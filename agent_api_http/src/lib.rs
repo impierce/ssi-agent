@@ -263,28 +263,28 @@ mod tests {
     }
 }
 
-struct AuthorizationHeader(Option<String>);
+struct HttpActorInput<'a> {
+    headers: &'a HeaderMap,
+}
 
-impl AuthorizationHeader {
-    fn from_headers(headers: &HeaderMap) -> Self {
-        Self(
-            headers
-                .get(AUTHORIZATION)
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_string),
-        )
+impl<'a> HttpActorInput<'a> {
+    fn from_headers(headers: &'a HeaderMap) -> Self {
+        Self { headers }
     }
 }
 
-impl ToActor for AuthorizationHeader {
+impl ToActor for HttpActorInput<'_> {
     fn to_actor(&self) -> Option<Actor> {
-        self.0
-            .as_deref()
+        self.auth_value(AUTHORIZATION.as_str())
             .and_then(|authorization_header| authorization_header.strip_prefix("Bearer "))
             .filter(|token| !token.is_empty())
             .map(|token| Actor {
                 subject: token.to_string(),
             })
+    }
+
+    fn auth_value(&self, key: &str) -> Option<&str> {
+        self.headers.get(key).and_then(|value| value.to_str().ok())
     }
 }
 
@@ -292,7 +292,7 @@ async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Re
 where
     E: ActorExtractor,
 {
-    let input = AuthorizationHeader::from_headers(request.headers());
+    let input = HttpActorInput::from_headers(request.headers());
     let actor = actor_extractor.extract_actor(&input);
 
     request.extensions_mut().insert(actor);
@@ -318,6 +318,20 @@ mod actor_extraction_tests {
                     subject: "user@example.test".to_string(),
                 })
             })
+        }
+    }
+
+    #[derive(Clone)]
+    struct CustomHeaderActorExtractor;
+
+    impl ActorExtractor for CustomHeaderActorExtractor {
+        fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input
+                .auth_value("x-custom-actor-token")
+                .filter(|token| *token == "valid-token")
+                .map(|_| Actor {
+                    subject: "custom@example.test".to_string(),
+                })
         }
     }
 
@@ -350,6 +364,31 @@ mod actor_extraction_tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
 
         assert_eq!(body.as_ref(), b"user@example.test");
+    }
+
+    #[tokio::test]
+    async fn actor_extractor_can_read_custom_auth_values() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(CustomHeaderActorExtractor),
+                extract_actor::<CustomHeaderActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("x-custom-actor-token", "valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"custom@example.test");
     }
 
     #[tokio::test]

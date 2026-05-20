@@ -17,7 +17,7 @@ use agent_shared::config::{config, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
-use shared_kernel::authorization::NoActorExtractor;
+use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::io;
 use tower_http::cors::CorsLayer;
@@ -194,7 +194,15 @@ pub async fn state() -> io::Result<ApplicationState> {
 
 /// Builds the full core SSI agent Router (app + metadata + probes).
 pub fn router(application_state: ApplicationState) -> axum::Router {
-    let app = app(application_state, NoActorExtractor);
+    router_with_actor_extractor(application_state, NoActorExtractor)
+}
+
+/// Builds the full core SSI agent Router with a custom actor extractor.
+pub fn router_with_actor_extractor<E>(application_state: ApplicationState, actor_extractor: E) -> axum::Router
+where
+    E: ActorExtractor,
+{
+    let app = app(application_state, actor_extractor);
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),

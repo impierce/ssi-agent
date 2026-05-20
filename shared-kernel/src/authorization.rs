@@ -7,6 +7,10 @@ pub struct Actor {
 
 pub trait ToActor {
     fn to_actor(&self) -> Option<Actor>;
+
+    fn auth_value(&self, _key: &str) -> Option<&str> {
+        None
+    }
 }
 
 pub trait ActorExtractor: Send + Sync + 'static {
