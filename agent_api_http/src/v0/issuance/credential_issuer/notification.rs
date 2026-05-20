@@ -25,12 +25,10 @@ pub async fn notification(
 ) -> Result<Response, PublicError> {
     info!("Notification Request: {}", json!(raw_value));
 
+    let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
-
-    let _claims = AccessTokenValidationService::validate(&state, &access_token)
-        .await
-        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
     let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
@@ -154,7 +152,7 @@ mod tests {
             name: &'static str,
             access_token: String,
             payload: String,
-            expected_error: NotificationErrorResponse,
+            expected_status: StatusCode,
         }
 
         let test_cases = vec![
@@ -167,7 +165,7 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidNotificationId,
+                expected_status: NotificationErrorResponse::InvalidNotificationId.status_code(),
             },
             TestCase {
                 name: "Invalid Access Token",
@@ -178,13 +176,13 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
+                expected_status: StatusCode::UNAUTHORIZED,
             },
             TestCase {
                 name: "Invalid Notification Event",
                 access_token: access_token.clone(),
                 payload: format!(r#"{{"notification_id": "{notification_id}", "event": "InvalidEventValue"}}"#),
-                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
+                expected_status: NotificationErrorResponse::InvalidNotificationRequest.status_code(),
             },
         ];
 
@@ -200,10 +198,10 @@ mod tests {
             let response = issuance_app.clone().oneshot(request).await.unwrap();
             assert_eq!(
                 response.status(),
-                test_case.expected_error.status_code(),
+                test_case.expected_status,
                 "Test case {} failed: expected status {}, got {}",
                 test_case.name,
-                test_case.expected_error.status_code(),
+                test_case.expected_status,
                 response.status(),
             );
         }
