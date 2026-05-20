@@ -324,7 +324,15 @@ fn quick_fix_transform(input: Value) -> Value {
     info!("Extracted credentialSubject for quick fix transformation: {sub:#?}");
 
     let get_val = |key: &str| {
+        let lowercase_key = {
+            let mut chars = key.chars();
+            match chars.next() {
+                Some(c) => c.to_lowercase().to_string() + chars.as_str(),
+                None => String::new(),
+            }
+        };
         sub.get(key)
+            .or_else(|| sub.get(&lowercase_key))
             .and_then(|v| v.as_str().map(ToString::to_string))
             .unwrap_or_default()
     };
