@@ -38,3 +38,4 @@ The following commands can be used to assert code quality:
 - `cargo clippy --all-targets --all-features -- -D warnings` (check for code lints, treat all warnings as errors)
 - `cargo test generate_openapi_spec` (generate the OpenAPI specification by executing a test)
 - `cargo test --workspace` (run all tests)
+- `cargo llvm-cov clean --workspace && cargo llvm-cov --all-features --workspace --json --output-path coverage.raw.json` (generate code coverage report)
