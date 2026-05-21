@@ -12,12 +12,11 @@ pub enum TemplateCommand {
         title: String,
         display: Box<Option<Display>>,
         data_model: DataModel,
-        creator: Option<String>,
         holder_type: HolderType,
         tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
-        expiration: Option<Expiration>,
+        credential_expiration: Option<Expiration>,
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
@@ -30,10 +29,6 @@ pub enum TemplateCommand {
     UpdateDisplay {
         template_id: String,
         display: Display,
-    },
-    UpdateCreator {
-        template_id: String,
-        creator: String,
     },
     UpdateTags {
         template_id: String,
@@ -63,9 +58,9 @@ pub enum TemplateCommand {
         template_id: String,
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
     },
-    UpdateExpiration {
+    UpdateCredentialExpiration {
         template_id: String,
-        expiration: Expiration,
+        credential_expiration: Expiration,
     },
     DeleteTemplate {
         template_id: String,

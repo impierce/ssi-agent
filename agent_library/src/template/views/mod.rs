@@ -17,13 +17,12 @@ impl View<Template> for Template {
                 title,
                 display,
                 data_model,
-                creator,
                 holder_type,
                 modified_at,
                 tags,
                 status,
                 visibility,
-                expiration,
+                credential_expiration,
                 description,
                 r#type,
                 schema,
@@ -34,13 +33,12 @@ impl View<Template> for Template {
                 self.title = title.clone();
                 self.display.clone_from(display);
                 self.data_model = data_model.clone();
-                self.creator.clone_from(creator);
                 self.holder_type = holder_type.clone();
                 self.modified_at.replace(modified_at.clone());
                 self.tags = tags.clone();
                 self.status.clone_from(status);
                 self.visibility.clone_from(visibility);
-                self.expiration = expiration.clone();
+                self.credential_expiration = credential_expiration.clone();
                 self.description.clone_from(description);
                 self.r#type.clone_from(r#type);
                 self.schema.clone_from(schema);
@@ -63,20 +61,12 @@ impl View<Template> for Template {
                 self.display.replace(display.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            CreatorUpdated {
-                template_id: _,
-                creator,
-                modified_at,
-            } => {
-                self.creator.replace(creator.clone());
-                self.modified_at.replace(modified_at.clone());
-            }
             TagsUpdated {
                 template_id: _,
                 tags,
                 modified_at,
             } => {
-                self.tags = Some(tags.clone());
+                self.tags = if tags.is_empty() { None } else { Some(tags.clone()) };
                 self.modified_at.replace(modified_at.clone());
             }
             StatusUpdated {
@@ -100,7 +90,7 @@ impl View<Template> for Template {
                 description,
                 modified_at,
             } => {
-                self.description.replace(description.clone());
+                self.description = if description.is_empty() { None } else { Some(description.clone()) };
                 self.modified_at.replace(modified_at.clone());
             }
             TypeUpdated {
@@ -128,12 +118,12 @@ impl View<Template> for Template {
                     .replace(schema_properties_attributes.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            ExpirationUpdated {
+            CredentialExpirationUpdated {
                 template_id: _,
-                expiration,
+                credential_expiration,
                 modified_at,
             } => {
-                self.expiration = expiration.clone();
+                self.credential_expiration = credential_expiration.clone();
                 self.modified_at.replace(modified_at.clone());
             }
             TemplateDeleted { template_id: _ } => {

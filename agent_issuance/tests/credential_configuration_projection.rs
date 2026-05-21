@@ -2,7 +2,7 @@ use agent_issuance::application::credential_configuration_projection::Credential
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{DataModel, Display, Status, Visibility};
+use agent_library::template::aggregate::{DataModel, Display, PropertyAttribute, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
 use agent_library::template::event::{Expiration, HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
@@ -30,13 +30,12 @@ fn create_test_event_template_created(
             title,
             display: Box::new(display),
             data_model,
-            creator: None,
             holder_type: HolderType::Individual,
             modified_at: "2024-01-01T00:00:00Z".to_string(),
             tags: None,
             status,
             visibility: Visibility::Private,
-            expiration: Expiration::Never,
+            credential_expiration: Expiration::Never,
             description: None,
             r#type: types,
             schema: Box::new(None),
@@ -160,6 +159,30 @@ async fn test_template_created_with_deleted_status_skips_registration() {
 }
 
 #[tokio::test]
+async fn test_template_created_with_archived_status_skips_registration() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "archived-template";
+    let event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Archived Credential".to_string(),
+        None,
+        Status::Archived,
+    );
+
+    projection.dispatch(template_id, &[event]).await;
+
+    let contains_key = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .map(|sc| sc.credential_configurations.contains_key(template_id))
+        .unwrap_or(false);
+    assert!(!contains_key);
+}
+
+#[tokio::test]
 async fn test_display_updated_reflects_in_credential_configuration() {
     let (issuance, lib_state, projection) = setup().await;
 
@@ -178,12 +201,11 @@ async fn test_display_updated_reflects_in_credential_configuration() {
                 logo: None,
             })),
             data_model: DataModel::W3CVcDataModelV2_0,
-            creator: None,
             holder_type: HolderType::Individual,
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
-            expiration: None,
+            credential_expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -273,12 +295,11 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             title: "Draft Title".to_string(),
             display: Box::new(None),
             data_model: DataModel::W3CVcDataModelV2_0,
-            creator: None,
             holder_type: HolderType::Individual,
             tags: None,
             status: Status::Draft,
             visibility: Visibility::Private,
-            expiration: None,
+            credential_expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -325,12 +346,11 @@ async fn test_title_updated_refreshes_credential_configuration() {
             title: "Original Title".to_string(),
             display: Box::new(None),
             data_model: DataModel::W3CVcDataModelV2_0,
-            creator: None,
             holder_type: HolderType::Individual,
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
-            expiration: None,
+            credential_expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -452,12 +472,11 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             title: "My Credential".to_string(),
             display: Box::new(None),
             data_model: DataModel::W3CVcDataModelV2_0,
-            creator: None,
             holder_type: HolderType::Individual,
             tags: None,
             status: Status::Draft,
             visibility: Visibility::Private,
-            expiration: None,
+            credential_expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -538,12 +557,11 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             title: "Temp".to_string(),
             display: Box::new(None),
             data_model: DataModel::W3CVcDataModelV2_0,
-            creator: None,
             holder_type: HolderType::Individual,
             tags: None,
             status: Status::Published,
             visibility: Visibility::Private,
-            expiration: None,
+            credential_expiration: None,
             description: None,
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
@@ -587,4 +605,260 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
         .unwrap()
         .unwrap();
     assert!(!server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_status_updated_to_archived_removes_credential_configuration() {
+    let (issuance, lib_state, projection) = setup().await;
+
+    let template_id = "published-to-archived";
+
+    command_handler(
+        template_id,
+        &lib_state.command.template,
+        TemplateCommand::CreateTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Temp".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let create_event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Temp".to_string(),
+        None,
+        Status::Published,
+    );
+    projection.dispatch(template_id, &[create_event]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+
+    command_handler(
+        template_id,
+        &lib_state.command.template,
+        TemplateCommand::UpdateStatus {
+            template_id: template_id.to_string(),
+            status: Status::Archived,
+        },
+    )
+    .await
+    .unwrap();
+
+    let status_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 2,
+        payload: TemplateEvent::StatusUpdated {
+            template_id: template_id.to_string(),
+            status: Status::Archived,
+            modified_at: "2024-01-01T00:01:00Z".to_string(),
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[status_event]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_schema_updated_refreshes_credential_configuration() {
+    let (issuance, lib_state, projection) = setup().await;
+
+    let template_id = "schema-update-template";
+    let updated_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" }
+        }
+    });
+
+    command_handler(
+        template_id,
+        &lib_state.command.template,
+        TemplateCommand::CreateTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Schema Update Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let create_event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Schema Update Test".to_string(),
+        None,
+        Status::Published,
+    );
+    projection.dispatch(template_id, &[create_event]).await;
+
+    command_handler(
+        template_id,
+        &lib_state.command.template,
+        TemplateCommand::UpdateSchema {
+            template_id: template_id.to_string(),
+            schema: updated_schema.clone(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 2,
+        payload: TemplateEvent::SchemaUpdated {
+            template_id: template_id.to_string(),
+            schema: updated_schema,
+            modified_at: "2024-01-01T00:01:00Z".to_string(),
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[update_event]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let claim_count = config_obj
+        .credential_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.claims.as_ref())
+        .map(|claims| claims.len())
+        .unwrap_or_default();
+    assert_eq!(claim_count, 1);
+}
+
+#[tokio::test]
+async fn test_schema_properties_attributes_updated_refreshes_credential_configuration() {
+    let (issuance, lib_state, projection) = setup().await;
+
+    let template_id = "schema-attributes-update-template";
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" }
+        }
+    });
+
+    command_handler(
+        template_id,
+        &lib_state.command.template,
+        TemplateCommand::CreateTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Schema Attributes Update Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(schema.clone())),
+            schema_properties_attributes: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let create_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 1,
+        payload: TemplateEvent::TemplateCreated {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Schema Attributes Update Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            modified_at: "2024-01-01T00:00:00Z".to_string(),
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::Never,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[create_event]).await;
+
+    let mut attrs = HashMap::new();
+    attrs.insert("name".to_string(), PropertyAttribute::new(true, false));
+
+    command_handler(
+        template_id,
+        &lib_state.command.template,
+        TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.to_string(),
+            schema_properties_attributes: attrs.clone(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 2,
+        payload: TemplateEvent::SchemaPropertiesAttributesUpdated {
+            template_id: template_id.to_string(),
+            schema_properties_attributes: attrs,
+            modified_at: "2024-01-01T00:01:00Z".to_string(),
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[update_event]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let claim = config_obj
+        .credential_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.claims.as_ref())
+        .and_then(|claims| claims.first())
+        .expect("claim should be present after schema attribute update");
+    assert!(!claim.mandatory);
 }

@@ -111,13 +111,13 @@ LinkedVerifiablePresentationServiceCreated
 TemplateCreated
 TitleUpdated
 DisplayUpdated
-CreatorUpdated
 TagsUpdated
 StatusUpdated
 VisibilityUpdated
 DescriptionUpdated
 TypeUpdated
 SchemaUpdated
+CredentialExpirationUpdated
 ```
 
 #### `server_config`

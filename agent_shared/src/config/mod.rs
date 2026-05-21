@@ -706,13 +706,13 @@ pub enum TemplateEvent {
     TemplateCreated,
     TitleUpdated,
     DisplayUpdated,
-    CreatorUpdated,
     TagsUpdated,
     StatusUpdated,
     VisibilityUpdated,
     DescriptionUpdated,
     TypeUpdated,
     SchemaUpdated,
+    CredentialExpirationUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

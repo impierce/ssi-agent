@@ -10,6 +10,11 @@ impl IntoApiErrorExt for TemplateError {
                 .title("Invalid JSON Schema")
                 .source(self)
                 .finish(),
+            TemplateError::InvalidStatusTransition(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Invalid Status Transition")
+                .type_url(type_url("library#invalid-status-transition"))
+                .source(self)
+                .finish(),
             TemplateError::InvalidSchemaPropertiesAttributes(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Schema Properties Attributes")
                 .type_url(type_url("library#invalid-schema-properties-attributes"))
@@ -40,11 +45,50 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("library#missing-title"))
                 .source(self)
                 .finish(),
+            TemplateError::ArchivedTemplateImmutable => ApiError::builder(StatusCode::CONFLICT)
+                .title("Archived Template Immutable")
+                .type_url(type_url("library#archived-template-immutable"))
+                .source(self)
+                .finish(),
+            TemplateError::DeletedTemplateTerminal => ApiError::builder(StatusCode::CONFLICT)
+                .title("Deleted Template Terminal")
+                .type_url(type_url("library#deleted-template-terminal"))
+                .source(self)
+                .finish(),
+            TemplateError::ArchiveBeforeDeleteRequired => ApiError::builder(StatusCode::CONFLICT)
+                .title("Archive Before Delete Required")
+                .type_url(type_url("library#archive-before-delete-required"))
+                .source(self)
+                .finish(),
             TemplateError::InvalidExpiration(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Expiration")
                 .type_url(type_url("library#invalid-expiration"))
                 .source(self)
                 .finish(),
+            TemplateError::InvalidType(_) => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Invalid Type")
+                .type_url(type_url("library#invalid-type"))
+                .source(self)
+                .finish(),
+            TemplateError::InvalidStatusOnCreate => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Invalid Status On Create")
+                .type_url(type_url("library#invalid-status-on-create"))
+                .source(self)
+                .finish(),
+            TemplateError::SchemaPropertiesAttributesNotAllowed => {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Schema Properties Attributes Not Allowed")
+                    .type_url(type_url("library#schema-properties-attributes-not-allowed"))
+                    .source(self)
+                    .finish()
+            }
+            TemplateError::DuplicateSchemaPropertiesAttributeKey(_) => {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Duplicate Schema Properties Attribute Key")
+                    .type_url(type_url("library#duplicate-schema-properties-attribute-key"))
+                    .source(self)
+                    .finish()
+            }
         }
     }
 }

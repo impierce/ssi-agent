@@ -672,10 +672,10 @@ components:
     CreateTemplateRequestBody:
       type: object
       properties:
-        creator:
-          type:
-          - string
-          - 'null'
+        credentialExpiration:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Expiration'
           default: null
         dataModel:
           oneOf:
@@ -690,11 +690,6 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/Display'
-          default: null
-        expiration:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Expiration'
           default: null
         holderType:
           oneOf:
@@ -733,6 +728,7 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Visibility'
           default: private
+      additionalProperties: false
     Credential:
       type: object
       required:
@@ -1289,13 +1285,12 @@ components:
       required:
       - selectivelyDisclosable
       properties:
-        immutable:
+        nonRemovable:
           type: boolean
           description: |-
-            Whether this property is immutable (cannot be removed from the schema).
-            Determined by the data model and cannot be altered through any command.
-            For OpenBadges 3.0 templates, only the required properties
-            (`achievement.name`, `achievement.description`, `achievement.criteria.narrative`) are immutable.
+            Whether this property is non-removable — its leaf field must remain present in the schema
+            and cannot be removed by the caller. Determined by the data model; system-controlled only.
+            For OpenBadges 3.0 templates, only the required standard fields are non-removable.
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
@@ -1351,12 +1346,11 @@ components:
       - holderType
       - status
       - visibility
+      - credentialExpiration
       - type
       properties:
-        creator:
-          type:
-          - string
-          - 'null'
+        credentialExpiration:
+          $ref: '#/components/schemas/Expiration'
         dataModel:
           $ref: '#/components/schemas/DataModel'
         description:
@@ -1384,10 +1378,6 @@ components:
             $ref: '#/components/schemas/PropertyAttribute'
           propertyNames:
             type: string
-        sourceTemplateId:
-          type:
-          - string
-          - 'null'
         status:
           $ref: '#/components/schemas/TemplateStatus'
         tags:
@@ -1414,10 +1404,10 @@ components:
     UpdateTemplateEndpointRequest:
       type: object
       properties:
-        creator:
-          type:
-          - string
-          - 'null'
+        credentialExpiration:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Expiration'
           default: null
         description:
           type:
@@ -1471,6 +1461,7 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Visibility'
           default: null
+      additionalProperties: false
     Validation:
       oneOf:
       - type: object

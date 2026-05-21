@@ -26,16 +26,15 @@ pub mod openapi;
 pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
-    pub source_template_id: Option<String>,
     pub title: String,
     pub display: Option<Display>,
     pub data_model: DataModel,
-    pub creator: Option<String>,
     pub holder_type: HolderType,
     pub modified_at: Option<String>,
     pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
+    pub credential_expiration: Expiration,
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
@@ -46,16 +45,15 @@ impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
         Self {
             template_id: value.template_id,
-            source_template_id: value.source_template_id,
             title: value.title,
             display: value.display,
             data_model: value.data_model,
-            creator: value.creator,
             holder_type: value.holder_type,
             modified_at: value.modified_at,
             tags: value.tags,
             status: value.status,
             visibility: value.visibility,
+            credential_expiration: value.credential_expiration,
             description: value.description,
             r#type: value.r#type,
             schema: *value.schema,
@@ -64,18 +62,17 @@ impl From<Template> for TemplateDto {
     }
 }
 
-#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Debug, Deserialize, Serialize, Default, utoipa::ToSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct CreateTemplateRequestBody {
     pub title: String,
     pub display: Option<Display>,
     pub data_model: DataModel,
-    pub creator: Option<String>,
     pub holder_type: HolderType,
     pub tags: Option<Vec<String>>,
     pub status: Status,
     pub visibility: Visibility,
-    pub expiration: Option<Expiration>,
+    pub credential_expiration: Option<Expiration>,
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
@@ -113,12 +110,11 @@ pub(crate) async fn create_template(
         title,
         display,
         data_model,
-        creator,
         holder_type,
         tags,
         status,
         visibility,
-        expiration,
+        credential_expiration,
         description,
         r#type,
         schema,
@@ -133,12 +129,11 @@ pub(crate) async fn create_template(
         title,
         display: Box::new(display),
         data_model,
-        creator,
         holder_type,
         tags,
         status,
         visibility,
-        expiration,
+        credential_expiration,
         description,
         r#type,
         schema: Box::new(schema),
@@ -193,6 +188,7 @@ pub(crate) async fn duplicate_template(
 
     let original_template = query_handler(&source_template_id, &state.query.template)
         .await?
+        .filter(|template| template.status != Status::Deleted)
         .ok_or_else(|| {
             ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
                 .title("Source Template Not Found")
@@ -207,12 +203,11 @@ pub(crate) async fn duplicate_template(
         title: format!("{} Copy", original_template.title),
         display: Box::new(original_template.display),
         data_model: original_template.data_model,
-        creator: original_template.creator,
         holder_type: original_template.holder_type,
         tags: original_template.tags,
         status: Status::Draft,
-        visibility: original_template.visibility,
-        expiration: Some(original_template.expiration),
+        visibility: Visibility::Private,
+        credential_expiration: Some(original_template.credential_expiration),
         description: original_template.description,
         r#type: original_template.r#type,
         schema: original_template.schema,
@@ -229,22 +224,22 @@ pub(crate) async fn duplicate_template(
     Ok((
         StatusCode::CREATED,
         [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
-        Json(new_template),
+        Json(TemplateDto::from(new_template)),
     )
         .into_response())
 }
 
-#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[derive(Debug, Deserialize, Serialize, Default, utoipa::ToSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub creator: Option<String>,
     pub tags: Option<Vec<String>>,
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
+    pub credential_expiration: Option<Expiration>,
     pub description: Option<String>,
     pub r#type: Option<Vec<String>>,
     pub schema: Option<serde_json::Value>,
@@ -270,10 +265,10 @@ pub(crate) async fn update_template(
         template_id,
         title,
         display,
-        creator,
         tags,
         status,
         visibility,
+        credential_expiration,
         description,
         r#type,
         schema,
@@ -290,6 +285,7 @@ pub(crate) async fn update_template(
 
     query_handler(&template_id, &state.query.template)
         .await?
+        .filter(|t| t.status != Status::Deleted)
         .ok_or_else(|| {
             ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
@@ -314,14 +310,6 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if let Some(creator) = creator {
-        let command = TemplateCommand::UpdateCreator {
-            template_id: template_id.clone(),
-            creator,
-        };
-        command_handler(&template_id, &state.command.template, command).await?;
-    }
-
     if let Some(tags) = tags {
         let command = TemplateCommand::UpdateTags {
             template_id: template_id.clone(),
@@ -342,6 +330,14 @@ pub(crate) async fn update_template(
         let command = TemplateCommand::UpdateVisibility {
             template_id: template_id.clone(),
             visibility,
+        };
+        command_handler(&template_id, &state.command.template, command).await?;
+    }
+
+    if let Some(credential_expiration) = credential_expiration {
+        let command = TemplateCommand::UpdateCredentialExpiration {
+            template_id: template_id.clone(),
+            credential_expiration,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
@@ -398,7 +394,7 @@ pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Res
     let filtered_templates = query_handler("all_templates", &state.query.all_templates)
         .await?
         .map(|all_templates_view| {
-            let filtered_templates: Vec<TemplateDto> = all_templates_view
+            let mut filtered_templates: Vec<TemplateDto> = all_templates_view
                 .templates
                 .into_values()
                 .filter(|template| {
@@ -407,6 +403,9 @@ pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Res
                 })
                 .map(TemplateDto::from)
                 .collect();
+
+            // Sort by most recently modified first (RFC 3339 strings are lexicographically comparable).
+            filtered_templates.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
 
             filtered_templates
         })
@@ -493,4 +492,193 @@ pub(crate) async fn delete_template(
 
     command_handler(&template_id, &state.command.template, command).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_store::{in_memory::InMemory, library_state};
+    use axum::{body::to_bytes, response::IntoResponse};
+    use serde_json::json;
+    use std::sync::Arc;
+
+    async fn create_source_template(state: &Arc<LibraryState>, template_id: &str, visibility: Visibility) {
+        command_handler(
+            template_id,
+            &state.command.template,
+            TemplateCommand::CreateTemplate {
+                template_id: template_id.to_string(),
+                source_template_id: None,
+                title: "Source Template".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility,
+                credential_expiration: Some(Expiration::Never),
+                description: Some("Template description".to_string()),
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "first_name": { "type": "string" }
+                    },
+                    "required": ["first_name"]
+                }))),
+                schema_properties_attributes: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[test]
+    fn create_template_request_accepts_credential_expiration() {
+        let request = serde_json::from_value::<CreateTemplateRequestBody>(json!({
+            "title": "Standard template",
+            "dataModel": "w3c_vc_data_model_v1-1",
+            "holderType": "individual",
+            "credentialExpiration": { "type": "never" }
+        }))
+        .unwrap();
+
+        assert_eq!(request.credential_expiration, Some(Expiration::Never));
+    }
+
+    #[test]
+    fn create_template_request_rejects_legacy_fields() {
+        let creator_error = serde_json::from_value::<CreateTemplateRequestBody>(json!({
+            "title": "Standard template",
+            "dataModel": "w3c_vc_data_model_v1-1",
+            "holderType": "individual",
+            "creator": "legacy"
+        }))
+        .err()
+        .unwrap();
+        assert!(creator_error.to_string().contains("creator"));
+
+        let expiration_error = serde_json::from_value::<CreateTemplateRequestBody>(json!({
+            "title": "Standard template",
+            "dataModel": "w3c_vc_data_model_v1-1",
+            "holderType": "individual",
+            "expiration": { "type": "never" }
+        }))
+        .err()
+        .unwrap();
+        assert!(expiration_error.to_string().contains("expiration"));
+    }
+
+    #[test]
+    fn update_template_request_accepts_credential_expiration() {
+        let request = serde_json::from_value::<UpdateTemplateEndpointRequest>(json!({
+            "id": "template-id",
+            "credentialExpiration": { "type": "never" }
+        }))
+        .unwrap();
+
+        assert_eq!(request.credential_expiration, Some(Expiration::Never));
+    }
+
+    #[test]
+    fn update_template_request_rejects_legacy_fields() {
+        let creator_error = serde_json::from_value::<UpdateTemplateEndpointRequest>(json!({
+            "id": "template-id",
+            "creator": "legacy"
+        }))
+        .err()
+        .unwrap();
+        assert!(creator_error.to_string().contains("creator"));
+
+        let expiration_error = serde_json::from_value::<UpdateTemplateEndpointRequest>(json!({
+            "id": "template-id",
+            "expiration": { "type": "never" }
+        }))
+        .err()
+        .unwrap();
+        assert!(expiration_error.to_string().contains("expiration"));
+    }
+
+    #[test]
+    fn template_dto_hides_internal_source_template_id() {
+        let dto = TemplateDto::from(Template {
+            template_id: "template-id".to_string(),
+            source_template_id: Some("parent-template-id".to_string()),
+            title: "Template".to_string(),
+            display: None,
+            data_model: DataModel::W3CVcDataModelV1_1,
+            holder_type: HolderType::Individual,
+            modified_at: Some("2024-01-01T00:00:00Z".to_string()),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::Never,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+        });
+
+        let serialized = serde_json::to_value(dto).unwrap();
+
+        assert!(serialized.get("sourceTemplateId").is_none());
+    }
+
+    #[tokio::test]
+    async fn duplicate_template_resets_visibility_and_hides_lineage() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "source-template", Visibility::Public).await;
+
+        let response = duplicate_template(
+            State(state),
+            Json(DuplicateTemplateEndpointRequest {
+                source_template_id: "source-template".to_string(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["status"], "draft");
+        assert_eq!(body["visibility"], "private");
+        assert_eq!(body["title"], "Source Template Copy");
+        assert!(body.get("sourceTemplateId").is_none());
+    }
+
+    #[tokio::test]
+    async fn duplicate_template_rejects_deleted_source_template() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "deleted-source", Visibility::Private).await;
+
+        command_handler(
+            "deleted-source",
+            &state.command.template,
+            TemplateCommand::DeleteTemplate {
+                template_id: "deleted-source".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let response = duplicate_template(
+            State(state),
+            Json(DuplicateTemplateEndpointRequest {
+                source_template_id: "deleted-source".to_string(),
+            }),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["title"], "Source Template Not Found");
+    }
 }

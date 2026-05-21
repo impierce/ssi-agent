@@ -393,12 +393,11 @@ pub mod tests {
                     }),
                 })),
                 data_model: DataModel::W3CVcDataModelV1_1,
-                creator: None,
                 holder_type: HolderType::Individual,
                 tags: None,
                 status: TemplateStatus::Published,
                 visibility: Visibility::Private,
-                expiration: None,
+                credential_expiration: None,
                 description: None,
                 r#type: vec!["VerifiableCredential".to_string()],
                 schema: Box::new(None),
@@ -483,7 +482,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": received_offer_id,
-                            "credentialConfigurationIds": [TEMPLATE_ID],
+                            "templateId": TEMPLATE_ID,
                         }))
                         .unwrap(),
                     ))

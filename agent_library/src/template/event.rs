@@ -14,13 +14,12 @@ pub enum TemplateEvent {
         title: String,
         display: Box<Option<Display>>,
         data_model: DataModel,
-        creator: Option<String>,
         holder_type: HolderType,
         modified_at: String,
         tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
-        expiration: Expiration,
+        credential_expiration: Expiration,
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
@@ -34,11 +33,6 @@ pub enum TemplateEvent {
     DisplayUpdated {
         template_id: String,
         display: Display,
-        modified_at: String,
-    },
-    CreatorUpdated {
-        template_id: String,
-        creator: String,
         modified_at: String,
     },
     TagsUpdated {
@@ -76,9 +70,9 @@ pub enum TemplateEvent {
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
         modified_at: String,
     },
-    ExpirationUpdated {
+    CredentialExpirationUpdated {
         template_id: String,
-        expiration: Expiration,
+        credential_expiration: Expiration,
         modified_at: String,
     },
     TemplateDeleted {
