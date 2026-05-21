@@ -1,3 +1,5 @@
+# AGENTS.md
+
 ## Application design
 
 - DDD: The application is designed around the concept of domain-driven design, where the core business logic is organized into domains and subdomains, with a clear separation of concerns.
