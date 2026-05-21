@@ -13,7 +13,7 @@ use agent_issuance::{
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
-    DataModel, Expiration, Status as TemplateStatus, Template,
+    Expiration, Status as TemplateStatus, Template,
 };
 use axum::Extension;
 use axum::{
@@ -651,6 +651,7 @@ pub mod tests {
             schema: Box::new(Some(json!({
                 "type": "object",
                 "properties": {
+                    "id": { "type": "string" },
                     "first_name": { "type": "string" },
                     "last_name": { "type": "string" }
                 },
@@ -709,6 +710,10 @@ pub mod tests {
         format: &str,
     ) -> String {
         let should_register_configuration = status == Status::Published;
+        let initial_status = match status.clone() {
+            Status::Archived | Status::Deleted => Status::Draft,
+            _ => status.clone(),
+        };
         let command = TemplateCommand::CreateTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
@@ -723,7 +728,7 @@ pub mod tests {
             data_model: agent_library::template::aggregate::DataModel::W3CVcDataModelV1_1,
             holder_type: agent_library::template::aggregate::HolderType::Individual,
             tags: None,
-            status,
+            status: initial_status,
             visibility: Visibility::Private,
             credential_expiration,
             description: None,
@@ -731,6 +736,7 @@ pub mod tests {
             schema: Box::new(Some(json!({
                 "type": "object",
                 "properties": {
+                    "id": { "type": "string" },
                     "first_name": { "type": "string" },
                     "last_name": { "type": "string" }
                 },
@@ -742,6 +748,29 @@ pub mod tests {
         agent_shared::handlers::command_handler(template_id, &library_state.command.template, command)
             .await
             .unwrap();
+
+        match status {
+            Status::Archived => {
+                let command = TemplateCommand::UpdateStatus {
+                    template_id: template_id.to_string(),
+                    status,
+                };
+
+                agent_shared::handlers::command_handler(template_id, &library_state.command.template, command)
+                    .await
+                    .unwrap();
+            }
+            Status::Deleted => {
+                let command = TemplateCommand::DeleteTemplate {
+                    template_id: template_id.to_string(),
+                };
+
+                agent_shared::handlers::command_handler(template_id, &library_state.command.template, command)
+                    .await
+                    .unwrap();
+            }
+            _ => {}
+        }
 
         if should_register_configuration {
             let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({

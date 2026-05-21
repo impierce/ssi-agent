@@ -824,7 +824,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
     projection.dispatch(template_id, &[create_event]).await;
 
     let mut attrs = HashMap::new();
-    attrs.insert("name".to_string(), PropertyAttribute::new(true, false));
+    attrs.insert("/name".to_string(), PropertyAttribute::new(true, false));
 
     command_handler(
         template_id,
