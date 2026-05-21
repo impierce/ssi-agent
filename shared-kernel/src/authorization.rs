@@ -27,10 +27,18 @@ impl ActorExtractor for NoActorExtractor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandAuthorization {
+    ActiveUser,
+    Administrator,
+    AdministratorOrEditor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthorizationOperation {
     Command {
         aggregate_id: String,
         command_type: &'static str,
+        authorization: CommandAuthorization,
     },
     Query {
         query_type: &'static str,

@@ -2,7 +2,9 @@ use cqrs_es::{
     persist::{PersistenceError, ViewRepository},
     Aggregate, AggregateError, View,
 };
-use shared_kernel::authorization::{Actor, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest};
+use shared_kernel::authorization::{
+    Actor, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
+};
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
@@ -58,6 +60,7 @@ where
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
             command_type: std::any::type_name::<A::Command>(),
+            authorization: CommandAuthorization::ActiveUser,
         },
     };
 
@@ -271,6 +274,7 @@ mod tests {
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     command_type: std::any::type_name::<String>(),
+                    authorization: CommandAuthorization::ActiveUser,
                 },
             }]
         );

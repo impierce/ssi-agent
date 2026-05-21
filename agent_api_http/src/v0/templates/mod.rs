@@ -627,7 +627,9 @@ mod tests {
     use axum::{body::Body, Extension};
     use http::Request;
     use serde_json::json;
-    use shared_kernel::authorization::{AuthorizationChecker, AuthorizationOperation, AuthorizationRequest};
+    use shared_kernel::authorization::{
+        AuthorizationChecker, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
+    };
     use std::sync::Mutex;
     use tower::ServiceExt;
 
@@ -807,9 +809,11 @@ mod tests {
             AuthorizationOperation::Command {
                 aggregate_id,
                 command_type,
+                authorization,
             } => {
                 assert!(!aggregate_id.is_empty());
                 assert_eq!(*command_type, std::any::type_name::<TemplateCommand>());
+                assert_eq!(*authorization, CommandAuthorization::ActiveUser);
             }
             operation => panic!("expected template command authorization request, got {operation:?}"),
         }

@@ -5,6 +5,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::authorization::{
     Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest,
+    CommandAuthorization,
 };
 
 /// Defines the domain-specific types and handlers for a bounded context.
@@ -36,6 +37,10 @@ pub trait ApplicationContext: Send + Sync + 'static {
 
     /// Execute a read-side query, returning the projected view.
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError>;
+
+    fn command_authorization(&self, _command: &Self::Command) -> CommandAuthorization {
+        CommandAuthorization::ActiveUser
+    }
 }
 
 /// A command message together with routing information and a reply channel.
@@ -182,6 +187,7 @@ async fn process_command<AC: ApplicationContext>(
         operation: AuthorizationOperation::Command {
             aggregate_id: msg.aggregate_id.clone(),
             command_type: std::any::type_name::<AC::Command>(),
+            authorization: context.command_authorization(&msg.command),
         },
     };
     if !authorization_checker.is_authorized(&authorization_request).await {
@@ -536,6 +542,7 @@ mod tests {
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     command_type: std::any::type_name::<String>(),
+                    authorization: CommandAuthorization::ActiveUser,
                 },
             }]
         );
