@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, request_actor};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{
@@ -43,7 +43,7 @@ pub(crate) async fn accept(
     // Furthermore, the Application Layer (not implemented yet) should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
     // Check if the Credential Offer exists.
-    query_handler(&received_offer_id, &state.query.received_offer)
+    load_view(&received_offer_id, &state.query.received_offer)
         .await?
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
@@ -75,7 +75,7 @@ pub(crate) async fn accept(
     )
     .await?;
 
-    let credentials = match query_handler(&received_offer_id, &state.query.received_offer).await? {
+    let credentials = match load_view(&received_offer_id, &state.query.received_offer).await? {
         Some(ReceivedOfferView { credentials, .. }) => credentials,
         // TODO: this *should* be an impossible error, what should we return here?
         _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
@@ -103,7 +103,7 @@ pub(crate) async fn accept(
         .await?;
     }
 
-    query_handler(&received_offer_id, &state.query.received_offer)
+    load_view(&received_offer_id, &state.query.received_offer)
         .await?
         .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
         // TODO: this *should* be an impossible error, what should we return here?

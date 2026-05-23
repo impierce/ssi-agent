@@ -1,4 +1,4 @@
-use crate::handlers::query_handler;
+use crate::handlers::load_view;
 use agent_verification::state::VerificationState;
 use axum::{
     extract::{Path, State},
@@ -17,7 +17,7 @@ pub(crate) async fn request(
     State(verification_state): State<Arc<VerificationState>>,
     Path(request_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&request_id, &verification_state.query.authorization_request)
+    load_view(&request_id, &verification_state.query.authorization_request)
         .await?
         .and_then(|authorization_request_view| authorization_request_view.signed_authorization_request_object)
         .map(|signed_authorization_request_object| {

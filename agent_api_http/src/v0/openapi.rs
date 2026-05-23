@@ -33,7 +33,6 @@ mod tests {
 
     /// Generates an openapi.yaml file from the annotations in the code.
     #[test]
-    #[ignore = "run manually to update the committed OpenAPI specification"]
     fn generate_openapi_spec() {
         let openapi = patch_generated_openapi(ApiDoc::openapi());
         let yaml = openapi.to_yaml().unwrap();

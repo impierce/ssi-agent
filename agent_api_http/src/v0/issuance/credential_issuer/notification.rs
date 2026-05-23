@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, request_actor};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
@@ -35,7 +35,7 @@ pub async fn notification(
         .await
         .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
+    let credentials = match load_view("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
         _ => return Err(internal_server_error()),
     };

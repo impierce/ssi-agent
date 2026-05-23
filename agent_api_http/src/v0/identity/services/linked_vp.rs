@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, request_actor};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
@@ -45,7 +45,7 @@ pub(crate) async fn linked_vp(
     )
     .await?;
 
-    let linked_verifiable_presentation_service = match query_handler(&service_id, &state.query.service).await? {
+    let linked_verifiable_presentation_service = match load_view(&service_id, &state.query.service).await? {
         Some(Service {
             service: Some(linked_verifiable_presentation_service),
             ..
@@ -55,7 +55,7 @@ pub(crate) async fn linked_vp(
     };
 
     // Query all DID Documents that require an update.
-    let document_ids: Vec<String> = query_handler("all_documents", &state.query.all_documents)
+    let document_ids: Vec<String> = load_view("all_documents", &state.query.all_documents)
         .await?
         .map(|all_documents_view| {
             all_documents_view
@@ -94,7 +94,7 @@ pub(crate) async fn linked_vp(
         .await
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    query_handler("all_documents", &state.query.all_documents)
+    load_view("all_documents", &state.query.all_documents)
         .await?
         .map(|all_documents_view| {
             let documents: Vec<_> = all_documents_view

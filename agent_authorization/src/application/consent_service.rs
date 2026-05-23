@@ -1,7 +1,7 @@
 use crate::{
     domain::oauth2_authorization_request::command::OAuth2AuthorizationRequestCommand, state::AuthorizationState,
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, load_view};
 use thiserror::Error;
 
 pub enum ConsentServiceResponse {
@@ -31,7 +31,7 @@ impl ConsentService {
     ) -> Result<ConsentServiceResponse, ConsentError> {
         let oauth_authorization_request_id = request_uri.clone();
 
-        let _oauth_authorization_request = query_handler(
+        let _oauth_authorization_request = load_view(
             &oauth_authorization_request_id,
             &state.query.oauth2_authorization_request,
         )

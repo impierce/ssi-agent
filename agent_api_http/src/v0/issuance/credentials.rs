@@ -1,5 +1,5 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -41,13 +41,18 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&credential_id, &state.query.credential)
-        .await?
-        .map(|credential_view| (StatusCode::OK, Json(credential_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &credential_id,
+        &state.query.credential,
+    )
+    .await?
+    .map(|credential_view| (StatusCode::OK, Json(credential_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -89,7 +94,7 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    let (_, credential_configuration, authorization) = load_view(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .and_then(|server_config_view| {
             server_config_view
@@ -150,7 +155,7 @@ pub(crate) async fn credentials(
     .await?;
 
     // Create an offer if it does not exist yet.
-    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+    if load_view(&offer_id, &state.query.offer).await?.is_none() {
         // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
@@ -198,7 +203,7 @@ pub(crate) async fn credentials(
     .await?;
 
     // Return the credential.
-    query_handler(&credential_id, &state.query.credential)
+    load_view(&credential_id, &state.query.credential)
         .await?
         .and_then(|credential_view| credential_view.data)
         .map(|data| {
@@ -225,11 +230,19 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-        .await?
-        .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn all_credentials(
+    State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
+) -> Result<Response, ApiError> {
+    let all_credentials = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_credentials",
+        &state.query.all_credentials,
+    )
+    .await?
+    .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
@@ -249,7 +262,7 @@ pub async fn patch_credential(
         credential_status: status,
     }): Json<PatchCredentialEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    if let Some(credential) = query_handler(&credential_id, &state.query.credential).await? {
+    if let Some(credential) = load_view(&credential_id, &state.query.credential).await? {
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,

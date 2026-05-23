@@ -4,7 +4,7 @@ use crate::{
     },
     state::AuthorizationState,
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, load_view};
 use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ impl OAuth2AuthorizationService {
         AuthorizationRequestByReference { client_id, request_uri }: AuthorizationRequestByReference,
     ) -> Result<OAuth2AuthorizationServiceResponse, OAuth2AuthorizationError> {
         // Get the OAuth2 authorization request that has been pushed via the `/auth/par` endpoint.
-        let oauth2_authorization_request = query_handler(
+        let oauth2_authorization_request = load_view(
             request_uri.to_string().as_ref(),
             &state.query.oauth2_authorization_request,
         )

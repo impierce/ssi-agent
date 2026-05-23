@@ -1,6 +1,6 @@
 use crate::nonce::command::NonceCommand;
 use crate::state::IssuanceState;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, load_view};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use oid4vci::credential_request::CredentialRequest;
 use thiserror::Error;
@@ -38,7 +38,7 @@ impl NonceValidationService {
 
         let nonce = &nonces[0];
 
-        let nonce_status = query_handler(nonce, &state.query.nonce)
+        let nonce_status = load_view(nonce, &state.query.nonce)
             .await
             .map_err(|_| NonceValidationError::InvalidNonce)?;
 

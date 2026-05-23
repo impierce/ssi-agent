@@ -1,6 +1,6 @@
 pub mod presentation_signed;
 
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, query_handler, request_actor};
 use agent_holder::{
     credential::queries::HolderCredentialView, presentation::command::PresentationCommand, state::HolderState,
 };
@@ -16,11 +16,19 @@ use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn get_presentations(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
-    let all_presentations = query_handler("all_presentations", &state.query.all_presentations)
-        .await?
-        .map(|all_presentations_view| all_presentations_view.presentations.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn get_presentations(
+    State(state): State<Arc<HolderState>>,
+    actor: Option<Extension<Option<Actor>>>,
+) -> Result<Response, ApiError> {
+    let all_presentations = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_presentations",
+        &state.query.all_presentations,
+    )
+    .await?
+    .map(|all_presentations_view| all_presentations_view.presentations.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_presentations)).into_response())
 }
@@ -28,13 +36,18 @@ pub(crate) async fn get_presentations(State(state): State<Arc<HolderState>>) -> 
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation(
     State(state): State<Arc<HolderState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&presentation_id, &state.query.presentation)
-        .await?
-        .map(|presentation_view| (StatusCode::OK, Json(presentation_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &presentation_id,
+        &state.query.presentation,
+    )
+    .await?
+    .map(|presentation_view| (StatusCode::OK, Json(presentation_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -53,7 +66,7 @@ pub(crate) async fn post_presentations(
 
     // Get all the credentials.
     for credential_id in credential_ids {
-        match query_handler(&credential_id, &state.query.holder_credential).await? {
+        match load_view(&credential_id, &state.query.holder_credential).await? {
             Some(HolderCredentialView {
                 signed: Some(credential),
                 ..
@@ -81,7 +94,7 @@ pub(crate) async fn post_presentations(
     )
     .await?;
 
-    query_handler(&presentation_id, &state.query.presentation)
+    load_view(&presentation_id, &state.query.presentation)
         .await?
         .map(|presentation_view| (StatusCode::CREATED, Json(presentation_view)).into_response())
         // TODO: this *should* be an impossible error, what should we return here?

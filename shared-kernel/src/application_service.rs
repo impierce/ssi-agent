@@ -186,6 +186,7 @@ async fn process_command<AC: ApplicationContext>(
         actor: msg.actor.clone(),
         operation: AuthorizationOperation::Command {
             aggregate_id: msg.aggregate_id.clone(),
+            // TODO: Use command variant names when authorization needs finer-grained permissions.
             command_type: std::any::type_name::<AC::Command>(),
             authorization: context.command_authorization(&msg.command),
         },

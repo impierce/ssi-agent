@@ -1,8 +1,7 @@
-use shared_kernel::authorization::Actor;
 use std::time::{Duration, Instant};
 
 use crate::{
-    handlers::{command_handler, query_handler, request_actor},
+    handlers::{load_view, public_command_handler},
     v0::issuance::error::internal_server_error,
     v0::issuance::error::PublicError,
 };
@@ -21,7 +20,6 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Extension,
 };
 use axum_auth::AuthBearer;
 use oauth_tsl::status_list::StatusType;
@@ -39,7 +37,6 @@ const POLLING_INTERVAL_MS: u64 = 100;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
@@ -56,7 +53,7 @@ pub(crate) async fn credential(
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
-        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+        match load_view(SERVER_CONFIG_ID, &state.query.server_config).await? {
             Some(ServerConfigView {
                 credential_issuer_metadata,
                 authorization_server_metadata,
@@ -80,14 +77,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-    command_handler(
-        state.authorization_checker.clone(),
-        request_actor(&actor),
-        &offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    public_command_handler(&offer_id, &state.command.offer, command).await?;
 
     let timeout = config().external_server_response_timeout_ms;
     let start_time = Instant::now();
@@ -95,7 +85,7 @@ pub(crate) async fn credential(
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
     let (credential_ids, subject_id) = loop {
-        match query_handler(&offer_id, &state.query.offer).await? {
+        match load_view(&offer_id, &state.query.offer).await? {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Some(OfferView { credential_ids, .. }) if credential_ids.is_empty() => {
                 if start_time.elapsed().as_millis() <= timeout as u128 {
@@ -118,7 +108,7 @@ pub(crate) async fn credential(
         }
     };
 
-    let all_status_lists = query_handler("all_status_lists", &state.query.all_status_lists)
+    let all_status_lists = load_view("all_status_lists", &state.query.all_status_lists)
         .await?
         .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
@@ -140,14 +130,7 @@ pub(crate) async fn credential(
             let id = TEST_STATUS_LIST_ID.to_string();
 
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            command_handler(
-                state.authorization_checker.clone(),
-                request_actor(&actor),
-                &id,
-                &state.command.status_list,
-                command,
-            )
-            .await?;
+            public_command_handler(&id, &state.command.status_list, command).await?;
 
             id
         }
@@ -160,16 +143,9 @@ pub(crate) async fn credential(
             status: StatusType::VALID,
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            request_actor(&actor),
-            &status_list_id,
-            &state.command.status_list,
-            command,
-        )
-        .await?;
+        public_command_handler(&status_list_id, &state.command.status_list, command).await?;
 
-        let status_list = query_handler(&status_list_id, &state.query.status_list)
+        let status_list = load_view(&status_list_id, &state.query.status_list)
             .await?
             .ok_or(PublicError::InternalServerError)?;
 
@@ -186,16 +162,9 @@ pub(crate) async fn credential(
                 .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            request_actor(&actor),
-            &credential_id,
-            &state.command.credential,
-            command,
-        )
-        .await?;
+        public_command_handler(&credential_id, &state.command.credential, command).await?;
 
-        let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
+        let signed_credential = match load_view(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
                 signed: Some(signed_credential),
                 notification_id,
@@ -213,17 +182,10 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    command_handler(
-        state.authorization_checker.clone(),
-        request_actor(&actor),
-        &offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    public_command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
-    query_handler(&offer_id, &state.query.offer)
+    load_view(&offer_id, &state.query.offer)
         .await?
         .and_then(|offer_view| offer_view.credential_response)
         .map(|credential_response| (StatusCode::OK, Json(credential_response)).into_response())

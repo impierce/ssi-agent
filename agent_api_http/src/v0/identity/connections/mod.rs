@@ -1,7 +1,7 @@
 use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -66,7 +66,7 @@ pub(crate) async fn post_connection(
     .await?;
 
     // Return the connection.
-    query_handler(&connection_id, &state.query.connection)
+    load_view(&connection_id, &state.query.connection)
         .await?
         .map(|connection_view| {
             (
@@ -108,27 +108,32 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    let filtered_connections = query_handler("all_connections", &state.query.all_connections)
-        .await?
-        .map(|all_connections_view| {
-            let filtered_connections: Vec<_> = all_connections_view
-                .connections
-                .into_values()
-                .filter(|connection| {
-                    display
-                        .as_ref()
-                        .map_or(true, |display| connection.display.as_ref() == Some(display))
-                        && url.as_ref().map_or(true, |url| *url == connection.url)
-                        && did.as_ref().map_or(true, |did| connection.dids.contains(did))
-                })
-                .collect();
+    let filtered_connections = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_connections",
+        &state.query.all_connections,
+    )
+    .await?
+    .map(|all_connections_view| {
+        let filtered_connections: Vec<_> = all_connections_view
+            .connections
+            .into_values()
+            .filter(|connection| {
+                display
+                    .as_ref()
+                    .map_or(true, |display| connection.display.as_ref() == Some(display))
+                    && url.as_ref().map_or(true, |url| *url == connection.url)
+                    && did.as_ref().map_or(true, |did| connection.dids.contains(did))
+            })
+            .collect();
 
-            filtered_connections
-        })
-        .unwrap_or_default();
+        filtered_connections
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(filtered_connections)).into_response())
 }
@@ -148,14 +153,19 @@ pub(crate) async fn get_connections(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&id, &state.query.connection)
-        .await?
-        .filter(|view| !view.deleted)
-        .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &id,
+        &state.query.connection,
+    )
+    .await?
+    .filter(|view| !view.deleted)
+    .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]

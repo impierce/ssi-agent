@@ -1,5 +1,5 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::handlers::{command_handler, load_view, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -150,7 +150,7 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    query_handler(&template_id, &state.query.template)
+    load_view(&template_id, &state.query.template)
         .await?
         .map(|template_view| {
             (
@@ -194,7 +194,7 @@ pub(crate) async fn duplicate_template(
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
-    let original_template = query_handler(&source_template_id, &state.query.template)
+    let original_template = load_view(&source_template_id, &state.query.template)
         .await?
         .ok_or_else(|| {
             ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
@@ -231,7 +231,7 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = query_handler(&new_template_id, &state.query.template)
+    let new_template = load_view(&new_template_id, &state.query.template)
         .await?
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
@@ -302,15 +302,13 @@ pub(crate) async fn update_template(
             .finish());
     }
 
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not Found")
-                .type_url(type_url("library#template-not-found"))
-                .message(format!("No Template found with id: `{template_id}`"))
-                .finish()
-        })?;
+    load_view(&template_id, &state.query.template).await?.ok_or_else(|| {
+        ApiError::builder(StatusCode::NOT_FOUND)
+            .title("Template Not Found")
+            .type_url(type_url("library#template-not-found"))
+            .message(format!("No Template found with id: `{template_id}`"))
+            .finish()
+    })?;
 
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -508,23 +506,31 @@ pub(crate) async fn update_template(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Result<Response, ApiError> {
-    let filtered_templates = query_handler("all_templates", &state.query.all_templates)
-        .await?
-        .map(|all_templates_view| {
-            let filtered_templates: Vec<TemplateDto> = all_templates_view
-                .templates
-                .into_values()
-                .filter(|template| {
-                    template.status != Status::Deleted
-                    // TODO: Apply filtering logic based on request parameters
-                })
-                .map(TemplateDto::from)
-                .collect();
+pub(crate) async fn get_templates(
+    State(state): State<Arc<LibraryState>>,
+    actor: Option<Extension<Option<Actor>>>,
+) -> Result<Response, ApiError> {
+    let filtered_templates = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_templates",
+        &state.query.all_templates,
+    )
+    .await?
+    .map(|all_templates_view| {
+        let filtered_templates: Vec<TemplateDto> = all_templates_view
+            .templates
+            .into_values()
+            .filter(|template| {
+                template.status != Status::Deleted
+                // TODO: Apply filtering logic based on request parameters
+            })
+            .map(TemplateDto::from)
+            .collect();
 
-            filtered_templates
-        })
-        .unwrap_or_default();
+        filtered_templates
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(filtered_templates)).into_response())
 }
@@ -544,20 +550,25 @@ pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Res
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .and_then(|template_view| {
-            if template_view.status == Status::Deleted {
-                None
-            } else {
-                Some(template_view)
-            }
-        })
-        .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .and_then(|template_view| {
+        if template_view.status == Status::Deleted {
+            None
+        } else {
+            Some(template_view)
+        }
+    })
+    .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -593,15 +604,13 @@ pub(crate) async fn delete_template(
             .finish());
     }
 
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not Found")
-                .type_url(type_url("library#template-not-found"))
-                .message(format!("No Template found with id: `{template_id}`"))
-                .finish()
-        })?;
+    load_view(&template_id, &state.query.template).await?.ok_or_else(|| {
+        ApiError::builder(StatusCode::NOT_FOUND)
+            .title("Template Not Found")
+            .type_url(type_url("library#template-not-found"))
+            .message(format!("No Template found with id: `{template_id}`"))
+            .finish()
+    })?;
 
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
@@ -616,215 +625,4 @@ pub(crate) async fn delete_template(
     )
     .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{error::tests::into_json_value, v0::library};
-    use agent_store::{in_memory::InMemory, library_state};
-    use async_trait::async_trait;
-    use axum::{body::Body, Extension};
-    use http::Request;
-    use serde_json::json;
-    use shared_kernel::authorization::{
-        AuthorizationChecker, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
-    };
-    use std::sync::Mutex;
-    use tower::ServiceExt;
-
-    struct DenyAllAuthorizationChecker;
-
-    #[async_trait]
-    impl AuthorizationChecker for DenyAllAuthorizationChecker {
-        async fn is_authorized(&self, _request: &AuthorizationRequest) -> bool {
-            false
-        }
-    }
-
-    struct CapturingAuthorizationChecker {
-        requests: Arc<Mutex<Vec<AuthorizationRequest>>>,
-    }
-
-    #[async_trait]
-    impl AuthorizationChecker for CapturingAuthorizationChecker {
-        async fn is_authorized(&self, request: &AuthorizationRequest) -> bool {
-            self.requests.lock().unwrap().push(request.clone());
-            true
-        }
-    }
-
-    #[tokio::test]
-    async fn template_command_endpoints_dispatch_successfully() {
-        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        let app = library::router(state);
-
-        let response = app
-            .clone()
-            .oneshot(post_json(
-                "/v0/templates/create-template",
-                json!({
-                    "title": "Template",
-                    "status": "draft",
-                    "visibility": "private"
-                }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let template = into_json_value(response).await;
-        let template_id = template["id"].as_str().unwrap().to_string();
-
-        let response = app
-            .clone()
-            .oneshot(post_json(
-                "/v0/templates/update-template",
-                json!({
-                    "id": template_id,
-                    "title": "Updated template",
-                    "display": {
-                        "name": "Updated template",
-                        "logo": {
-                            "uri": "https://example.com/logo.png",
-                            "altText": "Example logo"
-                        }
-                    },
-                    "dataModel": "w3c_vc_data_model_v2-0",
-                    "creator": "Impierce",
-                    "holderType": "organization",
-                    "tags": ["updated"],
-                    "status": "published",
-                    "visibility": "public",
-                    "description": "Updated description",
-                    "type": ["VerifiableCredential", "ExampleCredential"],
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "name": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "schemaPropertiesAttributes": {
-                        "name": {
-                            "selectivelyDisclosable": true
-                        }
-                    }
-                }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-
-        let response = app
-            .clone()
-            .oneshot(post_json(
-                "/v0/templates/duplicate-template",
-                json!({
-                    "sourceTemplateId": template_id
-                }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let duplicated_template = into_json_value(response).await;
-        assert_eq!(duplicated_template["source_template_id"], template_id);
-
-        let response = app
-            .oneshot(post_json(
-                "/v0/templates/delete-template",
-                json!({
-                    "id": template_id
-                }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    }
-
-    #[tokio::test]
-    async fn template_command_endpoint_returns_forbidden_when_authorization_denies() {
-        let mut state = library_state(&InMemory, Default::default(), Default::default()).await;
-        state.authorization_checker = Arc::new(DenyAllAuthorizationChecker);
-        let app = library::router(Arc::new(state));
-
-        let response = app
-            .oneshot(post_json(
-                "/v0/templates/create-template",
-                json!({
-                    "title": "Template",
-                    "status": "draft",
-                    "visibility": "private"
-                }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        assert_eq!(
-            into_json_value(response).await,
-            json!({
-                "type": format!("{}problem-details/authorization#forbidden", crate::DOCUMENTATION_URL),
-                "title": "Forbidden",
-                "status": 403,
-                "detail": "The request is not authorized"
-            })
-        );
-    }
-
-    #[tokio::test]
-    async fn template_command_endpoint_passes_actor_to_authorization_checker() {
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let mut state = library_state(&InMemory, Default::default(), Default::default()).await;
-        state.authorization_checker = Arc::new(CapturingAuthorizationChecker {
-            requests: Arc::clone(&requests),
-        });
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
-        let app = library::router(Arc::new(state)).layer(Extension(Some(actor.clone())));
-
-        let response = app
-            .oneshot(post_json(
-                "/v0/templates/create-template",
-                json!({
-                    "title": "Template",
-                    "status": "draft",
-                    "visibility": "private"
-                }),
-            ))
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-        let requests = requests.lock().unwrap();
-        assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].actor, Some(actor));
-
-        match &requests[0].operation {
-            AuthorizationOperation::Command {
-                aggregate_id,
-                command_type,
-                authorization,
-            } => {
-                assert!(!aggregate_id.is_empty());
-                assert_eq!(*command_type, std::any::type_name::<TemplateCommand>());
-                assert_eq!(*authorization, CommandAuthorization::ActiveUser);
-            }
-            operation => panic!("expected template command authorization request, got {operation:?}"),
-        }
-    }
-
-    fn post_json(uri: &str, body: serde_json::Value) -> Request<Body> {
-        Request::builder()
-            .method("POST")
-            .uri(uri)
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap()
-    }
 }

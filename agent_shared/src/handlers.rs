@@ -11,8 +11,8 @@ use tracing::{debug, error, info};
 
 use crate::application_state::CommandHandler;
 
-/// The `query_handler` function is used to query the view repository for a specific view.
-pub async fn query_handler<A, V>(
+/// Loads a specific view from the view repository without running authorization.
+pub async fn load_view<A, V>(
     view_id: &str,
     state: &Arc<dyn ViewRepository<V, A>>,
 ) -> Result<Option<V>, PersistenceError>
@@ -30,6 +30,39 @@ where
             Err(err)
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum QueryHandlerError {
+    #[error("Forbidden")]
+    Forbidden,
+    #[error(transparent)]
+    Persistence(#[from] PersistenceError),
+}
+
+/// The `query_handler` function is used to query the view repository after authorization.
+pub async fn query_handler<A, V>(
+    authorization_checker: Arc<dyn AuthorizationChecker>,
+    actor: Option<Actor>,
+    view_id: &str,
+    state: &Arc<dyn ViewRepository<V, A>>,
+) -> Result<Option<V>, QueryHandlerError>
+where
+    A: Aggregate,
+    V: View<A>,
+{
+    let authorization_request = AuthorizationRequest {
+        actor,
+        operation: AuthorizationOperation::Query {
+            query_type: std::any::type_name::<V>(),
+        },
+    };
+
+    if !authorization_checker.is_authorized(&authorization_request).await {
+        return Err(QueryHandlerError::Forbidden);
+    }
+
+    load_view(view_id, state).await.map_err(QueryHandlerError::Persistence)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,6 +92,7 @@ where
         actor,
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
+            // TODO: Use command variant names when authorization needs finer-grained permissions.
             command_type: std::any::type_name::<A::Command>(),
             authorization: CommandAuthorization::ActiveUser,
         },

@@ -151,21 +151,29 @@ struct GetProfileEndpointResponse {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
-    query_handler(PROFILE_ID, &state.query.profile)
-        .await?
-        .map(|profile_view| {
-            (
-                StatusCode::OK,
-                Json(GetProfileEndpointResponse {
-                    display_name: profile_view.display_name,
-                    description: profile_view.description,
-                    logo: profile_view.logo,
-                    country: profile_view.country,
-                    source: profile_view.source,
-                }),
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+pub(crate) async fn get_profile(
+    State(state): State<Arc<IdentityState>>,
+    actor: Option<Extension<Option<Actor>>>,
+) -> Result<Response, ApiError> {
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        PROFILE_ID,
+        &state.query.profile,
+    )
+    .await?
+    .map(|profile_view| {
+        (
+            StatusCode::OK,
+            Json(GetProfileEndpointResponse {
+                display_name: profile_view.display_name,
+                description: profile_view.description,
+                logo: profile_view.logo,
+                country: profile_view.country,
+                source: profile_view.source,
+            }),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

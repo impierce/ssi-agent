@@ -1,4 +1,4 @@
-use crate::handlers::query_handler;
+use crate::handlers::load_view;
 use agent_holder::{presentation::aggregate::Presentation, state::HolderState};
 use axum::{
     extract::{Path, State},
@@ -13,7 +13,7 @@ pub(crate) async fn presentation_signed(
     State(state): State<Arc<HolderState>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    match query_handler(&presentation_id, &state.query.presentation).await? {
+    match load_view(&presentation_id, &state.query.presentation).await? {
         Some(Presentation {
             signed: Some(signed_presentation),
             ..

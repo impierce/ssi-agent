@@ -1,5 +1,5 @@
 use crate::{
-    handlers::{command_handler, query_handler, request_actor},
+    handlers::{command_handler, load_view, query_handler, request_actor},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
@@ -20,18 +20,22 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn all_authorization_requests(
     State(state): State<Arc<VerificationState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
 ) -> Result<Response, ApiError> {
-    let all_authorization_requests =
-        query_handler("all_authorization_requests", &state.query.all_authorization_requests)
-            .await?
-            .map(|all_authorization_requests_view| {
-                all_authorization_requests_view
-                    .authorization_requests
-                    .into_values()
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+    let all_authorization_requests = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_authorization_requests",
+        &state.query.all_authorization_requests,
+    )
+    .await?
+    .map(|all_authorization_requests_view| {
+        all_authorization_requests_view
+            .authorization_requests
+            .into_values()
+            .collect::<Vec<_>>()
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_authorization_requests)).into_response())
 }
@@ -39,13 +43,18 @@ pub(crate) async fn all_authorization_requests(
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(authorization_request_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&authorization_request_id, &state.query.authorization_request)
-        .await?
-        .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &authorization_request_id,
+        &state.query.authorization_request,
+    )
+    .await?
+    .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -90,7 +99,7 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Return the authorization_request.
-    query_handler(&state, &verification_state.query.authorization_request)
+    load_view(&state, &verification_state.query.authorization_request)
         .await?
         .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
         .map(|form_url_encoded_authorization_request| {

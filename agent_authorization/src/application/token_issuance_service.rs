@@ -8,7 +8,7 @@ use crate::{
 use agent_issuance::{application::access_token_validation_service::AccessTokenClaims, state::IssuanceState};
 use agent_shared::{
     config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, load_view},
 };
 use jsonwebtoken;
 use oid4vc_core::jwt;
@@ -73,7 +73,7 @@ impl TokenIssuanceService {
             } => {
                 // TODO: make sure that the Pre-Authorized Code is short-lived and single-use.
                 // See https://github.com/impierce/ssi-agent/issues/240
-                let offer = query_handler("all_offers", &issuance_state.query.all_offers)
+                let offer = load_view("all_offers", &issuance_state.query.all_offers)
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
                     .and_then(|all_offers_view| {
@@ -117,7 +117,7 @@ impl TokenIssuanceService {
                 redirect_uri,
                 authorization_details,
             } => {
-                let client = query_handler(&client_id, &authorization_state.query.client)
+                let client = load_view(&client_id, &authorization_state.query.client)
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
                     .ok_or(TokenIssuanceError::InvalidClientIdError)?;
@@ -140,7 +140,7 @@ impl TokenIssuanceService {
                 .await
                 .map_err(|err| TokenIssuanceError::InvalidAuthorizationCodeError(err.to_string()))?;
 
-                let issuer_state = query_handler(&code, &authorization_state.query.authorization_code)
+                let issuer_state = load_view(&code, &authorization_state.query.authorization_code)
                     .await
                     .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
                     // This error should never happen, since we just redeemed the authorization code.
@@ -189,7 +189,7 @@ impl TokenIssuanceService {
             // TODO: support refresh tokens
             refresh_token_expires_at: _refresh_token_expires_at,
             issuer_state,
-        } = query_handler(&access_token_id, &authorization_state.query.access_token)
+        } = load_view(&access_token_id, &authorization_state.query.access_token)
             .await
             .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?
             .ok_or(TokenIssuanceError::MissingAccessTokenError)?;

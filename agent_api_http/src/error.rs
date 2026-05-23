@@ -1,6 +1,6 @@
 use crate::v0::issuance::error::{IntoPublicError, PublicError};
 use crate::DOCUMENTATION_URL;
-use agent_shared::handlers::CommandHandlerError;
+use agent_shared::handlers::{CommandHandlerError, QueryHandlerError};
 use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -10,6 +10,7 @@ use hyper::StatusCode;
 pub enum ErrorWrapper<T: std::error::Error> {
     AggregateError(AggregateError<T>),
     CommandHandlerError(CommandHandlerError<T>),
+    QueryHandlerError(QueryHandlerError),
     PersistenceError(PersistenceError),
 }
 
@@ -26,6 +27,7 @@ where
         match self {
             ErrorWrapper::AggregateError(error) => error.into_api_error(),
             ErrorWrapper::CommandHandlerError(error) => error.into_api_error(),
+            ErrorWrapper::QueryHandlerError(error) => error.into_api_error(),
             ErrorWrapper::PersistenceError(error) => error.into_api_error(),
         }
     }
@@ -48,6 +50,9 @@ impl<T: std::error::Error + IntoPublicError> From<ErrorWrapper<T>> for PublicErr
             ErrorWrapper::CommandHandlerError(error) => match error {
                 CommandHandlerError::Forbidden => PublicError::InternalServerError,
                 CommandHandlerError::Aggregate(error) => PublicError::from(error),
+            },
+            ErrorWrapper::QueryHandlerError(error) => match error {
+                QueryHandlerError::Forbidden | QueryHandlerError::Persistence(_) => PublicError::InternalServerError,
             },
             ErrorWrapper::PersistenceError(error) => PublicError::from(error),
         }
@@ -107,6 +112,19 @@ where
                 .message("The request is not authorized")
                 .finish(),
             CommandHandlerError::Aggregate(error) => error.into_api_error(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for QueryHandlerError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            QueryHandlerError::Forbidden => ApiError::builder(StatusCode::FORBIDDEN)
+                .title("Forbidden")
+                .type_url(type_url("authorization#forbidden"))
+                .message("The request is not authorized")
+                .finish(),
+            QueryHandlerError::Persistence(error) => error.into_api_error(),
         }
     }
 }

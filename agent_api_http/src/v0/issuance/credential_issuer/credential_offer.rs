@@ -1,4 +1,4 @@
-use crate::handlers::query_handler;
+use crate::handlers::load_view;
 use agent_issuance::{offer::aggregate::Offer, state::IssuanceState};
 use axum::{
     extract::{Path, State},
@@ -15,7 +15,7 @@ pub(crate) async fn credential_offer_uri(
     State(state): State<Arc<IssuanceState>>,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    match query_handler(&offer_id, &state.query.offer).await? {
+    match load_view(&offer_id, &state.query.offer).await? {
         Some(Offer {
             credential_offer: Some(CredentialOffer::CredentialOffer(credential_offer_parameters)),
             ..

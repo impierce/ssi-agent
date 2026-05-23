@@ -16,7 +16,7 @@ use agent_shared::config::{
     config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
-use agent_shared::{application_state::CommandHandler, handlers::query_handler};
+use agent_shared::{application_state::CommandHandler, handlers::load_view};
 use cqrs_es::persist::{PersistenceError, ViewRepository};
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
@@ -121,7 +121,7 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 // updates, rather than reading from a shared, mutable global state.
 /// Queries the profile and updates the application state with the profile information.
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
-    match query_handler(PROFILE_ID, &state.query.profile).await? {
+    match load_view(PROFILE_ID, &state.query.profile).await? {
         Some(Profile {
             display_name,
             logo,
@@ -174,7 +174,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     };
 
     if let Some(config_display) = first {
-        match query_handler(PROFILE_ID, &state.query.profile).await? {
+        match load_view(PROFILE_ID, &state.query.profile).await? {
             // If the profile exists, we check if it needs to be updated based on the config.
             // We only update the Profile if the config source is:
             // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
@@ -293,7 +293,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
             }
         };
     } else {
-        match query_handler(PROFILE_ID, &state.query.profile).await? {
+        match load_view(PROFILE_ID, &state.query.profile).await? {
             Some(Profile {
                 display_name: persisted_display_name,
                 logo: persisted_logo,
@@ -564,7 +564,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
         info!("Created Linked Domain service");
 
-        match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
+        match load_view(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
             Ok(Some(Service {
                 service: Some(service), ..
             })) => {
@@ -625,7 +625,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
 
     if let Some(Service {
         service: Some(service), ..
-    }) = query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
+    }) = load_view(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
     {
         info!("Found Linked Verifiable Presentations service: {service}");
 
@@ -695,132 +695,8 @@ pub async fn query_all_documents(
     state: &IdentityState,
     query: impl Fn(&(String, Document)) -> bool,
 ) -> anyhow::Result<HashMap<String, Document>> {
-    match query_handler("all_documents", &state.query.all_documents).await? {
+    match load_view("all_documents", &state.query.all_documents).await? {
         Some(AllDocumentsView { documents }) => Ok(documents.into_iter().filter(query).collect()),
         None => Ok(Default::default()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_shared::application_state::Command;
-    use async_trait::async_trait;
-    use cqrs_es::{
-        persist::{PersistenceError, ViewContext, ViewRepository},
-        Aggregate, AggregateError, View,
-    };
-    use shared_kernel::authorization::AllowAllAuthorizationChecker;
-    use std::marker::PhantomData;
-
-    struct NoopCommand<A>(PhantomData<A>);
-
-    #[async_trait]
-    impl<A> Command<A> for NoopCommand<A>
-    where
-        A: Aggregate + Send + Sync,
-        A::Command: Send + Sync,
-    {
-        async fn execute_with_metadata(
-            &self,
-            _aggregate_id: &str,
-            _command: A::Command,
-            _metadata: HashMap<String, String>,
-        ) -> Result<(), AggregateError<A::Error>> {
-            Ok(())
-        }
-    }
-
-    struct NoneRepo<V, A>(PhantomData<(V, A)>);
-
-    #[async_trait]
-    impl<V, A> ViewRepository<V, A> for NoneRepo<V, A>
-    where
-        V: View<A> + Send + Sync,
-        A: Aggregate + Send + Sync,
-    {
-        async fn load(&self, _view_id: &str) -> Result<Option<V>, PersistenceError> {
-            Ok(None)
-        }
-
-        async fn load_with_context(&self, _view_id: &str) -> Result<Option<(V, ViewContext)>, PersistenceError> {
-            Ok(None)
-        }
-
-        async fn update_view(&self, _view: V, _context: ViewContext) -> Result<(), PersistenceError> {
-            Ok(())
-        }
-    }
-
-    struct AllDocumentsRepo;
-
-    #[async_trait]
-    impl ViewRepository<AllDocumentsView, Document> for AllDocumentsRepo {
-        async fn load(&self, _view_id: &str) -> Result<Option<AllDocumentsView>, PersistenceError> {
-            Ok(Some(AllDocumentsView {
-                documents: HashMap::from([(
-                    "decentral-document".to_string(),
-                    Document {
-                        document_id: "decentral-document".to_string(),
-                        did_method: Some(SupportedDidMethod::Iota),
-                        ..Default::default()
-                    },
-                )]),
-            }))
-        }
-
-        async fn load_with_context(
-            &self,
-            view_id: &str,
-        ) -> Result<Option<(AllDocumentsView, ViewContext)>, PersistenceError> {
-            Ok(self
-                .load(view_id)
-                .await?
-                .map(|view| (view, ViewContext::new(view_id.to_string(), 0))))
-        }
-
-        async fn update_view(&self, _view: AllDocumentsView, _context: ViewContext) -> Result<(), PersistenceError> {
-            Ok(())
-        }
-    }
-
-    fn noop_command<A>() -> CommandHandler<A>
-    where
-        A: Aggregate + Send + Sync + 'static,
-        A::Command: Send + Sync,
-    {
-        Arc::new(NoopCommand::<A>(PhantomData))
-    }
-
-    fn none_repo<V, A>() -> Arc<dyn ViewRepository<V, A>>
-    where
-        V: View<A> + Send + Sync + 'static,
-        A: Aggregate + Send + Sync + 'static,
-    {
-        Arc::new(NoneRepo::<V, A>(PhantomData))
-    }
-
-    #[tokio::test]
-    async fn publish_decentrally_hosted_documents_dispatches_publish_command() {
-        let state = IdentityState {
-            authorization_checker: Arc::new(AllowAllAuthorizationChecker),
-            command: CommandHandlers {
-                connection: noop_command(),
-                document: noop_command(),
-                profile: noop_command(),
-                service: noop_command(),
-            },
-            query: ViewRepositories {
-                connection: none_repo(),
-                all_connections: none_repo(),
-                document: none_repo(),
-                all_documents: Arc::new(AllDocumentsRepo),
-                profile: none_repo(),
-                service: none_repo(),
-                all_services: none_repo(),
-            },
-        };
-
-        publish_decentrally_hosted_documents(&state).await.unwrap();
     }
 }

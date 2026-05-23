@@ -3,7 +3,7 @@ use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{
     config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported, CredentialConfiguration,
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, load_view};
 use agent_shared::profile::ApplicationProfile;
 use agent_shared::UrlAppendHelpers;
 use cqrs_es::persist::ViewRepository;
@@ -128,7 +128,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
 
     let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
-    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    match load_view(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(server_config_view) => {
             info!("Update Issuer URL in server metadata");
 
@@ -197,7 +197,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
 }
 
 pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyhow::Result<()> {
-    if let Some(server_config_view) = query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    if let Some(server_config_view) = load_view(SERVER_CONFIG_ID, &state.query.server_config).await? {
         let mut cryptographic_binding_methods_supported: Vec<_> = get_all_enabled_did_methods()
             .into_iter()
             .map(|did_method| did_method.to_string())
@@ -227,7 +227,7 @@ pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyh
 }
 
 pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<()> {
-    if let Some(server_config_view) = query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    if let Some(server_config_view) = load_view(SERVER_CONFIG_ID, &state.query.server_config).await? {
         let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
         if server_config_view.signing_algorithms_supported != signing_algorithms_supported {
@@ -389,7 +389,7 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             }
         });
 
-    let previous_provisioned_credential_configuration_ids = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    let previous_provisioned_credential_configuration_ids = load_view(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .map(|server_config_view| {
             server_config_view

@@ -2,7 +2,7 @@ pub mod send;
 
 use crate::{
     error::type_url,
-    handlers::{command_handler, query_handler, request_actor},
+    handlers::{command_handler, load_view, query_handler, request_actor},
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
@@ -42,7 +42,7 @@ pub(crate) async fn offers(
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
-    let credential_configurations = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    let credential_configurations = load_view(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .map(|server_config_view| server_config_view.credential_configurations)
         // Unreachable error
@@ -83,7 +83,7 @@ pub(crate) async fn offers(
     }];
 
     // Create an offer if it does not exist yet.
-    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+    if load_view(&offer_id, &state.query.offer).await?.is_none() {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
@@ -102,7 +102,7 @@ pub(crate) async fn offers(
         .await?;
     }
 
-    query_handler(&offer_id, &state.query.offer)
+    load_view(&offer_id, &state.query.offer)
         .await?
         .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
         .map(|form_url_encoded_credential_offer| {
@@ -130,11 +130,19 @@ pub(crate) async fn offers(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_offers = query_handler("all_offers", &state.query.all_offers)
-        .await?
-        .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn all_offers(
+    State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
+) -> Result<Response, ApiError> {
+    let all_offers = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_offers",
+        &state.query.all_offers,
+    )
+    .await?
+    .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_offers)).into_response())
 }
@@ -155,13 +163,18 @@ pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Resul
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
     State(state): State<Arc<IssuanceState>>,
-    _actor: Option<Extension<Option<Actor>>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&offer_id, &state.query.offer)
-        .await?
-        .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]
