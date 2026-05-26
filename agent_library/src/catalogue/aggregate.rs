@@ -7,8 +7,9 @@ use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq, ToSchema)]
 pub struct Catalogue {
     #[serde(rename = "id")]
     pub catalogue_id: String,
@@ -19,14 +20,14 @@ pub struct Catalogue {
     pub is_deleted: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq, ToSchema)]
 pub struct CatalogueDisplay {
     pub name: String,
     pub description: String,
     pub icon: Option<DisplayIcon>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ToSchema)]
 pub enum CatalogueVisibility {
     Public,
     #[default]
@@ -34,7 +35,7 @@ pub enum CatalogueVisibility {
     Draft,
 }
 
-#[derive(Debug, Clone, Serialize, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Serialize, Default, PartialEq, Deserialize, ToSchema)]
 pub struct DisplayIcon {
     pub url: String,
     pub alt_text: String,
@@ -63,14 +64,14 @@ impl Aggregate for Catalogue {
                 display,
                 visibility,
             } => {
-                // Todo! Does a catalogue with the same name already exist?
+                // TODO! Does a catalogue with the same name already exist?
                 Ok(vec![CatalogueCreated {
                     id: catalogue_id,
                     display,
                     visibility,
                 }])
             }
-            UpdateCatalogueDisplay { catalogue_id, display } => Ok(vec![CatalogueDisplayUpdated {
+            UpdateDisplay { catalogue_id, display } => Ok(vec![CatalogueDisplayUpdated {
                 id: catalogue_id,
                 display,
             }]),
@@ -85,6 +86,7 @@ impl Aggregate for Catalogue {
                 catalogue_id,
                 template_id,
             } => {
+                // TODO! Check if the template is a demo template, should be immutable!
                 if !services.template_exists(&template_id).await {
                     return Err(CatalogueError::TemplateNotFound(template_id));
                 }

@@ -9,7 +9,7 @@ pub enum CatalogueCommand {
         display: CatalogueDisplay,
         visibility: CatalogueVisibility,
     },
-    UpdateCatalogueDisplay {
+    UpdateDisplay {
         catalogue_id: String,
         display: CatalogueDisplay,
     },
