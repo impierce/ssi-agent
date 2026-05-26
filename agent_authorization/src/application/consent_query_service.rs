@@ -9,7 +9,7 @@ use thiserror::Error;
 pub struct ConsentPageViewModel {
     pub client_id: String,
     pub client_name: String,
-    pub authorization_details: Vec<AuthorizationDetailsObject>,
+    pub authorization_details: Option<Vec<AuthorizationDetailsObject>>,
     pub request_uri: String,
 }
 
@@ -41,18 +41,10 @@ impl ConsentQueryService {
             .map_err(|err| ConsentQueryError::Internal(err.to_string()))?
             .ok_or(ConsentQueryError::ClientNotFound)?;
 
-        let auth_details = if let Some(details) = authorization_request.authorization_details {
-            details
-        } else {
-            return Err(ConsentQueryError::Internal(
-                "Authorization details are missing, and the alternative `scope` parameter is not supported even when provided".to_string(),
-            ));
-        };
-
         Ok(ConsentPageViewModel {
             client_id: client.client_id.clone(),
             client_name: client.client_name.unwrap_or(client.client_id),
-            authorization_details: auth_details,
+            authorization_details: authorization_request.authorization_details,
             request_uri,
         })
     }
