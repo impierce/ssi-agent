@@ -41,10 +41,18 @@ impl ConsentQueryService {
             .map_err(|err| ConsentQueryError::Internal(err.to_string()))?
             .ok_or(ConsentQueryError::ClientNotFound)?;
 
+        let auth_details = if let Some(details) = authorization_request.authorization_details {
+            details
+        } else {
+            return Err(ConsentQueryError::Internal(
+                "Authorization details are missing, and the alternative `scope` parameter is not supported even when provided".to_string(),
+            ));
+        };
+
         Ok(ConsentPageViewModel {
             client_id: client.client_id.clone(),
             client_name: client.client_name.unwrap_or(client.client_id),
-            authorization_details: authorization_request.authorization_details,
+            authorization_details: auth_details,
             request_uri,
         })
     }
