@@ -1,10 +1,11 @@
 name: Check licenses
 
 on:
+  schedule:
+    - cron: "0 4 * * 1" # run at 4 AM every Monday
   # TODO: remove workflow_dispatch
   workflow_dispatch:
   pull_request:
-  push:  
     branches:
       - main
       - next
