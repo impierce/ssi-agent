@@ -95,12 +95,11 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "CC0-1.0",
-    "CC-BY-SA-3.0",
     "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
+    "MIT-0",
     "MPL-2.0",
-    "OpenSSL",
     "Unicode-3.0",
     "W3C-20150513",
     "Zlib",
@@ -116,7 +115,7 @@ confidence-threshold = 0.8
 exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
-    #{ allow = ["Zlib"], crate = "adler32" },
+    { allow = ["CC-BY-SA-3.0"], crate = "ssi-contexts" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
