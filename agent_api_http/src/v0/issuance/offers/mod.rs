@@ -180,7 +180,12 @@ pub mod tests {
     use super::*;
     use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance::{
-        credentials::tests::{create_test_template, create_test_template_with_status_and_format, credentials},
+        credentials::tests::{
+            create_test_template,
+            create_test_template_with_status_and_format,
+            credentials,
+            remove_test_template_configuration,
+        },
         router,
     };
     use crate::API_VERSION;
@@ -292,6 +297,24 @@ pub mod tests {
 
     #[serial_test::serial]
     #[tokio::test]
+    async fn test_offers_endpoint_requires_template_id() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let mut app = router((issuance_state, library_state));
+
+        let response = post_offer_request(&mut app, "").await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Missing Template ID");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
     async fn test_offers_endpoint_requires_published_template() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
@@ -315,6 +338,26 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["title"], "Template Not Published");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_offers_endpoint_requires_credential_configuration() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&library_state, &issuance_state).await;
+        remove_test_template_configuration(&issuance_state, TEMPLATE_ID).await;
+
+        let mut app = router((issuance_state, library_state));
+        let response = post_offer_request(&mut app, TEMPLATE_ID).await;
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "No Credential Configuration Found");
     }
 
     #[serial_test::serial]

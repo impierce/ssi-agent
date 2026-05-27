@@ -132,3 +132,97 @@ impl View<Template> for Template {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::template::aggregate::{DataModel, Visibility};
+    use crate::template::event::{Expiration, HolderType};
+    use std::collections::HashMap;
+
+    fn event(payload: TemplateEvent) -> EventEnvelope<Template> {
+        EventEnvelope {
+            aggregate_id: "template-id".to_string(),
+            sequence: 1,
+            payload,
+            metadata: HashMap::new(),
+        }
+    }
+
+    fn created_event() -> EventEnvelope<Template> {
+        event(TemplateEvent::TemplateCreated {
+            template_id: "template-id".to_string(),
+            source_template_id: None,
+            title: "Template".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            modified_at: "2024-01-01T00:00:00Z".to_string(),
+            tags: Some(vec!["existing".to_string()]),
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::Never,
+            description: Some("existing description".to_string()),
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+        })
+    }
+
+    #[test]
+    fn tags_updated_with_empty_list_clears_tags() {
+        let mut view = Template::default();
+        view.update(&created_event());
+
+        view.update(&event(TemplateEvent::TagsUpdated {
+            template_id: "template-id".to_string(),
+            tags: vec![],
+            modified_at: "2024-01-02T00:00:00Z".to_string(),
+        }));
+
+        assert_eq!(view.tags, None);
+        assert_eq!(view.modified_at.as_deref(), Some("2024-01-02T00:00:00Z"));
+    }
+
+    #[test]
+    fn description_updated_with_empty_string_clears_description() {
+        let mut view = Template::default();
+        view.update(&created_event());
+
+        view.update(&event(TemplateEvent::DescriptionUpdated {
+            template_id: "template-id".to_string(),
+            description: String::new(),
+            modified_at: "2024-01-02T00:00:00Z".to_string(),
+        }));
+
+        assert_eq!(view.description, None);
+        assert_eq!(view.modified_at.as_deref(), Some("2024-01-02T00:00:00Z"));
+    }
+
+    #[test]
+    fn credential_expiration_updated_replaces_previous_value() {
+        let mut view = Template::default();
+        view.update(&created_event());
+
+        view.update(&event(TemplateEvent::CredentialExpirationUpdated {
+            template_id: "template-id".to_string(),
+            credential_expiration: Expiration::Duration("P30D".to_string()),
+            modified_at: "2024-01-02T00:00:00Z".to_string(),
+        }));
+
+        assert_eq!(view.credential_expiration, Expiration::Duration("P30D".to_string()));
+        assert_eq!(view.modified_at.as_deref(), Some("2024-01-02T00:00:00Z"));
+    }
+
+    #[test]
+    fn template_deleted_marks_status_deleted() {
+        let mut view = Template::default();
+        view.update(&created_event());
+
+        view.update(&event(TemplateEvent::TemplateDeleted {
+            template_id: "template-id".to_string(),
+        }));
+
+        assert_eq!(view.status, Status::Deleted);
+    }
+}

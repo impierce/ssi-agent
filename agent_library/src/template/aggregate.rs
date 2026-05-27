@@ -1374,6 +1374,30 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    async fn test_create_template_rejects_archived_status_on_create(template_id: String) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: "Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Archived,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message("Invalid status on create: only Draft or Published are allowed")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
     async fn test_update_title_with_empty_string(template_id: String) {
         TemplateTestFramework::with(())
             .given(vec![TemplateEvent::TemplateCreated {
@@ -1443,6 +1467,335 @@ pub mod document_tests {
                 status: Status::Published,
                 modified_at: test_utils::modified_at(),
             }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_tags_normalizes_input(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
+            .when(TemplateCommand::UpdateTags {
+                template_id: template_id.clone(),
+                tags: vec![
+                    " alpha ".to_string(),
+                    "".to_string(),
+                    "beta".to_string(),
+                    "alpha".to_string(),
+                    "beta ".to_string(),
+                ],
+            })
+            .then_expect_events(vec![TemplateEvent::TagsUpdated {
+                template_id,
+                tags: vec!["alpha".to_string(), "beta".to_string()],
+                modified_at: test_utils::modified_at(),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_description_trims_whitespace(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
+            .when(TemplateCommand::UpdateDescription {
+                template_id: template_id.clone(),
+                description: "  trimmed description  ".to_string(),
+            })
+            .then_expect_events(vec![TemplateEvent::DescriptionUpdated {
+                template_id,
+                description: "trimmed description".to_string(),
+                modified_at: test_utils::modified_at(),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_type_normalizes_standard_input(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                modified_at: test_utils::modified_at(),
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Expiration::default(),
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateType {
+                template_id: template_id.clone(),
+                r#type: vec![
+                    "ExampleCredential".to_string(),
+                    "VerifiableCredential".to_string(),
+                    "ExampleCredential".to_string(),
+                    "".to_string(),
+                ],
+            })
+            .then_expect_events(vec![TemplateEvent::TypeUpdated {
+                template_id,
+                r#type: vec![
+                    "VerifiableCredential".to_string(),
+                    "ExampleCredential".to_string(),
+                ],
+                modified_at: test_utils::modified_at(),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Open Badges Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::OpenBadges3_0,
+                holder_type: HolderType::Individual,
+                modified_at: test_utils::modified_at(),
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Expiration::default(),
+                description: None,
+                r#type: vec![
+                    "VerifiableCredential".to_string(),
+                    "OpenBadgeCredential".to_string(),
+                ],
+                schema: Box::new(Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "achievement": {
+                            "type": "object",
+                            "properties": {
+                                "name": { "type": "string" },
+                                "description": { "type": "string" },
+                                "criteria": {
+                                    "type": "object",
+                                    "properties": {
+                                        "narrative": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }))),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateType {
+                template_id,
+                r#type: vec![
+                    "VerifiableCredential".to_string(),
+                    "OpenBadgeCredential".to_string(),
+                    "AchievementCredential".to_string(),
+                ],
+            })
+            .then_expect_error_message(
+                "Invalid type: OpenBadges type cannot include both `OpenBadgeCredential` and `AchievementCredential`",
+            )
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_credential_expiration_emits_event(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
+            .when(TemplateCommand::UpdateCredentialExpiration {
+                template_id: template_id.clone(),
+                credential_expiration: Expiration::Duration("P30D".to_string()),
+            })
+            .then_expect_events(vec![TemplateEvent::CredentialExpirationUpdated {
+                template_id,
+                credential_expiration: Expiration::Duration("P30D".to_string()),
+                modified_at: test_utils::modified_at(),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_credential_expiration_rejects_invalid_iso8601(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
+            .when(TemplateCommand::UpdateCredentialExpiration {
+                template_id,
+                credential_expiration: Expiration::Duration("30 days".to_string()),
+            })
+            .then_expect_error_message(
+                "Invalid expiration value: `30 days` is not a valid ISO 8601 duration",
+            )
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_open_badges_template_rejects_extra_types(template_id: String) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "OB with extra types".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::OpenBadges3_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![
+                    "VerifiableCredential".to_string(),
+                    "OpenBadgeCredential".to_string(),
+                    "ExtraType".to_string(),
+                ],
+                schema: Box::new(Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "achievement": {
+                            "type": "object",
+                            "properties": {
+                                "name": { "type": "string" },
+                                "description": { "type": "string" },
+                                "criteria": {
+                                    "type": "object",
+                                    "properties": {
+                                        "narrative": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }))),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message(
+                "Invalid type: OpenBadges type includes disallowed extra entries: [ExtraType]",
+            )
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_status_reject_invalid_archived_to_draft(template_id: String) {
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                modified_at: test_utils::modified_at(),
+                tags: None,
+                status: Status::Archived,
+                visibility: Visibility::Private,
+                credential_expiration: Expiration::default(),
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateStatus {
+                template_id,
+                status: Status::Draft,
+            })
+            .then_expect_error_message(
+                "Invalid status transition: cannot transition template status from `archived` to `draft`",
+            )
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_open_badges_template_missing_required_achievement_properties(
+        template_id: String,
+    ) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "OB Missing Props".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::OpenBadges3_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![
+                    "VerifiableCredential".to_string(),
+                    "OpenBadgeCredential".to_string(),
+                ],
+                schema: Box::new(Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "achievement": {
+                            "type": "object",
+                            "properties": {
+                                "description": { "type": "string" }
+                            }
+                        }
+                    }
+                }))),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message(
+                "Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [achievement.name, achievement.criteria.narrative]"
+            )
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_create_open_badges_template_with_array_type_in_schema(
+        template_id: String,
+    ) {
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "OB with array type".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::OpenBadges3_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![
+                    "VerifiableCredential".to_string(),
+                    "OpenBadgeCredential".to_string(),
+                ],
+                schema: Box::new(Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "achievement": {
+                            "type": "object",
+                            "properties": {
+                                "name": { "type": "string" },
+                                "description": { "type": "string" },
+                                "criteria": {
+                                    "type": "object",
+                                    "properties": {
+                                        "narrative": { "type": "string" },
+                                        "tags": { "type": "array" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }))),
+                schema_properties_attributes: None,
+            })
+            .then_expect_error_message(
+                "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields."
+            )
     }
 
     #[rstest]
@@ -1707,6 +2060,46 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "/name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                non_removable: false,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given_no_previous_events()
+            .when(TemplateCommand::CreateTemplate {
+                template_id,
+                source_template_id: None,
+                title: "Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: Some(attrs),
+            })
+            .then_expect_error_message("schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
     async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
         let schema = serde_json::json!({
             "type": "object",
@@ -1784,6 +2177,101 @@ pub mod document_tests {
                 schema_properties_attributes: attrs,
             })
             .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "/name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                non_removable: false,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                modified_at: test_utils::modified_at(),
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Expiration::default(),
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+                template_id,
+                schema_properties_attributes: attrs,
+            })
+            .then_expect_error_message("schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates")
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id: String) {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "/name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                non_removable: false,
+            },
+        );
+        attrs.insert(
+            " /name ".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: false,
+            },
+        );
+
+        TemplateTestFramework::with(())
+            .given(vec![TemplateEvent::TemplateCreated {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                modified_at: test_utils::modified_at(),
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Expiration::default(),
+                description: None,
+                r#type: vec![],
+                schema: Box::new(Some(schema)),
+                schema_properties_attributes: None,
+            }])
+            .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+                template_id,
+                schema_properties_attributes: attrs,
+            })
+            .then_expect_error_message("Duplicate schemaPropertiesAttributes key after trimming: `/name`")
     }
 
     #[rstest]

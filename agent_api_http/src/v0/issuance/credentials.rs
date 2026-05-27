@@ -701,6 +701,17 @@ pub mod tests {
         create_test_template_with_auth(library_state, issuance_state, true).await
     }
 
+    pub async fn remove_test_template_configuration(issuance_state: &IssuanceState, template_id: &str) {
+        let command = ServerConfigCommand::RemoveCredentialConfiguration {
+            credential_configuration_id: template_id.to_string(),
+            provisioned: false,
+        };
+
+        agent_shared::handlers::command_handler(SERVER_CONFIG_ID, &issuance_state.command.server_config, command)
+            .await
+            .unwrap();
+    }
+
     pub async fn create_test_template_with_status_and_format(
         library_state: &LibraryState,
         issuance_state: &IssuanceState,
@@ -1010,6 +1021,59 @@ pub mod tests {
         let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_requires_template_id() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let mut app = router((issuance_state, library_state));
+
+        let response = unsigned_credentials_request_with_template(&mut app, "").await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Missing Template ID");
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_requires_existing_template() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let mut app = router((issuance_state, library_state));
+
+        let response = unsigned_credentials_request_with_template(&mut app, "missing-template").await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Template Not Found");
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_requires_credential_configuration() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template(&library_state, &issuance_state).await;
+        remove_test_template_configuration(&issuance_state, TEMPLATE_ID).await;
+
+        let mut app = router((issuance_state, library_state));
+        let response = unsigned_credentials_request_with_template(&mut app, TEMPLATE_ID).await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "No Credential Configuration Found");
     }
 
     #[tokio::test]

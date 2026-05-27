@@ -92,3 +92,182 @@ impl IntoApiErrorExt for TemplateError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::tests::into_json_value;
+    use serde_json::json;
+
+    macro_rules! assert_problem_details {
+        ($error:expr, $expected:expr) => {
+            assert_eq!(
+                into_json_value($error.into_api_error().into_axum_response()).await,
+                $expected,
+            );
+        };
+    }
+
+    #[tokio::test]
+    async fn template_errors_successfully_convert_to_problem_details() {
+        assert_problem_details!(
+            TemplateError::InvalidSchema("bad schema".to_string()),
+            json!({
+                "type": "https://httpstatuses.com/400",
+                "title": "Invalid JSON Schema",
+                "status": 400,
+                "detail": "Invalid JSON Schema: bad schema"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::InvalidStatusTransition("draft -> draft".to_string()),
+            json!({
+                "type": type_url("library#invalid-status-transition"),
+                "title": "Invalid Status Transition",
+                "status": 409,
+                "detail": "Invalid status transition: draft -> draft"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::InvalidSchemaPropertiesAttributes("bad key".to_string()),
+            json!({
+                "type": type_url("library#invalid-schema-properties-attributes"),
+                "title": "Invalid Schema Properties Attributes",
+                "status": 400,
+                "detail": "Invalid schema_properties_attributes key(s): bad key"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::NonRemovablePropertyViolation("/name".to_string()),
+            json!({
+                "type": type_url("library#non-removable-property-violation"),
+                "title": "Non-removable Property Violation",
+                "status": 409,
+                "detail": "Cannot remove immutable schema properties: /name"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::DisallowedOpenBadgesProperties("achievement.foo".to_string()),
+            json!({
+                "type": type_url("library#disallowed-open-badges-properties"),
+                "title": "Disallowed OpenBadges Schema Properties",
+                "status": 400,
+                "detail": "Disallowed OpenBadges 3.0 schema properties: achievement.foo"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::MissingRequiredOpenBadgesProperties("/achievement/name".to_string()),
+            json!({
+                "type": type_url("library#missing-required-open-badges-properties"),
+                "title": "Missing Required OpenBadges Schema Properties",
+                "status": 400,
+                "detail": "Missing required OpenBadges 3.0 schema properties: /achievement/name"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::InvalidRequiredPropertyType("/achievement/name".to_string()),
+            json!({
+                "type": type_url("library#invalid-required-property-type"),
+                "title": "Invalid Required Property Type",
+                "status": 400,
+                "detail": "Invalid type for required OpenBadges 3.0 schema properties: /achievement/name"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::MissingTitle,
+            json!({
+                "type": type_url("library#missing-title"),
+                "title": "Missing Title",
+                "status": 400,
+                "detail": "A title is required when creating or updating a template"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::ArchivedTemplateImmutable,
+            json!({
+                "type": type_url("library#archived-template-immutable"),
+                "title": "Archived Template Immutable",
+                "status": 409,
+                "detail": "Archived templates are immutable except for status changes"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::DeletedTemplateTerminal,
+            json!({
+                "type": type_url("library#deleted-template-terminal"),
+                "title": "Deleted Template Terminal",
+                "status": 409,
+                "detail": "Deleted templates are terminal and cannot be changed"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::ArchiveBeforeDeleteRequired,
+            json!({
+                "type": type_url("library#archive-before-delete-required"),
+                "title": "Archive Before Delete Required",
+                "status": 409,
+                "detail": "Published templates must be archived before they can be deleted"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::InvalidExpiration("PXD".to_string()),
+            json!({
+                "type": type_url("library#invalid-expiration"),
+                "title": "Invalid Expiration",
+                "status": 400,
+                "detail": "Invalid expiration value: PXD"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::InvalidType("bad type".to_string()),
+            json!({
+                "type": type_url("library#invalid-type"),
+                "title": "Invalid Type",
+                "status": 422,
+                "detail": "Invalid type: bad type"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::InvalidStatusOnCreate,
+            json!({
+                "type": type_url("library#invalid-status-on-create"),
+                "title": "Invalid Status On Create",
+                "status": 422,
+                "detail": "Invalid status on create: only Draft or Published are allowed"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::SchemaPropertiesAttributesNotAllowed,
+            json!({
+                "type": type_url("library#schema-properties-attributes-not-allowed"),
+                "title": "Schema Properties Attributes Not Allowed",
+                "status": 422,
+                "detail": "schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::DuplicateSchemaPropertiesAttributeKey("/name".to_string()),
+            json!({
+                "type": type_url("library#duplicate-schema-properties-attribute-key"),
+                "title": "Duplicate Schema Properties Attribute Key",
+                "status": 422,
+                "detail": "Duplicate schemaPropertiesAttributes key after trimming: `/name`"
+            })
+        );
+    }
+}

@@ -503,13 +503,22 @@ mod tests {
     use std::sync::Arc;
 
     async fn create_source_template(state: &Arc<LibraryState>, template_id: &str, visibility: Visibility) {
+        create_source_template_with_title(state, template_id, "Source Template", visibility).await;
+    }
+
+    async fn create_source_template_with_title(
+        state: &Arc<LibraryState>,
+        template_id: &str,
+        title: &str,
+        visibility: Visibility,
+    ) {
         command_handler(
             template_id,
             &state.command.template,
             TemplateCommand::CreateTemplate {
                 template_id: template_id.to_string(),
                 source_template_id: None,
-                title: "Source Template".to_string(),
+                title: title.to_string(),
                 display: Box::new(None),
                 data_model: DataModel::W3CVcDataModelV1_1,
                 holder_type: HolderType::Individual,
@@ -680,5 +689,215 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body["title"], "Source Template Not Found");
+    }
+
+    #[tokio::test]
+    async fn create_template_returns_created_template() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let response = create_template(
+            State(state),
+            Json(CreateTemplateRequestBody {
+                title: "Created Template".to_string(),
+                display: None,
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: Some("Created description".to_string()),
+                r#type: vec!["EmployeeCredential".to_string()],
+                schema: None,
+                schema_properties_attributes: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["title"], "Created Template");
+        assert_eq!(body["description"], "Created description");
+        assert_eq!(
+            body["type"],
+            json!(["VerifiableCredential", "EmployeeCredential"])
+        );
+    }
+
+    #[tokio::test]
+    async fn update_template_requires_id() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let response = update_template(
+            State(state),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: String::new(),
+                title: Some("Updated title".to_string()),
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+            }),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["title"], "Template ID Missing");
+    }
+
+    #[tokio::test]
+    async fn update_template_rejects_deleted_template() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "deleted-template", Visibility::Private).await;
+
+        command_handler(
+            "deleted-template",
+            &state.command.template,
+            TemplateCommand::DeleteTemplate {
+                template_id: "deleted-template".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let response = update_template(
+            State(state),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "deleted-template".to_string(),
+                title: Some("Updated title".to_string()),
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+            }),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["title"], "Template Not Found");
+    }
+
+    #[tokio::test]
+    async fn update_template_applies_type_and_credential_expiration_changes() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "template-to-update", Visibility::Private).await;
+
+        let response = update_template(
+            State(state.clone()),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: None,
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: Some(Expiration::Duration("P30D".to_string())),
+                description: Some("Updated description".to_string()),
+                r#type: Some(vec!["EmployeeCredential".to_string()]),
+                schema: None,
+                schema_properties_attributes: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(template.credential_expiration, Expiration::Duration("P30D".to_string()));
+        assert_eq!(template.description.as_deref(), Some("Updated description"));
+        assert_eq!(
+            template.r#type,
+            vec![
+                "VerifiableCredential".to_string(),
+                "EmployeeCredential".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn get_templates_filters_deleted_and_sorts_latest_first() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template_with_title(&state, "older-template", "Older Template", Visibility::Private).await;
+        create_source_template_with_title(&state, "newer-template", "Newer Template", Visibility::Private).await;
+        create_source_template_with_title(&state, "deleted-template", "Deleted Template", Visibility::Private).await;
+
+        command_handler(
+            "deleted-template",
+            &state.command.template,
+            TemplateCommand::DeleteTemplate {
+                template_id: "deleted-template".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let response = get_templates(State(state)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let titles: Vec<&str> = body
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|template| template["title"].as_str().unwrap())
+            .collect();
+
+        assert_eq!(titles, vec!["Newer Template", "Older Template"]);
+    }
+
+    #[tokio::test]
+    async fn delete_template_hides_template_from_get_endpoint() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "template-to-delete", Visibility::Private).await;
+
+        let response = delete_template(
+            State(state.clone()),
+            Json(DeleteTemplateEndpointRequest {
+                template_id: "template-to-delete".to_string(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let response = get_template(State(state), Path("template-to-delete".to_string()))
+            .await
+            .unwrap_err()
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
