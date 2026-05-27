@@ -193,10 +193,10 @@ impl Aggregate for Template {
 
                 // W3C VC 1.1 does not expose claim metadata and must not have
                 // schemaPropertiesAttributes.
-                if data_model == DataModel::W3CVcDataModelV1_1 {
-                    if schema_properties_attributes.as_ref().is_some_and(|a| !a.is_empty()) {
-                        return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
-                    }
+                if data_model == DataModel::W3CVcDataModelV1_1
+                    && schema_properties_attributes.as_ref().is_some_and(|a| !a.is_empty())
+                {
+                    return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
                 }
 
                 // For OpenBadges 3.0 templates, validate that the required properties are present

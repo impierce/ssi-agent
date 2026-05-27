@@ -281,6 +281,7 @@ impl SignedCredentialFormat {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_signed_credential_format_matches_configuration(
     signed_credential: &str,
     credential_configuration: &CredentialConfigurationsSupportedObject,
@@ -303,6 +304,7 @@ fn validate_signed_credential_format_matches_configuration(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn expected_signed_credential_format(
     credential_configuration: &CredentialConfigurationsSupportedObject,
 ) -> Result<SignedCredentialFormat, ApiError> {
@@ -318,6 +320,7 @@ fn expected_signed_credential_format(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn detect_signed_credential_format(signed_credential: &str) -> Result<SignedCredentialFormat, ApiError> {
     if signed_credential.contains('~') {
         let issuer_jwt = signed_credential
@@ -347,6 +350,7 @@ fn detect_signed_credential_format(signed_credential: &str) -> Result<SignedCred
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn decode_jwt_segment_json(jwt: &str, segment_index: usize) -> Result<Value, ApiError> {
     let segment = jwt
         .split('.')
@@ -444,6 +448,7 @@ pub async fn patch_credential(
 /// - `Never` → `CredentialExpiry::Never`
 /// - `DateTime(s)` → `CredentialExpiry::Fixed(parsed datetime)`
 /// - `Duration(s)` → `CredentialExpiry::Fixed(Utc::now() + duration)`
+#[allow(clippy::result_large_err)]
 fn expiration_to_credential_expiry(expiration: &Expiration) -> Result<CredentialExpiry, ApiError> {
     match expiration {
         Expiration::Never => Ok(CredentialExpiry::Never),
@@ -491,6 +496,7 @@ fn expiration_to_credential_expiry(expiration: &Expiration) -> Result<Credential
 /// - If the template deadline is `Never`, any explicit value is accepted.
 /// - If the explicit value is `Never` but the template has a fixed deadline, that is rejected.
 /// - Otherwise, the explicit datetime must be ≤ the template deadline.
+#[allow(clippy::result_large_err)]
 fn validate_expiry_within_template_deadline(
     explicit: &CredentialExpiry,
     deadline: &CredentialExpiry,
