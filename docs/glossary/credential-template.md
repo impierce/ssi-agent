@@ -1,8 +1,8 @@
 # Credential Template
 
-A **credential template** is a blueprint for a verifiable credential. It tells UniCore what the credential should look like, what information it must contain, and under what conditions it may be issued.
+A **credential template** serves as a blueprint for a verifiable credential. It tells UniCore what the credential should look like, what information it must contain, and under what conditions it may be issued.
 
-Think of a template as the master definition an issuer sets up once and reuses every time they issue a particular type of credential — for example, a diploma, a membership card, or a professional certification.
+Think of a credential template as the definition an issuer sets up once and reuses every time they issue a particular type of credential — for example, a diploma, a membership card, or a professional certification.
 
 A template answers questions like:
 
