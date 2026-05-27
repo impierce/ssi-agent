@@ -91,6 +91,7 @@ DocumentPublished
 ```
 ProfileCreated,
 DisplayNameUpdated,
+DescriptionUpdated,
 LogoUpdated,
 CountryUpdated,
 SourceUpdated,
@@ -110,7 +111,7 @@ LinkedVerifiablePresentationServiceCreated
 TemplateCreated
 TitleUpdated
 DisplayUpdated
-CredentialFormatUpdated
+DataModelUpdated
 CreatorUpdated
 HolderTypeUpdated
 TagsUpdated
@@ -178,4 +179,19 @@ FormUrlEncodedAuthorizationRequestCreated
 AuthorizationRequestObjectSigned
 SIOPv2AuthorizationResponseVerified
 OID4VPAuthorizationResponseVerified
+```
+
+#### `nonce`
+
+```
+NonceGenerated
+NonceRedeemed
+```
+
+#### `status_list`
+
+```
+StatusListCreated
+IndexAdded
+IndexUpdated
 ```

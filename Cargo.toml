@@ -15,6 +15,10 @@ members = [
     "agent_shared",
     "agent_store",
     "agent_verification",
+
+    "shared-kernel",
+
+    "infrastructure/stores/mongodb",
 ]
 
 [workspace.package]
@@ -24,12 +28,20 @@ rust-version = "1.76.0"
 license-file = "LICENSE"
 publish = false
 
+[workspace.lints.clippy]
+# Enables a large group of strict lints for idiomatic Rust. 
+# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they 
+# prove too noisy.
+pedantic = "warn"
+
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "61fd882" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "61fd882" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "61fd882" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "61fd882" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "61fd882" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+
+shared-kernel = { path = "shared-kernel" }
 
 anyhow = "1.0"
 async-std = { version = "1.5", features = ["attributes", "tokio1"] }
@@ -40,19 +52,19 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
-identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
-identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7", default-features = false, features = [
-    "validator",
-    "credential",
-    "presentation",
+identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
+    "presentation",
+    "sd-jwt-vc",
 ] }
-identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
-identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
-identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
-identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7" }
-identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.6.0-beta.7", default-features = false }
-iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", tag = "v1.6.1" }
+identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_jose = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
+identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false }
+iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", rev = "96196f0da231883ec69cda04892c600ef6afa982" }
 # TODO: Check if this is still needed.
 iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
     "tls",
@@ -64,7 +76,7 @@ lazy_static = "1.4"
 mime = { version = "0.3" }
 oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
-product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.2", package = "product_common", features = [
+product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.16", package = "product_common", features = [
     "gas-station",
     "default-http-client",
 ] }
@@ -74,6 +86,9 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ] }
 rstest = "0.22"
+sd-jwt = { package = "sd-jwt-payload", version = "0.5", default-features = false, features = [
+    "sha",
+] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
@@ -90,5 +105,10 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
+utoipa = { version = "5", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
+
+[patch.crates-io]
+# We need this patch because it makes the `Hasher` trait `Send` and `Sync`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
+sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }

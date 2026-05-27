@@ -5,6 +5,7 @@ pub mod holder;
 pub mod openid4vci;
 
 pub mod error;
+pub mod openapi;
 
 use crate::v0::holder::holder::{
     credentials::credentials,

@@ -8,16 +8,17 @@ use agent_identity::{
     service::aggregate::Service,
 };
 use agent_issuance::{
-    credential::aggregate::Credential, offer::aggregate::Offer, server_config::aggregate::ServerConfig,
+    credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
+    server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
 use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
+    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
     PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, TemplateEventPublisher,
+    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
 };
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
@@ -49,6 +50,8 @@ pub struct EventPublisherHttp {
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
     pub credential: Option<AggregateEventPublisherHttp<Credential>>,
     pub offer: Option<AggregateEventPublisherHttp<Offer>>,
+    pub nonce: Option<AggregateEventPublisherHttp<Nonce>>,
+    pub status_list: Option<AggregateEventPublisherHttp<StatusListAggregate>>,
 
     // Holder
     pub holder_credential: Option<AggregateEventPublisherHttp<agent_holder::credential::aggregate::Credential>>,
@@ -225,6 +228,32 @@ impl EventPublisherHttp {
             )
         });
 
+        let nonce = (!event_publisher_http.events.nonce.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Nonce>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .nonce
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let status_list = (!event_publisher_http.events.status_list.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<StatusListAggregate>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .status_list
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
         let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
             AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
                 event_publisher_http.target_url.clone(),
@@ -290,6 +319,8 @@ impl EventPublisherHttp {
             server_config,
             credential,
             offer,
+            nonce,
+            status_list,
             holder_credential,
             presentation,
             received_offer,
@@ -370,6 +401,18 @@ impl EventPublisher for EventPublisherHttp {
         self.offer
             .take()
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
+    }
+
+    fn nonce(&mut self) -> Option<NonceEventPublisher> {
+        self.nonce
+            .take()
+            .map(|publisher| Box::new(publisher) as NonceEventPublisher)
+    }
+
+    fn status_list(&mut self) -> Option<StatusListEventPublisher> {
+        self.status_list
+            .take()
+            .map(|publisher| Box::new(publisher) as StatusListEventPublisher)
     }
 
     fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {

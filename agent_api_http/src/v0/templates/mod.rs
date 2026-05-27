@@ -2,30 +2,34 @@ use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{CredentialFormat, Display, HolderType, Status, Template, Visibility};
+use agent_library::template::aggregate::{
+    DataModel, Display, HolderType, PropertyAttribute, Status, Template, Visibility,
+};
 use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Form, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tracing::debug;
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
+pub mod openapi;
+
 /// Data transfer object for Templates.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(as = Template)]
 pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
     pub source_template_id: Option<String>,
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub modified_at: Option<String>,
@@ -35,6 +39,7 @@ pub struct TemplateDto {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
 impl From<Template> for TemplateDto {
@@ -44,7 +49,7 @@ impl From<Template> for TemplateDto {
             source_template_id: value.source_template_id,
             title: value.title,
             display: value.display,
-            credential_format: value.credential_format,
+            data_model: value.data_model,
             creator: value.creator,
             holder_type: value.holder_type,
             modified_at: value.modified_at,
@@ -54,16 +59,17 @@ impl From<Template> for TemplateDto {
             description: value.description,
             r#type: value.r#type,
             schema: *value.schema,
+            schema_properties_attributes: value.schema_properties_attributes,
         }
     }
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CreateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub tags: Vec<String>,
@@ -72,15 +78,36 @@ pub struct CreateTemplateEndpointRequest {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
+/// Create a new template
+///
+/// Creates a new template which can be used to issue credentials.
+#[utoipa::path(
+    post,
+    path = "/templates/create-template",
+    tags = ["Library", "Templates"],
+    request_body(
+        content = CreateTemplateEndpointRequest,
+        examples(
+            ("Standard template" = (
+                description = "A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.",
+                value = json!({ "title": "Standard template", "dataModel": "w3c_vc_data_model_v1-1", "holderType": "individual" })
+            ))
+        )
+    ),
+    responses(
+        (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
     Json(CreateTemplateEndpointRequest {
         title,
         display,
-        credential_format,
+        data_model,
         creator,
         holder_type,
         tags,
@@ -89,6 +116,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema,
+        schema_properties_attributes,
     }): Json<CreateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
@@ -97,8 +125,8 @@ pub(crate) async fn create_template(
         template_id: template_id.clone(),
         source_template_id: None,
         title,
-        display,
-        credential_format,
+        display: Box::new(display),
+        data_model,
         creator,
         holder_type,
         tags,
@@ -107,6 +135,7 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema: Box::new(schema),
+        schema_properties_attributes,
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -126,12 +155,28 @@ pub(crate) async fn create_template(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DuplicateTemplateEndpointRequest {
     pub source_template_id: String,
 }
 
+/// Duplicate existing template
+///
+/// Creates a duplicate of an existing template.
+#[utoipa::path(
+    post,
+    path = "/templates/duplicate-template",
+    tags = ["Library", "Templates"],
+    request_body(
+        content = DuplicateTemplateEndpointRequest,
+        example = json!({ "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca" })
+    ),
+    responses(
+        (status = 201, description = "Duplicate created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
+        (status = 422, description = "Source Template Not Found")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
@@ -153,8 +198,8 @@ pub(crate) async fn duplicate_template(
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
         title: original_template.title.map(|t| format!("{} Copy", t)),
-        display: original_template.display,
-        credential_format: original_template.credential_format,
+        display: Box::new(original_template.display),
+        data_model: original_template.data_model,
         creator: original_template.creator,
         holder_type: original_template.holder_type,
         tags: original_template.tags,
@@ -163,6 +208,7 @@ pub(crate) async fn duplicate_template(
         description: original_template.description,
         r#type: original_template.r#type,
         schema: original_template.schema,
+        schema_properties_attributes: original_template.schema_properties_attributes,
     };
 
     command_handler(&new_template_id, &state.command.template, command).await?;
@@ -180,14 +226,14 @@ pub(crate) async fn duplicate_template(
         .into_response())
 }
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
     pub title: Option<String>,
     pub display: Option<Display>,
-    pub credential_format: Option<CredentialFormat>,
+    pub data_model: Option<DataModel>,
     pub creator: Option<String>,
     pub holder_type: Option<HolderType>,
     pub tags: Vec<String>,
@@ -196,8 +242,21 @@ pub struct UpdateTemplateEndpointRequest {
     pub description: Option<String>,
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
+    pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
 }
 
+/// Update a template
+///
+/// Updates an existing template with the provided content.
+#[utoipa::path(
+    post,
+    path = "/templates/update-template",
+    operation_id = "update_template",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 204, description = "Template updated successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
@@ -205,7 +264,7 @@ pub(crate) async fn update_template(
         template_id,
         title,
         display,
-        credential_format,
+        data_model,
         creator,
         holder_type,
         tags,
@@ -214,6 +273,7 @@ pub(crate) async fn update_template(
         description,
         r#type,
         schema,
+        schema_properties_attributes,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
@@ -250,10 +310,10 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if let Some(credential_format) = credential_format {
-        let command = TemplateCommand::UpdateCredentialFormat {
+    if let Some(data_model) = data_model {
+        let command = TemplateCommand::UpdateDataModel {
             template_id: template_id.clone(),
-            credential_format,
+            data_model,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
@@ -322,22 +382,31 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
+    if let Some(schema_properties_attributes) = schema_properties_attributes {
+        let command = TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes,
+        };
+        command_handler(&template_id, &state.command.template, command).await?;
+    }
+
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetTemplatesEndpointRequest {
-    // TODO: Add parameters for filtering templates
-}
-
+/// List all templates
+///
+/// List all available templates.
+#[utoipa::path(
+    get,
+    path = "/templates/get-all-templates",
+    operation_id = "get_all_templates",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 200, description = "All templates retrieved successfully", body = [TemplateDto])
+    )
+)]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_templates(
-    State(state): State<Arc<LibraryState>>,
-    Form(GetTemplatesEndpointRequest {}): Form<GetTemplatesEndpointRequest>,
-) -> Result<Response, ApiError> {
-    debug!("Request Params - ");
-
+pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Result<Response, ApiError> {
     let filtered_templates = query_handler("all_templates", &state.query.all_templates)
         .await?
         .map(|all_templates_view| {
@@ -358,6 +427,18 @@ pub(crate) async fn get_templates(
     Ok((StatusCode::OK, Json(filtered_templates)).into_response())
 }
 
+/// Get template by ID
+///
+/// Retrieve a specific template by its ID.
+#[utoipa::path(
+    get,
+    path = "/templates/{template_id}",
+    operation_id = "get_template_by_id",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 200, description = "Template retrieved successfully", body = TemplateDto)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
@@ -376,13 +457,25 @@ pub(crate) async fn get_template(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteTemplateEndpointRequest {
     #[serde(rename = "id")]
     pub template_id: String,
 }
 
+/// Delete a template
+///
+/// Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+#[utoipa::path(
+    post,
+    path = "/templates/delete-template",
+    operation_id = "delete_template_by_id",
+    tags = ["Library", "Templates"],
+    responses(
+        (status = 204, description = "Template deleted successfully")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,

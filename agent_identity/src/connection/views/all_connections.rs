@@ -1,4 +1,5 @@
 use super::ConnectionView;
+use crate::connection::event::ConnectionEvent;
 use crate::connection::views::Connection;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,10 @@ pub struct AllConnectionsView {
 
 impl View<Connection> for AllConnectionsView {
     fn update(&mut self, event: &EventEnvelope<Connection>) {
+        if let ConnectionEvent::ConnectionRemoved { connection_id } = &event.payload {
+            self.connections.remove(connection_id);
+            return;
+        }
         self.connections
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())

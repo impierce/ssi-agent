@@ -16,7 +16,7 @@ impl View<Template> for Template {
                 source_template_id,
                 title,
                 display,
-                credential_format,
+                data_model,
                 creator,
                 holder_type,
                 modified_at,
@@ -26,12 +26,13 @@ impl View<Template> for Template {
                 description,
                 r#type,
                 schema,
+                schema_properties_attributes,
             } => {
                 self.template_id.clone_from(template_id);
                 self.source_template_id.clone_from(source_template_id);
                 self.title.clone_from(title);
                 self.display.clone_from(display);
-                self.credential_format.clone_from(credential_format);
+                self.data_model.clone_from(data_model);
                 self.creator.clone_from(creator);
                 self.holder_type.clone_from(holder_type);
                 self.modified_at.replace(modified_at.clone());
@@ -41,6 +42,8 @@ impl View<Template> for Template {
                 self.description.clone_from(description);
                 self.r#type.clone_from(r#type);
                 self.schema.clone_from(schema);
+                self.schema_properties_attributes
+                    .clone_from(schema_properties_attributes);
             }
             TitleUpdated {
                 template_id: _,
@@ -58,12 +61,12 @@ impl View<Template> for Template {
                 self.display.replace(display.clone());
                 self.modified_at.replace(modified_at.clone());
             }
-            CredentialFormatUpdated {
+            DataModelUpdated {
                 template_id: _,
-                credential_format,
+                data_model,
                 modified_at,
             } => {
-                self.credential_format.replace(credential_format.clone());
+                self.data_model.replace(data_model.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             CreatorUpdated {
@@ -128,6 +131,15 @@ impl View<Template> for Template {
                 modified_at,
             } => {
                 self.schema.replace(schema.clone());
+                self.modified_at.replace(modified_at.clone());
+            }
+            SchemaPropertiesAttributesUpdated {
+                template_id: _,
+                schema_properties_attributes,
+                modified_at,
+            } => {
+                self.schema_properties_attributes
+                    .replace(schema_properties_attributes.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             TemplateDeleted { template_id: _ } => {

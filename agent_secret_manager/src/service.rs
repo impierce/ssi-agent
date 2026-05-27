@@ -1,11 +1,11 @@
-use crate::subject::SubjectExt;
+use crate::subject::Subject;
 use async_trait::async_trait;
 use std::sync::Arc;
 
 /// Convenience trait for Services like `IssuanceServices`, `HolderServices`, and `VerifierServices`.
 #[async_trait]
 pub trait Service {
-    fn new(subject: Arc<dyn SubjectExt>) -> Self;
+    fn new(subject: Arc<Subject>) -> Self;
 
     #[cfg(feature = "test_utils")]
     async fn default() -> Arc<Self>

@@ -1,23 +1,27 @@
 use crate::stronghold_storage;
-use agent_shared::config::{config, SupportedDidMethod};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, SupportedDidMethod};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use did_manager_iota::consumer::NodeUrls;
+use identity_did::CoreDID;
 use identity_iota::did::DIDUrl;
+use identity_iota::document::CoreDocument;
 use identity_iota::storage::{JwkStorage, KeyId};
 use identity_iota::verification::jwk::Jwk;
 use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
 use jsonwebtoken::Algorithm;
+use oid4vc_core::verification_material_resolver::VerificationMaterialResolver;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
+pub use sd_jwt::{JsonObject, JwsSigner};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Reponsible for signing and verifying data.
+/// Responsible for signing and verifying data.
 #[derive(Debug)]
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
@@ -46,7 +50,7 @@ impl Subject {
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-            resolver: Resolver::new_with_options(None, Some(node_urls), username_password).await,
+            resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
     }
 
@@ -54,7 +58,7 @@ impl Subject {
         match algorithm {
             Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
             Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
-            _ => anyhow::bail!("Unsuported algorithm"),
+            _ => anyhow::bail!("Unsupported algorithm"),
         }
         .map_err(Into::into)
     }
@@ -74,18 +78,9 @@ impl Subject {
     pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
         self.verification_method_ids.lock().await.get(&key).cloned()
     }
-}
 
-#[async_trait]
-pub trait SubjectExt: oid4vc_core::Subject {
-    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk>;
-}
-
-/// Extension trait for `Subject` to provide additional functionality.
-#[async_trait]
-impl SubjectExt for Subject {
     /// Resolves the public key for a given DID URL.
-    async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
+    pub async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
         let did_url =
             identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
@@ -106,6 +101,51 @@ impl SubjectExt for Subject {
             .public_key_jwk()
             .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
             .cloned()
+    }
+}
+
+#[async_trait]
+impl JwsSigner for Subject {
+    type Error = String;
+
+    async fn sign(&self, header: &JsonObject, payload: &JsonObject) -> Result<Vec<u8>, Self::Error> {
+        let algorithm = header
+            .get("alg")
+            .and_then(|alg| alg.as_str())
+            .and_then(|alg_str| Algorithm::from_str(alg_str).ok())
+            .unwrap_or_else(get_preferred_signing_algorithm);
+
+        let encoded_header = serde_json::to_vec(header)
+            .map_err(|e| format!("Failed to serialize header to JSON: {}", e))
+            .map(|header_bytes| URL_SAFE_NO_PAD.encode(&header_bytes))?;
+
+        let encoded_payload = serde_json::to_vec(payload)
+            .map_err(|e| format!("Failed to serialize payload to JSON: {}", e))
+            .map(|payload_bytes| URL_SAFE_NO_PAD.encode(&payload_bytes))?;
+
+        let message = format!("{}.{}", encoded_header, encoded_payload);
+
+        let preferred_did_method = get_preferred_did_method();
+
+        let proof_value = Sign::sign(self, &message, &preferred_did_method.to_string(), algorithm)
+            .await
+            .map_err(|e| format!("Signing error: {}", e))?;
+
+        let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
+        let message = [message, signature].join(".");
+
+        Ok(message.as_bytes().to_vec())
+    }
+}
+
+#[async_trait]
+impl VerificationMaterialResolver for Subject {
+    async fn resolve_did_document(&self, did: &CoreDID) -> Result<CoreDocument, Box<dyn std::error::Error>> {
+        self.resolver.resolve(did.as_str()).await.map_err(|e| e.into())
+    }
+
+    async fn resolve_public_key(&self, kid: &str) -> Result<Jwk, Box<dyn std::error::Error>> {
+        Subject::resolve_public_key(self, kid).await.map_err(|e| e.into())
     }
 }
 
@@ -152,7 +192,7 @@ mod default_subject {
             Self {
                 stronghold_storage,
                 verification_method_ids,
-                resolver: Resolver::new().await,
+                resolver: Resolver::new(),
             }
         }
     }
@@ -273,10 +313,10 @@ impl StorageKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_shared::config::{
-        default_issuer_eddsa_key_id, default_issuer_es256_key_id, set_config, SecretManagerConfig,
-    };
+    use agent_shared::config::{default_issuer_eddsa_key_id, default_issuer_es256_key_id, SecretManagerConfig};
+    use jsonwebtoken::DecodingKey;
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
+    use serde_json::json;
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
     const EDDSA_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKSmJWOVpNRkZQTm05SFgyczVNbTlzY1RWTWRIUTJZVkE0YzE5QmJFRmhWVUl6UzBkelVFY3RlR0kwSWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWxaUGFrUjBRblozY0daalNraHlUelpMVjFOUGRYTlZVR1ptUWt3eVIxOUtjWFp0VVRZNFMzaDRWalFpZlEjMCJ9.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSkpiVjlaTUZGUE5tOUhYMnM1TW05c2NUVk1kSFEyWVZBNGMxOUJiRUZoVlVJelMwZHpVRWN0ZUdJMElpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklsWlBha1IwUW5aM2NHWmpTa2h5VHpaTFYxTlBkWE5WVUdabVFrd3lSMTlLY1hadFVUWTRTM2g0VmpRaWZRIiwic3ViIjoiZGlkOmp3azpleUpoYkdjaU9pSkZaRVJUUVNJc0ltTnlkaUk2SWtWa01qVTFNVGtpTENKcmFXUWlPaUpKYlY5Wk1GRlBObTlIWDJzNU1tOXNjVFZNZEhRMllWQTRjMTlCYkVGaFZVSXpTMGR6VUVjdGVHSTBJaXdpYTNSNUlqb2lUMHRRSWl3aWVDSTZJbFpQYWtSMFFuWjNjR1pqU2toeVR6WkxWMU5QZFhOVlVHWm1Ra3d5UjE5S2NYWnRVVFk0UzNoNFZqUWlmUSIsImF1ZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKdFFqSXhUV2t5Y1V0WVZtTTFOREpVWWt0U09UZ3lUelpUWjFKWVZrWlFaVzV3TTNGWWRIRlRla3R2SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWprM1JVRXpSSE5vUmpONlIwSllTVjlVYnpObVJrUnJNVTFxV1VaYVV6bFZiMUpVYmxCT1NIUlpVV01pZlEiLCJleHAiOjE3MjMwMzE3MTQsImlhdCI6MTcyMzAzMTExNCwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.oGRYpwH4QvWZs0bZkgAuxq6MqNYdoX44KxNfRl7GzXCnv_0D_c19rhYMwzn04R7udNCthFDr7GUhXLQgROlUDw";
@@ -292,8 +332,6 @@ mod tests {
 
     #[tokio::test]
     async fn es256_signed_jwt_successfully_verified() {
-        set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
-
         let subject = Arc::new(Subject::test_subject().await);
 
         let mut split = ES256_SIGNED_JWT.rsplitn(2, '.');
@@ -312,8 +350,6 @@ mod tests {
 
     #[tokio::test]
     async fn eddsa_signed_jwt_successfully_verified() {
-        set_config().set_secret_manager_config(SECRET_MANAGER_CONFIG.clone());
-
         let subject = Arc::new(Subject::test_subject().await);
 
         let mut split = EDDSA_SIGNED_JWT.rsplitn(2, '.');
@@ -328,5 +364,107 @@ mod tests {
         // Verify the signature
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_jws_signer_with_es256_algorithm() {
+        let subject = Subject::test_subject().await;
+
+        let preferred_did_method = get_preferred_did_method().to_string();
+        let kid = subject.key_id(&preferred_did_method, Algorithm::ES256).await.unwrap();
+
+        // Create header with ES256 algorithm
+        let header = json!({
+            "alg": "ES256",
+            "typ": "JWT",
+            "kid": kid
+        });
+
+        // Create a simple payload
+        let payload = json!({
+            "iss": "test-issuer",
+            "sub": "test-subject",
+            "iat": 1234567890
+        });
+
+        // Sign using JwsSigner trait
+        let result = JwsSigner::sign(&subject, header.as_object().unwrap(), payload.as_object().unwrap()).await;
+
+        assert!(result.is_ok());
+
+        let jwt_bytes = result.unwrap();
+        let jwt_string = String::from_utf8(jwt_bytes).unwrap();
+
+        // Verify JWT has 3 parts (header.payload.signature)
+        let parts: Vec<&str> = jwt_string.split('.').collect();
+        assert_eq!(parts.len(), 3);
+
+        // Verify the header part contains ES256
+        let decoded_header = URL_SAFE_NO_PAD.decode(parts[0]).unwrap();
+        let header_json: serde_json::Value = serde_json::from_slice(&decoded_header).unwrap();
+        assert_eq!(header_json["alg"], "ES256");
+
+        let public_key = subject.resolve_public_key(&kid).await.unwrap();
+
+        let jwk = serde_json::from_value(json!(public_key)).unwrap();
+
+        let decoding_key = DecodingKey::from_jwk(&jwk).unwrap();
+
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
+        validation.required_spec_claims = Default::default();
+
+        let token = jsonwebtoken::decode::<serde_json::Value>(&jwt_string, &decoding_key, &validation);
+
+        assert!(token.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_jws_signer_with_eddsa_algorithm() {
+        let subject = Subject::test_subject().await;
+
+        let preferred_did_method = get_preferred_did_method().to_string();
+        let kid = subject.key_id(&preferred_did_method, Algorithm::EdDSA).await.unwrap();
+
+        // Create header with EdDSA algorithm
+        let header = json!({
+            "alg": "EdDSA",
+            "typ": "JWT",
+            "kid": kid
+        });
+
+        // Create a simple payload
+        let payload = json!({
+            "iss": "test-issuer",
+            "sub": "test-subject",
+            "iat": 1234567890
+        });
+
+        // Sign using JwsSigner trait
+        let result = JwsSigner::sign(&subject, header.as_object().unwrap(), payload.as_object().unwrap()).await;
+
+        assert!(result.is_ok());
+
+        let jwt_bytes = result.unwrap();
+        let jwt_string = String::from_utf8(jwt_bytes).unwrap();
+
+        // Verify JWT has 3 parts (header.payload.signature)
+        let parts: Vec<&str> = jwt_string.split('.').collect();
+        assert_eq!(parts.len(), 3);
+
+        // Verify the header part contains EdDSA
+        let decoded_header = URL_SAFE_NO_PAD.decode(parts[0]).unwrap();
+        let header_json: serde_json::Value = serde_json::from_slice(&decoded_header).unwrap();
+        assert_eq!(header_json["alg"], "EdDSA");
+
+        let public_key = subject.resolve_public_key(&kid).await.unwrap();
+
+        let decoding_key = DecodingKey::from_jwk(&serde_json::from_value(json!(public_key)).unwrap()).unwrap();
+
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+        validation.required_spec_claims = Default::default();
+
+        let token = jsonwebtoken::decode::<serde_json::Value>(&jwt_string, &decoding_key, &validation);
+
+        assert!(token.is_ok());
     }
 }

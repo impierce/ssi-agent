@@ -5,7 +5,7 @@ use crate::{
     handlers::{command_handler, query_handler},
 };
 use agent_issuance::{
-    offer::{aggregate::DeliveryOptions, command::OfferCommand},
+    offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use axum::{
@@ -107,6 +107,18 @@ pub(crate) async fn offers(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+/// Get all offers
+///
+/// List all credential offers.
+#[utoipa::path(
+    get,
+    path = "/offers",
+    operation_id = "get_all_offers",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "All offers retrieved successfully", body = [OfferView])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_offers = query_handler("all_offers", &state.query.all_offers)
@@ -117,6 +129,19 @@ pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Resul
     Ok((StatusCode::OK, Json(all_offers)).into_response())
 }
 
+/// Get offer by ID
+///
+/// Retrieves a credential offer by its ID.
+#[utoipa::path(
+    get,
+    path = "/offers/{offer_id}",
+    operation_id = "get_offer_by_id",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "Offer retrieved successfully", body = OfferView),
+        (status = 404, description = "Offer not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
     State(state): State<Arc<IssuanceState>>,
@@ -188,8 +213,8 @@ pub mod tests {
         match CredentialOffer::from_str(&body).unwrap() {
             CredentialOffer::CredentialOffer(credential_offer) => {
                 assert_eq!(
-                    credential_offer.credential_configuration_ids,
-                    vec![credential_configuration_id.to_string()]
+                    &*credential_offer.credential_configuration_ids,
+                    &vec![credential_configuration_id.to_string()]
                 );
 
                 let CredentialOfferParameters {

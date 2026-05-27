@@ -3,9 +3,9 @@ use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
+    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
     PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, TemplateEventPublisher,
+    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
 };
 use async_nats::Client;
 use async_trait::async_trait;
@@ -98,6 +98,15 @@ impl EventPublisher for EventPublisherNats {
             .take()
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
     }
+
+    fn nonce(&mut self) -> Option<NonceEventPublisher> {
+        None
+    }
+
+    fn status_list(&mut self) -> Option<StatusListEventPublisher> {
+        None
+    }
+
     fn document(&mut self) -> Option<DocumentEventPublisher> {
         None
     }

@@ -1,4 +1,6 @@
-pub use super::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
+use std::collections::HashMap;
+
+pub use super::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Status, Visibility};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -8,8 +10,8 @@ pub enum TemplateCommand {
         template_id: String,
         source_template_id: Option<String>,
         title: Option<String>,
-        display: Option<Display>,
-        credential_format: Option<CredentialFormat>,
+        display: Box<Option<Display>>,
+        data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,
         tags: Vec<String>,
@@ -18,6 +20,7 @@ pub enum TemplateCommand {
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
+        schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     },
     UpdateTitle {
         template_id: String,
@@ -27,9 +30,9 @@ pub enum TemplateCommand {
         template_id: String,
         display: Display,
     },
-    UpdateCredentialFormat {
+    UpdateDataModel {
         template_id: String,
-        credential_format: CredentialFormat,
+        data_model: DataModel,
     },
     UpdateCreator {
         template_id: String,
@@ -62,6 +65,10 @@ pub enum TemplateCommand {
     UpdateSchema {
         template_id: String,
         schema: serde_json::Value,
+    },
+    UpdateSchemaPropertiesAttributes {
+        template_id: String,
+        schema_properties_attributes: HashMap<String, PropertyAttribute>,
     },
     DeleteTemplate {
         template_id: String,

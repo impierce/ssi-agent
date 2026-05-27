@@ -1,3 +1,4 @@
+mod openapi;
 mod provisioned;
 
 use agent_macros::Config;
@@ -8,12 +9,10 @@ use identity_iota::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
-use oid4vci::credential_issuer::credential_configurations_supported::ClaimDescription;
-use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedDisplay;
-use oid4vci::{
-    credential_format_profiles::{CredentialFormats, WithParameters},
-    credential_offer::TxCodeConstraints,
-};
+use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
+use oid4vci::credential_offer::TxCodeConstraints;
+use oid4vp::authorization_request::AlgValues;
+use oid4vp::authorization_request::VcSdJwtParameters;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -28,12 +27,20 @@ use std::{
 use strum::VariantArray;
 use url::Url;
 
-use crate::{error::SharedError, profile::ApplicationProfile};
+use crate::{
+    config::openapi::{authorization, credential_metadata},
+    error::SharedError,
+    profile::ApplicationProfile,
+};
 // Re-export
 pub use provisioned::load_provisioned_config;
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
+#[cfg(feature = "test_utils")]
+pub const TESTINDEX: usize = 123;
+#[cfg(feature = "test_utils")]
+pub const TEST_STATUS_LIST_ID: &str = "0";
 
 static STRONGHOLD_PATH: &str = "./stronghold.dat";
 
@@ -280,6 +287,7 @@ pub struct ApplicationConfiguration {
             Display {
                 name: "UniCore".to_string(),
                 locale: Some("en".to_string()),
+                description: None,
                 logo: Some(Logo {
                     uri: Some(Url::parse("https://www.impierce.com/external/impierce-icon.png").unwrap()),
                     alt_text: Some("Impierce Icon".to_string()),
@@ -293,17 +301,21 @@ pub struct ApplicationConfiguration {
     pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(vec![Algorithm::ES256, Algorithm::EdDSA])
+            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
         dc_sd_jwt: Some(DcSdJwtParameters {
-            sd_jwt_alg_values: Some(vec![Algorithm::ES256]),
-            kb_jwt_alg_values: Some(vec![Algorithm::ES256])
+            sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
+            kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
+                }),
+        vc_sd_jwt: Some(VcSdJwtParameters {
+            sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
+            kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
                 }),
         ldp_vc: None,
-        ldp_vp: None,
+        di_vp: None,
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
@@ -515,15 +527,17 @@ pub fn default_issuer_es256_key_id() -> KeyId {
     KeyId::new(ES256_KEY_ID)
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, utoipa::ToSchema)]
 pub struct CredentialConfiguration {
     pub credential_configuration_id: String,
+    pub format: String,
+    // The `type` field is only used when `format` is `jwt_vc_json`.
+    #[serde(default, rename = "type")]
+    pub type_: Vec<String>,
+    #[schema(schema_with = credential_metadata)]
     #[serde(flatten)]
-    pub credential_format_with_parameters: CredentialFormats<WithParameters>,
-    #[serde(default)]
-    pub display: Vec<CredentialConfigurationsSupportedDisplay>,
-    #[serde(default)]
-    pub claims: Vec<ClaimDescription>,
+    pub credential_metadata: CredentialMetadata,
+    #[schema(schema_with = authorization)]
     #[serde(default)]
     pub authorization: Authorization,
 }
@@ -545,7 +559,7 @@ impl Default for Authorization {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,
@@ -555,6 +569,7 @@ pub struct Logo {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Display {
     pub name: String,
+    pub description: Option<String>,
     pub locale: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
@@ -618,6 +633,10 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offer: Vec<OfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nonce: Vec<NonceEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status_list: Vec<StatusListEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holder_credential: Vec<HolderCredentialEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation: Vec<PresentationEvent>,
@@ -669,6 +688,7 @@ pub enum DocumentEvent {
 pub enum ProfileEvent {
     ProfileCreated,
     DisplayNameUpdated,
+    DescriptionUpdated,
     LogoUpdated,
     CountryUpdated,
     SourceUpdated,
@@ -686,7 +706,7 @@ pub enum TemplateEvent {
     TemplateCreated,
     TitleUpdated,
     DisplayUpdated,
-    CredentialFormatUpdated,
+    DataModelUpdated,
     CreatorUpdated,
     HolderTypeUpdated,
     TagsUpdated,
@@ -721,6 +741,19 @@ pub enum OfferEvent {
     CredentialResponseCreated,
     TxCodeGenerated,
     CredentialOfferEmailSent,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum StatusListEvent {
+    StatusListCreated,
+    IndexAdded,
+    IndexUpdated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum NonceEvent {
+    NonceGenerated,
+    NonceRedeemed,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -790,7 +823,9 @@ impl Default for Metrics {
     Ord,
     PartialOrd,
     VariantArray,
+    utoipa::ToSchema,
 )]
+#[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
     #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
     #[strum(serialize = "did:jwk")]
@@ -960,6 +995,30 @@ pub fn get_preferred_signing_algorithm() -> jsonwebtoken::Algorithm {
         .expect("Please set a signing algorithm as `preferred` in the configuration")
 }
 
+/// Extension trait for `jsonwebtoken::Algorithm` to provide a method to get the string representation.
+pub trait AlgorithmExt {
+    fn as_str(&self) -> &str;
+}
+
+impl AlgorithmExt for jsonwebtoken::Algorithm {
+    fn as_str(&self) -> &str {
+        match self {
+            jsonwebtoken::Algorithm::HS256 => "HS256",
+            jsonwebtoken::Algorithm::HS384 => "HS384",
+            jsonwebtoken::Algorithm::HS512 => "HS512",
+            jsonwebtoken::Algorithm::RS256 => "RS256",
+            jsonwebtoken::Algorithm::RS384 => "RS384",
+            jsonwebtoken::Algorithm::RS512 => "RS512",
+            jsonwebtoken::Algorithm::ES256 => "ES256",
+            jsonwebtoken::Algorithm::ES384 => "ES384",
+            jsonwebtoken::Algorithm::PS256 => "PS256",
+            jsonwebtoken::Algorithm::PS384 => "PS384",
+            jsonwebtoken::Algorithm::PS512 => "PS512",
+            jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+        }
+    }
+}
+
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
 pub(crate) fn redact<S, T>(_str: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -1096,7 +1155,11 @@ mod tests {
                 "dc+sd-jwt": {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
-                }
+                },
+                "vc+sd-jwt": {
+                  "sd-jwt_alg_values": ["ES256"],
+                  "kb-jwt_alg_values": ["ES256"]
+                },
               },
             })
         );

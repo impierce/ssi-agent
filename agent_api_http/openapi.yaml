@@ -173,6 +173,29 @@ paths:
               schema:
                 type: object
 
+  /openid4vci/nonce:
+    post:
+      summary: Request a fresh nonce for credential request proof
+      description: |
+        Standard OpenID4VCI nonce endpoint (Draft 15). Returns a fresh `c_nonce` that the wallet 
+        must include in the proof JWT when requesting a credential. Each nonce can only be used once.
+      tags:
+        - (public)
+      responses:
+        "200":
+          description: Fresh nonce generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  c_nonce:
+                    type: string
+                    description: A fresh nonce value to be used in the credential request proof
+                    example: "9c294e36e4231fbcf07758a71bb0b4903d7fdebf75e03a5beb7aeecf8a1b13af"
+              example:
+                c_nonce: "9c294e36e4231fbcf07758a71bb0b4903d7fdebf75e03a5beb7aeecf8a1b13af"
+
   /v0/authorization_requests:
     get:
       tags:
@@ -238,10 +261,6 @@ paths:
             schema:
               type: object
               properties:
-                nonce:
-                  type: string
-                  description: A unique identifier for the Authorization Request
-                  example: "0d520cbe176ab9e1f7888c70888020d84a69672a4baabd3ce1c6aaad8f6420c0"
                 state:
                   type: string
                   description: A unique string representing the state of the Authorization Request
@@ -282,17 +301,12 @@ paths:
                                   items:
                                     type: string
                                   example: ["credentialSubject", "first_name"]
-              required:
-                - nonce
             examples:
               siopv2:
                 summary: SIOPv2 Authorization Request
-                value:
-                  nonce: this is a nonce
               oid4vp-with-dcql:
                 summary: OID4VP with DCQL Query
                 value:
-                  nonce: this is a nonce
                   dcql_query:
                     credentials:
                       - id: "CredentialQuery"
@@ -385,16 +399,13 @@ paths:
                 format:
                   type: string
                   example: jwt_vc_json
-                credential_definition:
-                  type: object
-                  properties:
-                    type:
-                      type: array
-                      items:
-                        type: string
-                        example: VerifiableCredential
-                      example:
-                        - VerifiableCredential
+                type:
+                  type: array
+                  items:
+                    type: string
+                    example: VerifiableCredential
+                  example:
+                    - VerifiableCredential
                 display:
                   type: array
                   items:
@@ -426,14 +437,12 @@ paths:
                 - format
                 - credential_definition
             examples:
-              openbadgesv3_credential_configurations:
-                summary: Open Badges 3.0
+              jwt_vc_json_vc1_1_credential_configurations:
+                summary: JwtVcJson VC DM V1.1
                 value:
-                  credential_configuration_id: openbadge_credential
-                  credential_definition:
-                    type:
-                      - VerifiableCredential
-                      - OpenBadgeCredential
+                  credential_configuration_id: jwt_vc_json_vc1_1_credential
+                  type:
+                    - VerifiableCredential
                   display:
                     - locale: en
                       logo:
@@ -441,13 +450,13 @@ paths:
                         uri: https://impierce.com/images/logo-blue.png
                       name: Identity Credential
                   format: jwt_vc_json
-              w3c_vc_credential_configurations:
-                summary: W3C VC Data Model
+              jwt_vc_json_obv3_credential_configurations:
+                summary: JwtVcJson Open Badges V3.0
                 value:
-                  credential_configuration_id: w3c_vc_credential
-                  credential_definition:
-                    type:
-                      - VerifiableCredential
+                  credential_configuration_id: jwt_vc_json_obv3_credential
+                  type:
+                    - VerifiableCredential
+                    - OpenBadgeCredential
                   display:
                     - locale: en
                       logo:
@@ -455,6 +464,72 @@ paths:
                         uri: https://impierce.com/images/logo-blue.png
                       name: Identity Credential
                   format: jwt_vc_json
+              jwt_vc_json_elm_credential_configurations:
+                summary: JwtVcJson European Digital Credental V3.3
+                value:
+                  credential_configuration_id: jwt_vc_json_elm_credential
+                  type:
+                    - VerifiableCredential
+                    - EuropeanDigitalCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: jwt_vc_json
+              dc+sd-jwt_credential_configurations:
+                summary: SD-JWT VC
+                value:
+                  credential_configuration_id: dc+sd-jwt
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: dc+sd-jwt
+              vcdm2_sd_jwt_credential_configurations:
+                summary: VC DM V2.0 SD-JWT
+                value:
+                  credential_configuration_id: vc2_vc+sd-jwt
+                  type:
+                    - VerifiableCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: vc+sd-jwt
+              obv3_sd_jwt_credential_configurations:
+                summary: Open Badges V3.0 SD-JWT
+                value:
+                  credential_configuration_id: obv3_vc+sd-jwt
+                  type:
+                    - VerifiableCredential
+                    - OpenBadgeCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: vc+sd-jwt
+              elm_sd_jwt_credential_configurations:
+                summary: European Digital Credential V3.3 SD-JWT
+                value:
+                  credential_configuration_id: elm_vc+sd-jwt
+                  type:
+                    - VerifiableCredential
+                    - EuropeanDigitalCredential
+                  display:
+                    - locale: en
+                      logo:
+                        alt_text: UniCore Logo
+                        uri: https://impierce.com/images/logo-blue.png
+                      name: Identity Credential
+                  format: vc+sd-jwt
       responses:
         "200":
           description: A Credential Configuration has been successfully added to the Credential Issuer Metadata
@@ -566,8 +641,19 @@ paths:
                 - credential
                 - expiresAt
             examples:
-              open-badges-3:
-                summary: Open Badges 3.0
+              jwt_vc_json_vc1_1:
+                summary: JwtVcJson VC Data Model V1.1
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: jwt_vc_json_vc1_1_credential
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              jwt_vc_json_obv3:
+                summary: JwtVcJson Open Badges V3.0
                 value:
                   credential:
                     id: https://example.com/badges/teamwork
@@ -581,18 +667,61 @@ paths:
                         type: Achievement
                       type:
                         - AchievementSubject
-                  credentialConfigurationId: openbadge_credential
+                  credentialConfigurationId: jwt_vc_json_obv3_credential
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
-              w3c-vc-dm:
-                summary: W3C VC Data Model
+              jwt_vc_json_elm:
+                summary: JwtVcJson European Digital Credential V3.3
                 value:
                   credential:
                     credentialSubject:
                       dob: "1982-01-01"
                       first_name: Ferris
                       last_name: Crabman
-                  credentialConfigurationId: w3c_vc_credential
+                  credentialConfigurationId: jwt_vc_json_elm_credential
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              dc+sd-jwt:
+                summary: SD-JWT VC
+                value:
+                  credential:
+                    dob: "1982-01-01"
+                    first_name: Ferris
+                    last_name: Crabman
+                  credentialConfigurationId: dc+sd-jwt
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              vcdm2-sd-jwt:
+                summary: VC DM V2.0 SD-JWT
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: vc2_vc+sd-jwt
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              obv3-sd-jwt:
+                summary: Open Badges V3.0 SD-JWT
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: obv3_vc+sd-jwt
+                  offerId: "001"
+                  expiresAt: "3025-10-24 11:34:00Z"
+              elm-sd-jwt:
+                summary: European Digital Credential V3.3 SD-JWT
+                value:
+                  credential:
+                    credentialSubject:
+                      dob: "1982-01-01"
+                      first_name: Ferris
+                      last_name: Crabman
+                  credentialConfigurationId: elm_vc+sd-jwt
                   offerId: "001"
                   expiresAt: "3025-10-24 11:34:00Z"
       responses:
@@ -925,9 +1054,9 @@ paths:
                   value:
                     - id: "550e8400-e29b-41d4-a716-446655440000"
                       title: "Employee ID Credential"
-                      credentialFormat: "jwt_vc_json"
-                      status: "Published"
-                      visibility: "Public"
+                      dataModel: "w3c_vc_data_model_v1-1"
+                      status: "published"
+                      visibility: "public"
                       type:
                         - "VerifiableCredential"
                         - "EmployeeIDCredential"
@@ -975,27 +1104,22 @@ paths:
                   type: string
                   example: "Employee ID Credential"
                 display:
-                  type: object
-                credentialFormat:
-                  type: string
-                  example: "jwt_vc_json"
+                  $ref: "#/components/schemas/Display"
+                dataModel:
+                  $ref: "#/components/schemas/DataModel"
                 creator:
                   type: string
                 holderType:
-                  type: string
+                  $ref: "#/components/schemas/HolderType"
                 tags:
                   type: array
                   items:
                     type: string
                   example: ["employment", "identity"]
                 status:
-                  type: string
-                  enum: [Draft, Published, Archived]
-                  default: Draft
+                  $ref: "#/components/schemas/TemplateStatus"
                 visibility:
-                  type: string
-                  enum: [Private, Public]
-                  default: Private
+                  $ref: "#/components/schemas/TemplateVisibility"
                 description:
                   type: string
                 type:
@@ -1043,23 +1167,21 @@ paths:
                 title:
                   type: string
                 display:
-                  type: object
-                credentialFormat:
-                  type: string
+                  $ref: "#/components/schemas/Display"
+                dataModel:
+                  $ref: "#/components/schemas/DataModel"
                 creator:
                   type: string
                 holderType:
-                  type: string
+                  $ref: "#/components/schemas/HolderType"
                 tags:
                   type: array
                   items:
                     type: string
                 status:
-                  type: string
-                  enum: [Draft, Published, Archived]
+                  $ref: "#/components/schemas/TemplateStatus"
                 visibility:
-                  type: string
-                  enum: [Private, Public]
+                  $ref: "#/components/schemas/TemplateVisibility"
                 description:
                   type: string
                 type:
@@ -1896,41 +2018,125 @@ components:
           items:
             type: object
 
+    Logo:
+      type: object
+      required:
+        - uri
+      properties:
+        uri:
+          type: string
+          description: Impierce Icon
+          example: "https://www.impierce.com/external/impierce-icon.png"
+        alt_text:
+          type: string
+          description: Alternative text for the logo image
+          example: "UniCore Logo"
+
+    Display:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Display name
+          example: "Identity Credential"
+        logo:
+          $ref: "#/components/schemas/Logo"
+
+    DataModel:
+      type: string
+      enum:
+        - "w3c_vc_data_model_v1-1"
+        - "w3c_vc_data_model_v2-0"
+        - "open_badges_3-0"
+
+    HolderType:
+      type: string
+      description: The type of credential holder
+      enum:
+        - individual
+        - organization
+
+    TemplateStatus:
+      type: string
+      description: The lifecycle status of a template
+      default: draft
+      enum:
+        - draft
+        - published
+        - archived
+        - deleted
+
+    TemplateVisibility:
+      type: string
+      description: The visibility of a template
+      default: private
+      enum:
+        - private
+        - public
+
     Template:
       type: object
+      required:
+        - id
+        - tags
+        - status
+        - visibility
+        - type
       properties:
         id:
           type: string
+          description: Unique identifier for the template
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        sourceTemplateId:
+          type: string
+          description: ID of the template this was duplicated from, if any
         title:
           type: string
+          description: Human-readable title for the template
+          example: "Employee ID Credential"
         display:
-          type: object
-        credentialFormat:
-          type: string
+          allOf:
+            - $ref: "#/components/schemas/Display"
+        dataModel:
+          allOf:
+            - $ref: "#/components/schemas/DataModel"
         creator:
           type: string
+          description: Identifier of the template creator
         holderType:
-          type: string
+          allOf:
+            - $ref: "#/components/schemas/HolderType"
         modifiedAt:
           type: string
+          description: ISO 8601 timestamp of last modification
+          example: "2024-06-21T12:34:54Z"
         tags:
           type: array
           items:
             type: string
+          description: Tags for categorizing the template
+          default: []
+          example: ["employment", "identity"]
         status:
-          type: string
-          enum: [Draft, Published, Archived, Deleted]
+          $ref: "#/components/schemas/TemplateStatus"
         visibility:
-          type: string
-          enum: [Private, Public]
+          $ref: "#/components/schemas/TemplateVisibility"
         description:
           type: string
+          description: Longer description of the template
         type:
           type: array
           items:
             type: string
+          description: 'Credential types, e.g. ["VerifiableCredential", "EmployeeIDCredential"]'
+          example:
+            - "VerifiableCredential"
+            - "EmployeeIDCredential"
         schema:
           type: object
+          description: JSON Schema describing the credential subject structure
 
     DcqlQuery:
       type: object

@@ -17,22 +17,37 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::sync::Arc;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchProfileEndpointRequest {
     #[serde(default, with = "serde_explicit_null")]
     pub display_name: Option<Option<String>>,
+    #[serde(default, with = "serde_explicit_null")]
+    pub description: Option<Option<String>>,
     #[serde(default, with = "serde_explicit_null")]
     pub logo: Option<Option<Logo>>,
     #[serde(default, with = "serde_explicit_null")]
     pub country: Option<Option<String>>,
 }
 
+/// Update organisation profile
+///
+/// Updates your organisation's profile with the given information.
+#[utoipa::path(
+    patch,
+    path = "/profile",
+    operation_id = "update_profile",
+    tags = ["Identity", "Profile"],
+    responses(
+        (status = 200, description = "Profile updated successfully"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_profile(
     State(state): State<Arc<IdentityState>>,
     Json(PatchProfileEndpointRequest {
         display_name,
+        description,
         logo,
         country,
     }): Json<PatchProfileEndpointRequest>,
@@ -42,6 +57,15 @@ pub(crate) async fn patch_profile(
     if let Some(display_name) = display_name {
         let command = ProfileCommand::UpdateDisplayName {
             display_name: display_name.unwrap_or_default(),
+            source: Source::Runtime,
+        };
+
+        command_handler(&profile_id, &state.command.profile, command).await?;
+    }
+
+    if let Some(description) = description {
+        let command = ProfileCommand::UpdateDescription {
+            description,
             source: Source::Runtime,
         };
 
@@ -72,15 +96,30 @@ pub(crate) async fn patch_profile(
 }
 
 #[skip_serializing_none]
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(as = Profile)]
 struct GetProfileEndpointResponse {
     display_name: Option<String>,
+    description: Option<String>,
     logo: Option<Logo>,
     country: Option<String>,
     source: Source,
 }
 
+/// Get organisation profile
+///
+/// Retrieves the profile information of your organisation.
+#[utoipa::path(
+    get,
+    path = "/profile",
+    operation_id = "get_profile",
+    tags = ["Identity", "Profile"],
+    responses(
+        (status = 200, description = "Profile retrieved successfully", body = GetProfileEndpointResponse),
+        (status = 404, description = "Profile not found")
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
     query_handler(PROFILE_ID, &state.query.profile)
@@ -90,6 +129,7 @@ pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Resu
                 StatusCode::OK,
                 Json(GetProfileEndpointResponse {
                     display_name: profile_view.display_name,
+                    description: profile_view.description,
                     logo: profile_view.logo,
                     country: profile_view.country,
                     source: profile_view.source,

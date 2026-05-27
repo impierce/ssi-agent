@@ -1,4 +1,5 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
+use crate::document::openapi::{algorithm, core_document};
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
@@ -7,12 +8,11 @@ use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
-use identity_iota::iota::rebased::client::{
-    get_object_id_from_did, IdentityClient, IdentityClientReadOnly, PublishDidDocument,
-};
+use identity_iota::iota::rebased::client::{get_object_id_from_did, IdentityClient, PublishDidDocument};
 use identity_iota::iota::rebased::migration::{ControllerToken, Identity, OnChainIdentity};
 use identity_iota::iota::{rebased, IotaDID};
 use identity_iota::storage::{Storage, StorageSigner};
+use identity_iota::verification::MethodRelationship;
 use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
@@ -21,7 +21,6 @@ use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::{IotaClient, IotaClientBuilder};
 use jsonwebtoken::Algorithm;
-use product_common::core_client::CoreClient as _;
 use product_common::gas_station::GasStationOptions;
 use product_common::network_name::NetworkName;
 use product_common::transaction::TransactionBuilder;
@@ -39,8 +38,9 @@ use url::Url;
 const MIN_GAS_BUDGET: u64 = 50_000_000;
 
 /// Metadata for IOTA-based DID Documents.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct IotaMetadata {
+    #[schema(value_type = String, example = "0x1234567890")]
     pub wallet_address: IotaAddress,
     pub is_funded: bool,
     pub balance: u64,
@@ -51,7 +51,8 @@ pub struct IotaMetadata {
     pub updated_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[schema(as = DocumentStatus)]
 pub enum Status {
     SignAndValidate,
     // TODO: Make a distinction between enabling both signing AND validation and just validation.
@@ -60,14 +61,16 @@ pub enum Status {
     Disabled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Document {
     #[serde(rename = "id")]
     pub document_id: String,
+    #[schema(schema_with = core_document)]
     pub document: Option<CoreDocument>,
     pub did_method: Option<SupportedDidMethod>,
     // Applicable only for DID documents whose methods mandate a fixed verification algorithm,
     // such as `did:key` and `did:jwk`.
+    #[schema(schema_with = algorithm)]
     pub with_fixed_algorithm: Option<Algorithm>,
     // Applicable only for DID methods that are based on the IOTA ledger.
     pub iota_metadata: Option<IotaMetadata>,
@@ -135,19 +138,18 @@ impl Aggregate for Document {
                         // Create a new IOTA client to interact with the IOTA ledger.
                         let iota_client = get_iota_client(api_endpoint).await?;
 
-                        let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
-                            .await
-                            .map_err(|err| GenericError(err.to_string()))?;
-
                         // Create an `IdentityClient` instance.
                         // This client is used to interact with the IOTA identity ledger.
                         // It is used to publish the DID Document and to resolve it later.
-                        let identity_client = IdentityClient::new(read_only_client, signer)
+                        let identity_client = IdentityClient::from_iota_client(iota_client.clone(), None)
+                            .await
+                            .map_err(|err| GenericError(err.to_string()))?
+                            .with_signer(signer)
                             .await
                             .map_err(|err| GenericError(err.to_string()))?;
 
                         // Retrieve the wallet address from the identity client.
-                        let wallet_address = identity_client.sender_address();
+                        let wallet_address = identity_client.address();
 
                         let balance = iota_client
                             .coin_read_api()
@@ -363,8 +365,30 @@ impl Aggregate for Document {
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     document
-                        .insert_method(verification_method, MethodScope::VerificationMethod) // TODO: add relationships, also TODO: adjust KID insertion elsewhere
+                        .insert_method(verification_method.clone(), MethodScope::VerificationMethod) // TODO: adjust KID insertion elsewhere
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
+
+                    // Attach all possible relationships to the verification method.
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::Authentication,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::AssertionMethod,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::KeyAgreement,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::CapabilityDelegation,
+                    )?;
+                    document.attach_method_relationship(
+                        verification_method.id().clone(),
+                        MethodRelationship::CapabilityInvocation,
+                    )?;
 
                     events.push(PublicKeyUpdated {
                         document_id: self.document_id.clone(),
@@ -429,14 +453,13 @@ impl Aggregate for Document {
                 // This signer is used to sign the transactions that are sent to the IOTA ledger.
                 let signer = StorageSigner::new(storage, key_id, public_key_jwk.clone());
 
-                let read_only_client = IdentityClientReadOnly::new(iota_client.clone())
-                    .await
-                    .map_err(|err| GenericError(err.to_string()))?;
-
                 // Create an `IdentityClient` instance.
                 // This client is used to interact with the IOTA identity ledger.
                 // It is used to publish the DID Document and to resolve it later.
-                let identity_client = IdentityClient::new(read_only_client, signer)
+                let identity_client = IdentityClient::from_iota_client(iota_client.clone(), None)
+                    .await
+                    .map_err(|err| GenericError(err.to_string()))?
+                    .with_signer(signer)
                     .await
                     .map_err(|err| GenericError(err.to_string()))?;
 
@@ -455,7 +478,7 @@ impl Aggregate for Document {
                 }
 
                 // Retrieve the wallet address from the identity client.
-                let wallet_address = identity_client.sender_address();
+                let wallet_address = identity_client.address();
 
                 let network_name = did_method
                     .network_name()
@@ -659,7 +682,7 @@ where
     let controller_token = oci.get_controller_token(identity_client).await?.ok_or_else(|| {
         rebased::Error::Identity(format!(
             "address {} has no control over Identity {}",
-            identity_client.sender_address(),
+            identity_client.address(),
             oci.id()
         ))
     })?;
@@ -980,7 +1003,7 @@ pub mod test_utils {
         document::CoreDocument,
         service::{Service, ServiceEndpoint},
     };
-    use identity_iota::verification::jwk::Jwk;
+    use identity_iota::verification::{jwk::Jwk, MethodRelationship};
     use identity_iota::verification::{MethodData, MethodScope, MethodType, VerificationMethod};
     use rstest::*;
     use serde_json::json;
@@ -1067,8 +1090,27 @@ pub mod test_utils {
         mut document: CoreDocument,
         es256_verification_method: VerificationMethod,
     ) -> CoreDocument {
+        let verification_method_id = es256_verification_method.id().clone();
+
         document
             .insert_method(es256_verification_method, MethodScope::VerificationMethod)
+            .unwrap();
+
+        // Attach all possible relationships to the verification method.
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::Authentication)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::AssertionMethod)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::KeyAgreement)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::CapabilityDelegation)
+            .unwrap();
+        document
+            .attach_method_relationship(verification_method_id, MethodRelationship::CapabilityInvocation)
             .unwrap();
 
         document
@@ -1080,8 +1122,26 @@ pub mod test_utils {
         both_verification_methods: Vec<VerificationMethod>,
     ) -> CoreDocument {
         for verification_method in both_verification_methods {
+            let verification_method_id = verification_method.id().clone();
+
             document
                 .insert_method(verification_method, MethodScope::VerificationMethod)
+                .unwrap();
+
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::Authentication)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::AssertionMethod)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::KeyAgreement)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::CapabilityDelegation)
+                .unwrap();
+            document
+                .attach_method_relationship(verification_method_id, MethodRelationship::CapabilityInvocation)
                 .unwrap();
         }
 

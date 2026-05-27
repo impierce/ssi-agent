@@ -1,9 +1,13 @@
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
-use agent_issuance::credential::aggregate::CredentialStatus;
+use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
-    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
+    credential::{
+        aggregate::{Credential, CredentialExpiry, CredentialStatus},
+        command::CredentialCommand,
+        entity::Data,
+    },
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
@@ -20,9 +24,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
-#[cfg(feature = "test_utils")]
-pub const TESTINDEX: usize = 123;
-
+/// Get credential by ID
+///
+/// Retrieves a credential by its ID.
+#[utoipa::path(
+    get,
+    path = "/credentials/{credential_id}",
+    operation_id = "get_credential_by_id",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "Successfully retrieved credential", body = Credential)
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
@@ -34,7 +47,7 @@ pub(crate) async fn credential(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
     pub offer_id: String,
@@ -45,6 +58,20 @@ pub struct CredentialsEndpointRequest {
     pub expires_at: CredentialExpiry,
 }
 
+/// Create a credential
+///
+/// Creates a verifiable credential based on the provided template and data. An offer is created for the provided offer ID.
+#[utoipa::path(
+    post,
+    path = "/credentials",
+    operation_id = "create_credential",
+    tags = ["Credentials", "Issuance"],
+    responses(
+        (status = 201, description = "Credential created successfully",
+            headers(("Location" = String, description = "URI of the newly created credential"))
+        )
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<Arc<IssuanceState>>,
@@ -67,7 +94,6 @@ pub(crate) async fn credentials(
                 .cloned()
         })
         .ok_or_else(|| {
-            // TODO: Use 422 Unprocessable Content instead
             ApiError::builder(StatusCode::NOT_FOUND)
                 .title("No Credential Configuration Found")
                 .type_url(type_url("issuance#no-credential-configuration-found"))
@@ -101,48 +127,11 @@ pub(crate) async fn credentials(
                 .finish());
         }
 
-        // Create the new CredentialStatus index randomly.
-        let random_index;
-        #[cfg(not(feature = "test_utils"))]
-        {
-            use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-            use rand::Rng;
-
-            let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
-                .await?
-                .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-                .unwrap_or_default();
-
-            // Status Lists should only be filled up to 70%, the remaining 30% will be used for decoy/psuedo indices.
-            // This greatly improves the privacy of the issuer.
-            let used_indices: Vec<usize> = all_credentials.iter().map(|c| c.credential_status.index).collect();
-            let statuses_per_byte: usize = 8 / BITS_PER_STATUS as usize;
-            let status_list_number =
-                used_indices.len() / ((STATUS_LIST_BYTES_AMOUNT * statuses_per_byte) as f64 * 0.7) as usize;
-
-            let mut rng = rand::rng();
-            let lower_bound = status_list_number * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
-            let upper_bound = (status_list_number + 1) * STATUS_LIST_BYTES_AMOUNT * statuses_per_byte;
-            loop {
-                let candidate = rng.random_range(lower_bound..upper_bound);
-                if !used_indices.contains(&candidate) {
-                    random_index = candidate;
-                    break;
-                }
-            }
-        }
-
-        #[cfg(feature = "test_utils")]
-        {
-            random_index = TESTINDEX;
-        }
-
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },
             credential_configuration: Box::new(credential_configuration.clone()),
             expires_at,
-            credential_status_index: random_index,
         }
     };
 
@@ -198,6 +187,18 @@ pub(crate) async fn credentials(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+/// List all credentials
+///
+/// Lists all credentials including their current status and metadata.
+#[utoipa::path(
+    get,
+    path = "/credentials",
+    operation_id = "get_all_credentials",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "List of all credentials", body = [Credential])
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
@@ -226,14 +227,28 @@ pub async fn patch_credential(
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,
+            status_list_url: credential.credential_status.status_list_url.clone(),
         };
 
         let command = CredentialCommand::UpdateCredentialStatus {
             credential_id: credential_id.clone(),
-            credential_status,
+            credential_status: credential_status.clone(),
         };
 
         command_handler(&credential_id, &state.command.credential, command).await?;
+
+        let command = StatusListCommand::UpdateIndex {
+            index: credential_status.index,
+            status,
+        };
+
+        let status_list_url = credential_status.status_list_url.clone();
+        let status_list_id = status_list_url
+            .split('/')
+            .next_back()
+            .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
+
+        command_handler(status_list_id, &state.command.status_list, command).await?;
 
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {
@@ -245,11 +260,13 @@ pub async fn patch_credential(
 pub mod tests {
     use super::*;
     use crate::tests::OFFER_ID;
+    use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
     use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
     use agent_store::issuance_state;
     use axum::{
@@ -273,21 +290,16 @@ pub mod tests {
         });
 
         // The credentialStatus id/uri only contains a relative path, since we only need to have the correct route for them in the tests.
-        pub static ref CREDENTIAL: serde_json::Value = json!({
+        // This test credential is tested after creation but before signing, therefore it misses a few last fields which are set during signing.
+        // Please look at the comments in agent_issuance/src/credential/aggregate.rs `SignCredential` for more information.
+        pub static ref VC_DM_1_1_CREDENTIAL: serde_json::Value = json!({
             "@context": [ "https://www.w3.org/2018/credentials/v1" ],
             "type": [ "VerifiableCredential" ],
+            "name": "Verifiable Credential",
             "issuer": {
-                "id": "https://my-domain.example.org/",
                 "name": "UniCore"
             },
-            "issuanceDate": "2010-01-01T00:00:00Z",
             "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-            "credentialStatus": {
-                "id": "https://my-domain.example.org/ietf-oauth-token-status-list/0",
-                "type": "statuslist+jwt",
-                "idx": TESTINDEX,
-                "uri": "https://my-domain.example.org/ietf-oauth-token-status-list/0"
-            }
         });
     }
 
@@ -328,7 +340,7 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body, CREDENTIAL.clone());
+        assert_eq!(body, VC_DM_1_1_CREDENTIAL.clone());
 
         let response = app
             .call(
@@ -347,16 +359,12 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["data"]["raw"], CREDENTIAL.clone());
+        assert_eq!(body["data"]["raw"], VC_DM_1_1_CREDENTIAL.clone());
 
         get_credentials_endpoint
     }
 
-    pub async fn patch_credential(app: &mut Router) {
-        let credential_endpoint = credentials(app, "001").await;
-
-        let relying_party_state = Subject::test_subject().await;
-
+    pub async fn patch_credential(app: &mut Router, credential_endpoint: String) {
         let patch_response = app
             .call(
                 Request::builder()
@@ -396,6 +404,7 @@ pub mod tests {
         let jwt_header = decode_header(&jwt_status_list_token).unwrap();
 
         let key_id = jwt_header.kid.unwrap();
+        let relying_party_state = Subject::test_subject().await;
         let public_key = relying_party_state.public_key(&key_id).await.unwrap();
         let decoding_key = match jwt_header.alg {
             Algorithm::EdDSA => DecodingKey::from_ed_der(&public_key),
@@ -416,9 +425,10 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let mut app = router(issuance_state.clone());
 
-        patch_credential(&mut app).await;
+        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
+        patch_credential(&mut app, credential_endpoint).await;
     }
 
     #[tokio::test]
@@ -428,7 +438,7 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let mut app = router(issuance_state.clone());
         credentials(&mut app, "001").await;
     }
 }

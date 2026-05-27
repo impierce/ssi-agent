@@ -1,4 +1,4 @@
-# SSI Agent
+![banner](https://github.com/impierce/ssi-agent/raw/HEAD/.github/banner.png)
 
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md)
 [![GitHub License](https://img.shields.io/github/license/impierce/ssi-agent)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)

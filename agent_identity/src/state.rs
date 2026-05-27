@@ -120,15 +120,22 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 /// Queries the profile and updates the application state with the profile information.
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
     match query_handler(PROFILE_ID, &state.query.profile).await? {
-        Some(Profile { display_name, logo, .. }) => {
+        Some(Profile {
+            display_name,
+            logo,
+            description,
+            ..
+        }) => {
             let hostname = config().application_url.host_str().unwrap_or_default().to_string();
             let display = &mut config_mut().display;
             if let Some(display) = display.first_mut() {
                 display.name = display_name.unwrap_or_default();
+                display.description = description;
                 display.logo = logo;
             } else {
                 display.push(Display {
                     name: display_name.unwrap_or(hostname),
+                    description,
                     logo,
                     ..Default::default()
                 });
@@ -172,6 +179,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
             // - Default: If the persisted Profile is Provisioned, we update the persisted Profile.
             Some(Profile {
                 display_name: persisted_display_name,
+                description: persisted_description,
                 logo: persisted_logo,
                 country: persisted_country,
                 source: persisted_source,
@@ -191,6 +199,15 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                 if config_display.logo != persisted_logo {
                     let command = ProfileCommand::UpdateLogo {
                         logo: config_display.logo,
+                        source: config_display_source.clone(),
+                    };
+
+                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                }
+
+                if config_display.description != persisted_description {
+                    let command = ProfileCommand::UpdateDescription {
+                        description: config_display.description,
                         source: config_display_source.clone(),
                     };
 
@@ -222,6 +239,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                 let command = ProfileCommand::CreateProfile {
                     profile_id: PROFILE_ID.to_string(),
                     display_name: Some(config_display.name.clone()),
+                    description: config_display.description.clone(),
                     logo: config_display.logo.clone(),
                     source: config_display_source,
                     country: config_display.country.clone(),
@@ -270,6 +288,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                 let command = ProfileCommand::CreateProfile {
                     profile_id: PROFILE_ID.to_string(),
                     display_name: None,
+                    description: None,
                     logo: None,
                     country: None,
                     source: config_display_source,

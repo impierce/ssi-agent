@@ -1,4 +1,6 @@
-pub use super::aggregate::{CredentialFormat, Display, HolderType, Status, Visibility};
+use std::collections::HashMap;
+
+pub use super::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Status, Visibility};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -11,8 +13,8 @@ pub enum TemplateEvent {
         source_template_id: Option<String>,
         // TODO: Make this a required field.
         title: Option<String>,
-        display: Option<Display>,
-        credential_format: Option<CredentialFormat>,
+        display: Box<Option<Display>>,
+        data_model: Option<DataModel>,
         creator: Option<String>,
         holder_type: Option<HolderType>,
         modified_at: String,
@@ -22,6 +24,7 @@ pub enum TemplateEvent {
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
+        schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     },
     TitleUpdated {
         template_id: String,
@@ -33,9 +36,9 @@ pub enum TemplateEvent {
         display: Display,
         modified_at: String,
     },
-    CredentialFormatUpdated {
+    DataModelUpdated {
         template_id: String,
-        credential_format: CredentialFormat,
+        data_model: DataModel,
         modified_at: String,
     },
     CreatorUpdated {
@@ -76,6 +79,11 @@ pub enum TemplateEvent {
     SchemaUpdated {
         template_id: String,
         schema: serde_json::Value,
+        modified_at: String,
+    },
+    SchemaPropertiesAttributesUpdated {
+        template_id: String,
+        schema_properties_attributes: HashMap<String, PropertyAttribute>,
         modified_at: String,
     },
     TemplateDeleted {
