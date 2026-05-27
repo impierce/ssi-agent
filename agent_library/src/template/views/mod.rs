@@ -90,7 +90,11 @@ impl View<Template> for Template {
                 description,
                 modified_at,
             } => {
-                self.description = if description.is_empty() { None } else { Some(description.clone()) };
+                self.description = if description.is_empty() {
+                    None
+                } else {
+                    Some(description.clone())
+                };
                 self.modified_at.replace(modified_at.clone());
             }
             TypeUpdated {

@@ -181,9 +181,7 @@ pub mod tests {
     use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance::{
         credentials::tests::{
-            create_test_template,
-            create_test_template_with_status_and_format,
-            credentials,
+            create_test_template, create_test_template_with_status_and_format, credentials,
             remove_test_template_configuration,
         },
         router,

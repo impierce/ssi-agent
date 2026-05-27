@@ -722,10 +722,7 @@ mod tests {
 
         assert_eq!(body["title"], "Created Template");
         assert_eq!(body["description"], "Created description");
-        assert_eq!(
-            body["type"],
-            json!(["VerifiableCredential", "EmployeeCredential"])
-        );
+        assert_eq!(body["type"], json!(["VerifiableCredential", "EmployeeCredential"]));
     }
 
     #[tokio::test]
@@ -838,10 +835,7 @@ mod tests {
         assert_eq!(template.description.as_deref(), Some("Updated description"));
         assert_eq!(
             template.r#type,
-            vec![
-                "VerifiableCredential".to_string(),
-                "EmployeeCredential".to_string(),
-            ]
+            vec!["VerifiableCredential".to_string(), "EmployeeCredential".to_string(),]
         );
     }
 

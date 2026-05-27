@@ -75,13 +75,11 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("library#invalid-status-on-create"))
                 .source(self)
                 .finish(),
-            TemplateError::SchemaPropertiesAttributesNotAllowed => {
-                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                    .title("Schema Properties Attributes Not Allowed")
-                    .type_url(type_url("library#schema-properties-attributes-not-allowed"))
-                    .source(self)
-                    .finish()
-            }
+            TemplateError::SchemaPropertiesAttributesNotAllowed => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Schema Properties Attributes Not Allowed")
+                .type_url(type_url("library#schema-properties-attributes-not-allowed"))
+                .source(self)
+                .finish(),
             TemplateError::DuplicateSchemaPropertiesAttributeKey(_) => {
                 ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
                     .title("Duplicate Schema Properties Attribute Key")

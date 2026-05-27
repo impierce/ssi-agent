@@ -12,9 +12,7 @@ use agent_issuance::{
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{
-    Expiration, Status as TemplateStatus, Template,
-};
+use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
 use axum::Extension;
 use axum::{
     extract::{Json, Path, State},

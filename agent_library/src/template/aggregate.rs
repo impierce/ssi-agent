@@ -194,10 +194,7 @@ impl Aggregate for Template {
                 // W3C VC 1.1 does not expose claim metadata and must not have
                 // schemaPropertiesAttributes.
                 if data_model == DataModel::W3CVcDataModelV1_1 {
-                    if schema_properties_attributes
-                        .as_ref()
-                        .is_some_and(|a| !a.is_empty())
-                    {
+                    if schema_properties_attributes.as_ref().is_some_and(|a| !a.is_empty()) {
                         return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
                     }
                 }
@@ -495,8 +492,7 @@ impl Aggregate for Template {
                 }
 
                 // Trim keys and detect collisions after trimming.
-                let schema_properties_attributes =
-                    trim_and_deduplicate_attribute_keys(schema_properties_attributes)?;
+                let schema_properties_attributes = trim_and_deduplicate_attribute_keys(schema_properties_attributes)?;
 
                 validate_schema_properties_attributes(&self.schema, &schema_properties_attributes)?;
 
@@ -626,7 +622,11 @@ impl Aggregate for Template {
                 description,
                 modified_at,
             } => {
-                self.description = if description.is_empty() { None } else { Some(description) };
+                self.description = if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                };
                 self.modified_at.replace(modified_at);
             }
             TypeUpdated {
@@ -713,15 +713,9 @@ fn validate_no_array_types_recursive(schema: &serde_json::Value) -> Result<(), T
 ///   for empty or incomplete input.
 /// - For all other data models: ensures `VerifiableCredential` is present (adds it if missing),
 ///   deduplicates, and applies canonical ordering (VerifiableCredential first).
-fn normalize_and_validate_type(
-    type_input: Vec<String>,
-    data_model: &DataModel,
-) -> Result<Vec<String>, TemplateError> {
+fn normalize_and_validate_type(type_input: Vec<String>, data_model: &DataModel) -> Result<Vec<String>, TemplateError> {
     // Drop blank/whitespace-only entries.
-    let filtered: Vec<String> = type_input
-        .into_iter()
-        .filter(|t| !t.trim().is_empty())
-        .collect();
+    let filtered: Vec<String> = type_input.into_iter().filter(|t| !t.trim().is_empty()).collect();
 
     match data_model {
         DataModel::OpenBadges3_0 => normalize_open_badges_type(filtered),
@@ -739,10 +733,7 @@ fn normalize_standard_type(filtered: Vec<String>) -> Result<Vec<String>, Templat
 
     // Deduplicate preserving first-seen order.
     let mut seen = std::collections::HashSet::new();
-    let deduped: Vec<String> = filtered
-        .into_iter()
-        .filter(|t| seen.insert(t.clone()))
-        .collect();
+    let deduped: Vec<String> = filtered.into_iter().filter(|t| seen.insert(t.clone())).collect();
 
     // Canonical order: VerifiableCredential first, then extras.
     let mut result = vec![VC.to_string()];
@@ -807,7 +798,11 @@ fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
         .filter(|t| seen.insert(t.clone()))
         .collect();
 
-    if normalized.is_empty() { None } else { Some(normalized) }
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
 }
 
 /// Recursively adds `additionalProperties: false` to every JSON Schema object node
@@ -818,8 +813,7 @@ fn canonicalize_schema(schema: &mut serde_json::Value) {
         None => return,
     };
 
-    let is_object_node =
-        obj.get("type").and_then(|v| v.as_str()) == Some("object") || obj.contains_key("properties");
+    let is_object_node = obj.get("type").and_then(|v| v.as_str()) == Some("object") || obj.contains_key("properties");
 
     if is_object_node {
         obj.entry("additionalProperties").or_insert(serde_json::json!(false));
@@ -1106,7 +1100,10 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
     let required_fields: &[(&[&str], &str)] = &[
         (&["achievement", "name"], "achievement.name"),
         (&["achievement", "description"], "achievement.description"),
-        (&["achievement", "criteria", "narrative"], "achievement.criteria.narrative"),
+        (
+            &["achievement", "criteria", "narrative"],
+            "achievement.criteria.narrative",
+        ),
     ];
 
     let mut missing: Vec<&str> = Vec::new();
@@ -1116,8 +1113,7 @@ fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Resul
         match resolve(schema, segments) {
             None => missing.push(label),
             Some(field) => {
-                let has_type_string =
-                    field.get("type").and_then(|t| t.as_str()) == Some("string");
+                let has_type_string = field.get("type").and_then(|t| t.as_str()) == Some("string");
                 let has_const = field.get("const").is_some();
                 if !has_type_string && !has_const {
                     wrong_type.push(label);
@@ -1172,12 +1168,12 @@ fn ensure_schema_required_keys(schema: &mut serde_json::Value) {
     }
 
     // achievement level: ensure "name", "description", "criteria" are required.
-    if let Some(achievement) = schema
-        .get_mut("properties")
-        .and_then(|p| p.get_mut("achievement"))
-    {
+    if let Some(achievement) = schema.get_mut("properties").and_then(|p| p.get_mut("achievement")) {
         let has_name = achievement.get("properties").and_then(|p| p.get("name")).is_some();
-        let has_description = achievement.get("properties").and_then(|p| p.get("description")).is_some();
+        let has_description = achievement
+            .get("properties")
+            .and_then(|p| p.get("description"))
+            .is_some();
         let has_criteria = achievement.get("properties").and_then(|p| p.get("criteria")).is_some();
 
         if has_name || has_description || has_criteria {
@@ -1539,10 +1535,7 @@ pub mod document_tests {
             })
             .then_expect_events(vec![TemplateEvent::TypeUpdated {
                 template_id,
-                r#type: vec![
-                    "VerifiableCredential".to_string(),
-                    "ExampleCredential".to_string(),
-                ],
+                r#type: vec!["VerifiableCredential".to_string(), "ExampleCredential".to_string()],
                 modified_at: test_utils::modified_at(),
             }])
     }
@@ -1564,10 +1557,7 @@ pub mod document_tests {
                 visibility: Visibility::Private,
                 credential_expiration: Expiration::default(),
                 description: None,
-                r#type: vec![
-                    "VerifiableCredential".to_string(),
-                    "OpenBadgeCredential".to_string(),
-                ],
+                r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
                 schema: Box::new(Some(serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -1626,9 +1616,7 @@ pub mod document_tests {
                 template_id,
                 credential_expiration: Expiration::Duration("30 days".to_string()),
             })
-            .then_expect_error_message(
-                "Invalid expiration value: `30 days` is not a valid ISO 8601 duration",
-            )
+            .then_expect_error_message("Invalid expiration value: `30 days` is not a valid ISO 8601 duration")
     }
 
     #[rstest]
@@ -1673,9 +1661,7 @@ pub mod document_tests {
                 }))),
                 schema_properties_attributes: None,
             })
-            .then_expect_error_message(
-                "Invalid type: OpenBadges type includes disallowed extra entries: [ExtraType]",
-            )
+            .then_expect_error_message("Invalid type: OpenBadges type includes disallowed extra entries: [ExtraType]")
     }
 
     #[rstest]
@@ -1710,9 +1696,7 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_open_badges_template_missing_required_achievement_properties(
-        template_id: String,
-    ) {
+    async fn test_create_open_badges_template_missing_required_achievement_properties(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
             .when(TemplateCommand::CreateTemplate {
@@ -1751,9 +1735,7 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_open_badges_template_with_array_type_in_schema(
-        template_id: String,
-    ) {
+    async fn test_create_open_badges_template_with_array_type_in_schema(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
             .when(TemplateCommand::CreateTemplate {
@@ -2518,19 +2500,31 @@ pub mod document_tests {
         let mut attrs = HashMap::new();
         attrs.insert(
             "/achievement/name".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         attrs.insert(
             "/achievement/description".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         attrs.insert(
             "/achievement/criteria/narrative".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         attrs.insert(
             "/achievement/tag".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: false },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: false,
+            },
         );
 
         // Remove non-removable "/achievement/tag" — should succeed.
@@ -2556,15 +2550,24 @@ pub mod document_tests {
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "/achievement/name".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         expected_attrs.insert(
             "/achievement/description".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         expected_attrs.insert(
             "/achievement/criteria/narrative".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
 
         let expected_schema = serde_json::json!({
@@ -2690,15 +2693,24 @@ pub mod document_tests {
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "/achievement/name".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         expected_attrs.insert(
             "/achievement/description".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         expected_attrs.insert(
             "/achievement/criteria/narrative".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
 
         let expected_schema = serde_json::json!({
@@ -2788,15 +2800,24 @@ pub mod document_tests {
         let mut expected_attrs = HashMap::new();
         expected_attrs.insert(
             "/achievement/name".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         expected_attrs.insert(
             "/achievement/description".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
         expected_attrs.insert(
             "/achievement/criteria/narrative".to_string(),
-            PropertyAttribute { selectively_disclosable: false, non_removable: true },
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
         );
 
         let expected_schema = serde_json::json!({
@@ -3002,9 +3023,27 @@ pub mod document_tests {
         });
 
         let mut attrs = HashMap::new();
-        attrs.insert("/achievement/name".to_string(), PropertyAttribute { selectively_disclosable: false, non_removable: true });
-        attrs.insert("/achievement/description".to_string(), PropertyAttribute { selectively_disclosable: false, non_removable: true });
-        attrs.insert("/achievement/criteria/narrative".to_string(), PropertyAttribute { selectively_disclosable: false, non_removable: true });
+        attrs.insert(
+            "/achievement/name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
+        );
+        attrs.insert(
+            "/achievement/description".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
+        );
+        attrs.insert(
+            "/achievement/criteria/narrative".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+            },
+        );
 
         // New schema adds an invalid root-level field.
         let new_schema = serde_json::json!({
@@ -3426,7 +3465,11 @@ pub mod test_utils {
 
     #[fixture]
     pub fn r#type() -> Vec<String> {
-        vec!["VerifiableCredential".to_string(), "Type1".to_string(), "Type2".to_string()]
+        vec![
+            "VerifiableCredential".to_string(),
+            "Type1".to_string(),
+            "Type2".to_string(),
+        ]
     }
 
     #[fixture]

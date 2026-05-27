@@ -11,7 +11,10 @@ use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
 };
-use std::{collections::HashMap, sync::{Arc, OnceLock}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 use tracing::warn;
 
 type TemplateViewHandle = Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>;
@@ -804,20 +807,14 @@ mod tests {
         let template = Template {
             template_id: "t13_custom".to_string(),
             data_model: DataModel::OpenBadges3_0,
-            r#type: vec![
-                "VerifiableCredential".to_string(),
-                "AchievementCredential".to_string(),
-            ],
+            r#type: vec!["VerifiableCredential".to_string(), "AchievementCredential".to_string()],
             ..Default::default()
         };
 
         let config = credential_configuration_from_template(&template);
         assert_eq!(
             config.type_,
-            vec![
-                "VerifiableCredential".to_string(),
-                "AchievementCredential".to_string(),
-            ]
+            vec!["VerifiableCredential".to_string(), "AchievementCredential".to_string(),]
         );
     }
 }
