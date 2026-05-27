@@ -11,6 +11,10 @@ use axum::{
 use std::sync::Arc;
 
 use crate::{
+    v0::library::catalogue::{
+        queries::{get_all_catalogues::get_catalogues, get_catalogue::get_catalogue},
+        {add_template, create_catalogue, delete_catalogue, remove_template, update_display, update_visibility},
+    },
     v0::templates::{
         create_template, delete_template, duplicate_template, get_template, get_templates, update_template,
     },
@@ -29,12 +33,14 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/templates/update-template", post(update_template))
                 .route("/templates/duplicate-template", post(duplicate_template))
                 // Catalogue Routes
-                .route("/catalogue/create-catalogue", post(catalogue::create_catalogue))
-                .route("/catalogue/delete-catalogue", post(catalogue::delete_catalogue))
-                .route("/catalogue/add-template", post(catalogue::add_template))
-                .route("/catalogue/remove-template", post(catalogue::remove_template))
-                .route("/catalogue/update-display", post(catalogue::update_display))
-                .route("/catalogue/update-visibility", post(catalogue::update_visibility)),
+                .route("/catalogue/create-catalogue", post(create_catalogue))
+                .route("/catalogue/delete-catalogue", post(delete_catalogue))
+                .route("/catalogue/add-template", post(add_template))
+                .route("/catalogue/remove-template", post(remove_template))
+                .route("/catalogue/update-display", post(update_display))
+                .route("/catalogue/update-visibility", post(update_visibility))
+                .route("/catalogue/get-all-catalogues", get(get_catalogues))
+                .route("/catalogue/{catalogue_id}", get(get_catalogue)),
         )
         .with_state(library_state)
 }

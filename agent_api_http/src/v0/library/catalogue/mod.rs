@@ -1,4 +1,5 @@
 pub mod openapi;
+pub mod queries; 
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::catalogue::{
@@ -244,3 +245,5 @@ pub(crate) async fn delete_catalogue(
     command_handler(&catalogue_id, &state.command.catalogue, command).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
+
+

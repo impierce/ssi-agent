@@ -1,13 +1,16 @@
 pub mod view_all_catalogues;
 use super::event::CatalogueEvent;
-use crate::catalogue::aggregate::{Catalogue};
+use crate::catalogue::aggregate::Catalogue;
+use chrono::Utc;
 use cqrs_es::{EventEnvelope, View};
 
 pub type CatalogueView = Catalogue;
 
-impl View<Catalogue> for Catalogue{
+impl View<Catalogue> for Catalogue {
     fn update(&mut self, event: &EventEnvelope<Catalogue>) {
         use CatalogueEvent::*;
+
+        self.modified_at = Utc::now();
 
         match &event.payload {
             CatalogueCreated {
@@ -34,7 +37,7 @@ impl View<Catalogue> for Catalogue{
                 self.template_ids.retain(|id| id != template_id);
             }
             CatalogueDeleted { id: _ } => {
-                self.is_deleted = true; 
+                self.is_deleted = true;
             }
         }
     }

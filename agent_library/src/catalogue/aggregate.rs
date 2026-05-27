@@ -21,6 +21,7 @@ pub struct Catalogue {
 }
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CatalogueDisplay {
     pub name: String,
     pub description: String,
@@ -36,6 +37,7 @@ pub enum CatalogueVisibility {
 }
 
 #[derive(Debug, Clone, Serialize, Default, PartialEq, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct DisplayIcon {
     pub url: String,
     pub alt_text: String,
