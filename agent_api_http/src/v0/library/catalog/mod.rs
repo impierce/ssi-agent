@@ -1,5 +1,5 @@
 pub mod openapi;
-pub mod queries; 
+pub mod queries;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
@@ -206,10 +206,7 @@ pub struct UpdateCatalogVisibilityRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn update_visibility(
     State(state): State<Arc<LibraryState>>,
-    Json(UpdateCatalogVisibilityRequest {
-        catalog_id,
-        visibility,
-    }): Json<UpdateCatalogVisibilityRequest>,
+    Json(UpdateCatalogVisibilityRequest { catalog_id, visibility }): Json<UpdateCatalogVisibilityRequest>,
 ) -> Result<Response, ApiError> {
     let command = CatalogCommand::UpdateVisibility {
         catalog_id: catalog_id.clone(),
@@ -245,5 +242,3 @@ pub(crate) async fn delete_catalog(
     command_handler(&catalog_id, &state.command.catalog, command).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
-
-

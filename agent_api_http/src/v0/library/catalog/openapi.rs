@@ -1,6 +1,6 @@
 use crate::v0::library::catalog::{
-    __path_add_template, __path_create_catalog, __path_delete_catalog, __path_remove_template,
-    __path_update_display, __path_update_visibility,
+    __path_add_template, __path_create_catalog, __path_delete_catalog, __path_remove_template, __path_update_display,
+    __path_update_visibility,
 };
 
 use utoipa::OpenApi;

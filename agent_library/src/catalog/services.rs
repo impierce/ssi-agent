@@ -19,4 +19,3 @@ impl CatalogServices for CatalogServiceImpl {
         self.template_view_repo.load(id).await.ok().flatten().is_some()
     }
 }
-

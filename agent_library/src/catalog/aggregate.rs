@@ -1,6 +1,4 @@
-use crate::catalog::{
-    command::CatalogCommand, error::CatalogError, event::CatalogEvent, services::CatalogServices,
-};
+use crate::catalog::{command::CatalogCommand, error::CatalogError, event::CatalogEvent, services::CatalogServices};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
@@ -77,10 +75,7 @@ impl Aggregate for Catalog {
                 id: catalog_id,
                 display,
             }]),
-            UpdateVisibility {
-                catalog_id,
-                visibility,
-            } => Ok(vec![VisibilityUpdated {
+            UpdateVisibility { catalog_id, visibility } => Ok(vec![VisibilityUpdated {
                 id: catalog_id,
                 visibility,
             }]),
