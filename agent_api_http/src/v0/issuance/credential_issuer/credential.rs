@@ -11,7 +11,7 @@ use agent_issuance::{
         nonce_validation_service::NonceValidationService,
     },
     credential::{command::CredentialCommand, views::CredentialView},
-    offer::{command::OfferCommand, views::OfferView},
+    offer::{aggregate::ISSUER_STATE_PREFIX, command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
     status_list::command::StatusListCommand,
@@ -44,9 +44,15 @@ pub(crate) async fn credential(
     let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
 
     // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
-    let offer_id = claims
+    let issuer_state = claims
         .issuer_state
         .ok_or_else(|| PublicError::from(AccessTokenValidationError::InvalidToken))?;
+
+    // Here we strip the issuer_state_prefix which is added to ensure that also numbers are parsed as a String.
+    let offer_id = issuer_state
+        .strip_prefix(ISSUER_STATE_PREFIX)
+        .unwrap_or(issuer_state.as_str())
+        .to_string();
 
     NonceValidationService::validate(&state, &credential_request)
         .await

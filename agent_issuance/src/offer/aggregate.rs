@@ -21,6 +21,8 @@ use crate::utils::generate_tx_code::generate_tx_code;
 use oid4vci::credential_offer::CredentialConfigurationIds;
 use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
 
+pub const ISSUER_STATE_PREFIX: &str = "issuer_state:";
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
 #[schema(as = CredentialOfferStatus)]
 pub enum Status {
@@ -111,7 +113,9 @@ impl Aggregate for Offer {
                 let grants = Grants {
                     authorization_code: grant_types.contains(&GrantType::AuthorizationCode).then(|| {
                         AuthorizationCode {
-                            issuer_state: Some(offer_id.clone()),
+                            // We prefix the issuer_state here with a string to ensure it will always be parsed as a string, as per the spec https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters.
+                            // The offer_id is set by the user of our API, not by ourselves, it therefore can easily be a number which would then be parsed as such, consequently resulting in an error at the `credential` endpoint.
+                            issuer_state: Some(format!("{}{}", ISSUER_STATE_PREFIX, offer_id)),
                             authorization_server: None,
                         }
                     }),
