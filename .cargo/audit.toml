@@ -1,0 +1,64 @@
+[advisories]
+ignore = [
+    # RUSTSEC-2022-0093: ed25519-dalek v1.0.1 — Double Public Key Signing Oracle Attack
+    # The attack requires an adversary to call the signing function as an oracle with
+    # arbitrary, decoupled private/public keypair inputs. The ssi-agent does not expose
+    # signing as an oracle; it only uses internally managed keypairs. The vulnerable API
+    # is not reachable from outside the process.
+    # TODO: revisit when did-key is updated to use ed25519-dalek >=2.0.
+    "RUSTSEC-2022-0093",
+
+    # RUSTSEC-2023-0071: rsa (v0.6.1, v0.8.2, v0.9.10) — Marvin Attack (RSA timing side-channel)
+    # No upstream patch is available. All three versions are transitive dependencies:
+    #   - rsa@0.6.1 via ssi-jwk (pinned git dep): used for RSA JWK signing/verification only,
+    #     not for PKCS#1 v1.5 decryption, which is the primary Marvin Attack vector.
+    #   - rsa@0.8.2 via fastcrypto → IOTA identity SDK: deep internal SDK dependency.
+    #   - rsa@0.9.10: no dependents in the normal runtime dependency graph (dev/build only).
+    # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
+    "RUSTSEC-2023-0071",
+
+    # RUSTSEC-2024-0344: curve25519-dalek v3.2.0 — Timing variability in Scalar subtraction
+    # Patched in curve25519-dalek >=4.1.3. Version 3.2.0 is a transitive dependency of
+    # did-key@0.2.1, which is pinned to a specific git revision of an external crate.
+    # There is no upgrade path without updating the upstream did-key crate.
+    # TODO: revisit when did-key is updated or replaced.
+    "RUSTSEC-2024-0344",
+
+    # RUSTSEC-2026-0002: lru v0.12.5 — IterMut unsoundness (Stacked Borrows violation)
+    # The soundness issue is in the lru crate's IterMut iterator, which is used inside
+    # iota-package-resolver (a deep internal of the IOTA SDK). This code path is not
+    # reachable through any ssi-agent public API or normal operation of the identity module.
+    # TODO: revisit when the IOTA SDK updates its lru dependency to a patched version.
+    "RUSTSEC-2026-0002",
+
+    # RUSTSEC-2026-0049: rustls-webpki v0.102.8 — CRL distribution point matching bug
+    # Only relevant when CRL revocation checking is enabled. The async-nats NATS event
+    # publisher (the sole consumer of this webpki version) does not configure TLS with CRL
+    # revocation checking, so this code path is never reached.
+    "RUSTSEC-2026-0049",
+
+    # RUSTSEC-2026-0097: rand v0.7.3 — Unsound when a custom logger calls rand::rng()
+    # Triggers aliased mutable references during ThreadRng reseeding only when all of these
+    # hold simultaneously: log+thread_rng features enabled, a custom logger defined that
+    # calls rand::rng(), and reseeding occurs during the log call. The ssi-agent uses the
+    # tracing crate with no custom logger that touches rand, so this condition is never met.
+    "RUSTSEC-2026-0097",
+
+    # RUSTSEC-2026-0098: rustls-webpki — URI name constraints incorrectly accepted
+    # Exploitable only after successful certificate signature verification AND requires a
+    # compromised or malicious certificate authority to misuse URI name constraints.
+    # The ssi-agent does not use URI SAN name constraints anywhere in its TLS configuration.
+    "RUSTSEC-2026-0098",
+
+    # RUSTSEC-2026-0099: rustls-webpki — Wildcard DNS name constraints incorrectly accepted
+    # Same preconditions as RUSTSEC-2026-0098: requires CA misissuance of a certificate
+    # that would otherwise pass signature verification. Not exploitable without a
+    # compromised trusted certificate authority.
+    "RUSTSEC-2026-0099",
+
+    # RUSTSEC-2026-0104: rustls-webpki — Reachable panic in CRL parsing (DoS)
+    # Only triggered when parsing certificate revocation lists. Neither reqwest (v0.11,
+    # via did-web/hyper-rustls) nor async-nats enable CRL checking in their TLS
+    # configurations, so CRL parsing code is never reached in this application.
+    "RUSTSEC-2026-0104",
+]
