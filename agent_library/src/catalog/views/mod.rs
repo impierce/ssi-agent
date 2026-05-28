@@ -1,28 +1,28 @@
-pub mod view_all_catalogues;
-use super::event::CatalogueEvent;
-use crate::catalogue::aggregate::Catalogue;
+pub mod view_all_catalogs;
+use super::event::CatalogEvent;
+use crate::catalog::aggregate::Catalog;
 use chrono::Utc;
 use cqrs_es::{EventEnvelope, View};
 
-pub type CatalogueView = Catalogue;
+pub type CatalogView = Catalog;
 
-impl View<Catalogue> for Catalogue {
-    fn update(&mut self, event: &EventEnvelope<Catalogue>) {
-        use CatalogueEvent::*;
+impl View<Catalog> for Catalog {
+    fn update(&mut self, event: &EventEnvelope<Catalog>) {
+        use CatalogEvent::*;
 
         self.modified_at = Utc::now();
 
         match &event.payload {
-            CatalogueCreated {
+            CatalogCreated {
                 id,
                 display,
                 visibility,
             } => {
-                self.catalogue_id.clone_from(id);
+                self.catalog_id.clone_from(id);
                 self.display.clone_from(display);
                 self.visibility.clone_from(visibility);
             }
-            CatalogueDisplayUpdated { id: _, display } => {
+            CatalogDisplayUpdated { id: _, display } => {
                 self.display.clone_from(display);
             }
             VisibilityUpdated { id: _, visibility } => {
@@ -36,7 +36,7 @@ impl View<Catalogue> for Catalogue {
             TemplateIdRemoved { id: _, template_id } => {
                 self.template_ids.retain(|id| id != template_id);
             }
-            CatalogueDeleted { id: _ } => {
+            CatalogDeleted { id: _ } => {
                 self.is_deleted = true;
             }
         }

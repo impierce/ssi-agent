@@ -1,5 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use agent_library::catalogue::error::CatalogueError;
+use agent_library::catalog::error::CatalogError;
 use agent_library::template::error::TemplateError;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -20,23 +20,23 @@ impl IntoApiErrorExt for TemplateError {
     }
 }
 
-impl IntoApiErrorExt for CatalogueError {
+impl IntoApiErrorExt for CatalogError {
     fn into_api_error(self) -> ApiError {
         match self {
-            CatalogueError::DuplicateName(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Duplicate Catalogue Name")
+            CatalogError::DuplicateName(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Duplicate Catalog Name")
                 .source(self)
                 .finish(),
-            CatalogueError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+            CatalogError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
                 .source(self)
                 .finish(),
-            CatalogueError::TemplateAlreadyInCatalogue(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Template Already In Catalogue")
+            CatalogError::TemplateAlreadyInCatalog(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Template Already In Catalog")
                 .source(self)
                 .finish(),
-            CatalogueError::TemplateNotInCatalogue(_) => ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not In Catalogue")
+            CatalogError::TemplateNotInCatalog(_) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not In Catalog")
                 .source(self)
                 .finish(),
         }

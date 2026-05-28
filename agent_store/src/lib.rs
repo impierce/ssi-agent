@@ -44,9 +44,9 @@ use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
     server_config::aggregate::ServerConfig,
 };
-use agent_library::catalogue::aggregate::Catalogue;
-use agent_library::catalogue::services::{CatalogueServiceImpl, CatalogueServices};
-use agent_library::catalogue::views::view_all_catalogues::AllCataloguesView;
+use agent_library::catalog::aggregate::Catalog;
+use agent_library::catalog::services::{CatalogServiceImpl, CatalogServices};
+use agent_library::catalog::views::view_all_catalogs::AllCatalogsView;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
@@ -243,24 +243,24 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<Template, Template, AllTemplatesView>((), queries)
         .await;
 
-    let catalogue_services: Arc<dyn CatalogueServices> = Arc::new(CatalogueServiceImpl {
+    let catalog_services: Arc<dyn CatalogServices> = Arc::new(CatalogServiceImpl {
         template_view_repo: template.clone(),
     });
 
-    let (catalogue_command_handler, catalogue, all_catalogues) = builder
-        .commands_and_queries::<Catalogue, Catalogue, AllCataloguesView>(catalogue_services, vec![])
+    let (catalog_command_handler, catalog, all_catalogs) = builder
+        .commands_and_queries::<Catalog, Catalog, AllCatalogsView>(catalog_services, vec![])
         .await;
 
     LibraryState {
         command: agent_library::state::CommandHandlers {
             template: template_command_handler,
-            catalogue: catalogue_command_handler,
+            catalog: catalog_command_handler,
         },
         query: agent_library::state::ViewRepositories {
             template,
             all_templates,
-            catalogue,
-            all_catalogues,
+            catalog,
+            all_catalogs,
         },
     }
 }

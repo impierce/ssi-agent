@@ -1,22 +1,22 @@
-use crate::catalogue::aggregate::{CatalogueDisplay, CatalogueVisibility};
+use crate::catalog::aggregate::{CatalogDisplay, CatalogVisibility};
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
 #[derive(Debug, Clone, Serialize, Display, Deserialize, PartialEq)]
-pub enum CatalogueEvent {
-    CatalogueCreated {
+pub enum CatalogEvent {
+    CatalogCreated {
         id: String,
-        display: CatalogueDisplay,
-        visibility: CatalogueVisibility,
+        display: CatalogDisplay,
+        visibility: CatalogVisibility,
     },
-    CatalogueDisplayUpdated {
+    CatalogDisplayUpdated {
         id: String,
-        display: CatalogueDisplay,
+        display: CatalogDisplay,
     },
     VisibilityUpdated {
         id: String,
-        visibility: CatalogueVisibility,
+        visibility: CatalogVisibility,
     },
     TemplateIdAdded {
         id: String,
@@ -26,12 +26,12 @@ pub enum CatalogueEvent {
         id: String,
         template_id: String,
     },
-    CatalogueDeleted {
+    CatalogDeleted {
         id: String,
     },
 }
 
-impl DomainEvent for CatalogueEvent {
+impl DomainEvent for CatalogEvent {
     fn event_type(&self) -> String {
         self.to_string()
     }

@@ -1,6 +1,6 @@
 // Endpoint handlers
 
-pub mod catalogue;
+pub mod catalog;
 pub mod error;
 
 use agent_library::state::LibraryState;
@@ -11,9 +11,9 @@ use axum::{
 use std::sync::Arc;
 
 use crate::{
-    v0::library::catalogue::{
-        queries::{get_all_catalogues::get_catalogues, get_catalogue::get_catalogue},
-        {add_template, create_catalogue, delete_catalogue, remove_template, update_display, update_visibility},
+    v0::library::catalog::{
+        queries::{get_all_catalogs::get_catalogs, get_catalog::get_catalog},
+        {add_template, create_catalog, delete_catalog, remove_template, update_display, update_visibility},
     },
     v0::templates::{
         create_template, delete_template, duplicate_template, get_template, get_templates, update_template,
@@ -32,15 +32,15 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/templates/delete-template", post(delete_template))
                 .route("/templates/update-template", post(update_template))
                 .route("/templates/duplicate-template", post(duplicate_template))
-                // Catalogue Routes
-                .route("/catalogue/create-catalogue", post(create_catalogue))
-                .route("/catalogue/delete-catalogue", post(delete_catalogue))
-                .route("/catalogue/add-template", post(add_template))
-                .route("/catalogue/remove-template", post(remove_template))
-                .route("/catalogue/update-display", post(update_display))
-                .route("/catalogue/update-visibility", post(update_visibility))
-                .route("/catalogue/get-all-catalogues", get(get_catalogues))
-                .route("/catalogue/{catalogue_id}", get(get_catalogue)),
+                // catalog Routes
+                .route("/catalog/create-catalog", post(create_catalog))
+                .route("/catalog/delete-catalog", post(delete_catalog))
+                .route("/catalog/add-template", post(add_template))
+                .route("/catalog/remove-template", post(remove_template))
+                .route("/catalog/update-display", post(update_display))
+                .route("/catalog/update-visibility", post(update_visibility))
+                .route("/catalog/get-all-catalogs", get(get_catalogs))
+                .route("/catalog/{catalog_id}", get(get_catalog)),
         )
         .with_state(library_state)
 }

@@ -5,17 +5,18 @@ use cqrs_es::persist::ViewRepository;
 use std::sync::Arc;
 
 #[async_trait]
-pub trait CatalogueServices: Send + Sync {
+pub trait CatalogServices: Send + Sync {
     async fn template_exists(&self, id: &str) -> bool;
 }
 
-pub struct CatalogueServiceImpl {
+pub struct CatalogServiceImpl {
     pub template_view_repo: Arc<dyn ViewRepository<TemplateView, Template>>,
 }
 
 #[async_trait]
-impl CatalogueServices for CatalogueServiceImpl {
+impl CatalogServices for CatalogServiceImpl {
     async fn template_exists(&self, id: &str) -> bool {
         self.template_view_repo.load(id).await.ok().flatten().is_some()
     }
 }
+

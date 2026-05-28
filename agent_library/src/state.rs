@@ -1,5 +1,5 @@
 use agent_shared::application_state::CommandHandler;
-use cqrs_es::{persist::ViewRepository};
+use cqrs_es::persist::ViewRepository;
 use std::sync::Arc;
 
 use crate::template::{
@@ -7,9 +7,9 @@ use crate::template::{
     views::{all_templates::AllTemplatesView, TemplateView},
 };
 
-use crate::catalogue::{
-    aggregate::Catalogue,
-    views::{view_all_catalogues::AllCataloguesView, CatalogueView},
+use crate::catalog::{
+    aggregate::Catalog,
+    views::{view_all_catalogs::AllCatalogsView, CatalogView},
 };
 
 #[derive(Clone)]
@@ -22,7 +22,7 @@ pub struct LibraryState {
 #[derive(Clone)]
 pub struct CommandHandlers {
     pub template: CommandHandler<Template>,
-    pub catalogue: CommandHandler<Catalogue>,
+    pub catalog: CommandHandler<Catalog>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -31,21 +31,21 @@ pub struct CommandHandlers {
 type Queries = ViewRepositories<
     dyn ViewRepository<TemplateView, Template>,
     dyn ViewRepository<AllTemplatesView, Template>,
-    dyn ViewRepository<CatalogueView, Catalogue>,
-    dyn ViewRepository<AllCataloguesView, Catalogue>,
+    dyn ViewRepository<CatalogView, Catalog>,
+    dyn ViewRepository<AllCatalogsView, Catalog>,
 >;
 
 pub struct ViewRepositories<T1, T2, T3, T4>
 where
     T1: ViewRepository<TemplateView, Template> + ?Sized,
     T2: ViewRepository<AllTemplatesView, Template> + ?Sized,
-    T3: ViewRepository<CatalogueView, Catalogue> + ?Sized,
-    T4: ViewRepository<AllCataloguesView, Catalogue> + ?Sized,
+    T3: ViewRepository<CatalogView, Catalog> + ?Sized,
+    T4: ViewRepository<AllCatalogsView, Catalog> + ?Sized,
 {
     pub template: Arc<T1>,
     pub all_templates: Arc<T2>,
-    pub catalogue: Arc<T3>,
-    pub all_catalogues: Arc<T4>,
+    pub catalog: Arc<T3>,
+    pub all_catalogs: Arc<T4>,
 }
 
 impl Clone for Queries {
@@ -53,8 +53,8 @@ impl Clone for Queries {
         ViewRepositories {
             template: self.template.clone(),
             all_templates: self.all_templates.clone(),
-            catalogue: self.catalogue.clone(),
-            all_catalogues: self.all_catalogues.clone(),
+            catalog: self.catalog.clone(),
+            all_catalogs: self.all_catalogs.clone(),
         }
     }
 }

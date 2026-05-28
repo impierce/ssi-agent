@@ -9,6 +9,96 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
+  /v0/catalog/add-template:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Add a template to a catalog
+      description: Adds a template to a catalog by its ID.
+      operationId: add_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTemplateRequest'
+        required: true
+      responses: {}
+  /v0/catalog/create-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Create a new catalog
+      description: Creates a new catalog with the provided display information.
+      operationId: create_catalog
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogRequest'
+        required: true
+      responses: {}
+  /v0/catalog/delete-catalog/{catalog_id}:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Delete a catalog
+      description: Deletes a catalog.
+      operationId: delete_catalog
+      parameters:
+      - name: catalog_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses: {}
+  /v0/catalog/remove-template:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Remove a template from a catalog
+      description: Removes a template from a catalog by its ID.
+      operationId: remove_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveTemplateRequest'
+        required: true
+      responses: {}
+  /v0/catalog/update-display:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Update a catalog's display information
+      description: Updates a catalog's display information such as name, description, and icon.
+      operationId: update_display
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCatalogDisplayRequest'
+        required: true
+      responses: {}
+  /v0/catalog/update-visibility:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Update a catalog's visibility
+      description: Updates a catalog's visibility (e.g., public, private, draft).
+      operationId: update_visibility
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCatalogVisibilityRequest'
+        required: true
+      responses: {}
   /v0/connections:
     get:
       tags:
@@ -616,6 +706,35 @@ components:
       properties:
         url:
           type: string
+    AddTemplateRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        templateId:
+          type: string
+          default: ''
+    CatalogDisplay:
+      type: object
+      required:
+      - name
+      - description
+      properties:
+        description:
+          type: string
+        icon:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DisplayIcon'
+        name:
+          type: string
+    CatalogVisibility:
+      type: string
+      enum:
+      - Public
+      - Private
+      - Draft
     Connection:
       type: object
       required:
@@ -670,6 +789,20 @@ components:
           type:
           - string
           - 'null'
+    CreateCatalogRequest:
+      type: object
+      properties:
+        display:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogDisplay'
+          default:
+            name: ''
+            description: ''
+            icon: null
+        visibility:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogVisibility'
+          default: Private
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -974,6 +1107,16 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Logo'
         name:
+          type: string
+    DisplayIcon:
+      type: object
+      required:
+      - url
+      - altText
+      properties:
+        altText:
+          type: string
+        url:
           type: string
     Document:
       type: object
@@ -1288,6 +1431,15 @@ components:
       properties:
         id:
           type: string
+    RemoveTemplateRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        templateId:
+          type: string
+          default: ''
     Source:
       type: string
       enum:
@@ -1395,6 +1547,29 @@ components:
       - published
       - archived
       - deleted
+    UpdateCatalogDisplayRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        display:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogDisplay'
+          default:
+            name: ''
+            description: ''
+            icon: null
+    UpdateCatalogVisibilityRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        visibility:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogVisibility'
+          default: Private
     UpdateTemplateEndpointRequest:
       type: object
       properties:
@@ -1512,6 +1687,8 @@ tags:
   description: Manage your own templates, browse and import external templates.
 - name: Templates
   description: Create and manage templates which provide the structure for credentials to be issued.
+- name: Catalogs
+  description: Create and manage Catalogs to organize and share your templates.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation
