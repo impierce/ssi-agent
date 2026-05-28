@@ -133,7 +133,7 @@ expression = "Apache-2.0"
 # # depending on the rest of your configuration
 license-files = [
     #     # Each entry is a crate relative path, and the (opaque) hash of its contents
-    { path = "LICENSE", hash = 0x00000000 },
+    # { path = "LICENSE", hash = 0x00000000 },
 ]
 
 [licenses.private]
