@@ -142,12 +142,15 @@ pub mod tests {
 
         set_config().enable_event_publisher_http(0);
         set_config().set_event_publisher_http_target_url(0, target_url.clone());
-        set_config().set_event_publisher_http_target_events(0, Events {
-            authorization_request: vec![
-                agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
-            ],
-            ..Default::default()
-        });
+        set_config().set_event_publisher_http_target_events(
+            0,
+            Events {
+                authorization_request: vec![
+                    agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
+                ],
+                ..Default::default()
+            },
+        );
 
         let event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
             .unwrap()

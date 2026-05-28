@@ -408,10 +408,13 @@ pub mod tests {
 
             set_config().enable_event_publisher_http(0);
             set_config().set_event_publisher_http_target_url(0, target_url.clone());
-            set_config().set_event_publisher_http_target_events(0, Events {
-                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                ..Default::default()
-            });
+            set_config().set_event_publisher_http_target_events(
+                0,
+                Events {
+                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                    ..Default::default()
+                },
+            );
 
             (
                 Some(external_server),

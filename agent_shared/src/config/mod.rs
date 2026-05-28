@@ -423,21 +423,27 @@ impl ApplicationConfiguration {
     // TODO: make generic: set_enabled(enabled: bool)
     pub fn enable_event_publisher_http(&mut self, index: usize) {
         if self.event_publishers.http.len() <= index {
-            self.event_publishers.http.resize(index + 1, EventPublisherHttp::default());
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
         self.event_publishers.http[index].enabled = true;
     }
 
     pub fn set_event_publisher_http_target_url(&mut self, index: usize, target_url: String) {
         if self.event_publishers.http.len() <= index {
-            self.event_publishers.http.resize(index + 1, EventPublisherHttp::default());
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
         self.event_publishers.http[index].target_url = target_url;
     }
 
     pub fn set_event_publisher_http_target_events(&mut self, index: usize, events: Events) {
         if self.event_publishers.http.len() <= index {
-            self.event_publishers.http.resize(index + 1, EventPublisherHttp::default());
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
         self.event_publishers.http[index].events = events;
     }
