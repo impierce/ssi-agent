@@ -8,6 +8,8 @@
 
 [![twelve-factor-app](https://img.shields.io/badge/factors-twelve-blue)](https://12factor.net)
 
+![Check dependencies](https://github.com/impierce/ssi-agent/actions/workflows/audit.yaml/badge.svg)
+
 ---
 
 ## Documentation
