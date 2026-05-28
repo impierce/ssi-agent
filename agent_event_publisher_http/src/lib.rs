@@ -444,7 +444,7 @@ impl EventPublisher for EventPublisherHttp {
 
 /// An event publisher for a specific aggregate that dispatches events to an HTTP endpoint.
 #[skip_serializing_none]
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
@@ -457,6 +457,16 @@ where
     pub client: reqwest::Client,
     #[serde(skip)]
     _marker: std::marker::PhantomData<A>,
+}
+
+impl<A: Aggregate> std::fmt::Debug for AggregateEventPublisherHttp<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AggregateEventPublisherHttp")
+            .field("target_url", &self.target_url)
+            .field("headers", &self.headers.as_ref().map(|_| "<REDACTED>"))
+            .field("target_events", &self.target_events)
+            .finish()
+    }
 }
 
 impl<A> AggregateEventPublisherHttp<A>
