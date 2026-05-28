@@ -140,16 +140,20 @@ pub mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        set_config().enable_event_publisher_http();
-        set_config().set_event_publisher_http_target_url(target_url.clone());
-        set_config().set_event_publisher_http_target_events(Events {
+        set_config().enable_event_publisher_http(0);
+        set_config().set_event_publisher_http_target_url(0, target_url.clone());
+        set_config().set_event_publisher_http_target_events(0, Events {
             authorization_request: vec![
                 agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
             ],
             ..Default::default()
         });
 
-        let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
+        let event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+            .unwrap()
+            .into_iter()
+            .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+            .collect();
 
         let verification_state =
             Arc::new(verification_state(&InMemory, VerificationServices::default().await, event_publishers).await);
