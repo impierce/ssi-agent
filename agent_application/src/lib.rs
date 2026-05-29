@@ -40,17 +40,38 @@ pub async fn state() -> io::Result<ApplicationState> {
     // TODO: Currently all these `*_event_publishers` are exactly the same, which is weird. We need some sort of layer
     // between `agent_application` and `agent_store` that will provide a cleaner way of initializing the event
     // publishers and sending them over to `agent_store`.
-    let identity_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
-    let issuance_event_publishers: Vec<Box<dyn EventPublisher>> = vec![
-        Box::new(EventPublisherHttp::load().unwrap()),
-        Box::new(EventPublisherNats::load().await.unwrap()),
-    ];
-    let library_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
-    let authorization_event_publishers: Vec<Box<dyn EventPublisher>> =
-        vec![Box::new(EventPublisherHttp::load().unwrap())];
-    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(EventPublisherHttp::load().unwrap())];
-    let verification_event_publishers: Vec<Box<dyn EventPublisher>> =
-        vec![Box::new(EventPublisherHttp::load().unwrap())];
+    let identity_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+        .unwrap()
+        .into_iter()
+        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+        .collect();
+    // Issuance events are also published to NATS.
+    let mut issuance_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+        .unwrap()
+        .into_iter()
+        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+        .collect();
+    issuance_event_publishers.push(Box::new(EventPublisherNats::load().await.unwrap()));
+    let library_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+        .unwrap()
+        .into_iter()
+        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+        .collect();
+    let authorization_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+        .unwrap()
+        .into_iter()
+        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+        .collect();
+    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+        .unwrap()
+        .into_iter()
+        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+        .collect();
+    let verification_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+        .unwrap()
+        .into_iter()
+        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+        .collect();
 
     let event_store_type = config().event_store.type_.clone();
 

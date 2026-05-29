@@ -29,13 +29,13 @@ signing_algorithms_supported:
 # aggregate. The events will be dispatched to the `https://my-domain.example.org/event-subscriber` endpoint.
 event_publishers:
   http:
-    enabled: false
-    target_url: "https://my-domain.example.org/event-subscriber"
-    headers:
-      Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-    events:
-      server_config: []
-      credential: [UnsignedCredentialCreated, CredentialSigned]
+    - enabled: false
+      target_url: "https://my-domain.example.org/event-subscriber"
+      headers:
+        Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
+      events:
+        server_config: []
+        credential: [UnsignedCredentialCreated, CredentialSigned]
   nats:
     enabled: true
     nats_url: "nats://localhost:4222"
