@@ -1,14 +1,14 @@
 ![banner](https://github.com/impierce/ssi-agent/raw/HEAD/.github/banner.png)
 
-[![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 [![GitHub License](https://img.shields.io/github/license/impierce/ssi-agent)](https://github.com/impierce/ssi-agent/blob/HEAD/LICENSE)
 [![Docker Pulls](https://img.shields.io/docker/pulls/impiercetechnologies/ssi-agent)](https://hub.docker.com/r/impiercetechnologies/ssi-agent)
-
-<!-- This is a playful reference to the "Twelve-Factor App" conventions that we try to follow. -->
-
+[![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md)
 [![twelve-factor-app](https://img.shields.io/badge/factors-twelve-blue)](https://12factor.net)
 
 ![Check dependencies](https://github.com/impierce/ssi-agent/actions/workflows/audit.yaml/badge.svg)
+![Check licenses](https://github.com/impierce/ssi-agent/actions/workflows/check-licenses.yaml/badge.svg)
+
+<!-- The "Twelve-Factor App" badge is a playful reference to the conventions we try to follow. -->
 
 ---
 

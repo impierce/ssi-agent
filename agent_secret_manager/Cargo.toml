@@ -3,6 +3,7 @@ name = "agent_secret_manager"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_shared = { path = "../agent_shared" }
