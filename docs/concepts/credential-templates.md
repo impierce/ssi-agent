@@ -113,6 +113,8 @@ Each template is tied to exactly one **credential data model**, set at creation 
 
 > W3C VC 1.1 templates do not support `schemaPropertiesAttributes`. Attempting to set claim attributes on a VC 1.1 template returns an error.
 
+> **ELM V3.3 note**: European Learning Model 3.3 templates currently accept a caller-defined schema with no field-level standard enforcement beyond valid JSON Schema. ELM-specific field validation is planned to be tightened in a future iteration, following the same approach as OB 3.0.
+
 ---
 
 ## The `schema` Field
@@ -368,6 +370,60 @@ The `visibility` field controls whether the template appears in a future **unaut
 | --------- | ----------------------------------------------------------------- |
 | `Private` | Template does not appear in the public listing                    |
 | `Public`  | Template appears in the public listing (only if also `Published`) |
+
+---
+
+## Update Request Semantics
+
+Template update requests follow consistent field-level semantics:
+
+- **Omitted field** — the field is left unchanged. Omitting a field does not clear it.
+- **`null` for a clearable field** — clears the field back to absent. Clearable fields are: `display`, `description`, `tags`, `schemaPropertiesAttributes`.
+- **`null` for a non-clearable field** — rejected as invalid. Non-clearable fields include `title`, `schema`, `type`, etc.
+- **Empty collections** (`[]` or `{}`) — treated identically to `null`. `tags: []` and `tags: null` both clear tags; `schemaPropertiesAttributes: {}` and `schemaPropertiesAttributes: null` both clear the attributes.
+- **Empty or whitespace-only string for a clearable field** — treated as `null` (clears the field). Applies to `description`.
+- **Empty or whitespace-only string for a non-clearable field** — rejected. Applies to `title`.
+- **All string values** — trimmed of leading and trailing whitespace before validation and storage.
+
+---
+
+## Offer Behavior
+
+Offers always reference a `template_id`. UniCore resolves the corresponding credential configuration internally; callers do not specify credential configuration IDs.
+
+Offers use the **live template state at redemption time**, not a snapshot taken when the offer was created. If the template's schema or type changes between offer creation and wallet redemption, the current state applies.
+
+Archiving or deleting a template does **not** automatically invalidate outstanding offers. Any attempt to redeem an offer against a template that is no longer `Published` will fail at redemption time.
+
+---
+
+## Pre-signed Credentials
+
+Pre-signed credential issuance follows a different validation contract from unsigned issuance. The signed payload is trusted as-is — UniCore only checks that the template exists, is `Published`, and that the format is compatible with the credential configuration.
+
+| Rule                                       | Unsigned issuance | Pre-signed issuance |
+| ------------------------------------------ | ----------------- | ------------------- |
+| Template must be `Published`               | Yes               | Yes                 |
+| Format must match credential configuration | Yes               | Yes                 |
+| Payload validated against template schema  | Yes               | **No**              |
+| `type` verified against template           | Yes               | **No**              |
+| `credentialExpiration` enforced            | Yes               | **No**              |
+| `expiresAt` in request honoured            | Yes               | **No (ignored)**    |
+
+Content correctness is the caller's responsibility. If the template is no longer `Published` at redemption time, offer redemption fails. Holder-facing metadata uses the current live credential configuration; the signed content may diverge from the live template state, and this divergence is intentional and accepted.
+
+---
+
+## Validation Error Codes
+
+Template API operations return two distinct HTTP error codes for input problems:
+
+| Code                       | When to expect it                                                                                                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400 Bad Request`          | Malformed JSON, deserialization failure, or other transport-level structural error                                                                                                                                               |
+| `422 Unprocessable Entity` | Business rule violation — the request is structurally valid JSON but violates a domain constraint (e.g. invalid schema, forbidden status transition, missing required fields for publication, non-clearable field set to `null`) |
+
+Business-rule failures fail fast rather than aggregating multiple errors into a single response.
 
 ---
 
