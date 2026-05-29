@@ -362,6 +362,9 @@ impl Aggregate for Template {
             } => {
                 ensure_template_editable(&self.status)?;
 
+                if self.status == Status::Draft && visibility == Visibility::Public {
+                    return Err(TemplateError::DraftTemplateCannotBePublic);
+                }
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]

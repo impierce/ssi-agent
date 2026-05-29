@@ -34,4 +34,6 @@ pub enum TemplateError {
     SchemaPropertiesAttributesNotAllowed,
     #[error("Duplicate schemaPropertiesAttributes key after trimming: `{0}`")]
     DuplicateSchemaPropertiesAttributeKey(String),
+    #[error("A template must not be in \"Draft\" stage when making it public")]
+    DraftTemplateCannotBePublic,
 }
