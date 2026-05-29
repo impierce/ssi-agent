@@ -87,6 +87,11 @@ impl IntoApiErrorExt for TemplateError {
                     .source(self)
                     .finish()
             }
+            TemplateError::DraftTemplateCannotBePublic => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Draft Template Cannot Be Public")
+                .type_url(type_url("library#draft-template-cannot-be-public"))
+                .source(self)
+                .finish(),
         }
     }
 }
@@ -265,6 +270,16 @@ mod tests {
                 "title": "Duplicate Schema Properties Attribute Key",
                 "status": 422,
                 "detail": "Duplicate schemaPropertiesAttributes key after trimming: `/name`"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::DraftTemplateCannotBePublic,
+            json!({
+                "type": type_url("library#draft-template-cannot-be-public"),
+                "title": "Draft Template Cannot Be Public",
+                "status": 422,
+                "detail": "A template must not be in \"Draft\" stage when making it public"
             })
         );
     }

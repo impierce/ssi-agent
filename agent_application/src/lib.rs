@@ -24,7 +24,7 @@ use tracing::info;
 pub async fn run() -> io::Result<()> {
     let state = state().await?;
 
-    serve(app(state)).await
+    serve(router(state)).await
 }
 
 pub async fn state() -> io::Result<ApplicationState> {

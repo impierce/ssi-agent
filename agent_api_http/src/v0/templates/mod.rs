@@ -137,7 +137,8 @@ pub(crate) async fn create_template(
         description,
         r#type,
         schema: Box::new(schema),
-        schema_properties_attributes,
+        schema_properties_attributes: schema_properties_attributes
+            .map(|attrs| attrs.into_iter().map(|(k, v)| (k, v.strip_non_removable())).collect()),
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -375,7 +376,10 @@ pub(crate) async fn update_template(
     if let Some(schema_properties_attributes) = schema_properties_attributes {
         let command = TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id: template_id.clone(),
-            schema_properties_attributes,
+            schema_properties_attributes: schema_properties_attributes
+                .into_iter()
+                .map(|(k, v)| (k, v.strip_non_removable()))
+                .collect(),
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
@@ -484,6 +488,7 @@ pub(crate) async fn delete_template(
 
     query_handler(&template_id, &state.query.template)
         .await?
+        .filter(|t| t.status != Status::Deleted)
         .ok_or_else(|| {
             ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")

@@ -132,8 +132,10 @@ pub(crate) async fn credentials(
     // and cannot be validated against a template schema.
     if !is_signed {
         if let Some(schema) = template.schema.as_ref() {
-            // Template schemas describe the shape of the credential subject data.
-            // The API consumer sends data wrapped in "credentialSubject", so we unwrap it before validation.
+            // The template schema describes the shape of the credential subject data.
+            // Callers are expected to nest their subject properties under `credentialSubject`
+            // in the `credential` payload. We unwrap it here so that the schema is validated
+            // against the subject properties directly, as the schema describes.
             let data_to_validate = credential.get("credentialSubject").unwrap_or(&credential);
             validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
         }

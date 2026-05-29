@@ -78,5 +78,12 @@ JSON Schema documents are often stored, cached, or forwarded verbatim by tooling
 
 - The `schema` field remains a clean, standards-compliant JSON Schema document with no platform-specific extensions.
 - `schemaPropertiesAttributes` keys use **JSON Pointer** notation (RFC 6901) to address leaf fields within the nested schema, providing an unambiguous and standard path format.
+
+---
+
+## Note: No automatic `additionalProperties` injection
+
+An earlier implementation automatically injected `"additionalProperties": false` into every object node of the stored schema. This was removed in favour of simplicity and readability. The schema is now stored exactly as provided by the caller. Callers who want strict additional-property rejection may include `"additionalProperties": false` themselves.
+
 - Consumers who want to understand claim projection metadata must read both fields. This is an acceptable tradeoff given the audience (issuer-facing admin API, not credential holder tooling).
 - When displaying the schema in a frontend form builder, the UI layer is responsible for merging the two fields into a combined view if needed.

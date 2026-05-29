@@ -24,7 +24,7 @@ Every unsigned credential issuance request in UniCore must reference a template.
 | `title`                      | Yes                                         | Yes (Draft, Published) | Human-readable name for the template                                        |
 | `dataModel`                  | Yes                                         | No                     | Credential data model (W3C VC 1.1, VC 2.0, OB 3.0, ELM 3.3)                 |
 | `holderType`                 | Yes                                         | No                     | Who the credential is issued to (`Individual` or `Organization`)            |
-| `schema`                     | Yes                                         | Yes (Draft, Published) | JSON Schema defining the issuance input surface                             |
+| `schema`                     | No (optional; OBv3 requires it by spec)     | Yes (Draft, Published) | JSON Schema defining the issuance input surface                             |
 | `status`                     | No (defaults to `Draft`)                    | Yes (see lifecycle)    | Current lifecycle stage of the template                                     |
 | `type`                       | No (defaults to `["VerifiableCredential"]`) | Yes (Draft, Published) | Credential type URIs included in the issued credential                      |
 | `credentialExpiration`       | No (defaults to `P90D`)                     | Yes (Draft, Published) | Upper-bound expiration policy for issued credentials                        |
@@ -55,11 +55,11 @@ Draft ──► Published ──► Archived ──► Deleted
 | From        | To                                 |
 | ----------- | ---------------------------------- |
 | `Draft`     | `Published`, `Archived`, `Deleted` |
-| `Published` | `Archived`, `Deleted`              |
+| `Published` | `Archived`                         |
 | `Archived`  | `Published`, `Deleted`             |
 | `Deleted`   | _(none — terminal)_                |
 
-> **Note**: Deleting a `Published` template is not allowed directly. The template must first be archived.
+> **Note**: Deleting a `Published` template is not allowed directly. The template must first be `Archived`.
 
 ### Draft
 

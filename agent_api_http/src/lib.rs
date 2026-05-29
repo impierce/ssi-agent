@@ -79,9 +79,13 @@ pub fn app(
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(|request: &Request<_>| {
-                            let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                            let path = request
+                                .extensions()
+                                .get::<MatchedPath>()
+                                .map(MatchedPath::as_str)
+                                .unwrap_or_else(|| request.uri().path());
                             info_span!(
-                                "HTTP Request ",
+                                "HTTP Request",
                                 method = ?request.method(),
                                 path,
                             )
