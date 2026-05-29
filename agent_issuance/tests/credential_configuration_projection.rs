@@ -192,7 +192,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
     command_handler(
         template_id,
         &lib_state.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Display Update Test".to_string(),
@@ -289,7 +289,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
     command_handler(
         template_id,
         &library_for_query.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Draft Title".to_string(),
@@ -340,7 +340,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
     command_handler(
         template_id,
         &library_for_query.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Original Title".to_string(),
@@ -466,7 +466,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
     command_handler(
         template_id,
         &lib_state.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "My Credential".to_string(),
@@ -551,7 +551,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
     command_handler(
         template_id,
         &lib_state.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Temp".to_string(),
@@ -616,7 +616,7 @@ async fn test_status_updated_to_archived_removes_credential_configuration() {
     command_handler(
         template_id,
         &lib_state.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Temp".to_string(),
@@ -697,7 +697,7 @@ async fn test_schema_updated_refreshes_credential_configuration() {
     command_handler(
         template_id,
         &lib_state.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Schema Update Test".to_string(),
@@ -779,7 +779,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
     command_handler(
         template_id,
         &lib_state.command.template,
-        TemplateCommand::CreateTemplate {
+        TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Schema Attributes Update Test".to_string(),

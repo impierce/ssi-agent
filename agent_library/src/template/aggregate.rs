@@ -154,7 +154,7 @@ impl Aggregate for Template {
         info!("Handling command: {:?}", command);
 
         match command {
-            CreateTemplate {
+            CreateNewTemplate {
                 template_id,
                 source_template_id,
                 title,
@@ -1285,7 +1285,7 @@ pub mod document_tests {
     ) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: title.clone(),
@@ -1325,7 +1325,7 @@ pub mod document_tests {
     async fn test_create_template_without_title(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: String::new(),
@@ -1349,7 +1349,7 @@ pub mod document_tests {
     async fn test_create_template_with_empty_title(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "".to_string(),
@@ -1373,7 +1373,7 @@ pub mod document_tests {
     async fn test_create_template_rejects_archived_status_on_create(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -1624,7 +1624,7 @@ pub mod document_tests {
     async fn test_create_open_badges_template_rejects_extra_types(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "OB with extra types".to_string(),
@@ -1699,7 +1699,7 @@ pub mod document_tests {
     async fn test_create_open_badges_template_missing_required_achievement_properties(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "OB Missing Props".to_string(),
@@ -1738,7 +1738,7 @@ pub mod document_tests {
     async fn test_create_open_badges_template_with_array_type_in_schema(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "OB with array type".to_string(),
@@ -1829,7 +1829,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -1853,7 +1853,7 @@ pub mod document_tests {
     async fn test_create_template_with_no_schema(template_id: String) {
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -1988,7 +1988,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -2021,7 +2021,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -2061,7 +2061,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -2649,7 +2649,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -2740,7 +2740,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -2847,7 +2847,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -2975,7 +2975,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -3169,7 +3169,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -3218,7 +3218,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -3323,7 +3323,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id: template_id.clone(),
                 source_template_id: None,
                 title: "Test".to_string(),
@@ -3385,7 +3385,7 @@ pub mod document_tests {
 
         TemplateTestFramework::with(())
             .given_no_previous_events()
-            .when(TemplateCommand::CreateTemplate {
+            .when(TemplateCommand::CreateNewTemplate {
                 template_id,
                 source_template_id: None,
                 title: "Test".to_string(),

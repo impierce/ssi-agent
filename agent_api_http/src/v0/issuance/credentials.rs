@@ -633,7 +633,7 @@ pub mod tests {
     ) -> String {
         let template_id = TEMPLATE_ID.to_string();
 
-        let command = TemplateCommand::CreateTemplate {
+        let command = TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test Template".to_string(),
@@ -729,7 +729,7 @@ pub mod tests {
             Status::Archived | Status::Deleted => Status::Draft,
             _ => status.clone(),
         };
-        let command = TemplateCommand::CreateTemplate {
+        let command = TemplateCommand::CreateNewTemplate {
             template_id: template_id.to_string(),
             source_template_id: None,
             title: "Test Template".to_string(),

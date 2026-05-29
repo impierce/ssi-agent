@@ -123,6 +123,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/create-new-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Create a new template
+      description: Creates a new template which can be used to issue credentials.
+      operationId: create_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequestBody'
+            examples:
+              OpenBadges template:
+                description: An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.
+                value:
+                  title: OpenBadges template
+                  dataModel: open_badges_3-0
+                  holderType: individual
+                  schema:
+                    type: object
+                    properties:
+                      achievement.name:
+                        type: string
+                      achievement.description:
+                        type: string
+                      achievement.criteria.narrative:
+                        type: string
+              Standard template:
+                description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
+                value:
+                  title: Standard template
+                  dataModel: w3c_vc_data_model_v1-1
+                  holderType: individual
+        required: true
+      responses:
+        '201':
+          description: New template created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The path of the newly created template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
   /v0/credentials:
     get:
       tags:
@@ -180,6 +228,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+  /v0/delete-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Delete a template
+      description: Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+      operationId: delete_template_by_id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteTemplateEndpointRequest'
+        required: true
+      responses:
+        '204':
+          description: Template deleted successfully
   /v0/documents:
     get:
       tags:
@@ -226,6 +291,57 @@ paths:
                 $ref: '#/components/schemas/Document'
         '404':
           description: Document not found
+  /v0/duplicate-template:
+    post:
+      tags:
+      - Library
+      - Templates
+      summary: Duplicate existing template
+      description: Creates a duplicate of an existing template.
+      operationId: duplicate_template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateTemplateEndpointRequest'
+            example:
+              sourceTemplateId: 91fc790f-d876-4827-9a9d-0fb0f6766dca
+        required: true
+      responses:
+        '201':
+          description: Duplicate created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The path of the newly created template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '422':
+          description: Source Template Not Found
+  /v0/get-template-by-id/{id}:
+    get:
+      tags:
+      - Library
+      - Templates
+      summary: Get template by ID
+      description: Retrieve a specific template by its ID.
+      operationId: get_template_by_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Template retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
   /v0/holder/credentials:
     get:
       tags:
@@ -346,6 +462,23 @@ paths:
                 $ref: '#/components/schemas/OfferView'
         '404':
           description: Offer not found
+  /v0/list-all-templates:
+    get:
+      tags:
+      - Library
+      - Templates
+      summary: List all templates
+      description: List all available templates.
+      operationId: get_all_templates
+      responses:
+        '200':
+          description: All templates retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Template'
   /v0/offers:
     get:
       tags:
@@ -449,119 +582,7 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
-  /v0/templates/create-template:
-    post:
-      tags:
-      - Library
-      - Templates
-      summary: Create a new template
-      description: Creates a new template which can be used to issue credentials.
-      operationId: create_template
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateTemplateRequestBody'
-            examples:
-              OpenBadges template:
-                description: An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.
-                value:
-                  title: OpenBadges template
-                  dataModel: open_badges_3-0
-                  holderType: individual
-                  schema:
-                    type: object
-                    properties:
-                      achievement.name:
-                        type: string
-                      achievement.description:
-                        type: string
-                      achievement.criteria.narrative:
-                        type: string
-              Standard template:
-                description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
-                value:
-                  title: Standard template
-                  dataModel: w3c_vc_data_model_v1-1
-                  holderType: individual
-        required: true
-      responses:
-        '201':
-          description: New template created successfully
-          headers:
-            Location:
-              schema:
-                type: string
-              description: The path of the newly created template
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Template'
-  /v0/templates/delete-template:
-    post:
-      tags:
-      - Library
-      - Templates
-      summary: Delete a template
-      description: Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
-      operationId: delete_template_by_id
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeleteTemplateEndpointRequest'
-        required: true
-      responses:
-        '204':
-          description: Template deleted successfully
-  /v0/templates/duplicate-template:
-    post:
-      tags:
-      - Library
-      - Templates
-      summary: Duplicate existing template
-      description: Creates a duplicate of an existing template.
-      operationId: duplicate_template
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DuplicateTemplateEndpointRequest'
-            example:
-              sourceTemplateId: 91fc790f-d876-4827-9a9d-0fb0f6766dca
-        required: true
-      responses:
-        '201':
-          description: Duplicate created successfully
-          headers:
-            Location:
-              schema:
-                type: string
-              description: The path of the newly created template
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Template'
-        '422':
-          description: Source Template Not Found
-  /v0/templates/get-all-templates:
-    get:
-      tags:
-      - Library
-      - Templates
-      summary: List all templates
-      description: List all available templates.
-      operationId: get_all_templates
-      responses:
-        '200':
-          description: All templates retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Template'
-  /v0/templates/update-template:
+  /v0/update-template:
     post:
       tags:
       - Library
@@ -578,27 +599,6 @@ paths:
       responses:
         '204':
           description: Template updated successfully
-  /v0/templates/{template_id}:
-    get:
-      tags:
-      - Library
-      - Templates
-      summary: Get template by ID
-      description: Retrieve a specific template by its ID.
-      operationId: get_template_by_id
-      parameters:
-      - name: template_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Template retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Template'
 components:
   schemas:
     AcceptConnectionChangesRequest:

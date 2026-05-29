@@ -381,7 +381,7 @@ pub mod tests {
         command_handler(
             TEMPLATE_ID,
             &library_state.command.template,
-            TemplateCommand::CreateTemplate {
+            TemplateCommand::CreateNewTemplate {
                 template_id: TEMPLATE_ID.to_string(),
                 source_template_id: None,
                 title: "Test Template".to_string(),

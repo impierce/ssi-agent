@@ -6,7 +6,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum TemplateCommand {
-    CreateTemplate {
+    CreateNewTemplate {
         template_id: String,
         source_template_id: Option<String>,
         title: String,

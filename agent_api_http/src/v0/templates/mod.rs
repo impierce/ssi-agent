@@ -84,7 +84,7 @@ pub struct CreateTemplateRequestBody {
 /// Creates a new template which can be used to issue credentials.
 #[utoipa::path(
     post,
-    path = "/templates/create-template",
+    path = "/create-new-template",
     tags = ["Library", "Templates"],
     request_body(
         content = CreateTemplateRequestBody,
@@ -123,7 +123,7 @@ pub(crate) async fn create_template(
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
 
-    let command = TemplateCommand::CreateTemplate {
+    let command = TemplateCommand::CreateNewTemplate {
         template_id: template_id.clone(),
         source_template_id: None,
         title,
@@ -148,7 +148,10 @@ pub(crate) async fn create_template(
         .map(|template_view| {
             (
                 StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/templates/{template_id}"))],
+                [(
+                    header::LOCATION,
+                    &format!("{API_VERSION}/get-template-by-id/{template_id}"),
+                )],
                 Json(TemplateDto::from(template_view)),
             )
                 .into_response()
@@ -168,7 +171,7 @@ pub struct DuplicateTemplateEndpointRequest {
 /// Creates a duplicate of an existing template.
 #[utoipa::path(
     post,
-    path = "/templates/duplicate-template",
+    path = "/duplicate-template",
     tags = ["Library", "Templates"],
     request_body(
         content = DuplicateTemplateEndpointRequest,
@@ -197,7 +200,7 @@ pub(crate) async fn duplicate_template(
                 .finish()
         })?;
 
-    let command = TemplateCommand::CreateTemplate {
+    let command = TemplateCommand::CreateNewTemplate {
         template_id: new_template_id.clone(),
         source_template_id: Some(source_template_id),
         title: format!("{} Copy", original_template.title),
@@ -223,7 +226,10 @@ pub(crate) async fn duplicate_template(
 
     Ok((
         StatusCode::CREATED,
-        [(header::LOCATION, &format!("{API_VERSION}/templates/{new_template_id}"))],
+        [(
+            header::LOCATION,
+            &format!("{API_VERSION}/get-template-by-id/{new_template_id}"),
+        )],
         Json(TemplateDto::from(new_template)),
     )
         .into_response())
@@ -251,7 +257,7 @@ pub struct UpdateTemplateEndpointRequest {
 /// Updates an existing template with the provided content.
 #[utoipa::path(
     post,
-    path = "/templates/update-template",
+    path = "/update-template",
     operation_id = "update_template",
     tags = ["Library", "Templates"],
     responses(
@@ -382,7 +388,7 @@ pub(crate) async fn update_template(
 /// List all available templates.
 #[utoipa::path(
     get,
-    path = "/templates/get-all-templates",
+    path = "/list-all-templates",
     operation_id = "get_all_templates",
     tags = ["Library", "Templates"],
     responses(
@@ -419,7 +425,7 @@ pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Res
 /// Retrieve a specific template by its ID.
 #[utoipa::path(
     get,
-    path = "/templates/{template_id}",
+    path = "/get-template-by-id/{id}",
     operation_id = "get_template_by_id",
     tags = ["Library", "Templates"],
     responses(
@@ -456,7 +462,7 @@ pub struct DeleteTemplateEndpointRequest {
 /// Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
 #[utoipa::path(
     post,
-    path = "/templates/delete-template",
+    path = "/delete-template",
     operation_id = "delete_template_by_id",
     tags = ["Library", "Templates"],
     responses(
@@ -515,7 +521,7 @@ mod tests {
         command_handler(
             template_id,
             &state.command.template,
-            TemplateCommand::CreateTemplate {
+            TemplateCommand::CreateNewTemplate {
                 template_id: template_id.to_string(),
                 source_template_id: None,
                 title: title.to_string(),
