@@ -2,7 +2,7 @@
 
 A simple HTTP event publisher for the SSI Agent.
 
-To make use of this publisher you need to configure it by adding the `http` object to your configuration file.
+To make use of this publisher you need to configure it by adding one or more entries to the `http` array in your configuration file.
 
 - The `target_url` is the URL to which the events will be published.
 - The `target_events` is a list of events that will be published to the `target_url`.
@@ -12,13 +12,17 @@ Example:
 ```yaml
 event_publishers:
   http:
-    enabled: false
-    target_url: "https://my-domain.example.org/event-subscriber"
-    headers:
-      authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-    events:
-      server_config: []
-      credential: [UnsignedCredentialCreated, CredentialSigned]
+    - enabled: true
+      target_url: "https://my-domain.example.org/event-subscriber"
+      headers:
+        authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
+      events:
+        server_config: []
+        credential: [UnsignedCredentialCreated, CredentialSigned]
+    - enabled: false
+      target_url: "https://another-endpoint.example.org/events"
+      events:
+        offer: [CredentialOfferCreated]
 ```
 
 ### Request format

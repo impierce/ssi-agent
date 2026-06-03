@@ -3,6 +3,7 @@ name = "agent_shared"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_macros = { path = "../agent_macros" }

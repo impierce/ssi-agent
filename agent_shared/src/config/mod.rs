@@ -12,6 +12,7 @@ use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
 use oid4vci::credential_offer::TxCodeConstraints;
 use oid4vp::authorization_request::AlgValues;
+use oid4vp::authorization_request::VcSdJwtParameters;
 use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -309,6 +310,10 @@ pub struct ApplicationConfiguration {
             sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
             kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
                 }),
+        vc_sd_jwt: Some(VcSdJwtParameters {
+            sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
+            kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
+                }),
         ldp_vc: None,
         di_vp: None,
         mso_mdoc: None,
@@ -416,22 +421,31 @@ impl ApplicationConfiguration {
     }
 
     // TODO: make generic: set_enabled(enabled: bool)
-    pub fn enable_event_publisher_http(&mut self) {
-        if let Some(http) = &mut self.event_publishers.http {
-            http.enabled = true;
+    pub fn enable_event_publisher_http(&mut self, index: usize) {
+        if self.event_publishers.http.len() <= index {
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
+        self.event_publishers.http[index].enabled = true;
     }
 
-    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
-        if let Some(http) = &mut self.event_publishers.http {
-            http.target_url = target_url;
+    pub fn set_event_publisher_http_target_url(&mut self, index: usize, target_url: String) {
+        if self.event_publishers.http.len() <= index {
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
+        self.event_publishers.http[index].target_url = target_url;
     }
 
-    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
-        if let Some(http) = &mut self.event_publishers.http {
-            http.events = events;
+    pub fn set_event_publisher_http_target_events(&mut self, index: usize, events: Events) {
+        if self.event_publishers.http.len() <= index {
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
+        self.event_publishers.http[index].events = events;
     }
 
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
@@ -573,7 +587,8 @@ pub struct Display {
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct EventPublishers {
-    pub http: Option<EventPublisherHttp>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub http: Vec<EventPublisherHttp>,
     pub nats: Option<EventPublisherNats>,
 }
 
@@ -1150,7 +1165,11 @@ mod tests {
                 "dc+sd-jwt": {
                   "sd-jwt_alg_values": ["ES256"],
                   "kb-jwt_alg_values": ["ES256"]
-                }
+                },
+                "vc+sd-jwt": {
+                  "sd-jwt_alg_values": ["ES256"],
+                  "kb-jwt_alg_values": ["ES256"]
+                },
               },
             })
         );

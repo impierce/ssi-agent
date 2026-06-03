@@ -3,6 +3,7 @@ name = "agent_application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_api_http = { path = "../agent_api_http" }
@@ -17,7 +18,7 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
-did_manager = { git = "https://github.com/impierce/did-manager", rev = "48c5b60" }
+did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
 
 anyhow.workspace = true
 axum.workspace = true
