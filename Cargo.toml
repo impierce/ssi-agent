@@ -25,6 +25,8 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.76.0"
+license-file = "LICENSE"
+publish = false
 
 [workspace.lints.clippy]
 # Enables a large group of strict lints for idiomatic Rust. 

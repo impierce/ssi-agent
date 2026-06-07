@@ -409,16 +409,23 @@ pub mod tests {
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            set_config().enable_event_publisher_http();
-            set_config().set_event_publisher_http_target_url(target_url.clone());
-            set_config().set_event_publisher_http_target_events(Events {
-                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                ..Default::default()
-            });
+            set_config().enable_event_publisher_http(0);
+            set_config().set_event_publisher_http_target_url(0, target_url.clone());
+            set_config().set_event_publisher_http_target_events(
+                0,
+                Events {
+                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                    ..Default::default()
+                },
+            );
 
             (
                 Some(external_server),
-                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
+                EventPublisherHttp::load()
+                    .unwrap()
+                    .into_iter()
+                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+                    .collect(),
             )
         } else {
             (None, Default::default())
