@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use oid4vci::authorization_request::AuthorizationRequest;
+use tracing::error;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
@@ -18,7 +19,10 @@ pub(crate) async fn par(
         PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
             .await
             // TODO: implement proper error handling
-            .map_err(|_err| PublicError::InternalServerError)?;
+            .map_err(|err| {
+                error!("Error handling pushed authorization request: {:?}", err);
+                PublicError::InternalServerError
+            })?;
 
     Ok((StatusCode::CREATED, Json(pushed_authorization_response)).into_response())
 }
