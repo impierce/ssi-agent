@@ -457,7 +457,6 @@ dependencies = [
  "http-serde",
  "identity_core",
  "identity_iota",
- "identity_jose",
  "jsonwebtoken",
  "oauth_tsl",
  "oid4vc-core",

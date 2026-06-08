@@ -15,9 +15,8 @@ cqrs-es.workspace = true
 dotenvy = { version = "0.15" }
 http-serde = "2.1"
 # TODO: replace all identity_* with identity_iota?
-identity_core.workspace = true
 identity_iota.workspace = true
-identity_jose.workspace = true
+identity_core.workspace = true
 jsonwebtoken.workspace = true
 oauth_tsl.workspace = true
 oid4vc-core.workspace = true
