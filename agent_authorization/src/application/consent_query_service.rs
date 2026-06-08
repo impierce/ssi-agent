@@ -9,7 +9,7 @@ use thiserror::Error;
 pub struct ConsentPageViewModel {
     pub client_id: String,
     pub client_name: String,
-    pub authorization_details: Vec<AuthorizationDetailsObject>,
+    pub authorization_details: Option<Vec<AuthorizationDetailsObject>>,
     pub request_uri: String,
 }
 
