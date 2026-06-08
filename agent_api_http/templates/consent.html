@@ -151,6 +151,7 @@
 </ul>
 {% else %}
 <p>
+  <!-- TODO: implement displaying the credential_configurations from the credential_configuration_id's (`scope` won't be supported in the foreseeable future), as per: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-3.3.4 -->
   The application <strong>{{ client_id }}</strong> is requesting access to your data.
 </p>
 {% endif %}
