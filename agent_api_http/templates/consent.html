@@ -134,20 +134,26 @@
           style="height: 100%"
         />
       </div>
+{% if let Some(auth_details_list) = authorization_details %}
 <p>
   The application <strong>{{ client_id }}</strong> is requesting access to
   the following data:
 </p>
 <h2>Credentials to be Shared</h2>
+<!-- TODO: In the future, rely on either the initial credential_configuration_ids or the auth_details (as we do below) to populate the "to be shared" credentials.
+     We currently do not support using the scope parameter for this. More info here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei  -->
 <ul>
-  {% for authorization_detail in authorization_details %}
-  <li>
-    <strong>{{ authorization_detail.credential_configuration_id }}</strong>
-    {% if let Some(claims) = &authorization_detail.claims %}
-    {% endif %}
-  </li>
-  {% endfor %}
+    {% for authorization_detail in auth_details_list %}
+      <li>
+        <strong>{{ authorization_detail.credential_configuration_id }}</strong>
+      </li>
+    {% endfor %}
 </ul>
+{% else %}
+<p>
+  The application <strong>{{ client_id }}</strong> is requesting access to your data.
+</p>
+{% endif %}
 <p>Do you want to allow this application to access your data?</p>
       <form
         action="/auth/consent"

@@ -130,9 +130,21 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
         .to_bytes();
 
-    let _ = serde_json::from_slice(&bytes)
+    // Print pretty JSON when possible, otherwise log the raw body.
+    if let Ok(pretty_json) = serde_json::from_slice(&bytes)
         .and_then(|json_value: serde_json::Value| serde_json::to_string_pretty(&json_value))
-        .map(|pretty_json| info!("Request Body: {}", pretty_json));
+    {
+        info!("Request Body JSON: {}", pretty_json);
+    } else {
+        let content_type = parts
+            .headers
+            .get(http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("unknown");
+
+        let raw_body = String::from_utf8_lossy(&bytes);
+        info!(%content_type, body = %raw_body, "Request Body raw");
+    }
 
     Ok(Request::from_parts(parts, Body::from(bytes)))
 }
