@@ -22,15 +22,22 @@ use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
+// Re-export states
+pub use agent_authorization::state::AuthorizationState;
+pub use agent_holder::state::HolderState;
+pub use agent_identity::state::IdentityState;
+pub use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
+pub use agent_library::state::LibraryState;
+pub use agent_verification::state::VerificationState;
+
 pub async fn run() -> io::Result<()> {
-    let state = state().await?;
+    let subject = Arc::new(Subject::new().await);
+    let state = state(subject).await?;
 
     serve(app(state)).await
 }
 
-pub async fn state() -> io::Result<ApplicationState> {
-    let subject = Arc::new(Subject::new().await);
-
+pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
