@@ -4,10 +4,10 @@ use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
 use agent_shared::credential_status_checker::CredentialStatusChecker;
 use async_trait::async_trait;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use cqrs_es::Aggregate;
 use identity_credential::credential::Jwt;
 use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
+use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -52,7 +52,8 @@ impl Aggregate for Credential {
                 received_offer_id,
                 credential,
             } => {
-                let raw = get_unverified_jwt_claims(&serde_json::json!(credential))?;
+                let raw = get_unverified_jwt_claims(&serde_json::json!(credential))
+                    .map_err(|_| CredentialError::CredentialDecodingError)?;
 
                 if let Some(status_claim) = raw.get("status") {
                     let credential_status_checker = CredentialStatusChecker {
@@ -96,20 +97,6 @@ impl Aggregate for Credential {
             }
         }
     }
-}
-
-// TODO: actually validate the JWT!
-/// Get the claims from a JWT without performing validation.
-pub fn get_unverified_jwt_claims(jwt: &serde_json::Value) -> Result<serde_json::Value, CredentialError> {
-    jwt.as_str()
-        .and_then(|string| string.splitn(3, '.').collect::<Vec<&str>>().get(1).cloned())
-        .and_then(|payload| {
-            URL_SAFE_NO_PAD
-                .decode(payload)
-                .ok()
-                .and_then(|payload_bytes| serde_json::from_slice::<serde_json::Value>(&payload_bytes).ok())
-        })
-        .ok_or(CredentialError::CredentialDecodingError)
 }
 
 #[cfg(test)]
