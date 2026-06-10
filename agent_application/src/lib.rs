@@ -26,7 +26,7 @@ use tracing::info;
 pub async fn run() -> io::Result<()> {
     let state = state().await?;
 
-    serve(app(state, NoActorExtractor)).await
+    serve(app(state, Arc::new(NoActorExtractor))).await
 }
 
 pub async fn state() -> io::Result<ApplicationState> {
@@ -202,7 +202,8 @@ pub fn router_with_actor_extractor<E>(application_state: ApplicationState, actor
 where
     E: ActorExtractor,
 {
-    let app = app(application_state, actor_extractor);
+    let actor_extractor = Arc::new(actor_extractor);
+    let app = app(application_state, actor_extractor.clone());
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
@@ -212,10 +213,16 @@ where
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
-        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    let app = metadata_router.merge(app);
+    let configuration_router = axum::Router::new()
+        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
+        .route_layer(axum::middleware::from_fn_with_state(
+            actor_extractor,
+            agent_api_http::require_actor::<E>,
+        ));
+
+    let app = metadata_router.merge(configuration_router).merge(app);
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));

@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, request_actor};
+use crate::handlers::public_command_handler;
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -18,7 +18,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<Arc<VerificationState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    _actor: Option<Extension<Option<Actor>>>,
     body: String,
 ) -> Result<Response, ApiError> {
     let authorization_response: GenericAuthorizationResponse = from_form_urlencoded_string(&body).map_err(|e| {
@@ -36,9 +36,7 @@ pub(crate) async fn redirect(
     let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
     // Verify the authorization response.
-    command_handler(
-        verification_state.authorization_checker.clone(),
-        request_actor(&actor),
+    public_command_handler(
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,

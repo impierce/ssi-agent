@@ -52,13 +52,11 @@ pub fn app<E>(
         holder_state,
         verification_state,
     }: ApplicationState,
-    actor_extractor: E,
+    actor_extractor: Arc<E>,
 ) -> Router
 where
     E: ActorExtractor,
 {
-    let actor_extractor = Arc::new(actor_extractor);
-
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.map(v0::library::router).unwrap_or_default())
@@ -288,7 +286,7 @@ impl ToActor for HttpActorInput<'_> {
     }
 }
 
-async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
+pub async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
 where
     E: ActorExtractor,
 {
@@ -298,6 +296,26 @@ where
     request.extensions_mut().insert(actor);
 
     next.run(request).await
+}
+
+pub async fn require_actor<E>(
+    State(actor_extractor): State<Arc<E>>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode>
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+    let actor = actor_extractor.extract_actor(&input);
+
+    if actor.is_none() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    request.extensions_mut().insert(actor);
+
+    Ok(next.run(request).await)
 }
 
 #[cfg(test)]

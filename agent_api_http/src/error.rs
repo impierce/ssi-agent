@@ -8,6 +8,7 @@ use hyper::StatusCode;
 /// Wraps errors from the `cqrs_es` crate to be returned as API errors.
 #[derive(Debug)]
 pub enum ErrorWrapper<T: std::error::Error> {
+    Unauthorized,
     AggregateError(AggregateError<T>),
     CommandHandlerError(CommandHandlerError<T>),
     QueryHandlerError(QueryHandlerError),
@@ -25,6 +26,11 @@ where
 {
     fn into_api_error(self) -> ApiError {
         match self {
+            ErrorWrapper::Unauthorized => ApiError::builder(StatusCode::UNAUTHORIZED)
+                .title("Unauthorized")
+                .type_url(type_url("authorization#unauthorized"))
+                .message("Authentication is required")
+                .finish(),
             ErrorWrapper::AggregateError(error) => error.into_api_error(),
             ErrorWrapper::CommandHandlerError(error) => error.into_api_error(),
             ErrorWrapper::QueryHandlerError(error) => error.into_api_error(),
@@ -46,6 +52,7 @@ impl IntoApiErrorExt for ApiError {
 impl<T: std::error::Error + IntoPublicError> From<ErrorWrapper<T>> for PublicError {
     fn from(err: ErrorWrapper<T>) -> Self {
         match err {
+            ErrorWrapper::Unauthorized => PublicError::InternalServerError,
             ErrorWrapper::AggregateError(error) => PublicError::from(error),
             ErrorWrapper::CommandHandlerError(error) => match error {
                 CommandHandlerError::Forbidden => PublicError::InternalServerError,
