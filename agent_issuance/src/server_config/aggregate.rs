@@ -77,7 +77,12 @@ impl Aggregate for ServerConfig {
 
     const TYPE: &'static str = "server_config";
 
-    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        _services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use ServerConfigCommand::*;
         use ServerConfigError::*;
         use ServerConfigEvent::*;

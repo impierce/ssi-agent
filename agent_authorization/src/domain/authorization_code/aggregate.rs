@@ -28,7 +28,12 @@ impl Aggregate for AuthorizationCode {
 
     const TYPE: &'static str = "authorization_code";
 
-    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        _services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use AuthorizationCodeCommand::*;
         use AuthorizationCodeError::*;
         use AuthorizationCodeEvent::*;

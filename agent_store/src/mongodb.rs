@@ -1,6 +1,6 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
-use agent_shared::{application_state::Command, config::config};
 use agent_shared::view_repository::DynViewRepository;
+use agent_shared::{application_state::Command, config::config};
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};

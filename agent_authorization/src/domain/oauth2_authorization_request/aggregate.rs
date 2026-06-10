@@ -48,7 +48,12 @@ impl Aggregate for OAuth2AuthorizationRequest {
 
     const TYPE: &'static str = "oauth2_authorization_request";
 
-    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        _services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;
         use OAuth2AuthorizationRequestEvent::*;
 

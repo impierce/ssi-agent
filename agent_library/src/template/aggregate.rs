@@ -98,7 +98,12 @@ impl Aggregate for Template {
 
     const TYPE: &'static str = "template";
 
-    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        _services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use TemplateCommand::*;
         use TemplateEvent::*;
 

@@ -43,7 +43,12 @@ impl Aggregate for Service {
 
     const TYPE: &'static str = "service";
 
-    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use ServiceCommand::*;
         use ServiceError::*;
         use ServiceEvent::*;

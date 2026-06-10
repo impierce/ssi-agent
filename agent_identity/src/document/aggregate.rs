@@ -87,7 +87,12 @@ impl Aggregate for Document {
     // TODO: Most of how these commands are handled is not Domain logic, but rather Application logic, so it should be moved
     // to the Application layer. The Aggregate should only handle the Domain logic, such as creating a new Document, updating public keys, etc.
     // The Application layer should handle the specifics of how to create a Document based on the DID method, how to publish it, etc.
-    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use DocumentCommand::*;
         use DocumentError::*;
         use DocumentEvent::*;

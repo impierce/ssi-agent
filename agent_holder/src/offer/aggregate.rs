@@ -60,7 +60,12 @@ impl Aggregate for Offer {
 
     const TYPE: &'static str = "received_offer";
 
-    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferError::*;
         use OfferEvent::*;

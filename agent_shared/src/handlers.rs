@@ -1,7 +1,4 @@
-use cqrs_es::{
-    persist::PersistenceError,
-    Aggregate, AggregateError, View,
-};
+use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};

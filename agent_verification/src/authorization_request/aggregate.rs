@@ -36,7 +36,12 @@ impl Aggregate for AuthorizationRequest {
 
     const TYPE: &'static str = "authorization_request";
 
-    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use AuthorizationRequestCommand::*;
         use AuthorizationRequestError::*;
         use AuthorizationRequestEvent::*;

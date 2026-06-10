@@ -36,7 +36,12 @@ impl Aggregate for Profile {
 
     const TYPE: &'static str = "profile";
 
-    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        _services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use ProfileCommand::*;
         use ProfileEvent::*;
 

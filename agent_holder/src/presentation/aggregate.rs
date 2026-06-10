@@ -26,7 +26,12 @@ impl Aggregate for Presentation {
 
     const TYPE: &'static str = "presentation";
 
-    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &cqrs_es::event_sink::EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use PresentationCommand::*;
         use PresentationError::*;
         use PresentationEvent::*;

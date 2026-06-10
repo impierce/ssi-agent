@@ -1,6 +1,6 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
-use agent_shared::{application_state::Command, config::config};
 use agent_shared::view_repository::DynViewRepository;
+use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
@@ -49,10 +49,8 @@ impl CqrsComponentBuilder for Postgres {
         let all_aggregates_name = format!("all_{}s", A::TYPE);
 
         // Initialize the postgres repositories.
-        let aggregate: Arc<PostgresViewRepository<V, A>> = Arc::new(PostgresViewRepository::<V, A>::new(
-            A::TYPE,
-            self.pool.clone(),
-        ));
+        let aggregate: Arc<PostgresViewRepository<V, A>> =
+            Arc::new(PostgresViewRepository::<V, A>::new(A::TYPE, self.pool.clone()));
         let all_aggregates: Arc<PostgresViewRepository<AV, A>> = Arc::new(PostgresViewRepository::<AV, A>::new(
             &all_aggregates_name,
             self.pool.clone(),
