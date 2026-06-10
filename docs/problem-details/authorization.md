@@ -2,9 +2,13 @@
 
 UniCore's authorization layer determines whether a request is allowed to perform an operation. The following errors may be encountered during authorization checks:
 
+## Unauthorized
+
+This error is raised when the request is performed without an identifiable actor, where one is required. The system returns a `401 Unauthorized` error.
+
 ## Forbidden
 
-This error is raised when the request is authenticated or otherwise identified, but the actor is not authorized to perform the requested operation. The system returns a `403 Forbidden` error.
+This error is raised when the request is authenticated or otherwise identified, but the actor does not have the permission to perform the requested operation. The system returns a `403 Forbidden` error.
 
 ### Resolution
 
