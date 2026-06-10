@@ -1,7 +1,6 @@
 use super::command::AccessTokenCommand;
 use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
-use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -19,28 +18,21 @@ pub struct AccessToken {
     pub issuer_state: Option<String>,
 }
 
-#[async_trait]
 impl Aggregate for AccessToken {
     type Command = AccessTokenCommand;
     type Event = AccessTokenEvent;
     type Error = AccessTokenError;
     type Services = ();
 
-    fn aggregate_type() -> String {
-        "access_token".to_string()
-    }
+    const TYPE: &'static str = "access_token";
 
-    async fn handle(
-        &self,
-        command: Self::Command,
-        _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use AccessTokenCommand::*;
         use AccessTokenEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             IssueAccessToken {
                 access_token_id,
                 user_id,
@@ -69,7 +61,13 @@ impl Aggregate for AccessToken {
                     issuer_state,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

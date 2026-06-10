@@ -1,6 +1,5 @@
 use agent_shared::config::{config, Authorization};
 use agent_shared::UrlAppendHelpers as _;
-use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
@@ -70,29 +69,22 @@ pub struct ServerConfig {
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
 
-#[async_trait]
 impl Aggregate for ServerConfig {
     type Command = ServerConfigCommand;
     type Event = ServerConfigEvent;
     type Error = ServerConfigError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "server_config".to_string()
-    }
+    const TYPE: &'static str = "server_config";
 
-    async fn handle(
-        &self,
-        command: Self::Command,
-        _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, _services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use ServerConfigCommand::*;
         use ServerConfigError::*;
         use ServerConfigEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             InitializeServerMetadata {
                 authorization_server_metadata,
                 credential_issuer_metadata,
@@ -286,7 +278,13 @@ impl Aggregate for ServerConfig {
                     credential_configurations,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

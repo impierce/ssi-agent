@@ -1,6 +1,6 @@
 use agent_shared::application_state::CommandHandler;
 use agent_shared::handlers::{command_handler, query_handler};
-use cqrs_es::persist::ViewRepository;
+use agent_shared::view_repository::DynViewRepository;
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
 use std::sync::Arc;
@@ -44,18 +44,18 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<ClientView, Client>,
-    dyn ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest>,
-    dyn ViewRepository<AuthorizationCodeView, AuthorizationCode>,
-    dyn ViewRepository<AccessTokenView, AccessToken>,
+    dyn DynViewRepository<ClientView, Client>,
+    dyn DynViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest>,
+    dyn DynViewRepository<AuthorizationCodeView, AuthorizationCode>,
+    dyn DynViewRepository<AccessTokenView, AccessToken>,
 >;
 
 pub struct ViewRepositories<C, OAR, AC, AT>
 where
-    C: ViewRepository<ClientView, Client> + ?Sized,
-    OAR: ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest> + ?Sized,
-    AC: ViewRepository<AuthorizationCodeView, AuthorizationCode> + ?Sized,
-    AT: ViewRepository<AccessTokenView, AccessToken> + ?Sized,
+    C: DynViewRepository<ClientView, Client> + ?Sized,
+    OAR: DynViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest> + ?Sized,
+    AC: DynViewRepository<AuthorizationCodeView, AuthorizationCode> + ?Sized,
+    AT: DynViewRepository<AccessTokenView, AccessToken> + ?Sized,
 {
     pub client: Arc<C>,
     pub oauth2_authorization_request: Arc<OAR>,

@@ -1,7 +1,6 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
 use agent_shared::config::config;
-use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use identity_core::{
@@ -36,25 +35,22 @@ pub struct Service {
     pub is_deleted: bool,
 }
 
-#[async_trait]
 impl Aggregate for Service {
     type Command = ServiceCommand;
     type Event = ServiceEvent;
     type Error = ServiceError;
     type Services = Arc<IdentityServices>;
 
-    fn aggregate_type() -> String {
-        "service".to_string()
-    }
+    const TYPE: &'static str = "service";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use ServiceCommand::*;
         use ServiceError::*;
         use ServiceEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateDomainLinkageService {
                 service_id,
                 verification_methods,
@@ -213,7 +209,13 @@ impl Aggregate for Service {
                     service,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

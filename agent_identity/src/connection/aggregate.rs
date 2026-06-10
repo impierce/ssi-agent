@@ -1,5 +1,4 @@
 use crate::services::IdentityServices;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
 use identity_core::common::Url;
@@ -74,24 +73,21 @@ pub struct LogoProperties {
     pub alt_text: Option<String>,
 }
 
-#[async_trait]
 impl Aggregate for Connection {
     type Command = ConnectionCommand;
     type Event = ConnectionEvent;
     type Error = ConnectionError;
     type Services = Arc<IdentityServices>;
 
-    fn aggregate_type() -> String {
-        "connection".to_string()
-    }
+    const TYPE: &'static str = "connection";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use ConnectionCommand::*;
         use ConnectionEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             AddConnection { connection_id, url } => {
                 let metadata = services.fetch_credential_issuer_metadata(&url).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
@@ -175,7 +171,13 @@ impl Aggregate for Connection {
                 None => Ok(vec![]),
             },
             RemoveConnection { connection_id } => Ok(vec![ConnectionRemoved { connection_id }]),
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

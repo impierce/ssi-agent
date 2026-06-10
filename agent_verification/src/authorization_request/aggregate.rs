@@ -7,7 +7,6 @@ use crate::{
     services::VerificationServices,
 };
 use agent_shared::config::{config, get_preferred_signing_algorithm};
-use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject as _};
@@ -29,25 +28,22 @@ pub struct AuthorizationRequest {
     pub validated: bool,
 }
 
-#[async_trait]
 impl Aggregate for AuthorizationRequest {
     type Command = AuthorizationRequestCommand;
     type Event = AuthorizationRequestEvent;
     type Error = AuthorizationRequestError;
     type Services = Arc<VerificationServices>;
 
-    fn aggregate_type() -> String {
-        "authorization_request".to_string()
-    }
+    const TYPE: &'static str = "authorization_request";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use AuthorizationRequestCommand::*;
         use AuthorizationRequestError::*;
         use AuthorizationRequestEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateAuthorizationRequest {
                 state,
                 nonce,
@@ -240,7 +236,13 @@ impl Aggregate for AuthorizationRequest {
                     }
                 }
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

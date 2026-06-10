@@ -1,7 +1,6 @@
 use super::{command::PresentationCommand, error::PresentationError, event::PresentationEvent};
 use crate::services::HolderServices;
 use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algorithm};
-use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::Aggregate;
 use identity_core::convert::ToJson;
@@ -19,25 +18,22 @@ pub struct Presentation {
     pub signed: Option<Jwt>,
 }
 
-#[async_trait]
 impl Aggregate for Presentation {
     type Command = PresentationCommand;
     type Event = PresentationEvent;
     type Error = PresentationError;
     type Services = Arc<HolderServices>;
 
-    fn aggregate_type() -> String {
-        "presentation".to_string()
-    }
+    const TYPE: &'static str = "presentation";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use PresentationCommand::*;
         use PresentationError::*;
         use PresentationEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreatePresentation {
                 presentation_id,
                 signed_credentials,
@@ -111,7 +107,13 @@ impl Aggregate for Presentation {
                     signed_presentation: Jwt::from(message),
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

@@ -5,8 +5,8 @@ use agent_shared::config::{
 };
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_shared::profile::ApplicationProfile;
+use agent_shared::view_repository::DynViewRepository;
 use agent_shared::UrlAppendHelpers;
-use cqrs_es::persist::ViewRepository;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use std::sync::Arc;
@@ -48,26 +48,26 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<ServerConfigView, ServerConfig>,
-    dyn ViewRepository<CredentialView, Credential>,
-    dyn ViewRepository<AllCredentialsView, Credential>,
-    dyn ViewRepository<OfferView, Offer>,
-    dyn ViewRepository<AllOffersView, Offer>,
-    dyn ViewRepository<NonceView, Nonce>,
-    dyn ViewRepository<StatusListView, StatusListAggregate>,
-    dyn ViewRepository<AllStatusListsView, StatusListAggregate>,
+    dyn DynViewRepository<ServerConfigView, ServerConfig>,
+    dyn DynViewRepository<CredentialView, Credential>,
+    dyn DynViewRepository<AllCredentialsView, Credential>,
+    dyn DynViewRepository<OfferView, Offer>,
+    dyn DynViewRepository<AllOffersView, Offer>,
+    dyn DynViewRepository<NonceView, Nonce>,
+    dyn DynViewRepository<StatusListView, StatusListAggregate>,
+    dyn DynViewRepository<AllStatusListsView, StatusListAggregate>,
 >;
 
 pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1>
 where
-    SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
-    C: ViewRepository<CredentialView, Credential> + ?Sized,
-    C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
-    O: ViewRepository<OfferView, Offer> + ?Sized,
-    O1: ViewRepository<AllOffersView, Offer> + ?Sized,
-    N: ViewRepository<NonceView, Nonce> + ?Sized,
-    SL: ViewRepository<StatusListView, StatusListAggregate> + ?Sized,
-    SL1: ViewRepository<AllStatusListsView, StatusListAggregate> + ?Sized,
+    SC: DynViewRepository<ServerConfigView, ServerConfig> + ?Sized,
+    C: DynViewRepository<CredentialView, Credential> + ?Sized,
+    C1: DynViewRepository<AllCredentialsView, Credential> + ?Sized,
+    O: DynViewRepository<OfferView, Offer> + ?Sized,
+    O1: DynViewRepository<AllOffersView, Offer> + ?Sized,
+    N: DynViewRepository<NonceView, Nonce> + ?Sized,
+    SL: DynViewRepository<StatusListView, StatusListAggregate> + ?Sized,
+    SL1: DynViewRepository<AllStatusListsView, StatusListAggregate> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,

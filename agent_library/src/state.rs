@@ -1,5 +1,5 @@
 use agent_shared::application_state::CommandHandler;
-use cqrs_es::persist::ViewRepository;
+use agent_shared::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 use crate::template::{
@@ -23,12 +23,12 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries =
-    ViewRepositories<dyn ViewRepository<TemplateView, Template>, dyn ViewRepository<AllTemplatesView, Template>>;
+    ViewRepositories<dyn DynViewRepository<TemplateView, Template>, dyn DynViewRepository<AllTemplatesView, Template>>;
 
 pub struct ViewRepositories<T1, T2>
 where
-    T1: ViewRepository<TemplateView, Template> + ?Sized,
-    T2: ViewRepository<AllTemplatesView, Template> + ?Sized,
+    T1: DynViewRepository<TemplateView, Template> + ?Sized,
+    T2: DynViewRepository<AllTemplatesView, Template> + ?Sized,
 {
     pub template: Arc<T1>,
     pub all_templates: Arc<T2>,

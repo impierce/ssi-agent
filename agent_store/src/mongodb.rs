@@ -1,7 +1,8 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
+use agent_shared::view_repository::DynViewRepository;
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
-use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
+use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
 use std::sync::Arc;
 
@@ -42,17 +43,17 @@ impl CqrsComponentBuilder for MongoDB {
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
-        Arc<dyn ViewRepository<V, A>>,
-        Arc<dyn ViewRepository<AV, A>>,
+        Arc<dyn DynViewRepository<V, A>>,
+        Arc<dyn DynViewRepository<AV, A>>,
     )
     where
         <A as Aggregate>::Command: Send + Sync,
     {
-        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
+        let all_aggregates_name = format!("all_{}s", A::TYPE);
 
         // Initialize the MongoDB repositories.
         let aggregate: Arc<MongoViewRepository<V, A>> =
-            Arc::new(MongoViewRepository::new(&A::aggregate_type(), self.client.clone()));
+            Arc::new(MongoViewRepository::new(A::TYPE, self.client.clone()));
         let all_aggregates: Arc<MongoViewRepository<AV, A>> =
             Arc::new(MongoViewRepository::new(&all_aggregates_name, self.client.clone()));
 

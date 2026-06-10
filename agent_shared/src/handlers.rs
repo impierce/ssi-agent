@@ -1,5 +1,5 @@
 use cqrs_es::{
-    persist::{PersistenceError, ViewRepository},
+    persist::PersistenceError,
     Aggregate, AggregateError, View,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -7,11 +7,12 @@ use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
 
 use crate::application_state::CommandHandler;
+use crate::view_repository::DynViewRepository;
 
 /// The `query_handler` function is used to query the view repository for a specific view.
 pub async fn query_handler<A, V>(
     view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
+    state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, PersistenceError>
 where
     A: Aggregate,

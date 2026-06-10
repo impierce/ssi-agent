@@ -50,6 +50,7 @@ use agent_library::template::views::all_templates::AllTemplatesView;
 use agent_shared::application_state::Command;
 use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
+use agent_shared::view_repository::DynViewRepository;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use agent_verification::services::VerificationServices;
@@ -154,8 +155,8 @@ where
 /// and the all-instances view repository.
 pub type CqrsComponents<A, V, AV> = (
     Arc<dyn Command<A> + Send + Sync>,
-    Arc<dyn ViewRepository<V, A>>,
-    Arc<dyn ViewRepository<AV, A>>,
+    Arc<dyn DynViewRepository<V, A>>,
+    Arc<dyn DynViewRepository<AV, A>>,
 );
 
 /// A trait for building the command and query infrastructure for a given aggregate.

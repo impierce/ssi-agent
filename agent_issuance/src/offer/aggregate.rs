@@ -1,5 +1,4 @@
 use agent_shared::config::config;
-use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
@@ -76,24 +75,21 @@ pub enum DeliveryMethod {
     },
 }
 
-#[async_trait]
 impl Aggregate for Offer {
     type Command = OfferCommand;
     type Event = OfferEvent;
     type Error = OfferError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "offer".to_string()
-    }
+    const TYPE: &'static str = "offer";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateCredentialOffer {
                 offer_id,
                 grant_types,
@@ -346,7 +342,13 @@ impl Aggregate for Offer {
                     status: Status::Issued,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

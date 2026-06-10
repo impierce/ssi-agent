@@ -4,7 +4,6 @@ use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
 use agent_shared::config::{config_mut, SupportedDidMethod};
-use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
@@ -77,28 +76,25 @@ pub struct Document {
     pub status: Status,
 }
 
-#[async_trait]
 impl Aggregate for Document {
     type Command = DocumentCommand;
     type Event = DocumentEvent;
     type Error = DocumentError;
     type Services = Arc<IdentityServices>;
 
-    fn aggregate_type() -> String {
-        "document".to_string()
-    }
+    const TYPE: &'static str = "document";
 
     // TODO: Most of how these commands are handled is not Domain logic, but rather Application logic, so it should be moved
     // to the Application layer. The Aggregate should only handle the Domain logic, such as creating a new Document, updating public keys, etc.
     // The Application layer should handle the specifics of how to create a Document based on the DID method, how to publish it, etc.
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use DocumentCommand::*;
         use DocumentError::*;
         use DocumentEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Result<Vec<Self::Event>, Self::Error> = match command {
             CreateDocument {
                 document_id,
                 did_method,
@@ -473,7 +469,7 @@ impl Aggregate for Document {
 
                     if published_document.core_document() == document.core_document() {
                         info!("Document instance does not contain any updates, skipping publishing.");
-                        return Ok(vec![]);
+                        return Ok(());
                     }
                 }
 
@@ -501,10 +497,15 @@ impl Aggregate for Document {
 
                     let document = CoreDocument::from(IotaDocument::new_with_id(did));
 
-                    return Ok(vec![DocumentDeleted {
-                        document_id: self.document_id.clone(),
-                        document,
-                    }]);
+                    sink.write(
+                        DocumentDeleted {
+                            document_id: self.document_id.clone(),
+                            document,
+                        },
+                        self,
+                    )
+                    .await;
+                    return Ok(());
                 }
 
                 let mut iota_metadata = self.iota_metadata.clone().unwrap_or_default();
@@ -603,7 +604,15 @@ impl Aggregate for Document {
                     iota_metadata: Some(iota_metadata),
                 }])
             }
+        };
+
+        let events = events?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

@@ -2,7 +2,6 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
-use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use identity_credential::credential::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
@@ -53,25 +52,22 @@ pub struct Offer {
     pub credentials: Vec<OfferCredential>,
 }
 
-#[async_trait]
 impl Aggregate for Offer {
     type Command = OfferCommand;
     type Event = OfferEvent;
     type Error = OfferError;
     type Services = Arc<HolderServices>;
 
-    fn aggregate_type() -> String {
-        "received_offer".to_string()
-    }
+    const TYPE: &'static str = "received_offer";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(&mut self, command: Self::Command, services: &Self::Services, sink: &cqrs_es::event_sink::EventSink<Self>) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferError::*;
         use OfferEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             ReceiveCredentialOffer {
                 received_offer_id,
                 credential_offer,
@@ -284,7 +280,13 @@ impl Aggregate for Offer {
                     status: Status::Rejected,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
