@@ -4,8 +4,8 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 use crate::authorization::{
-    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest,
-    CommandAuthorization,
+    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, AuthorizationOperation,
+    AuthorizationRequest, CommandAuthorization,
 };
 
 /// Defines the domain-specific types and handlers for a bounded context.
@@ -75,10 +75,10 @@ pub enum ApplicationServiceError<E>
 where
     E: std::error::Error,
 {
-    #[error("Forbidden")]
-    Forbidden,
     #[error(transparent)]
-    Context(#[from] E),
+    Authorization(AuthorizationError),
+    #[error(transparent)]
+    Context(E),
 }
 
 /// An actor-style application service that drives an [`ApplicationContext`].
@@ -191,9 +191,12 @@ async fn process_command<AC: ApplicationContext>(
             authorization: context.command_authorization(&msg.command),
         },
     };
-    if !authorization_checker.is_authorized(&authorization_request).await {
-        let result = Err(ApplicationServiceError::Forbidden);
-        let _ = msg.reply.send(result);
+    if let Err(error) = authorization_checker
+        .is_authorized(&authorization_request)
+        .await
+        .map_err(ApplicationServiceError::Authorization)
+    {
+        let _ = msg.reply.send(Err(error));
         return;
     }
 
@@ -225,9 +228,12 @@ async fn process_query<AC: ApplicationContext>(
             query_type: std::any::type_name::<AC::Query>(),
         },
     };
-    if !authorization_checker.is_authorized(&authorization_request).await {
-        let result = Err(ApplicationServiceError::Forbidden);
-        let _ = msg.reply.send(result);
+    if let Err(error) = authorization_checker
+        .is_authorized(&authorization_request)
+        .await
+        .map_err(ApplicationServiceError::Authorization)
+    {
+        let _ = msg.reply.send(Err(error));
         return;
     }
 
@@ -332,8 +338,8 @@ mod tests {
 
     #[async_trait]
     impl AuthorizationChecker for DenyAllAuthorizationChecker {
-        async fn is_authorized(&self, _request: &AuthorizationRequest) -> bool {
-            false
+        async fn is_authorized(&self, _request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            Err(AuthorizationError::Forbidden)
         }
     }
 
@@ -343,9 +349,9 @@ mod tests {
 
     #[async_trait]
     impl AuthorizationChecker for CapturingAuthorizationChecker {
-        async fn is_authorized(&self, request: &AuthorizationRequest) -> bool {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
             self.requests.lock().unwrap().push(request.clone());
-            true
+            Ok(())
         }
     }
 
@@ -461,7 +467,10 @@ mod tests {
             .dispatch_command("aggregate-id".into(), "create".into())
             .await;
 
-        assert!(matches!(result, Err(ServiceError::Forbidden)));
+        assert!(matches!(
+            result,
+            Err(ServiceError::Authorization(AuthorizationError::Forbidden))
+        ));
     }
 
     #[tokio::test]
@@ -470,7 +479,10 @@ mod tests {
 
         let result = service_handle.dispatch_query("my-query".into()).await;
 
-        assert!(matches!(result, Err(ServiceError::Forbidden)));
+        assert!(matches!(
+            result,
+            Err(ServiceError::Authorization(AuthorizationError::Forbidden))
+        ));
     }
 
     #[tokio::test]

@@ -71,11 +71,20 @@ pub struct AuthorizationRequest {
     pub operation: AuthorizationOperation,
 }
 
+/// Errors related to authorization checks
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum AuthorizationError {
+    #[error("Unauthorized")]
+    Unauthorized, // 401
+    #[error("Forbidden")]
+    Forbidden, // 403
+}
+
 /// Decides whether an [`AuthorizationRequest`] is allowed to execute.
 #[async_trait]
 pub trait AuthorizationChecker: Send + Sync {
     /// Returns `true` when the request is authorized.
-    async fn is_authorized(&self, request: &AuthorizationRequest) -> bool;
+    async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError>;
 }
 
 /// Authorization checker that permits every request.
@@ -83,7 +92,7 @@ pub struct AllowAllAuthorizationChecker;
 
 #[async_trait]
 impl AuthorizationChecker for AllowAllAuthorizationChecker {
-    async fn is_authorized(&self, _request: &AuthorizationRequest) -> bool {
-        true
+    async fn is_authorized(&self, _request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+        Ok(())
     }
 }

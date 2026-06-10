@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
 use crate::application_service::{ApplicationContext, ApplicationServiceError, CommandEnvelope, QueryEnvelope};
-use crate::authorization::Actor;
+use crate::authorization::{Actor, AuthorizationError};
 
 /// A type-keyed registry for storing and retrieving services at runtime.
 ///
@@ -51,8 +51,8 @@ pub enum ServiceError<AC: ApplicationContext> {
     CommandError(AC::CommandError),
     #[error("Query error: {0}")]
     QueryError(AC::QueryError),
-    #[error("Forbidden")]
-    Forbidden,
+    #[error("Authorization error: {0}")]
+    Authorization(#[from] AuthorizationError),
 }
 
 /// A cloneable handle for sending commands and queries to an [`ApplicationService`](crate::application_service::ApplicationService).
@@ -122,7 +122,7 @@ where
 
         match reply_rx.await? {
             Ok(id) => Ok(id),
-            Err(ApplicationServiceError::Forbidden) => Err(ServiceError::Forbidden),
+            Err(ApplicationServiceError::Authorization(error)) => Err(ServiceError::Authorization(error)),
             Err(ApplicationServiceError::Context(error)) => Err(ServiceError::CommandError(error)),
         }
     }
@@ -165,7 +165,7 @@ where
 
         match reply_rx.await? {
             Ok(id) => Ok(id),
-            Err(ApplicationServiceError::Forbidden) => Err(ServiceError::Forbidden),
+            Err(ApplicationServiceError::Authorization(error)) => Err(ServiceError::Authorization(error)),
             Err(ApplicationServiceError::Context(error)) => Err(ServiceError::QueryError(error)),
         }
     }

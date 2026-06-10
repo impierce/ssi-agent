@@ -20,10 +20,6 @@ where
     A: Aggregate,
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
-    if actor.is_none() {
-        return Err(ErrorWrapper::Unauthorized);
-    }
-
     agent_shared::handlers::command_handler(authorization_checker, actor, aggregate_id, state, command)
         .await
         .map_err(ErrorWrapper::CommandHandlerError)
@@ -75,10 +71,6 @@ where
     A: Aggregate,
     V: View<A>,
 {
-    if actor.is_none() {
-        return Err(ErrorWrapper::Unauthorized);
-    }
-
     agent_shared::handlers::query_handler(authorization_checker, actor, view_id, state)
         .await
         .map_err(ErrorWrapper::QueryHandlerError)

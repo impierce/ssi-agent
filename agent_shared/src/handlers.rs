@@ -3,7 +3,7 @@ use cqrs_es::{
     Aggregate, AggregateError, View,
 };
 use shared_kernel::authorization::{
-    Actor, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
+    Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
 };
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
@@ -34,8 +34,8 @@ where
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueryHandlerError {
-    #[error("Forbidden")]
-    Forbidden,
+    #[error(transparent)]
+    Authorization(AuthorizationError),
     #[error(transparent)]
     Persistence(#[from] PersistenceError),
 }
@@ -58,9 +58,10 @@ where
         },
     };
 
-    if !authorization_checker.is_authorized(&authorization_request).await {
-        return Err(QueryHandlerError::Forbidden);
-    }
+    authorization_checker
+        .is_authorized(&authorization_request)
+        .await
+        .map_err(QueryHandlerError::Authorization)?;
 
     public_query_handler(view_id, state)
         .await
@@ -72,8 +73,8 @@ pub enum CommandHandlerError<E>
 where
     E: std::error::Error,
 {
-    #[error("Forbidden")]
-    Forbidden,
+    #[error(transparent)]
+    Authorization(AuthorizationError),
     #[error(transparent)]
     Aggregate(#[from] AggregateError<E>),
 }
@@ -100,9 +101,10 @@ where
         },
     };
 
-    if !authorization_checker.is_authorized(&authorization_request).await {
-        return Err(CommandHandlerError::Forbidden);
-    }
+    authorization_checker
+        .is_authorized(&authorization_request)
+        .await
+        .map_err(CommandHandlerError::Authorization)?;
 
     let mut metadata = HashMap::new();
     let timestamp = time::OffsetDateTime::now_utc()
@@ -208,8 +210,8 @@ mod tests {
 
     #[async_trait]
     impl AuthorizationChecker for DenyAllAuthorizationChecker {
-        async fn is_authorized(&self, _request: &AuthorizationRequest) -> bool {
-            false
+        async fn is_authorized(&self, _request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            Err(AuthorizationError::Forbidden)
         }
     }
 
@@ -219,9 +221,9 @@ mod tests {
 
     #[async_trait]
     impl AuthorizationChecker for CapturingAuthorizationChecker {
-        async fn is_authorized(&self, request: &AuthorizationRequest) -> bool {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
             self.requests.lock().unwrap().push(request.clone());
-            true
+            Ok(())
         }
     }
 
@@ -262,7 +264,10 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(CommandHandlerError::Forbidden)));
+        assert!(matches!(
+            result,
+            Err(CommandHandlerError::Authorization(AuthorizationError::Forbidden))
+        ));
     }
 
     #[tokio::test]
