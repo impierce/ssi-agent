@@ -1,5 +1,8 @@
 use agent_authorization::services::OpenId4VpPresentationService;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::{
+    generate_random_string,
+    handlers::{command_handler, query_handler},
+};
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -22,7 +25,7 @@ impl VerificationAuthorizationAdapter {
 #[async_trait]
 impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
     async fn create_openid4vp_presentation_request(&self, state: String) -> anyhow::Result<serde_json::Value> {
-        let nonce = "nonce".to_string();
+        let nonce = generate_random_string();
 
         // TODO: Make claims and credential formats configurable by the client, rather than hardcoded.
         // Currently only applicable when `enable_interactive_authorization_flow` is true. When false,
