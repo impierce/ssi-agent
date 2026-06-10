@@ -50,7 +50,10 @@ pub struct CreateCatalogRequest {
     tags = ["Library", "Catalog"],
     request_body(
         content = CreateCatalogRequest,
-        )
+        ),
+    responses(
+        (status = 201, description = "Catalog created successfully", body = Catalog)
+    )
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_catalog(
@@ -97,7 +100,10 @@ pub struct AddTemplateRequest {
     tags = ["Library", "Catalog"],
     request_body(
         content = AddTemplateRequest,
-        )
+        ),
+    responses(
+        (status = 200, description = "Catalog updated successfully", body = Catalog)
+    )
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn add_template(
@@ -137,7 +143,11 @@ pub struct RemoveTemplateRequest {
     tags = ["Library", "Catalog"],
     request_body(
         content = RemoveTemplateRequest,
-        )
+        ),
+    responses(
+        (status = 200, description = "Catalog removed successfully", body = Catalog)
+    )
+       
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn remove_template(
@@ -177,7 +187,10 @@ pub struct UpdateCatalogDisplayRequest {
     tags = ["Library", "Catalog"],
     request_body(
         content = UpdateCatalogDisplayRequest,
-        )
+        ),
+    responses(
+        (status = 200, description = "Catalog display updated successfully", body = Catalog)
+    )
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn update_display(
@@ -214,7 +227,10 @@ pub struct UpdateCatalogVisibilityRequest {
     tags = ["Library", "Catalog"],
     request_body(
         content = UpdateCatalogVisibilityRequest,
-        )
+        ),
+    responses(
+        (status = 200, description = "Catalog visibility updated successfully", body = Catalog)
+    )
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn update_visibility(
