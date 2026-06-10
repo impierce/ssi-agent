@@ -72,13 +72,13 @@ pub mod tests {
                             code_challenge_method: Some(CodeChallengeMethod::S256),
                             scope: Some("openid profile".to_string()),
                             issuer_state: Some(issuer_state),
-                            authorization_details: vec![AuthorizationDetailsObject {
+                            authorization_details: Some(vec![AuthorizationDetailsObject {
                                 r#type: OpenidCredential::Type,
                                 locations: None,
                                 credential_configuration_id: "configuration_id".to_string(),
                                 credential_identifiers: None,
                                 claims: None,
-                            }],
+                            }]),
                         }))
                         .unwrap(),
                     ))

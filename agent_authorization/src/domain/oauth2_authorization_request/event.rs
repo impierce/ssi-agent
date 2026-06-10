@@ -19,7 +19,7 @@ pub enum OAuth2AuthorizationRequestEvent {
         issuer_state: Option<String>,
 
         // OID4VCI
-        authorization_details: Vec<AuthorizationDetailsObject>,
+        authorization_details: Option<Vec<AuthorizationDetailsObject>>,
 
         // PKCE
         #[serde(default)]

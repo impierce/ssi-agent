@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, load_view, request_actor};
+use crate::handlers::{public_command_handler, public_query_handler};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
@@ -28,6 +28,8 @@ pub async fn notification(
 ) -> Result<Response, PublicError> {
     info!("Notification Request: {}", json!(raw_value));
 
+    let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
@@ -35,7 +37,7 @@ pub async fn notification(
         .await
         .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let credentials = match load_view("all_credentials", &state.query.all_credentials).await? {
+    let credentials = match public_query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
         _ => return Err(internal_server_error()),
     };
@@ -58,14 +60,7 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    command_handler(
-        state.authorization_checker.clone(),
-        request_actor(&actor),
-        &credential_id,
-        &state.command.credential,
-        command,
-    )
-    .await?;
+    public_command_handler(&credential_id, &state.command.credential, command).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }
@@ -155,7 +150,7 @@ mod tests {
             name: &'static str,
             access_token: String,
             payload: String,
-            expected_error: NotificationErrorResponse,
+            expected_status: StatusCode,
         }
 
         let test_cases = vec![
@@ -168,7 +163,7 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidNotificationId,
+                expected_status: NotificationErrorResponse::InvalidNotificationId.status_code(),
             },
             TestCase {
                 name: "Invalid Access Token",
@@ -179,13 +174,13 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
+                expected_status: StatusCode::UNAUTHORIZED,
             },
             TestCase {
                 name: "Invalid Notification Event",
                 access_token: access_token.clone(),
                 payload: format!(r#"{{"notification_id": "{notification_id}", "event": "InvalidEventValue"}}"#),
-                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
+                expected_status: NotificationErrorResponse::InvalidNotificationRequest.status_code(),
             },
         ];
 
@@ -201,10 +196,10 @@ mod tests {
             let response = issuance_app.clone().oneshot(request).await.unwrap();
             assert_eq!(
                 response.status(),
-                test_case.expected_error.status_code(),
+                test_case.expected_status,
                 "Test case {} failed: expected status {}, got {}",
                 test_case.name,
-                test_case.expected_error.status_code(),
+                test_case.expected_status,
                 response.status(),
             );
         }

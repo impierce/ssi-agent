@@ -179,7 +179,12 @@ impl axum::response::IntoResponse for PublicError {
                 let status = oid4vc_error.error.status_code();
                 (status, axum::Json(oid4vc_error)).into_response()
             }
-            PublicError::AccessTokenError(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            PublicError::AccessTokenError(_) => (
+                StatusCode::UNAUTHORIZED,
+                [("WWW-Authenticate", "Bearer error=\"invalid_token\"")],
+                Json(serde_json::json!({"error": "invalid_token"})),
+            )
+                .into_response(),
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
         }
@@ -212,17 +217,41 @@ impl IntoPublicError for OfferError {
     fn into_public_error(self) -> PublicError {
         use OfferError::*;
         match self {
-            MissingCredentialOfferError => {
-                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidCredentialRequest))
-            }
+            // `/auth/token` endpoint
             MissingTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidRequest)),
             InvalidTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidGrant)),
             InvalidPreAuthorizedCodeError => {
                 PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidGrant))
             }
             UnrequestedTxCodeError => PublicError::TokenError(OID4VCError::new(TokenErrorResponse::InvalidRequest)),
-            // TODO: check for missing error responses
-            _ => PublicError::InternalServerError,
+
+            // `/openid4vci/credential` endpoint
+            MissingCredentialOfferError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidCredentialRequest))
+            }
+            MissingCredentialError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidCredentialRequest))
+            }
+            MissingProofError => PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidProof)),
+            InvalidProofError(_) => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidProof))
+            }
+            MissingProofIssuerError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidProof))
+            }
+            MissingCredentialConfigurationIdsError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::InvalidCredentialRequest))
+            }
+            UnknownCredentialConfiguration(_) => PublicError::CredentialError(OID4VCError::new(
+                CredentialErrorResponse::UnknownCredentialConfiguration,
+            )),
+            UnsupportedCredentialIdentifierError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
+            }
+            // Internal errors that shouldn't reach the public API
+            SendCredentialOfferError(_) => PublicError::InternalServerError,
+            UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
+            InvalidCredentialOfferUriError(_) => PublicError::InternalServerError,
         }
     }
 }

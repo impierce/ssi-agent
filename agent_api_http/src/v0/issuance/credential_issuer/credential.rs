@@ -7,7 +7,8 @@ use crate::{
 };
 use agent_issuance::{
     application::{
-        access_token_validation_service::AccessTokenValidationService, nonce_validation_service::NonceValidationService,
+        access_token_validation_service::{AccessTokenValidationError, AccessTokenValidationService},
+        nonce_validation_service::NonceValidationService,
     },
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
@@ -40,12 +41,12 @@ pub(crate) async fn credential(
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
-    let offer_id = AccessTokenValidationService::validate(&state, &access_token)
-        .await
-        .ok()
-        // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
-        .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+    let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
+    // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
+    let offer_id = claims
+        .issuer_state
+        .ok_or_else(|| PublicError::from(AccessTokenValidationError::InvalidToken))?;
 
     NonceValidationService::validate(&state, &credential_request)
         .await
@@ -411,16 +412,23 @@ pub mod tests {
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            set_config().enable_event_publisher_http();
-            set_config().set_event_publisher_http_target_url(target_url.clone());
-            set_config().set_event_publisher_http_target_events(Events {
-                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                ..Default::default()
-            });
+            set_config().enable_event_publisher_http(0);
+            set_config().set_event_publisher_http_target_url(0, target_url.clone());
+            set_config().set_event_publisher_http_target_events(
+                0,
+                Events {
+                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                    ..Default::default()
+                },
+            );
 
             (
                 Some(external_server),
-                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
+                EventPublisherHttp::load()
+                    .unwrap()
+                    .into_iter()
+                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+                    .collect(),
             )
         } else {
             (None, Default::default())
