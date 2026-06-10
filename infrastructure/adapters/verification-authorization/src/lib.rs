@@ -30,7 +30,7 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         // TODO: Make claims and credential formats configurable by the client, rather than hardcoded.
         // Currently only applicable when `enable_interactive_authorization_flow` is true. When false,
         // the authorization server defaults to the Authorization Code flow.
-        let claims: Vec<ClaimQuery> = serde_json::from_value(serde_json::json!([
+        let eduid_claims: Vec<ClaimQuery> = serde_json::from_value(serde_json::json!([
             {"path": ["name"]},
             {"path": ["given_name"]},
             {"path": ["family_name"]},
@@ -47,19 +47,37 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
             {"path": ["is_library-walk-in"]}
         ]))?;
 
+        let entitlement_claims: Vec<ClaimQuery> = serde_json::from_value(serde_json::json!([
+            {"path": ["entitlement"]},
+        ]))?;
+
         let dcql_query = DcqlQuery {
-            credentials: vec![CredentialQuery {
-                id: CredentialQueryId::try_new("eduID").unwrap(),
-                format: Format::DcSdJwt,
-                multiple: None,
-                meta: MetaTypes::SdJwtMeta {
-                    vct_values: vec!["https://issuer.pilots.eduid.nl/vct/eduid".to_string()],
+            credentials: vec![
+                CredentialQuery {
+                    id: CredentialQueryId::try_new("eduID").unwrap(),
+                    format: Format::DcSdJwt,
+                    multiple: None,
+                    meta: MetaTypes::SdJwtMeta {
+                        vct_values: vec!["https://issuer.pilots.eduid.nl/vct/eduid".to_string()],
+                    },
+                    trusted_authorities: None,
+                    require_cryptographic_holder_binding: None,
+                    claims: Some(eduid_claims),
+                    claim_sets: None,
                 },
-                trusted_authorities: None,
-                require_cryptographic_holder_binding: None,
-                claims: Some(claims),
-                claim_sets: None,
-            }],
+                CredentialQuery {
+                    id: CredentialQueryId::try_new("Entitlement").unwrap(),
+                    format: Format::DcSdJwt,
+                    multiple: None,
+                    meta: MetaTypes::SdJwtMeta {
+                        vct_values: vec!["https://issuer.pilots.eduid.nl/vct/entitlement".to_string()],
+                    },
+                    trusted_authorities: None,
+                    require_cryptographic_holder_binding: None,
+                    claims: Some(entitlement_claims),
+                    claim_sets: None,
+                },
+            ],
             credential_sets: None,
         };
 
