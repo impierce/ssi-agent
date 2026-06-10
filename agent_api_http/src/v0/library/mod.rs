@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use crate::{
     v0::library::catalog::{
-        queries::{get_all_catalogs::get_catalogs, get_catalog::get_catalog},
+        queries::{get_all_catalogs::get_all_catalogs, get_catalog::get_catalog},
         {add_template, create_catalog, delete_catalog, remove_template, update_display, update_visibility},
     },
     v0::templates::{
@@ -39,7 +39,7 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/catalog/remove-template", post(remove_template))
                 .route("/catalog/update-display", post(update_display))
                 .route("/catalog/update-visibility", post(update_visibility))
-                .route("/catalog/get-all-catalogs", get(get_catalogs))
+                .route("/catalog/get-all-catalogs", get(get_all_catalogs))
                 .route("/catalog/{catalog_id}", get(get_catalog)),
         )
         .with_state(library_state)

@@ -66,6 +66,23 @@ paths:
         schema:
           type: string
       responses: {}
+  /v0/catalog/get-all-catalogs:
+    get:
+      tags:
+      - Library
+      - Catalog
+      summary: List all Catalogs
+      description: List all available Catalogs.
+      operationId: get_all_catalogs
+      responses:
+        '200':
+          description: All catalogs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Catalog'
   /v0/catalog/remove-template:
     post:
       tags:
@@ -125,6 +142,27 @@ paths:
       responses:
         '200':
           description: Catalog visibility updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+  /v0/catalog/{catalog_id}:
+    get:
+      tags:
+      - Library
+      - Catalog
+      summary: Get catalog by ID
+      description: Retrieve a specific catalog by its ID.
+      operationId: get_catalog_by_id
+      parameters:
+      - name: catalog_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Catalog retrieved successfully
           content:
             application/json:
               schema:
@@ -747,25 +785,24 @@ components:
           default: ''
     Catalog:
       type: object
-      description: Data transfer object for Catalogs.
       required:
       - id
       - display
-      - templateIds
+      - template_ids
       - visibility
-      - modifiedAt
-      - isDeleted
+      - modified_at
+      - is_deleted
       properties:
         display:
           $ref: '#/components/schemas/CatalogDisplay'
         id:
           type: string
-        isDeleted:
+        is_deleted:
           type: boolean
-        modifiedAt:
+        modified_at:
           type: string
           format: date-time
-        templateIds:
+        template_ids:
           type: array
           items:
             type: string

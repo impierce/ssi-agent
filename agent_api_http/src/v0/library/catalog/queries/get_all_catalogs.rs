@@ -23,7 +23,7 @@ use std::sync::Arc;
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_catalogs(State(state): State<Arc<LibraryState>>) -> Result<Response, ApiError> {
+pub(crate) async fn get_all_catalogs(State(state): State<Arc<LibraryState>>) -> Result<Response, ApiError> {
     let filtered_catalogs = query_handler("all_catalogs", &state.query.all_catalogs)
         .await?
         .map(|all_catalogs_view| {
