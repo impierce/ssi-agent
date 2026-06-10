@@ -23,7 +23,13 @@ paths:
             schema:
               $ref: '#/components/schemas/AddTemplateRequest'
         required: true
-      responses: {}
+      responses:
+        '200':
+          description: Catalog updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/catalog/create-catalog:
     post:
       tags:
@@ -38,7 +44,13 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateCatalogRequest'
         required: true
-      responses: {}
+      responses:
+        '201':
+          description: Catalog created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/catalog/delete-catalog/{catalog_id}:
     post:
       tags:
@@ -68,7 +80,13 @@ paths:
             schema:
               $ref: '#/components/schemas/RemoveTemplateRequest'
         required: true
-      responses: {}
+      responses:
+        '200':
+          description: Catalog removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/catalog/update-display:
     post:
       tags:
@@ -83,7 +101,13 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateCatalogDisplayRequest'
         required: true
-      responses: {}
+      responses:
+        '200':
+          description: Catalog display updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/catalog/update-visibility:
     post:
       tags:
@@ -98,7 +122,13 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateCatalogVisibilityRequest'
         required: true
-      responses: {}
+      responses:
+        '200':
+          description: Catalog visibility updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/connections:
     get:
       tags:
@@ -715,6 +745,32 @@ components:
         templateId:
           type: string
           default: ''
+    Catalog:
+      type: object
+      description: Data transfer object for Catalogs.
+      required:
+      - id
+      - display
+      - templateIds
+      - visibility
+      - modifiedAt
+      - isDeleted
+      properties:
+        display:
+          $ref: '#/components/schemas/CatalogDisplay'
+        id:
+          type: string
+        isDeleted:
+          type: boolean
+        modifiedAt:
+          type: string
+          format: date-time
+        templateIds:
+          type: array
+          items:
+            type: string
+        visibility:
+          $ref: '#/components/schemas/CatalogVisibility'
     CatalogDisplay:
       type: object
       required:
