@@ -6,20 +6,33 @@ use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
     command::CatalogCommand,
 };
-
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::{DateTime, Utc};
 
+use agent_library::state::LibraryState;
 use http::StatusCode;
 use http_api_problem::ApiError;
 use hyper::header;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use agent_library::state::LibraryState;
+/// Data transfer object for Catalogs.
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(as = Catalog)]
+pub struct Catalog {
+    #[serde(rename = "id")]
+    pub catalog_id: String,
+    pub display: CatalogDisplay,
+    pub template_ids: Vec<String>,
+    pub visibility: CatalogVisibility,
+    pub modified_at: DateTime<Utc>,
+    pub is_deleted: bool,
+}
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
