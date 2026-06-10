@@ -1,4 +1,4 @@
-use agent_shared::handlers::{command_handler, load_view};
+use agent_shared::handlers::{command_handler, public_query_handler};
 use oid4vci::authorization_request::AuthorizationRequest;
 use oid4vci::wallet::PushedAuthorizationResponse;
 use thiserror::Error;
@@ -36,7 +36,7 @@ impl PushedAuthorizationService {
         // registered in the Authorization Server). Therefore, as of now we can only validate the request for known
         // Clients. See: https://github.com/openid/OpenID4VCI/issues/94
         if pushed_authorization_request.client_id == UNIME_CLIENT_ID {
-            let client = load_view(&pushed_authorization_request.client_id, &state.query.client)
+            let client = public_query_handler(&pushed_authorization_request.client_id, &state.query.client)
                 .await
                 .map_err(|err| PushedAuthorizationError::Internal(err.to_string()))?
                 .ok_or(PushedAuthorizationError::InvalidClientIdError)?;

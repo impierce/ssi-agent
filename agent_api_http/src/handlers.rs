@@ -59,7 +59,7 @@ where
     A: Aggregate,
     V: View<A>,
 {
-    agent_shared::handlers::load_view(view_id, state)
+    agent_shared::handlers::public_query_handler(view_id, state)
         .await
         .map_err(ErrorWrapper::PersistenceError)
 }

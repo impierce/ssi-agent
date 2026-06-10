@@ -1,4 +1,3 @@
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 use agent_issuance::{
@@ -7,7 +6,6 @@ use agent_issuance::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension,
 };
 use http::StatusCode;
 use hyper::header;
@@ -17,7 +15,6 @@ use crate::v0::issuance::error::PublicError;
 
 pub async fn token_status_list(
     State(state): State<Arc<IssuanceState>>,
-    _actor: Option<Extension<Option<Actor>>>,
     Path(status_list_id): Path<String>,
 ) -> Result<Response, PublicError> {
     let token_status_list_service = TokenStatusListService {};

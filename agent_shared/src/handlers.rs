@@ -12,7 +12,7 @@ use tracing::{debug, error, info};
 use crate::application_state::CommandHandler;
 
 /// Loads a specific view from the view repository without running authorization.
-pub async fn load_view<A, V>(
+pub async fn public_query_handler<A, V>(
     view_id: &str,
     state: &Arc<dyn ViewRepository<V, A>>,
 ) -> Result<Option<V>, PersistenceError>
@@ -62,7 +62,9 @@ where
         return Err(QueryHandlerError::Forbidden);
     }
 
-    load_view(view_id, state).await.map_err(QueryHandlerError::Persistence)
+    public_query_handler(view_id, state)
+        .await
+        .map_err(QueryHandlerError::Persistence)
 }
 
 #[derive(Debug, thiserror::Error)]

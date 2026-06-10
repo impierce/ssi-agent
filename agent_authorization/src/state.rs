@@ -1,5 +1,5 @@
 use agent_shared::application_state::CommandHandler;
-use agent_shared::handlers::{command_handler, load_view};
+use agent_shared::handlers::{command_handler, public_query_handler};
 use cqrs_es::persist::ViewRepository;
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
@@ -87,7 +87,7 @@ pub async fn initialize(state: &AuthorizationState) -> anyhow::Result<()> {
 
 /// Initialize the default client (UniMe) in the authorization state.
 async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
-    if let Some(client) = load_view(UNIME_CLIENT_ID, &state.query.client).await? {
+    if let Some(client) = public_query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
         debug!("UniMe client already exists: {:?}", client);
         Ok(())
     } else {

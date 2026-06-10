@@ -16,7 +16,7 @@ use agent_shared::config::{
     config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
-use agent_shared::{application_state::CommandHandler, handlers::load_view};
+use agent_shared::{application_state::CommandHandler, handlers::public_query_handler};
 use cqrs_es::persist::{PersistenceError, ViewRepository};
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
@@ -121,7 +121,7 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 // updates, rather than reading from a shared, mutable global state.
 /// Queries the profile and updates the application state with the profile information.
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
-    match load_view(PROFILE_ID, &state.query.profile).await? {
+    match public_query_handler(PROFILE_ID, &state.query.profile).await? {
         Some(Profile {
             display_name,
             logo,
@@ -174,7 +174,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     };
 
     if let Some(config_display) = first {
-        match load_view(PROFILE_ID, &state.query.profile).await? {
+        match public_query_handler(PROFILE_ID, &state.query.profile).await? {
             // If the profile exists, we check if it needs to be updated based on the config.
             // We only update the Profile if the config source is:
             // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
@@ -293,7 +293,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
             }
         };
     } else {
-        match load_view(PROFILE_ID, &state.query.profile).await? {
+        match public_query_handler(PROFILE_ID, &state.query.profile).await? {
             Some(Profile {
                 display_name: persisted_display_name,
                 logo: persisted_logo,
@@ -564,7 +564,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
         info!("Created Linked Domain service");
 
-        match load_view(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
+        match public_query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
             Ok(Some(Service {
                 service: Some(service), ..
             })) => {
@@ -625,7 +625,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
 
     if let Some(Service {
         service: Some(service), ..
-    }) = load_view(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
+    }) = public_query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
     {
         info!("Found Linked Verifiable Presentations service: {service}");
 
@@ -695,7 +695,7 @@ pub async fn query_all_documents(
     state: &IdentityState,
     query: impl Fn(&(String, Document)) -> bool,
 ) -> anyhow::Result<HashMap<String, Document>> {
-    match load_view("all_documents", &state.query.all_documents).await? {
+    match public_query_handler("all_documents", &state.query.all_documents).await? {
         Some(AllDocumentsView { documents }) => Ok(documents.into_iter().filter(query).collect()),
         None => Ok(Default::default()),
     }

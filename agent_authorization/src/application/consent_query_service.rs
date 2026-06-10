@@ -1,5 +1,5 @@
 use crate::state::AuthorizationState;
-use agent_shared::handlers::load_view;
+use agent_shared::handlers::public_query_handler;
 use oid4vci::authorization_details::AuthorizationDetailsObject;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -31,12 +31,12 @@ impl ConsentQueryService {
         state: &AuthorizationState,
         request_uri: String,
     ) -> Result<ConsentPageViewModel, ConsentQueryError> {
-        let authorization_request = load_view(&request_uri.to_string(), &state.query.oauth2_authorization_request)
+        let authorization_request = public_query_handler(&request_uri.to_string(), &state.query.oauth2_authorization_request)
             .await
             .map_err(|err| ConsentQueryError::Internal(err.to_string()))?
             .ok_or(ConsentQueryError::RequestNotFound)?;
 
-        let client = load_view(&authorization_request.client_id, &state.query.client)
+        let client = public_query_handler(&authorization_request.client_id, &state.query.client)
             .await
             .map_err(|err| ConsentQueryError::Internal(err.to_string()))?
             .ok_or(ConsentQueryError::ClientNotFound)?;
