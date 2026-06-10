@@ -3,6 +3,7 @@ name = "agent_application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_api_http = { path = "../agent_api_http" }
@@ -12,6 +13,7 @@ agent_event_publisher_nats = { path = "../agent_event_publisher_nats" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
+agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }

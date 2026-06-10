@@ -33,7 +33,7 @@ pub struct OAuth2AuthorizationRequest {
     pub issuer_state: Option<String>,
 
     // OID4VCI
-    pub authorization_details: Vec<AuthorizationDetailsObject>,
+    pub authorization_details: Option<Vec<AuthorizationDetailsObject>>,
 
     // PKCE
     #[serde(default)]
@@ -330,14 +330,14 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn authorization_details() -> Vec<AuthorizationDetailsObject> {
-        vec![AuthorizationDetailsObject {
+    pub fn authorization_details() -> Option<Vec<AuthorizationDetailsObject>> {
+        Some(vec![AuthorizationDetailsObject {
             r#type: OpenidCredential::Type,
             locations: None,
             credential_configuration_id: "001".to_string(),
             credential_identifiers: None,
             claims: None,
-        }]
+        }])
     }
 
     static CODE_VERIFIER: OnceLock<Vec<u8>> = OnceLock::new();
@@ -374,7 +374,7 @@ pub mod test_utils {
         redirect_uri: Option<Url>,
         scope: String,
         issuer_state: Option<String>,
-        authorization_details: Vec<AuthorizationDetailsObject>,
+        authorization_details: Option<Vec<AuthorizationDetailsObject>>,
         code_challenge: String,
         code_challenge_method: Option<CodeChallengeMethod>,
     ) -> AuthorizationRequest {

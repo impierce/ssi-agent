@@ -35,13 +35,13 @@ signing_algorithms_supported:
 
 event_publishers:
   http:
-    enabled: true
-    target_url: https://service.example.test:8291/events
-    headers:
-      Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-    events:
-      credential: [UnsignedCredentialCreated, CredentialSigned]
-      server_config: []
+    - enabled: true
+      target_url: https://service.example.test:8291/events
+      headers:
+        Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
+      events:
+        credential: [UnsignedCredentialCreated, CredentialSigned]
+        server_config: []
 
 display:
   - name: UniCore
