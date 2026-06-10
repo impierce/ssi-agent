@@ -21,8 +21,7 @@ impl VerificationAuthorizationAdapter {
 
 #[async_trait]
 impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
-    async fn create_openid4vp_presentation_request(&self) -> anyhow::Result<serde_json::Value> {
-        let state = "state".to_string();
+    async fn create_openid4vp_presentation_request(&self, state: String) -> anyhow::Result<serde_json::Value> {
         let nonce = "nonce".to_string();
 
         let claims: Vec<ClaimQuery> = serde_json::from_value(serde_json::json!([
@@ -58,13 +57,13 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
             credential_sets: None,
         };
 
+        let authorization_request_id = state.clone();
+
         let command = AuthorizationRequestCommand::CreateAuthorizationRequest {
             state,
             nonce,
             dcql_query: Some(dcql_query),
         };
-
-        let authorization_request_id = "test_authorization_request_id".to_string();
 
         command_handler(
             &authorization_request_id,

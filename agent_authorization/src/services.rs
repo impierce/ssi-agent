@@ -17,7 +17,7 @@ impl Service for AuthorizationServices {
 #[cfg_attr(any(feature = "test_utils", test), automock)]
 #[async_trait]
 pub trait OpenId4VpPresentationService: Send + Sync {
-    async fn create_openid4vp_presentation_request(&self) -> anyhow::Result<serde_json::Value>;
+    async fn create_openid4vp_presentation_request(&self, state: String) -> anyhow::Result<serde_json::Value>;
     async fn verify_openid4vp_response(&self, openid4vp_response: serde_json::Value) -> anyhow::Result<()>;
 }
 
@@ -46,7 +46,7 @@ impl Default for OAuth2AuthorizationRequestDomainServices {
         mock_openid4vp_presentation_service
             .expect_create_openid4vp_presentation_request()
             // Returns a default JSON value for testing purposes
-            .returning(|| Ok(serde_json::json!({})));
+            .returning(|_| Ok(serde_json::json!({})));
 
         Self {
             openid4vp_presentation_service: Box::new(mock_openid4vp_presentation_service),

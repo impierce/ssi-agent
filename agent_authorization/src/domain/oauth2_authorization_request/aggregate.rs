@@ -73,11 +73,13 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 expires_at,
                 interaction_type,
             } => {
+                let state = pushed_authorization_request.issuer_state.clone().unwrap_or_default();
+
                 let openid4vp_presentation = if let Some(InteractionType::OpenId4VpPresentation) = interaction_type {
                     Some(
                         services
                             .openid4vp_presentation_service
-                            .create_openid4vp_presentation_request()
+                            .create_openid4vp_presentation_request(state)
                             .await
                             .expect("FIXME"),
                     )
