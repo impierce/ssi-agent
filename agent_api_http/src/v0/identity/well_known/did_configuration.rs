@@ -1,4 +1,3 @@
-use crate::handlers::load_view;
 use agent_identity::{
     service::{aggregate::ServiceResource, views::ServiceView},
     state::{IdentityState, DOMAIN_LINKAGE_SERVICE_ID},
@@ -12,10 +11,12 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn did_configuration(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
     // Get the DID Configuration Resource if it exists.
-    match load_view(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await? {
+    match public_query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await? {
         Some(ServiceView {
             is_deleted: false,
             resource: Some(ServiceResource::DomainLinkage(domain_linkage_configuration)),

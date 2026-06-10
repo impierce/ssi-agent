@@ -1,6 +1,6 @@
 pub mod presentation_signed;
 
-use crate::handlers::{command_handler, load_view, query_handler, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_holder::{
     credential::queries::HolderCredentialView, presentation::command::PresentationCommand, state::HolderState,
 };
@@ -66,7 +66,14 @@ pub(crate) async fn post_presentations(
 
     // Get all the credentials.
     for credential_id in credential_ids {
-        match load_view(&credential_id, &state.query.holder_credential).await? {
+        match query_handler(
+            state.authorization_checker.clone(),
+            request_actor(&actor),
+            &credential_id,
+            &state.query.holder_credential,
+        )
+        .await?
+        {
             Some(HolderCredentialView {
                 signed: Some(credential),
                 ..
@@ -94,9 +101,14 @@ pub(crate) async fn post_presentations(
     )
     .await?;
 
-    load_view(&presentation_id, &state.query.presentation)
-        .await?
-        .map(|presentation_view| (StatusCode::CREATED, Json(presentation_view)).into_response())
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &presentation_id,
+        &state.query.presentation,
+    )
+    .await?
+    .map(|presentation_view| (StatusCode::CREATED, Json(presentation_view)).into_response())
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

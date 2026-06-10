@@ -1,7 +1,7 @@
 use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
-use crate::handlers::{command_handler, load_view, query_handler, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -66,18 +66,23 @@ pub(crate) async fn post_connection(
     .await?;
 
     // Return the connection.
-    load_view(&connection_id, &state.query.connection)
-        .await?
-        .map(|connection_view| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-                Json(connection_view),
-            )
-                .into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &connection_id,
+        &state.query.connection,
+    )
+    .await?
+    .map(|connection_view| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
+            Json(connection_view),
+        )
+            .into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]

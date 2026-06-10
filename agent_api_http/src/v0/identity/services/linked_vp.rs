@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, load_view, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
@@ -45,7 +45,14 @@ pub(crate) async fn linked_vp(
     )
     .await?;
 
-    let linked_verifiable_presentation_service = match load_view(&service_id, &state.query.service).await? {
+    let linked_verifiable_presentation_service = match query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &service_id,
+        &state.query.service,
+    )
+    .await?
+    {
         Some(Service {
             service: Some(linked_verifiable_presentation_service),
             ..
@@ -55,24 +62,29 @@ pub(crate) async fn linked_vp(
     };
 
     // Query all DID Documents that require an update.
-    let document_ids: Vec<String> = load_view("all_documents", &state.query.all_documents)
-        .await?
-        .map(|all_documents_view| {
-            all_documents_view
-                .documents
-                .into_values()
-                .filter(|document| {
-                    document.status != Status::Disabled
-                        && document
-                            .did_method
-                            .as_ref()
-                            .map(SupportedDidMethod::supports_update)
-                            .unwrap_or(false)
-                })
-                .map(|document| document.document_id)
-                .collect()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+    let document_ids: Vec<String> = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_documents",
+        &state.query.all_documents,
+    )
+    .await?
+    .map(|all_documents_view| {
+        all_documents_view
+            .documents
+            .into_values()
+            .filter(|document| {
+                document.status != Status::Disabled
+                    && document
+                        .did_method
+                        .as_ref()
+                        .map(SupportedDidMethod::supports_update)
+                        .unwrap_or(false)
+            })
+            .map(|document| document.document_id)
+            .collect()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
     for document_id in &document_ids {
         let command = DocumentCommand::AddService {
@@ -94,23 +106,28 @@ pub(crate) async fn linked_vp(
         .await
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    load_view("all_documents", &state.query.all_documents)
-        .await?
-        .map(|all_documents_view| {
-            let documents: Vec<_> = all_documents_view
-                .documents
-                .into_values()
-                .filter(|document| {
-                    document.status != Status::Disabled
-                        && document
-                            .did_method
-                            .as_ref()
-                            .map(SupportedDidMethod::supports_update)
-                            .unwrap_or(false)
-                })
-                .collect();
-            (StatusCode::OK, Json(documents)).into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        "all_documents",
+        &state.query.all_documents,
+    )
+    .await?
+    .map(|all_documents_view| {
+        let documents: Vec<_> = all_documents_view
+            .documents
+            .into_values()
+            .filter(|document| {
+                document.status != Status::Disabled
+                    && document
+                        .did_method
+                        .as_ref()
+                        .map(SupportedDidMethod::supports_update)
+                        .unwrap_or(false)
+            })
+            .collect();
+        (StatusCode::OK, Json(documents)).into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

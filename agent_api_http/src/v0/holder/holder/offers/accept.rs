@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, load_view, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{
@@ -43,9 +43,14 @@ pub(crate) async fn accept(
     // Furthermore, the Application Layer (not implemented yet) should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
     // Check if the Credential Offer exists.
-    load_view(&received_offer_id, &state.query.received_offer)
-        .await?
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &received_offer_id,
+        &state.query.received_offer,
+    )
+    .await?
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
     let command = OfferCommand::AcceptCredentialOffer {
         received_offer_id: received_offer_id.clone(),
@@ -75,7 +80,14 @@ pub(crate) async fn accept(
     )
     .await?;
 
-    let credentials = match load_view(&received_offer_id, &state.query.received_offer).await? {
+    let credentials = match query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &received_offer_id,
+        &state.query.received_offer,
+    )
+    .await?
+    {
         Some(ReceivedOfferView { credentials, .. }) => credentials,
         // TODO: this *should* be an impossible error, what should we return here?
         _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
@@ -103,9 +115,14 @@ pub(crate) async fn accept(
         .await?;
     }
 
-    load_view(&received_offer_id, &state.query.received_offer)
-        .await?
-        .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &received_offer_id,
+        &state.query.received_offer,
+    )
+    .await?
+    .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

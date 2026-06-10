@@ -59,18 +59,6 @@ where
     A: Aggregate,
     V: View<A>,
 {
-    load_view(view_id, state).await
-}
-
-// Wrapping the `query_handler` function from the `agent_shared` crate to handle errors.
-pub async fn load_view<A, V>(
-    view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
-) -> Result<Option<V>, ErrorWrapper<A::Error>>
-where
-    A: Aggregate,
-    V: View<A>,
-{
     agent_shared::handlers::load_view(view_id, state)
         .await
         .map_err(ErrorWrapper::PersistenceError)

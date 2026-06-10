@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, load_view, query_handler, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
     state::HolderState,
@@ -74,11 +74,16 @@ pub(crate) async fn post_credentials(
     )
     .await?;
 
-    load_view(&holder_credential_id, &state.query.holder_credential)
-        .await?
-        .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &holder_credential_id,
+        &state.query.holder_credential,
+    )
+    .await?
+    .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// Get credential by ID

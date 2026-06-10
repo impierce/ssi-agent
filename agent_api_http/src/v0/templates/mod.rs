@@ -1,5 +1,5 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, load_view, query_handler, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -150,18 +150,23 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    load_view(&template_id, &state.query.template)
-        .await?
-        .map(|template_view| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/templates/{template_id}"))],
-                Json(TemplateDto::from(template_view)),
-            )
-                .into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .map(|template_view| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/templates/{template_id}"))],
+            Json(TemplateDto::from(template_view)),
+        )
+            .into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -194,15 +199,20 @@ pub(crate) async fn duplicate_template(
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
-    let original_template = load_view(&source_template_id, &state.query.template)
-        .await?
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Source Template Not Found")
-                .type_url(type_url("library#source-template-not-found"))
-                .message(format!("No Source Template found with id: `{source_template_id}`"))
-                .finish()
-        })?;
+    let original_template = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &source_template_id,
+        &state.query.template,
+    )
+    .await?
+    .ok_or_else(|| {
+        ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Source Template Not Found")
+            .type_url(type_url("library#source-template-not-found"))
+            .message(format!("No Source Template found with id: `{source_template_id}`"))
+            .finish()
+    })?;
 
     let command = TemplateCommand::CreateTemplate {
         template_id: new_template_id.clone(),
@@ -231,9 +241,14 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = load_view(&new_template_id, &state.query.template)
-        .await?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let new_template = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &new_template_id,
+        &state.query.template,
+    )
+    .await?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok((
         StatusCode::CREATED,
@@ -302,7 +317,14 @@ pub(crate) async fn update_template(
             .finish());
     }
 
-    load_view(&template_id, &state.query.template).await?.ok_or_else(|| {
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .ok_or_else(|| {
         ApiError::builder(StatusCode::NOT_FOUND)
             .title("Template Not Found")
             .type_url(type_url("library#template-not-found"))
@@ -604,7 +626,14 @@ pub(crate) async fn delete_template(
             .finish());
     }
 
-    load_view(&template_id, &state.query.template).await?.ok_or_else(|| {
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .ok_or_else(|| {
         ApiError::builder(StatusCode::NOT_FOUND)
             .title("Template Not Found")
             .type_url(type_url("library#template-not-found"))

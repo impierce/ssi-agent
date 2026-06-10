@@ -1,4 +1,3 @@
-use crate::handlers::load_view;
 use agent_holder::{presentation::aggregate::Presentation, state::HolderState};
 use axum::{
     extract::{Path, State},
@@ -8,12 +7,14 @@ use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation_signed(
     State(state): State<Arc<HolderState>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    match load_view(&presentation_id, &state.query.presentation).await? {
+    match public_query_handler(&presentation_id, &state.query.presentation).await? {
         Some(Presentation {
             signed: Some(signed_presentation),
             ..

@@ -1,8 +1,12 @@
-use crate::{handlers::load_view, v0::issuance::error::PublicError};
+use crate::{
+    handlers::{query_handler, request_actor},
+    v0::issuance::error::PublicError,
+};
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
+    Extension,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use identity_credential::sd_jwt_vc::metadata::{
@@ -11,11 +15,13 @@ use identity_credential::sd_jwt_vc::metadata::{
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay,
 };
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn type_metadata(
     State(state): State<Arc<IssuanceState>>,
+    actor: Option<Extension<Option<Actor>>>,
     Path((credential_configuration_id, _version)): Path<(String, String)>,
 ) -> Result<Response, PublicError> {
     let credential_configuration_id = URL_SAFE_NO_PAD
@@ -25,16 +31,21 @@ pub(crate) async fn type_metadata(
         .ok_or(PublicError::NotFoundError)?;
 
     // Check if the credential configuration IDs are valid.
-    let credential_configuration = load_view(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .map(|(_, credential_configuration, _authorization)| credential_configuration)
-                .cloned()
-        })
-        .ok_or(PublicError::NotFoundError)?;
+    let credential_configuration = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        SERVER_CONFIG_ID,
+        &state.query.server_config,
+    )
+    .await?
+    .and_then(|server_config_view| {
+        server_config_view
+            .credential_configurations
+            .get(&credential_configuration_id)
+            .map(|(_, credential_configuration, _authorization)| credential_configuration)
+            .cloned()
+    })
+    .ok_or(PublicError::NotFoundError)?;
 
     let (display, claims) = credential_configuration
         .credential_metadata

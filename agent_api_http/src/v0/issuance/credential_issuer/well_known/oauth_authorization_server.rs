@@ -1,4 +1,3 @@
-use crate::handlers::load_view;
 use agent_issuance::{
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -11,10 +10,12 @@ use axum::{
 use http_api_problem::ApiError;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+
 // TODO: move this to `authorization/authorization_server/well_known.rs`!
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    match load_view(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(ServerConfigView {
             authorization_server_metadata,
             ..

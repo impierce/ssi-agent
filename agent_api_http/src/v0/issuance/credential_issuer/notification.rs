@@ -6,13 +6,11 @@ use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
-    Extension,
 };
 use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 use tracing::info;
@@ -22,7 +20,6 @@ use tracing::info;
 #[axum_macros::debug_handler]
 pub async fn notification(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
     AuthBearer(access_token): AuthBearer,
     Json(raw_value): Json<serde_json::Value>,
 ) -> Result<Response, PublicError> {

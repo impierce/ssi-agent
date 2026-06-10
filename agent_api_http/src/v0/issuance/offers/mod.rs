@@ -2,7 +2,7 @@ pub mod send;
 
 use crate::{
     error::type_url,
-    handlers::{command_handler, load_view, query_handler, request_actor},
+    handlers::{command_handler, query_handler, request_actor},
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
@@ -42,11 +42,16 @@ pub(crate) async fn offers(
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     // Check if the credential configuration IDs are valid.
-    let credential_configurations = load_view(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .map(|server_config_view| server_config_view.credential_configurations)
-        // Unreachable error
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let credential_configurations = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        SERVER_CONFIG_ID,
+        &state.query.server_config,
+    )
+    .await?
+    .map(|server_config_view| server_config_view.credential_configurations)
+    // Unreachable error
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let persisted_credential_configuration_ids = credential_configurations.keys().collect::<Vec<_>>();
 
@@ -83,7 +88,15 @@ pub(crate) async fn offers(
     }];
 
     // Create an offer if it does not exist yet.
-    if load_view(&offer_id, &state.query.offer).await?.is_none() {
+    if query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .is_none()
+    {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             credential_configuration_ids,
@@ -102,19 +115,24 @@ pub(crate) async fn offers(
         .await?;
     }
 
-    load_view(&offer_id, &state.query.offer)
-        .await?
-        .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
-        .map(|form_url_encoded_credential_offer| {
-            (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
-                form_url_encoded_credential_offer,
-            )
-                .into_response()
-        })
-        // Unreachable error
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
+    .map(|form_url_encoded_credential_offer| {
+        (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
+            form_url_encoded_credential_offer,
+        )
+            .into_response()
+    })
+    // Unreachable error
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// Get all offers

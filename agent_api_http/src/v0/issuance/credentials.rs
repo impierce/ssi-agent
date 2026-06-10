@@ -1,5 +1,5 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, load_view, query_handler, request_actor};
+use crate::handlers::{command_handler, query_handler, request_actor};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -94,23 +94,28 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let (_, credential_configuration, authorization) = load_view(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
-                .message(format!(
-                    "No Credential Configuration found with id: `{credential_configuration_id}`"
-                ))
-                .finish()
-        })?;
+    let (_, credential_configuration, authorization) = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        SERVER_CONFIG_ID,
+        &state.query.server_config,
+    )
+    .await?
+    .and_then(|server_config_view| {
+        server_config_view
+            .credential_configurations
+            .get(&credential_configuration_id)
+            .cloned()
+    })
+    .ok_or_else(|| {
+        ApiError::builder(StatusCode::NOT_FOUND)
+            .title("No Credential Configuration Found")
+            .type_url(type_url("issuance#no-credential-configuration-found"))
+            .message(format!(
+                "No Credential Configuration found with id: `{credential_configuration_id}`"
+            ))
+            .finish()
+    })?;
 
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
@@ -155,7 +160,15 @@ pub(crate) async fn credentials(
     .await?;
 
     // Create an offer if it does not exist yet.
-    if load_view(&offer_id, &state.query.offer).await?.is_none() {
+    if query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .is_none()
+    {
         // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
@@ -203,18 +216,23 @@ pub(crate) async fn credentials(
     .await?;
 
     // Return the credential.
-    load_view(&credential_id, &state.query.credential)
-        .await?
-        .and_then(|credential_view| credential_view.data)
-        .map(|data| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
-                Json(data.raw),
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &credential_id,
+        &state.query.credential,
+    )
+    .await?
+    .and_then(|credential_view| credential_view.data)
+    .map(|data| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
+            Json(data.raw),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// List all credentials
@@ -262,7 +280,14 @@ pub async fn patch_credential(
         credential_status: status,
     }): Json<PatchCredentialEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    if let Some(credential) = load_view(&credential_id, &state.query.credential).await? {
+    if let Some(credential) = query_handler(
+        state.authorization_checker.clone(),
+        request_actor(&actor),
+        &credential_id,
+        &state.query.credential,
+    )
+    .await?
+    {
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,

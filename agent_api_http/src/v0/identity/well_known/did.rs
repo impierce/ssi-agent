@@ -1,4 +1,3 @@
-use crate::handlers::load_view;
 use agent_identity::{document::aggregate::Status, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
 use axum::{
@@ -10,9 +9,11 @@ use http_api_problem::ApiError;
 use hyper::StatusCode;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn did(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
-    load_view("all_documents", &state.query.all_documents)
+    public_query_handler("all_documents", &state.query.all_documents)
         .await?
         .and_then(|all_documents_view| {
             all_documents_view.documents.into_values().find_map(|document| {

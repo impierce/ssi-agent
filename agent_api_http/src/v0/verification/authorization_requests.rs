@@ -1,5 +1,5 @@
 use crate::{
-    handlers::{command_handler, load_view, query_handler, request_actor},
+    handlers::{command_handler, query_handler, request_actor},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
@@ -99,24 +99,29 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Return the authorization_request.
-    load_view(&state, &verification_state.query.authorization_request)
-        .await?
-        .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
-        .map(|form_url_encoded_authorization_request| {
-            (
-                StatusCode::CREATED,
-                [
-                    (
-                        header::LOCATION,
-                        format!("{API_VERSION}/authorization_requests/{state}").as_str(),
-                    ),
-                    (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
-                ],
-                form_url_encoded_authorization_request,
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        verification_state.authorization_checker.clone(),
+        request_actor(&actor),
+        &state,
+        &verification_state.query.authorization_request,
+    )
+    .await?
+    .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
+    .map(|form_url_encoded_authorization_request| {
+        (
+            StatusCode::CREATED,
+            [
+                (
+                    header::LOCATION,
+                    format!("{API_VERSION}/authorization_requests/{state}").as_str(),
+                ),
+                (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+            ],
+            form_url_encoded_authorization_request,
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]
