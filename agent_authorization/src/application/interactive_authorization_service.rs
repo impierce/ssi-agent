@@ -134,15 +134,12 @@ impl InteractiveAuthorizationService {
         openid4vp_response: Option<serde_json::Value>,
         code_verifier: Option<String>,
     ) -> Result<InteractiveAuthorizationResponse, InteractiveAuthorizationError> {
-        println!("{}:{}", file!(), line!());
         let oauth2_authorization_request_id = auth_session.clone();
 
-        println!("{}:{}", file!(), line!());
         let command = OAuth2AuthorizationRequestCommand::SubmitOpenId4VpResponse {
             openid4vp_response: openid4vp_response.clone().expect("FIXME"),
         };
 
-        println!("{}:{}", file!(), line!());
         command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
@@ -151,7 +148,6 @@ impl InteractiveAuthorizationService {
         .await
         .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 
-        println!("{}:{}", file!(), line!());
         // Get the OAuth2 authorization request that has been pushed via the `/auth/par` endpoint.
         let oauth2_authorization_request = query_handler(
             &oauth2_authorization_request_id,
@@ -161,18 +157,14 @@ impl InteractiveAuthorizationService {
         .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?
         .ok_or(InteractiveAuthorizationError::RequestNotFound)?;
 
-        println!("{}:{}", file!(), line!());
         if chrono::Utc::now().timestamp() > oauth2_authorization_request.expires_at {
             return Err(InteractiveAuthorizationError::ExpiredAuthorizationRequestError);
         }
 
-        println!("{}:{}", file!(), line!());
         // TODO: make this configurable?
         let expires_in = 600; // 10 minutes
 
-        println!("{}:{}", file!(), line!());
         let authorization_code_id = uuid::Uuid::new_v4().to_string();
-        println!("{}:{}", file!(), line!());
         let command = AuthorizationCodeCommand::CreateAuthorizationCode {
             authorization_code_id: authorization_code_id.clone(),
             client_id: oauth2_authorization_request.client_id.clone(),
@@ -183,12 +175,10 @@ impl InteractiveAuthorizationService {
             expires_in,
         };
 
-        println!("{}:{}", file!(), line!());
         command_handler(&authorization_code_id, &state.command.authorization_code, command)
             .await
             .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 
-        println!("{}:{}", file!(), line!());
         Ok(InteractiveAuthorizationResponse {
             status: InteractiveAuthorizationStatus::Ok,
             code: Some(authorization_code_id),

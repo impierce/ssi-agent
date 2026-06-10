@@ -37,7 +37,6 @@ pub(crate) async fn par(
     match authorization_request {
         AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => {
             info!("Received interactive authorization request");
-            println!("{}:{}", file!(), line!());
 
             let interactive_authorization_response =
                 InteractiveAuthorizationService::handle_interactive_authorization_request(
@@ -57,7 +56,6 @@ pub(crate) async fn par(
         } => {
             info!("Received follow-up interactive authorization request for auth session: {auth_session}");
 
-            println!("{}:{}", file!(), line!());
             let interactive_authorization_follow_up_response =
                 InteractiveAuthorizationService::handle_interactive_authorization_request_follow_up(
                     &state,
@@ -76,7 +74,6 @@ pub(crate) async fn par(
                 "Received pushed authorization request with state: {:?}",
                 pushed_authorization_request.state
             );
-            println!("{}:{}", file!(), line!());
 
             let authorization_response =
                 PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
@@ -168,7 +165,6 @@ pub mod tests {
         app: &mut Router,
         issuer_state: String,
     ) -> InteractiveAuthorizationResponse {
-        println!("{}:{}", file!(), line!());
         let response = app
             .call(
                 Request::builder()
@@ -189,13 +185,13 @@ pub mod tests {
                                 code_challenge_method: Some(CodeChallengeMethod::S256),
                                 scope: None,
                                 issuer_state: Some(issuer_state),
-                                authorization_details: vec![AuthorizationDetailsObject {
+                                authorization_details: Some(vec![AuthorizationDetailsObject {
                                     r#type: OpenidCredential::Type,
                                     locations: None,
                                     credential_configuration_id: "configuration_id".to_string(),
                                     credential_identifiers: None,
                                     claims: None,
-                                }],
+                                }]),
                             },
                             interaction_types_supported: "FIXME".to_string(),
                         }))
@@ -206,18 +202,13 @@ pub mod tests {
             .await
             .unwrap();
 
-        println!("{}:{}", file!(), line!());
         assert_eq!(response.status(), StatusCode::OK);
-        println!("{}:{}", file!(), line!());
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
-        println!("{}:{}", file!(), line!());
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        println!("{}:{}", file!(), line!());
         let interactive_authorization_response: InteractiveAuthorizationResponse =
             serde_json::from_slice(&body).unwrap();
 
-        println!("{}:{}", file!(), line!());
         let response = app
             .call(
                 Request::builder()
@@ -242,18 +233,13 @@ pub mod tests {
             .await
             .unwrap();
 
-        println!("{}:{}", file!(), line!());
         assert_eq!(response.status(), StatusCode::OK);
-        println!("{}:{}", file!(), line!());
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
-        println!("{}:{}", file!(), line!());
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        println!("{}:{}", file!(), line!());
         let interactive_authorization_response: InteractiveAuthorizationResponse =
             serde_json::from_slice(&body).unwrap();
 
-        println!("{}:{}", file!(), line!());
         interactive_authorization_response
     }
 
@@ -296,22 +282,15 @@ pub mod tests {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
 
-        println!("{}:{}", file!(), line!());
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        println!("{}:{}", file!(), line!());
         let mut app = issuance::router(issuance_state.clone());
 
-        println!("{}:{}", file!(), line!());
         credentials(&mut app, "002").await;
-        println!("{}:{}", file!(), line!());
         let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();
-        println!("{}:{}", file!(), line!());
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
-        println!("{}:{}", file!(), line!());
         let issuer_state = issuer_state.unwrap();
 
-        println!("{}:{}", file!(), line!());
         let authorization_state = Arc::new(
             authorization_state(
                 &InMemory,
@@ -321,15 +300,12 @@ pub mod tests {
             )
             .await,
         );
-        println!("{}:{}", file!(), line!());
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
 
-        println!("{}:{}", file!(), line!());
         let mut app = authorization::router((authorization_state, issuance_state));
 
-        println!("{}:{}", file!(), line!());
         let _interactive_authorization_request = interactive_authorization_request(&mut app, issuer_state).await;
     }
 }

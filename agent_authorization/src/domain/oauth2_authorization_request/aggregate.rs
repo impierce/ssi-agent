@@ -130,24 +130,19 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 }
             }
             SubmitOpenId4VpResponse { openid4vp_response } => {
-                println!("{}:{}", file!(), line!());
                 services
                     .openid4vp_presentation_service()
                     .verify_openid4vp_response(openid4vp_response)
                     .await
                     .expect("FIXME");
 
-                println!("{}:{}", file!(), line!());
                 let now = chrono::Utc::now().timestamp();
-                println!("{}:{}", file!(), line!());
                 if now > self.expires_at {
-                    println!("{}:{}", file!(), line!());
                     Ok(vec![OAuth2AuthorizationRequestExpired {
                         oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
                         consent_status: ConsentStatus::Expired,
                     }])
                 } else {
-                    println!("{}:{}", file!(), line!());
                     Ok(vec![ConsentGranted {
                         oauth2_authorization_request_id: self.oauth2_authorization_request_id.clone(),
                         consent_status: ConsentStatus::Granted,
