@@ -43,6 +43,12 @@ pub struct ApplicationState {
     pub verification_state: Option<Arc<VerificationState>>,
 }
 
+/// Build the top-level API router.
+///
+/// This merges the routers for each bounded context that has state available,
+/// installs actor extraction middleware, and attaches request tracing/logging.
+/// When the configured application URL includes a non-root base path, the
+/// router is nested under that path.
 pub fn app<E>(
     ApplicationState {
         identity_state,
@@ -143,15 +149,89 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
     Ok(Request::from_parts(parts, Body::from(bytes)))
 }
 
+/// Adapter that lets the actor extractor read values from HTTP headers.
+struct HttpActorInput<'a> {
+    headers: &'a HeaderMap,
+}
+
+impl<'a> HttpActorInput<'a> {
+    /// Create a header-backed actor input used by the actor extractor.
+    fn from_headers(headers: &'a HeaderMap) -> Self {
+        Self { headers }
+    }
+}
+
+impl ToActor for HttpActorInput<'_> {
+    /// Convert the `Authorization` header into an `Actor` when it contains a
+    /// non-empty `Bearer <token>` value.
+    fn to_actor(&self) -> Option<Actor> {
+        self.auth_value(AUTHORIZATION.as_str())
+            .and_then(|authorization_header| authorization_header.strip_prefix("Bearer "))
+            .filter(|token| !token.is_empty())
+            .map(|token| Actor {
+                subject: token.to_string(),
+            })
+    }
+
+    /// Read the header identified by `key` as a UTF-8 string slice.
+    fn auth_value(&self, key: &str) -> Option<&str> {
+        self.headers.get(key).and_then(|value| value.to_str().ok())
+    }
+}
+
+/// Extract an optional actor from the request headers and store it in the
+/// request extensions before continuing.
+pub async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+    let actor = actor_extractor.extract_actor(&input);
+
+    request.extensions_mut().insert(actor);
+
+    next.run(request).await
+}
+
+/// Require a valid actor in the request headers, returning `401 Unauthorized`
+/// when none is present.
+///
+/// When an actor is found, it is inserted into the request extensions before
+/// the request is forwarded to the next handler.
+pub async fn require_actor<E>(
+    State(actor_extractor): State<Arc<E>>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode>
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+    let actor = actor_extractor.extract_actor(&input);
+
+    if actor.is_none() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    request.extensions_mut().insert(actor);
+
+    Ok(next.run(request).await)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use agent_shared::config::config;
+    use axum::{body::Body, extract::Extension, routing::get};
+    use http::Request;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
+    use shared_kernel::authorization::NoActorExtractor;
     use std::collections::HashMap;
+    use tower::ServiceExt;
 
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
 
@@ -259,72 +339,6 @@ mod tests {
             ..Default::default()
         };
     }
-}
-
-struct HttpActorInput<'a> {
-    headers: &'a HeaderMap,
-}
-
-impl<'a> HttpActorInput<'a> {
-    fn from_headers(headers: &'a HeaderMap) -> Self {
-        Self { headers }
-    }
-}
-
-impl ToActor for HttpActorInput<'_> {
-    fn to_actor(&self) -> Option<Actor> {
-        self.auth_value(AUTHORIZATION.as_str())
-            .and_then(|authorization_header| authorization_header.strip_prefix("Bearer "))
-            .filter(|token| !token.is_empty())
-            .map(|token| Actor {
-                subject: token.to_string(),
-            })
-    }
-
-    fn auth_value(&self, key: &str) -> Option<&str> {
-        self.headers.get(key).and_then(|value| value.to_str().ok())
-    }
-}
-
-pub async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
-where
-    E: ActorExtractor,
-{
-    let input = HttpActorInput::from_headers(request.headers());
-    let actor = actor_extractor.extract_actor(&input);
-
-    request.extensions_mut().insert(actor);
-
-    next.run(request).await
-}
-
-pub async fn require_actor<E>(
-    State(actor_extractor): State<Arc<E>>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, StatusCode>
-where
-    E: ActorExtractor,
-{
-    let input = HttpActorInput::from_headers(request.headers());
-    let actor = actor_extractor.extract_actor(&input);
-
-    if actor.is_none() {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    request.extensions_mut().insert(actor);
-
-    Ok(next.run(request).await)
-}
-
-#[cfg(test)]
-mod actor_extraction_tests {
-    use super::*;
-    use axum::{body::Body, extract::Extension, routing::get};
-    use http::Request;
-    use shared_kernel::authorization::NoActorExtractor;
-    use tower::ServiceExt;
 
     #[derive(Clone)]
     struct MappingActorExtractor;
