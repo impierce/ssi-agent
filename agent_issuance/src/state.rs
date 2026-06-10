@@ -145,6 +145,26 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
         None => {
             info!("Initializing server metadata ...");
 
+            // If `enable_interactive_authorization_flow` is enabled, then the `require_pushed_authorization_requests`
+            // field will be set to `None`, and the `interactive_authorization_endpoint` and
+            // `require_interactive_authorization_request` fields will be set to the corresponding values. If
+            // `enable_interactive_authorization_flow` is disabled, then the `require_pushed_authorization_requests`
+            // field will be set to `Some(true)`, and the `interactive_authorization_endpoint` and
+            // `require_interactive_authorization_request` fields will be set to `None`.
+            let (
+                require_pushed_authorization_requests,
+                interactive_authorization_endpoint,
+                require_interactive_authorization_request,
+            ) = if config().enable_interactive_authorization_flow {
+                info!("Interactive authorization flow is enabled. Initializing interactive authorization endpoints in server metadata.");
+
+                (None, Some(public_url.append_path_segment("auth/par")), Some(true))
+            } else {
+                info!("Interactive authorization flow is disabled. Interactive authorization endpoints will not be included in the server metadata.");
+
+                (Some(true), None, None)
+            };
+
             let command = ServerConfigCommand::InitializeServerMetadata {
                 // TODO: Move this to `agent_authorization`.
                 authorization_server_metadata: Box::new(AuthorizationServerMetadata {
@@ -152,8 +172,9 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                     authorization_endpoint: Some(public_url.append_path_segment("auth/authorize")),
                     token_endpoint: Some(public_url.append_path_segment("auth/token")),
                     pushed_authorization_request_endpoint: Some(public_url.append_path_segment("auth/par")),
-                    // require_pushed_authorization_requests: Some(true),
-                    interactive_authorization_endpoint: Some(public_url.append_path_segment("auth/par")),
+                    require_pushed_authorization_requests,
+                    interactive_authorization_endpoint,
+                    require_interactive_authorization_request,
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {

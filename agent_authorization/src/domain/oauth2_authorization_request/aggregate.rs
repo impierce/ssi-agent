@@ -62,6 +62,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
 
     async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;
+        use OAuth2AuthorizationRequestError::*;
         use OAuth2AuthorizationRequestEvent::*;
 
         info!("Handling command: {:?}", command);
@@ -81,7 +82,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                             .openid4vp_presentation_service
                             .create_openid4vp_presentation_request(state)
                             .await
-                            .expect("FIXME"),
+                            .map_err(OpenID4VpCreationError)?,
                     )
                 } else {
                     None
@@ -136,7 +137,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     .openid4vp_presentation_service()
                     .verify_openid4vp_response(openid4vp_response)
                     .await
-                    .expect("FIXME");
+                    .map_err(OpenID4VpVerificationError)?;
 
                 let now = chrono::Utc::now().timestamp();
                 if now > self.expires_at {

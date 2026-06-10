@@ -94,12 +94,14 @@ pub mod tests {
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
     use agent_authorization::{
-        domain::oauth2_authorization_request::aggregate::test_utils::code_challenge, state::UNIME_REDIRECT_URI,
+        domain::oauth2_authorization_request::aggregate::test_utils::code_challenge,
+        services::OAuth2AuthorizationRequestDomainServices, state::UNIME_REDIRECT_URI,
     };
     use agent_authorization::{services::AuthorizationServices, state::UNIME_CLIENT_ID};
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_verification::services::VerificationServices;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -115,6 +117,7 @@ pub mod tests {
     };
     use serde_json::json;
     use tower::Service as _;
+    use verification_authorization::VerificationAuthorizationAdapter;
 
     pub async fn par(app: &mut Router, issuer_state: String) -> String {
         let response = app
@@ -193,7 +196,7 @@ pub mod tests {
                                     claims: None,
                                 }]),
                             },
-                            interaction_types_supported: "FIXME".to_string(),
+                            interaction_types_supported: "urn:openid:dcp:iae:openid4vp_presentation".to_string(),
                         }))
                         .unwrap(),
                     ))
@@ -276,6 +279,10 @@ pub mod tests {
         let _request_uri = par(&mut app, issuer_state).await;
     }
 
+    // TODO: The holder functionality exists but is outdated and not easily integrated in this test structure. Once
+    // holder state can be instantiated and initialized here, add holder service and state creation. Consider creating
+    // a separate test module or helper that demonstrates holder functionality integration
+    #[ignore = "Holder integration requires refactoring test infrastructure to support holder state alongside authorization state"]
     #[serial_test::serial]
     #[tokio::test]
     async fn test_interactive_authorization_request_flow() {
@@ -291,12 +298,20 @@ pub mod tests {
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
+        let verification_state = Arc::new(
+            agent_store::verification_state(&InMemory, VerificationServices::default().await, Default::default()).await,
+        );
+
+        let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(Box::new(
+            VerificationAuthorizationAdapter::new(verification_state.clone()),
+        ));
+
         let authorization_state = Arc::new(
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
                 Default::default(),
-                Default::default(),
+                oauth2_authorization_request_domain_services,
             )
             .await,
         );

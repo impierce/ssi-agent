@@ -24,6 +24,9 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
     async fn create_openid4vp_presentation_request(&self, state: String) -> anyhow::Result<serde_json::Value> {
         let nonce = "nonce".to_string();
 
+        // TODO: Make claims and credential formats configurable by the client, rather than hardcoded.
+        // Currently only applicable when `enable_interactive_authorization_flow` is true. When false,
+        // the authorization server defaults to the Authorization Code flow.
         let claims: Vec<ClaimQuery> = serde_json::from_value(serde_json::json!([
             {"path": ["name"]},
             {"path": ["given_name"]},
@@ -63,6 +66,7 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
             state,
             nonce,
             dcql_query: Some(dcql_query),
+            alternative_response_mode: None,
         };
 
         command_handler(
@@ -84,7 +88,7 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         .ok_or_else(|| anyhow::anyhow!("Failed to convert to OID4VP authorization request"))?
         .clone();
 
-        // FIXME
+        // TODO:
         authorization_request.body.extension.response_mode = "iae_post".to_string();
 
         Ok(serde_json::json!(authorization_request))

@@ -31,6 +31,10 @@ pub enum InteractiveAuthorizationError {
     ExpiredAuthorizationRequestError,
     #[error("Missing redirect URI")]
     MissingRedirectUriError,
+    #[error("Missing `openid4vp_response` in the request")]
+    MissingOpenId4VPResponseError,
+    #[error("Unsupported interaction types: {0}")]
+    UnsupportedInteractionTypesError(String),
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -46,6 +50,12 @@ impl InteractiveAuthorizationService {
             authorization_request,
             interaction_types_supported,
         } = interactive_authorization_request;
+
+        if interaction_types_supported != "urn:openid:dcp:iae:openid4vp_presentation" {
+            return Err(InteractiveAuthorizationError::UnsupportedInteractionTypesError(
+                interaction_types_supported,
+            ));
+        }
 
         // TODO: Currently there is no way of validating these parameters for unknown Clients (Clients that are not
         // registered in the Authorization Server). Therefore, as of now we can only validate the request for known
@@ -132,12 +142,15 @@ impl InteractiveAuthorizationService {
         state: &AuthorizationState,
         auth_session: String,
         openid4vp_response: Option<serde_json::Value>,
-        code_verifier: Option<String>,
+        // TODO: support PKCE?
+        _code_verifier: Option<String>,
     ) -> Result<InteractiveAuthorizationResponse, InteractiveAuthorizationError> {
         let oauth2_authorization_request_id = auth_session.clone();
 
         let command = OAuth2AuthorizationRequestCommand::SubmitOpenId4VpResponse {
-            openid4vp_response: openid4vp_response.clone().expect("FIXME"),
+            openid4vp_response: openid4vp_response
+                .clone()
+                .ok_or(InteractiveAuthorizationError::MissingOpenId4VPResponseError)?,
         };
 
         command_handler(

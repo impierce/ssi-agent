@@ -332,6 +332,11 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     #[serde(serialize_with = "redact")]
     pub iota_sponsoring_service_auth: Option<String>,
+    // WARNING: When this is enabled, the authorization flow will be interactive. However, in the current form this
+    // means that the issuance flow will always include an OpenID4VP Presentation Request containing a hardcoded DCQL
+    // Query.
+    #[config(default)]
+    pub enable_interactive_authorization_flow: bool,
 }
 
 impl ApplicationConfiguration {
@@ -1171,6 +1176,7 @@ mod tests {
                   "kb-jwt_alg_values": ["ES256"]
                 },
               },
+              "enable_interactive_authorization_flow": false
             })
         );
 
