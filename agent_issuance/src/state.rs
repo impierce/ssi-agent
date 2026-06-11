@@ -389,27 +389,28 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
             }
         });
 
-    let previous_provisioned_credential_configuration_ids = public_query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .map(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .into_iter()
-                .filter_map(
-                    |(credential_configuration_id, (provisioned, _credential_configuration, _authorization))| {
-                        (provisioned
-                            && !provisioned_credential_configurations.iter().any(
-                                |provisioned_credential_configuration| {
-                                    *provisioned_credential_configuration.credential_configuration_id
-                                        == credential_configuration_id
-                                },
-                            ))
-                        .then_some(credential_configuration_id)
-                    },
-                )
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let previous_provisioned_credential_configuration_ids =
+        public_query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+            .await?
+            .map(|server_config_view| {
+                server_config_view
+                    .credential_configurations
+                    .into_iter()
+                    .filter_map(
+                        |(credential_configuration_id, (provisioned, _credential_configuration, _authorization))| {
+                            (provisioned
+                                && !provisioned_credential_configurations.iter().any(
+                                    |provisioned_credential_configuration| {
+                                        *provisioned_credential_configuration.credential_configuration_id
+                                            == credential_configuration_id
+                                    },
+                                ))
+                            .then_some(credential_configuration_id)
+                        },
+                    )
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
 
     for credential_configuration_id in previous_provisioned_credential_configuration_ids {
         let command = ServerConfigCommand::RemoveCredentialConfiguration {

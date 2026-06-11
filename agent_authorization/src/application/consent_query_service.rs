@@ -31,10 +31,11 @@ impl ConsentQueryService {
         state: &AuthorizationState,
         request_uri: String,
     ) -> Result<ConsentPageViewModel, ConsentQueryError> {
-        let authorization_request = public_query_handler(&request_uri.to_string(), &state.query.oauth2_authorization_request)
-            .await
-            .map_err(|err| ConsentQueryError::Internal(err.to_string()))?
-            .ok_or(ConsentQueryError::RequestNotFound)?;
+        let authorization_request =
+            public_query_handler(&request_uri.to_string(), &state.query.oauth2_authorization_request)
+                .await
+                .map_err(|err| ConsentQueryError::Internal(err.to_string()))?
+                .ok_or(ConsentQueryError::RequestNotFound)?;
 
         let client = public_query_handler(&authorization_request.client_id, &state.query.client)
             .await
