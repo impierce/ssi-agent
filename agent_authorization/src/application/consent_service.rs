@@ -1,7 +1,7 @@
 use crate::{
     domain::oauth2_authorization_request::command::OAuth2AuthorizationRequestCommand, state::AuthorizationState,
 };
-use agent_shared::handlers::{command_handler, public_query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler};
 use thiserror::Error;
 
 pub enum ConsentServiceResponse {
@@ -45,9 +45,7 @@ impl ConsentService {
             OAuth2AuthorizationRequestCommand::RejectConsent
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            None,
+        public_command_handler(
             &oauth_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,

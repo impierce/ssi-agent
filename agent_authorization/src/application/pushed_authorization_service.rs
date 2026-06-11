@@ -1,4 +1,4 @@
-use agent_shared::handlers::{command_handler, public_query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler};
 use oid4vci::authorization_request::AuthorizationRequest;
 use oid4vci::wallet::PushedAuthorizationResponse;
 use thiserror::Error;
@@ -80,9 +80,7 @@ impl PushedAuthorizationService {
             expires_at,
         };
 
-        command_handler(
-            state.authorization_checker.clone(),
-            None,
+        public_command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,

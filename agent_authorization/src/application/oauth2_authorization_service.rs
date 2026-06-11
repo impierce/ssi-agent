@@ -4,7 +4,7 @@ use crate::{
     },
     state::AuthorizationState,
 };
-use agent_shared::handlers::{command_handler, public_query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler};
 use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use serde::{Deserialize, Serialize};
@@ -89,15 +89,9 @@ impl OAuth2AuthorizationService {
                     expires_in: 600, // 10 minutes
                 };
 
-                command_handler(
-                    state.authorization_checker.clone(),
-                    None,
-                    &authorization_code_id,
-                    &state.command.authorization_code,
-                    command,
-                )
-                .await
-                .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
+                public_command_handler(&authorization_code_id, &state.command.authorization_code, command)
+                    .await
+                    .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
 
                 let state = oauth2_authorization_request.state;
 

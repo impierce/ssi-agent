@@ -1,5 +1,4 @@
-use crate::extractors::RequestActor;
-use crate::handlers::command_handler;
+use crate::handlers::public_command_handler;
 use agent_issuance::{nonce::command::NonceCommand, state::IssuanceState};
 use agent_shared::generate_random_string;
 use axum::{
@@ -14,24 +13,15 @@ use serde_json::json;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
-pub(crate) async fn nonce(
-    State(state): State<Arc<IssuanceState>>,
-    RequestActor(actor): RequestActor,
-) -> Result<Response, ApiError> {
+pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let fresh_c_nonce = generate_random_string();
     let command = NonceCommand::GenerateNonce {
         c_nonce: fresh_c_nonce.clone(),
     };
 
-    command_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &fresh_c_nonce,
-        &state.command.nonce,
-        command,
-    )
-    .await
-    .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    public_command_handler(&fresh_c_nonce, &state.command.nonce, command)
+        .await
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, "no-store".parse().unwrap());
