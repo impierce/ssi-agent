@@ -61,6 +61,7 @@ use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod eventsourcingdb;
 pub mod in_memory;
 pub mod mongodb;
 pub mod postgres;

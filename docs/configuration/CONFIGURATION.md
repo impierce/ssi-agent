@@ -244,6 +244,7 @@ The event store is used to persist events and serves as UniCore's persistence la
 | ----------------------------------------- | ------------------------------- |
 | `UNICORE__EVENT_STORE__TYPE`              | `event_store.type`              |
 | `UNICORE__EVENT_STORE__CONNECTION_STRING` | `event_store.connection_string` |
+| `UNICORE__EVENT_STORE__API_TOKEN`         | `event_store.api_token`         |
 
 #### Values
 
@@ -251,18 +252,24 @@ The event store is used to persist events and serves as UniCore's persistence la
 
 - `mongodb` _(default)_
 - `postgres`
+- `eventsourcingdb`
 - `in_memory`
 
 ##### `connection_string`
 
-Only required when `type` is `postgres`.
+Required for all non-`in_memory` backends.
+
+##### `api_token`
+
+Required when `type` is `eventsourcingdb`.
 
 #### Example
 
 ```yaml
 event_store:
-  type: postgres
-  connection_string: postgresql://user:password@database:5432/demo
+  type: eventsourcingdb
+  connection_string: http://localhost:3000
+  api_token: your-esdb-api-token
 ```
 
 <!--

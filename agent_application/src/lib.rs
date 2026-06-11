@@ -14,7 +14,9 @@ use agent_issuance::{
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
-use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
+use agent_store::{
+    eventsourcingdb::EventSourcingDb, in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher,
+};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
 use std::sync::Arc;
@@ -122,6 +124,41 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
+
+                let issuance_state =
+                    Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
+
+                let issuer_metadata_synchronization_policy =
+                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+
+                (
+                    Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
+                    Arc::new(
+                        agent_store::library_state(
+                            &builder,
+                            library_event_publishers,
+                            vec![Box::new(issuer_metadata_synchronization_policy)],
+                        )
+                        .await,
+                    ),
+                    Arc::new(
+                        agent_store::authorization_state(
+                            &builder,
+                            authorization_services,
+                            authorization_event_publishers,
+                        )
+                        .await,
+                    ),
+                    issuance_state,
+                    Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
+                    Arc::new(
+                        agent_store::verification_state(&builder, verification_services, verification_event_publishers)
+                            .await,
+                    ),
+                )
+            }
+            EventStoreType::EventSourcingDb => {
+                let builder = EventSourcingDb::new().await;
 
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);

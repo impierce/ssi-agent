@@ -113,7 +113,8 @@ pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
             type_: EventStoreType::InMemory,
-            connection_string: None
+            connection_string: None,
+            api_token: None
         }")]
     pub event_store: EventStoreConfig,
     #[config(
@@ -393,6 +394,12 @@ impl ApplicationConfiguration {
             ));
         }
 
+        if self.event_store.type_ == EventStoreType::EventSourcingDb && self.event_store.api_token.is_none() {
+            return Err(SharedError::ConfigurationNotSuitableForProduction(
+                "Event store API token must be provided when using EventSourcingDB".to_string(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -468,6 +475,8 @@ pub struct EventStoreConfig {
     pub type_: EventStoreType,
     #[serde(serialize_with = "redact")]
     pub connection_string: Option<String>,
+    #[serde(serialize_with = "redact")]
+    pub api_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq, Default, Serialize)]
@@ -477,6 +486,8 @@ pub enum EventStoreType {
     #[default]
     #[serde(rename = "mongodb")]
     MongoDb,
+    #[serde(rename = "eventsourcingdb")]
+    EventSourcingDb,
     // Postgres(EventStorePostgresConfig), // <== TODO: "config-rs" panics with "unreachable code", other solution?
     Postgres,
 }
@@ -1058,10 +1069,14 @@ mod tests {
         let value = EventStoreConfig {
             type_: EventStoreType::Postgres,
             connection_string: Some("postgres://localhost:5432".to_string()),
+            api_token: Some("super-secret".to_string()),
         };
 
         let json = serde_json::to_value(&value).unwrap();
-        assert_eq!(json, json!({"type": "postgres", "connection_string": "<REDACTED>"}));
+        assert_eq!(
+            json,
+            json!({"type": "postgres", "connection_string": "<REDACTED>", "api_token": "<REDACTED>"})
+        );
     }
 
     #[test]
@@ -1070,6 +1085,7 @@ mod tests {
         let value = EventStoreConfig {
             type_: EventStoreType::InMemory,
             connection_string: None,
+            api_token: None,
         };
 
         let json = serde_json::to_value(&value).unwrap();
@@ -1308,6 +1324,40 @@ mod tests {
                 assert_eq!(
                     config.unwrap_err().to_string(),
                     "Configuration is not suitable for production: Event store connection string must be provided"
+                );
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_production_config_requires_eventsourcingdb_api_token() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__EVENT_STORE__CONNECTION_STRING", Some("http://localhost:3000")),
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::File::from_str(
+                        r#"
+                            application_url: "http://localhost"
+                            event_store:
+                                type: "eventsourcingdb"
+                            display:
+                                - name: "UniCore"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
+
+                let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production);
+
+                assert_eq!(
+                    config.unwrap_err().to_string(),
+                    "Configuration is not suitable for production: Event store API token must be provided when using EventSourcingDB"
                 );
             },
         );
