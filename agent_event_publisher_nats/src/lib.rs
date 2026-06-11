@@ -4,8 +4,8 @@ use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
-    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ReissuanceEventPublisher,
+    ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
 };
 use async_nats::Client;
 use async_trait::async_trait;
@@ -164,6 +164,10 @@ impl EventPublisher for EventPublisherNats {
     }
 
     fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
+        None
+    }
+
+    fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
         None
     }
 }

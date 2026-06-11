@@ -35,6 +35,8 @@ use agent_issuance::credential::views::CredentialView;
 use agent_issuance::nonce::views::NonceView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
+use agent_issuance::reissuance::views::all_reissuances::AllReissuancesView;
+use agent_issuance::reissuance::views::ReissuanceView;
 use agent_issuance::server_config::views::ServerConfigView;
 use agent_issuance::status_list::aggregate::StatusListAggregate;
 use agent_issuance::status_list::views::all_status_lists::AllStatusListsView;
@@ -42,7 +44,7 @@ use agent_issuance::status_list::views::StatusListView;
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
-    server_config::aggregate::ServerConfig,
+    reissuance::aggregate::Reissuance, server_config::aggregate::ServerConfig,
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
@@ -313,6 +315,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     // Partition the event_publishers into the different aggregates.
     let Partitions {
         credential_event_publishers,
+        reissuance_event_publishers,
         offer_event_publishers,
         server_config_event_publishers,
         nonce_event_publishers,
@@ -324,6 +327,12 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
             services.clone(),
             credential_event_publishers,
+        )
+        .await;
+    let (reissuance_command_handler, reissuance, all_reissuances) = builder
+        .commands_and_queries::<ReissuanceView, Reissuance, AllReissuancesView>(
+            services.clone(),
+            reissuance_event_publishers,
         )
         .await;
     let (offer_command_handler, offer, all_offers) = builder
@@ -348,6 +357,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     agent_issuance::state::IssuanceState {
         command: agent_issuance::state::CommandHandlers {
             credential: credential_command_handler,
+            reissuance: reissuance_command_handler,
             offer: offer_command_handler,
             server_config: server_config_command_handler,
             nonce: nonce_command_handler,
@@ -357,6 +367,8 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             server_config,
             credential,
             all_credentials,
+            reissuance,
+            all_reissuances,
             offer,
             all_offers,
             nonce,
@@ -458,6 +470,7 @@ pub type OAuth2AuthorizationRequestEventPublisher = Box<dyn Query<OAuth2Authoriz
 pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
+pub type ReissuanceEventPublisher = Box<dyn Query<Reissuance>>;
 pub type StatusListEventPublisher = Box<dyn Query<StatusListAggregate>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
 pub type NonceEventPublisher = Box<dyn Query<Nonce>>;
@@ -480,6 +493,7 @@ pub struct Partitions {
     pub access_token_event_publishers: Vec<AccessTokenEventPublisher>,
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
+    pub reissuance_event_publishers: Vec<ReissuanceEventPublisher>,
     pub status_list_event_publishers: Vec<StatusListEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
     pub nonce_event_publishers: Vec<NonceEventPublisher>,
@@ -508,6 +522,7 @@ pub trait EventPublisher {
 
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher>;
     fn credential(&mut self) -> Option<CredentialEventPublisher>;
+    fn reissuance(&mut self) -> Option<ReissuanceEventPublisher>;
     fn offer(&mut self) -> Option<OfferEventPublisher>;
     fn nonce(&mut self) -> Option<NonceEventPublisher>;
     fn status_list(&mut self) -> Option<StatusListEventPublisher>;
@@ -557,6 +572,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(credential) = event_publisher.credential() {
                 partitions.credential_event_publishers.push(credential);
+            }
+            if let Some(reissuance) = event_publisher.reissuance() {
+                partitions.reissuance_event_publishers.push(reissuance);
             }
             if let Some(offer) = event_publisher.offer() {
                 partitions.offer_event_publishers.push(offer);
@@ -652,6 +670,10 @@ mod test {
             None
         }
 
+        fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
+            None
+        }
+
         fn offer(&mut self) -> Option<OfferEventPublisher> {
             None
         }
@@ -726,6 +748,10 @@ mod test {
             None
         }
 
+        fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
+            None
+        }
+
         fn offer(&mut self) -> Option<OfferEventPublisher> {
             None
         }
@@ -772,6 +798,7 @@ mod test {
             access_token_event_publishers: token_event_publishers,
             server_config_event_publishers,
             credential_event_publishers,
+            reissuance_event_publishers,
             offer_event_publishers,
             nonce_event_publishers,
             status_list_event_publishers,
@@ -792,6 +819,7 @@ mod test {
         assert_eq!(token_event_publishers.len(), 0);
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
+        assert_eq!(reissuance_event_publishers.len(), 0);
         assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
         assert_eq!(nonce_event_publishers.len(), 0);
