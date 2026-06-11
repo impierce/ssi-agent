@@ -1,12 +1,7 @@
 use crate::error::ErrorWrapper;
-use axum::Extension;
 use cqrs_es::{persist::ViewRepository, Aggregate, View};
 use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker};
 use std::sync::Arc;
-
-pub fn request_actor(actor: &Option<Extension<Option<Actor>>>) -> Option<Actor> {
-    actor.as_ref().and_then(|Extension(actor)| actor.clone())
-}
 
 /// Wrapping the `command_handler` function from the `agent_shared` crate to handle errors.
 pub async fn command_handler<A>(

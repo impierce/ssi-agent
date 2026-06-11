@@ -1,7 +1,7 @@
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -10,7 +10,7 @@ use agent_identity::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Form, Json,
+    Form, Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
@@ -45,7 +45,7 @@ pub struct AddConnectionEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(AddConnectionEndpointRequest { url }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
@@ -58,7 +58,7 @@ pub(crate) async fn post_connection(
 
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &connection_id,
         &state.command.connection,
         command,
@@ -68,7 +68,7 @@ pub(crate) async fn post_connection(
     // Return the connection.
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &connection_id,
         &state.query.connection,
     )
@@ -113,12 +113,12 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let filtered_connections = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_connections",
         &state.query.all_connections,
     )
@@ -158,12 +158,12 @@ pub(crate) async fn get_connections(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &id,
         &state.query.connection,
     )
@@ -194,7 +194,7 @@ pub struct SyncConnectionRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(SyncConnectionRequest { id }): Json<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
@@ -202,7 +202,7 @@ pub(crate) async fn sync_connection(
     };
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &id,
         &state.command.connection,
         command,
@@ -231,7 +231,7 @@ pub struct AcceptConnectionChangesRequest {
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(AcceptConnectionChangesRequest { id }): Json<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
@@ -239,7 +239,7 @@ pub(crate) async fn accept_connection_changes(
     };
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &id,
         &state.command.connection,
         command,
@@ -268,7 +268,7 @@ pub struct RemoveConnectionRequest {
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(RemoveConnectionRequest { id }): Json<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
@@ -276,7 +276,7 @@ pub(crate) async fn remove_connection(
     };
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &id,
         &state.command.connection,
         command,

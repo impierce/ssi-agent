@@ -1,16 +1,16 @@
 pub mod accept;
 pub mod reject;
 
-use crate::handlers::{query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::query_handler;
 use agent_holder::{offer::aggregate::Offer, state::HolderState};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// List all offers
@@ -28,11 +28,11 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let all_received_offers = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_received_offers",
         &state.query.all_received_offers,
     )
@@ -64,12 +64,12 @@ pub(crate) async fn offers(
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.query.received_offer,
     )

@@ -1,28 +1,28 @@
 pub mod presentation_signed;
 
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use agent_holder::{
     credential::queries::HolderCredentialView, presentation::command::PresentationCommand, state::HolderState,
 };
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn get_presentations(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let all_presentations = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_presentations",
         &state.query.all_presentations,
     )
@@ -36,12 +36,12 @@ pub(crate) async fn get_presentations(
 #[axum_macros::debug_handler]
 pub(crate) async fn presentation(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &presentation_id,
         &state.query.presentation,
     )
@@ -59,7 +59,7 @@ pub struct PresentationsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(PresentationsEndpointRequest { credential_ids }): Json<PresentationsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let mut credentials = vec![];
@@ -68,7 +68,7 @@ pub(crate) async fn post_presentations(
     for credential_id in credential_ids {
         match query_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &credential_id,
             &state.query.holder_credential,
         )
@@ -94,7 +94,7 @@ pub(crate) async fn post_presentations(
     // Create the presentation.
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &presentation_id,
         &state.command.presentation,
         command,
@@ -103,7 +103,7 @@ pub(crate) async fn post_presentations(
 
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &presentation_id,
         &state.query.presentation,
     )

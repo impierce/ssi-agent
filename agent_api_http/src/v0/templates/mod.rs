@@ -1,5 +1,6 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -9,12 +10,11 @@ use agent_library::template::command::TemplateCommand;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Actor;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
@@ -105,7 +105,7 @@ pub struct CreateTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(CreateTemplateEndpointRequest {
         title,
         display,
@@ -142,7 +142,7 @@ pub(crate) async fn create_template(
 
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &template_id,
         &state.command.template,
         command,
@@ -152,7 +152,7 @@ pub(crate) async fn create_template(
     // Return the template.
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &template_id,
         &state.query.template,
     )
@@ -194,14 +194,14 @@ pub struct DuplicateTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(DuplicateTemplateEndpointRequest { source_template_id }): Json<DuplicateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
     let original_template = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &source_template_id,
         &state.query.template,
     )
@@ -233,7 +233,7 @@ pub(crate) async fn duplicate_template(
 
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &new_template_id,
         &state.command.template,
         command,
@@ -243,7 +243,7 @@ pub(crate) async fn duplicate_template(
     // Return the duplicated template.
     let new_template = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &new_template_id,
         &state.query.template,
     )
@@ -292,7 +292,7 @@ pub struct UpdateTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(UpdateTemplateEndpointRequest {
         template_id,
         title,
@@ -319,7 +319,7 @@ pub(crate) async fn update_template(
 
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &template_id,
         &state.query.template,
     )
@@ -339,7 +339,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -354,7 +354,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -369,7 +369,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -384,7 +384,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -399,7 +399,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -414,7 +414,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -429,7 +429,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -444,7 +444,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -459,7 +459,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -474,7 +474,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -489,7 +489,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -504,7 +504,7 @@ pub(crate) async fn update_template(
         };
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &template_id,
             &state.command.template,
             command,
@@ -530,11 +530,11 @@ pub(crate) async fn update_template(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_templates(
     State(state): State<Arc<LibraryState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let filtered_templates = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_templates",
         &state.query.all_templates,
     )
@@ -572,12 +572,12 @@ pub(crate) async fn get_templates(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &template_id,
         &state.query.template,
     )
@@ -615,7 +615,7 @@ pub struct DeleteTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
@@ -628,7 +628,7 @@ pub(crate) async fn delete_template(
 
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &template_id,
         &state.query.template,
     )
@@ -647,7 +647,7 @@ pub(crate) async fn delete_template(
 
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &template_id,
         &state.command.template,
         command,

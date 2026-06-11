@@ -1,22 +1,22 @@
-use crate::handlers::{command_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::command_handler;
 use agent_holder::{offer::command::OfferCommand, state::HolderState};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Extension, Form,
+    Form,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use serde_json::Value;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 use tracing::info;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn offers_params(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     // TODO: Can this be changed to `StringifiedForm`?
     Form(payload): Form<serde_json::Value>,
 ) -> Result<Response, ApiError> {
@@ -47,7 +47,7 @@ pub(crate) async fn offers_params(
     // Add the Credential Offer to the state.
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.command.offer,
         command,

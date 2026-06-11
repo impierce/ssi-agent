@@ -1,4 +1,5 @@
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{
@@ -11,11 +12,10 @@ use agent_holder::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Accept a credential offer
@@ -34,7 +34,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the
@@ -45,7 +45,7 @@ pub(crate) async fn accept(
     // Check if the Credential Offer exists.
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.query.received_offer,
     )
@@ -59,7 +59,7 @@ pub(crate) async fn accept(
     // Accept the Credential Offer
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -73,7 +73,7 @@ pub(crate) async fn accept(
     // Send the Credential Request
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.command.offer,
         command,
@@ -82,7 +82,7 @@ pub(crate) async fn accept(
 
     let credentials = match query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.query.received_offer,
     )
@@ -107,7 +107,7 @@ pub(crate) async fn accept(
         // Add the Credential to the state.
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &holder_credential_id,
             &state.command.credential,
             command,
@@ -117,7 +117,7 @@ pub(crate) async fn accept(
 
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.query.received_offer,
     )

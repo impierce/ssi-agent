@@ -1,4 +1,5 @@
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
@@ -8,12 +9,11 @@ use agent_shared::config::SupportedDidMethod;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[derive(Deserialize, Serialize)]
@@ -25,7 +25,7 @@ pub struct LinkedVPEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn linked_vp(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let service_id = "linked-verifiable-presentation-service".to_string();
@@ -38,7 +38,7 @@ pub(crate) async fn linked_vp(
     // Create a linked verifiable presentation service.
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &service_id,
         &state.command.service,
         command,
@@ -47,7 +47,7 @@ pub(crate) async fn linked_vp(
 
     let linked_verifiable_presentation_service = match query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &service_id,
         &state.query.service,
     )
@@ -64,7 +64,7 @@ pub(crate) async fn linked_vp(
     // Query all DID Documents that require an update.
     let document_ids: Vec<String> = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_documents",
         &state.query.all_documents,
     )
@@ -94,7 +94,7 @@ pub(crate) async fn linked_vp(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             document_id,
             &state.command.document,
             command,
@@ -108,7 +108,7 @@ pub(crate) async fn linked_vp(
 
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_documents",
         &state.query.all_documents,
     )

@@ -1,5 +1,6 @@
 use crate::error::type_url;
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -15,7 +16,6 @@ use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Extension,
 };
 use http_api_problem::ApiError;
 use hyper::header;
@@ -23,7 +23,6 @@ use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Get credential by ID
@@ -41,12 +40,12 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &credential_id,
         &state.query.credential,
     )
@@ -83,7 +82,7 @@ pub struct CredentialsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(CredentialsEndpointRequest {
         offer_id,
         credential,
@@ -96,7 +95,7 @@ pub(crate) async fn credentials(
 
     let (_, credential_configuration, authorization) = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         SERVER_CONFIG_ID,
         &state.query.server_config,
     )
@@ -152,7 +151,7 @@ pub(crate) async fn credentials(
     // Create an unsigned/signed credential.
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &credential_id,
         &state.command.credential,
         command,
@@ -162,7 +161,7 @@ pub(crate) async fn credentials(
     // Create an offer if it does not exist yet.
     if query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &offer_id,
         &state.query.offer,
     )
@@ -191,7 +190,7 @@ pub(crate) async fn credentials(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &offer_id,
             &state.command.offer,
             command,
@@ -208,7 +207,7 @@ pub(crate) async fn credentials(
     // Add the credential to the offer.
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &offer_id,
         &state.command.offer,
         command,
@@ -218,7 +217,7 @@ pub(crate) async fn credentials(
     // Return the credential.
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &credential_id,
         &state.query.credential,
     )
@@ -250,11 +249,11 @@ pub(crate) async fn credentials(
 #[axum_macros::debug_handler]
 pub(crate) async fn all_credentials(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let all_credentials = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_credentials",
         &state.query.all_credentials,
     )
@@ -274,7 +273,7 @@ pub struct PatchCredentialEndpointRequest {
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(credential_id): Path<String>,
     Json(PatchCredentialEndpointRequest {
         credential_status: status,
@@ -282,7 +281,7 @@ pub async fn patch_credential(
 ) -> Result<Response, ApiError> {
     if let Some(credential) = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &credential_id,
         &state.query.credential,
     )
@@ -301,7 +300,7 @@ pub async fn patch_credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &credential_id,
             &state.command.credential,
             command,
@@ -321,7 +320,7 @@ pub async fn patch_credential(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             status_list_id,
             &state.command.status_list,
             command,

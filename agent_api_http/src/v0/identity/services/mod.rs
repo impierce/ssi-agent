@@ -1,25 +1,25 @@
 pub mod linked_vp;
 
-use crate::handlers::{query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::query_handler;
 use agent_identity::state::IdentityState;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn services(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let all_services = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_services",
         &state.query.all_services,
     )
@@ -33,12 +33,12 @@ pub(crate) async fn services(
 #[axum_macros::debug_handler]
 pub(crate) async fn service(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(service_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &service_id,
         &state.query.service,
     )

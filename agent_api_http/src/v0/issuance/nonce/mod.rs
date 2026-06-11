@@ -1,13 +1,12 @@
-use crate::handlers::{command_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::command_handler;
 use agent_issuance::{nonce::command::NonceCommand, state::IssuanceState};
 use agent_shared::generate_random_string;
 use axum::{
     extract::State,
     http::{header::CACHE_CONTROL, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    Extension,
 };
-use shared_kernel::authorization::Actor;
 
 use axum::Json;
 use http_api_problem::ApiError;
@@ -17,7 +16,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn nonce(
     State(state): State<Arc<IssuanceState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let fresh_c_nonce = generate_random_string();
     let command = NonceCommand::GenerateNonce {
@@ -26,7 +25,7 @@ pub(crate) async fn nonce(
 
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &fresh_c_nonce,
         &state.command.nonce,
         command,

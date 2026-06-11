@@ -1,13 +1,12 @@
-use crate::handlers::{command_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::command_handler;
 use agent_holder::{offer::command::OfferCommand, state::HolderState};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Rejects a credential offer
@@ -25,7 +24,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn reject(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::RejectCredentialOffer {
@@ -35,7 +34,7 @@ pub(crate) async fn reject(
     // Remove the Credential Offer from the state.
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &received_offer_id,
         &state.command.offer,
         command,

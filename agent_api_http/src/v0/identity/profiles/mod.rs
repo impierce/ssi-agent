@@ -1,5 +1,6 @@
 use crate::error::IntoApiErrorExt;
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use crate::utils::serde_explicit_null;
 use agent_identity::profile::aggregate::Source;
 use agent_identity::profile::command::ProfileCommand;
@@ -9,13 +10,12 @@ use agent_shared::config::Logo;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -46,7 +46,7 @@ pub struct PatchProfileEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_profile(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(PatchProfileEndpointRequest {
         display_name,
         description,
@@ -64,7 +64,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &profile_id,
             &state.command.profile,
             command,
@@ -80,7 +80,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &profile_id,
             &state.command.profile,
             command,
@@ -96,7 +96,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &profile_id,
             &state.command.profile,
             command,
@@ -112,7 +112,7 @@ pub(crate) async fn patch_profile(
 
         command_handler(
             state.authorization_checker.clone(),
-            request_actor(&actor),
+            actor.clone(),
             &profile_id,
             &state.command.profile,
             command,
@@ -153,11 +153,11 @@ struct GetProfileEndpointResponse {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_profile(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         PROFILE_ID,
         &state.query.profile,
     )

@@ -1,4 +1,5 @@
-use crate::handlers::{command_handler, query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
     state::HolderState,
@@ -6,13 +7,12 @@ use agent_holder::{
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// List all credentials
@@ -30,11 +30,11 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let all_credentials = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_holder_credentials",
         &state.query.all_holder_credentials,
     )
@@ -54,7 +54,7 @@ pub struct HolderCredentialsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
@@ -67,7 +67,7 @@ pub(crate) async fn post_credentials(
 
     command_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &holder_credential_id,
         &state.command.credential,
         command,
@@ -76,7 +76,7 @@ pub(crate) async fn post_credentials(
 
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &holder_credential_id,
         &state.query.holder_credential,
     )
@@ -102,12 +102,12 @@ pub(crate) async fn post_credentials(
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(holder_credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &holder_credential_id,
         &state.query.holder_credential,
     )

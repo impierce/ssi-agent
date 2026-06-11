@@ -2,6 +2,7 @@ pub mod public;
 pub mod v0;
 
 pub mod error;
+pub mod extractors;
 pub mod handlers;
 pub mod metrics;
 pub mod utils;
@@ -179,25 +180,23 @@ impl ToActor for HttpActorInput<'_> {
     }
 }
 
-/// Extract an optional actor from the request headers and store it in the
-/// request extensions before continuing.
+/// Extract an optional actor from the request headers and store it in the request extensions when present.
 pub async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
 where
     E: ActorExtractor,
 {
     let input = HttpActorInput::from_headers(request.headers());
-    let actor = actor_extractor.extract_actor(&input);
 
-    request.extensions_mut().insert(actor);
+    if let Some(actor) = actor_extractor.extract_actor(&input) {
+        request.extensions_mut().insert(actor);
+    }
 
     next.run(request).await
 }
 
-/// Require a valid actor in the request headers, returning `401 Unauthorized`
-/// when none is present.
+/// Require a valid actor in the request headers, returning `401 Unauthorized` when none is present.
 ///
-/// When an actor is found, it is inserted into the request extensions before
-/// the request is forwarded to the next handler.
+/// When an actor is found, it is inserted into the request extensions before the request is forwarded to the next handler.
 pub async fn require_actor<E>(
     State(actor_extractor): State<Arc<E>>,
     mut request: Request,
@@ -207,13 +206,12 @@ where
     E: ActorExtractor,
 {
     let input = HttpActorInput::from_headers(request.headers());
-    let actor = actor_extractor.extract_actor(&input);
 
-    if actor.is_none() {
+    if let Some(actor) = actor_extractor.extract_actor(&input) {
+        request.extensions_mut().insert(actor);
+    } else {
         return Err(StatusCode::UNAUTHORIZED);
     }
-
-    request.extensions_mut().insert(actor);
 
     Ok(next.run(request).await)
 }
@@ -221,8 +219,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::extractors::RequestActor;
     use agent_shared::config::config;
-    use axum::{body::Body, extract::Extension, routing::get};
+    use axum::{body::Body, routing::get};
     use http::Request;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -367,7 +366,7 @@ mod tests {
         }
     }
 
-    async fn actor_subject(Extension(actor): Extension<Option<Actor>>) -> String {
+    async fn actor_subject(RequestActor(actor): RequestActor) -> String {
         actor
             .map(|actor| actor.subject)
             .unwrap_or_else(|| "anonymous".to_string())

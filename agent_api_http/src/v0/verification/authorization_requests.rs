@@ -1,5 +1,6 @@
+use crate::extractors::RequestActor;
 use crate::{
-    handlers::{command_handler, query_handler, request_actor},
+    handlers::{command_handler, query_handler},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
@@ -8,23 +9,22 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::header;
 use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 #[axum_macros::debug_handler]
 pub(crate) async fn all_authorization_requests(
     State(state): State<Arc<VerificationState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
     let all_authorization_requests = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_authorization_requests",
         &state.query.all_authorization_requests,
     )
@@ -43,12 +43,12 @@ pub(crate) async fn all_authorization_requests(
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(authorization_request_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &authorization_request_id,
         &state.query.authorization_request,
     )
@@ -66,7 +66,7 @@ pub struct AuthorizationRequestsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<Arc<VerificationState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Json(AuthorizationRequestsEndpointRequest { state, dcql_query }): Json<AuthorizationRequestsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
@@ -81,7 +81,7 @@ pub(crate) async fn authorization_requests(
     // Create the authorization request.
     command_handler(
         verification_state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &state,
         &verification_state.command.authorization_request,
         command,
@@ -91,7 +91,7 @@ pub(crate) async fn authorization_requests(
     // Sign the authorization request object.
     command_handler(
         verification_state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
@@ -101,7 +101,7 @@ pub(crate) async fn authorization_requests(
     // Return the authorization_request.
     query_handler(
         verification_state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &state,
         &verification_state.query.authorization_request,
     )

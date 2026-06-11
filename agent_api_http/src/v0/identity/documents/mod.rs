@@ -1,15 +1,15 @@
-use crate::handlers::{query_handler, request_actor};
+use crate::extractors::RequestActor;
+use crate::handlers::query_handler;
 use agent_identity::{document::aggregate::Document, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
 use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Response},
-    Extension, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 use tracing::debug;
 
@@ -35,14 +35,14 @@ pub struct GetDocumentsEndpoint {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_documents(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Query(GetDocumentsEndpoint { did_method }): Query<GetDocumentsEndpoint>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
 
     let filtered_documents = query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         "all_documents",
         &state.query.all_documents,
     )
@@ -81,12 +81,12 @@ pub(crate) async fn get_documents(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_document(
     State(state): State<Arc<IdentityState>>,
-    actor: Option<Extension<Option<Actor>>>,
+    RequestActor(actor): RequestActor,
     Path(document_id): Path<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
-        request_actor(&actor),
+        actor.clone(),
         &document_id,
         &state.query.document,
     )
