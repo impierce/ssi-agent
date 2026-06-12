@@ -187,7 +187,7 @@ where
 {
     let input = HttpActorInput::from_headers(request.headers());
 
-    if let Some(actor) = actor_extractor.extract_actor(&input) {
+    if let Some(actor) = actor_extractor.extract_actor(&input).await {
         request.extensions_mut().insert(actor);
     }
 
@@ -207,7 +207,7 @@ where
 {
     let input = HttpActorInput::from_headers(request.headers());
 
-    if let Some(actor) = actor_extractor.extract_actor(&input) {
+    if let Some(actor) = actor_extractor.extract_actor(&input).await {
         request.extensions_mut().insert(actor);
     } else {
         return Err(StatusCode::UNAUTHORIZED);
@@ -342,8 +342,9 @@ mod tests {
     #[derive(Clone)]
     struct MappingActorExtractor;
 
+    #[async_trait::async_trait]
     impl ActorExtractor for MappingActorExtractor {
-        fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+        async fn extract_actor(&self, input: &(dyn ToActor + Sync)) -> Option<Actor> {
             input.to_actor().and_then(|actor| {
                 (actor.subject == "valid-token").then(|| Actor {
                     subject: "user@example.test".to_string(),
@@ -355,8 +356,9 @@ mod tests {
     #[derive(Clone)]
     struct CustomHeaderActorExtractor;
 
+    #[async_trait::async_trait]
     impl ActorExtractor for CustomHeaderActorExtractor {
-        fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+        async fn extract_actor(&self, input: &(dyn ToActor + Sync)) -> Option<Actor> {
             input
                 .auth_value("x-custom-actor-token")
                 .filter(|token| *token == "valid-token")

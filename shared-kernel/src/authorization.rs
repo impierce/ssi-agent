@@ -8,7 +8,7 @@ pub struct Actor {
 }
 
 /// Adapter trait for request-like inputs that can expose actor information.
-pub trait ToActor {
+pub trait ToActor: Sync {
     /// Returns the actor represented by this input, if one can be derived.
     fn to_actor(&self) -> Option<Actor>;
 
@@ -19,17 +19,19 @@ pub trait ToActor {
 }
 
 /// Extracts an [`Actor`] from an input object.
+#[async_trait]
 pub trait ActorExtractor: Send + Sync + 'static {
     /// Returns the actor that should be attached to the application operation.
-    fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor>;
+    async fn extract_actor(&self, input: &(dyn ToActor + Sync)) -> Option<Actor>;
 }
 
 /// Actor extractor used when no actor context should be attached.
 #[derive(Clone)]
 pub struct NoActorExtractor;
 
+#[async_trait]
 impl ActorExtractor for NoActorExtractor {
-    fn extract_actor(&self, _input: &dyn ToActor) -> Option<Actor> {
+    async fn extract_actor(&self, _input: &(dyn ToActor + Sync)) -> Option<Actor> {
         None
     }
 }
