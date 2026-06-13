@@ -8,7 +8,7 @@ use crate::{
 use agent_issuance::{application::access_token_validation_service::AccessTokenClaims, state::IssuanceState};
 use agent_shared::{
     config::{config, get_preferred_did_method, get_preferred_signing_algorithm},
-    handlers::{command_handler, public_query_handler},
+    handlers::{public_command_handler, public_query_handler},
 };
 use jsonwebtoken;
 use oid4vc_core::jwt;
@@ -130,15 +130,9 @@ impl TokenIssuanceService {
                     code_verifier,
                 };
 
-                command_handler(
-                    authorization_state.authorization_checker.clone(),
-                    None,
-                    &code,
-                    &authorization_state.command.authorization_code,
-                    command,
-                )
-                .await
-                .map_err(|err| TokenIssuanceError::InvalidAuthorizationCodeError(err.to_string()))?;
+                public_command_handler(&code, &authorization_state.command.authorization_code, command)
+                    .await
+                    .map_err(|err| TokenIssuanceError::InvalidAuthorizationCodeError(err.to_string()))?;
 
                 let issuer_state = public_query_handler(&code, &authorization_state.query.authorization_code)
                     .await
@@ -169,15 +163,9 @@ impl TokenIssuanceService {
             issuer_state,
         };
 
-        command_handler(
-            authorization_state.authorization_checker.clone(),
-            None,
-            &access_token_id,
-            &authorization_state.command.access_token,
-            command,
-        )
-        .await
-        .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
+        public_command_handler(&access_token_id, &authorization_state.command.access_token, command)
+            .await
+            .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
 
         let AccessTokenView {
             access_token_id,

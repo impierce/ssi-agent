@@ -106,6 +106,18 @@ where
         .await
         .map_err(CommandHandlerError::Authorization)?;
 
+    public_command_handler(aggregate_id, state, command).await
+}
+
+pub async fn public_command_handler<A>(
+    aggregate_id: &str,
+    state: &CommandHandler<A>,
+    command: A::Command,
+) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
+where
+    A: Aggregate,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+{
     let mut metadata = HashMap::new();
     let timestamp = time::OffsetDateTime::now_utc()
         .format(&Rfc3339)
