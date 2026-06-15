@@ -4,6 +4,7 @@ use crate::{
     handlers::{command_handler, query_handler},
     v0::issuance::error::internal_server_error,
     v0::issuance::error::PublicError,
+    v0::issuance::public_offers::increment_public_offer_claims,
 };
 use agent_issuance::{
     application::{
@@ -184,6 +185,7 @@ pub(crate) async fn credential(
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
     command_handler(&offer_id, &state.command.offer, command).await?;
+    increment_public_offer_claims(&offer_id);
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
     query_handler(&offer_id, &state.query.offer)

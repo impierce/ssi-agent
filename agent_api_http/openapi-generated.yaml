@@ -123,6 +123,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/create-public-offer:
+    post:
+      tags:
+      - Issuance
+      summary: Create a public offer mapping
+      operationId: create_public_offer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePublicOfferRequest'
+        required: true
+      responses:
+        '201':
+          description: Public offer created successfully
+        '404':
+          description: Offer not found
   /v0/credential-configurations:
     post:
       tags:
@@ -242,6 +259,21 @@ paths:
                 $ref: '#/components/schemas/Document'
         '404':
           description: Document not found
+  /v0/get-all-public-offers:
+    get:
+      tags:
+      - Issuance
+      summary: Get all public offers
+      operationId: all_public_offers
+      responses:
+        '200':
+          description: Public offers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicOfferStatusDto'
   /v0/holder/credentials:
     get:
       tags:
@@ -465,6 +497,57 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+  /v0/remove-public-offer/{offer_id}:
+    delete:
+      tags:
+      - Issuance
+      summary: Delete a public offer
+      operationId: delete_public_offer
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Public offer deleted
+        '404':
+          description: Public offer not found
+  /v0/take-public-offer-offline/{offer_id}:
+    post:
+      tags:
+      - Issuance
+      summary: Take a public offer offline
+      operationId: take_public_offer_offline
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Public offer is now inactive
+        '404':
+          description: Public offer not found
+  /v0/take-public-offer-online/{offer_id}:
+    post:
+      tags:
+      - Issuance
+      summary: Take a public offer online
+      operationId: take_public_offer_online
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Public offer is now active
+        '404':
+          description: Public offer not found
   /v0/templates/create-template:
     post:
       tags:
@@ -670,6 +753,16 @@ components:
           type:
           - string
           - 'null'
+    CreatePublicOfferRequest:
+      type: object
+      required:
+      - offerId
+      - templateId
+      properties:
+        offerId:
+          type: string
+        templateId:
+          type: string
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -1281,6 +1374,29 @@ components:
       properties:
         selectivelyDisclosable:
           type: boolean
+    PublicOfferStatus:
+      type: string
+      enum:
+      - Active
+      - Inactive
+    PublicOfferStatusDto:
+      type: object
+      required:
+      - id
+      - templateId
+      - amountIssued
+      - status
+      properties:
+        amountIssued:
+          type: integer
+          format: int64
+          minimum: 0
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/PublicOfferStatus'
+        templateId:
+          type: string
     RemoveConnectionRequest:
       type: object
       required:
