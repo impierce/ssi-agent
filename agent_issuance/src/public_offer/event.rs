@@ -11,15 +11,12 @@ pub enum PublicOfferEvent {
         template_id: String,
         created_at: DateTime<Utc>,
     },
-
     TakenOffline {
         offer_id: String,
     },
-
     TakenOnline {
         offer_id: String,
     },
-
     Deleted {
         offer_id: String,
     },

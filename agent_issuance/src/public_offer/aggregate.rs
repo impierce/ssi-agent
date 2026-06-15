@@ -1,6 +1,4 @@
-use crate::public_offer::{
-    command::PublicOfferCommand, error::PublicOfferError, event::PublicOfferEvent,
-};
+use crate::public_offer::{command::PublicOfferCommand, error::PublicOfferError, event::PublicOfferEvent};
 use crate::services::IssuanceServices;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
@@ -35,10 +33,7 @@ impl Aggregate for PublicOffer {
         _services: &Self::Services,
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
-            PublicOfferCommand::Create {
-                offer_id,
-                template_id,
-            } => {
+            PublicOfferCommand::Create { offer_id, template_id } => {
                 if !self.id.is_empty() {
                     return Err(PublicOfferError::AlreadyExists);
                 }
@@ -49,7 +44,6 @@ impl Aggregate for PublicOffer {
                     created_at: chrono::Utc::now(),
                 }])
             }
-
             PublicOfferCommand::TakeOffline { offer_id } => {
                 if self.id.is_empty() {
                     return Err(PublicOfferError::NotFound);
@@ -60,7 +54,6 @@ impl Aggregate for PublicOffer {
 
                 Ok(vec![PublicOfferEvent::TakenOffline { offer_id }])
             }
-
             PublicOfferCommand::TakeOnline { offer_id } => {
                 if self.id.is_empty() {
                     return Err(PublicOfferError::NotFound);
@@ -71,7 +64,6 @@ impl Aggregate for PublicOffer {
 
                 Ok(vec![PublicOfferEvent::TakenOnline { offer_id }])
             }
-
             PublicOfferCommand::Delete { offer_id } => {
                 if self.id.is_empty() {
                     return Err(PublicOfferError::NotFound);
@@ -170,10 +162,7 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::Create {
-                offer_id,
-                template_id,
-            })
+            .when(PublicOfferCommand::Create { offer_id, template_id })
             .then_expect_error(PublicOfferError::AlreadyExists);
     }
 
@@ -194,9 +183,7 @@ pub mod tests {
             .when(PublicOfferCommand::TakeOffline {
                 offer_id: offer_id.clone(),
             })
-            .then_expect_events(vec![PublicOfferEvent::TakenOffline {
-                offer_id,
-            }]);
+            .then_expect_events(vec![PublicOfferEvent::TakenOffline { offer_id }]);
     }
 
     #[rstest]
@@ -218,9 +205,7 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                 },
             ])
-            .when(PublicOfferCommand::TakeOffline {
-                offer_id,
-            })
+            .when(PublicOfferCommand::TakeOffline { offer_id })
             .then_expect_events(vec![]);
     }
 
@@ -246,9 +231,7 @@ pub mod tests {
             .when(PublicOfferCommand::TakeOnline {
                 offer_id: offer_id.clone(),
             })
-            .then_expect_events(vec![PublicOfferEvent::TakenOnline {
-                offer_id,
-            }]);
+            .then_expect_events(vec![PublicOfferEvent::TakenOnline { offer_id }]);
     }
 
     #[rstest]
@@ -265,9 +248,7 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::TakeOnline {
-                offer_id,
-            })
+            .when(PublicOfferCommand::TakeOnline { offer_id })
             .then_expect_events(vec![]);
     }
 
@@ -288,9 +269,7 @@ pub mod tests {
             .when(PublicOfferCommand::Delete {
                 offer_id: offer_id.clone(),
             })
-            .then_expect_events(vec![PublicOfferEvent::Deleted {
-                offer_id,
-            }]);
+            .then_expect_events(vec![PublicOfferEvent::Deleted { offer_id }]);
     }
 
     #[rstest]
@@ -346,9 +325,7 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::TakeOffline {
-                offer_id,
-            })
+            .when(PublicOfferCommand::TakeOffline { offer_id })
             .then_expect_events(vec![PublicOfferEvent::TakenOffline {
                 offer_id: "public-offer-123".to_string(),
             }]);
