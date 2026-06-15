@@ -16,7 +16,7 @@ pub(crate) async fn credential_offer_uri(
     State(state): State<Arc<IssuanceState>>,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    if !can_resolve_public_offer(&offer_id) {
+    if !can_resolve_public_offer(&state, &offer_id).await? {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
 

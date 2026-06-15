@@ -405,6 +405,10 @@ impl EventPublisher for EventPublisherHttp {
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
     }
 
+    fn public_offer(&mut self) -> Option<agent_store::PublicOfferEventPublisher> {
+        None
+    }
+
     fn nonce(&mut self) -> Option<NonceEventPublisher> {
         self.nonce
             .take()

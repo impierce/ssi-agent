@@ -35,6 +35,8 @@ use agent_issuance::credential::views::CredentialView;
 use agent_issuance::nonce::views::NonceView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
+use agent_issuance::public_offer::views::AllPublicOffersView;
+use agent_issuance::public_offer::views::PublicOfferView;
 use agent_issuance::server_config::views::ServerConfigView;
 use agent_issuance::status_list::aggregate::StatusListAggregate;
 use agent_issuance::status_list::views::all_status_lists::AllStatusListsView;
@@ -42,7 +44,7 @@ use agent_issuance::status_list::views::StatusListView;
 use agent_issuance::SimpleLoggingQuery;
 use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
-    server_config::aggregate::ServerConfig,
+    public_offer::aggregate::PublicOffer, server_config::aggregate::ServerConfig,
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
@@ -314,6 +316,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     let Partitions {
         credential_event_publishers,
         offer_event_publishers,
+        public_offer_event_publishers,
         server_config_event_publishers,
         nonce_event_publishers,
         status_list_event_publishers,
@@ -328,6 +331,12 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         .await;
     let (offer_command_handler, offer, all_offers) = builder
         .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers)
+        .await;
+    let (public_offer_command_handler, public_offer, all_public_offers) = builder
+        .commands_and_queries::<PublicOfferView, PublicOffer, AllPublicOffersView>(
+            services.clone(),
+            public_offer_event_publishers,
+        )
         .await;
     let (server_config_command_handler, server_config, _all_server_configs) = builder
         .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
@@ -349,6 +358,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         command: agent_issuance::state::CommandHandlers {
             credential: credential_command_handler,
             offer: offer_command_handler,
+            public_offer: public_offer_command_handler,
             server_config: server_config_command_handler,
             nonce: nonce_command_handler,
             status_list: status_list_command_handler,
@@ -359,6 +369,8 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             all_credentials,
             offer,
             all_offers,
+            public_offer,
+            all_public_offers,
             nonce,
             status_list,
             all_status_lists,
@@ -460,6 +472,7 @@ pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type StatusListEventPublisher = Box<dyn Query<StatusListAggregate>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
+pub type PublicOfferEventPublisher = Box<dyn Query<PublicOffer>>;
 pub type NonceEventPublisher = Box<dyn Query<Nonce>>;
 pub type HolderCredentialEventPublisher = Box<dyn Query<agent_holder::credential::aggregate::Credential>>;
 pub type PresentationEventPublisher = Box<dyn Query<agent_holder::presentation::aggregate::Presentation>>;
@@ -482,6 +495,7 @@ pub struct Partitions {
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub status_list_event_publishers: Vec<StatusListEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
+    pub public_offer_event_publishers: Vec<PublicOfferEventPublisher>,
     pub nonce_event_publishers: Vec<NonceEventPublisher>,
     pub holder_credential_event_publishers: Vec<HolderCredentialEventPublisher>,
     pub presentation_event_publishers: Vec<PresentationEventPublisher>,
@@ -509,6 +523,7 @@ pub trait EventPublisher {
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher>;
     fn credential(&mut self) -> Option<CredentialEventPublisher>;
     fn offer(&mut self) -> Option<OfferEventPublisher>;
+    fn public_offer(&mut self) -> Option<PublicOfferEventPublisher>;
     fn nonce(&mut self) -> Option<NonceEventPublisher>;
     fn status_list(&mut self) -> Option<StatusListEventPublisher>;
 
@@ -560,6 +575,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(offer) = event_publisher.offer() {
                 partitions.offer_event_publishers.push(offer);
+            }
+            if let Some(public_offer) = event_publisher.public_offer() {
+                partitions.public_offer_event_publishers.push(public_offer);
             }
             if let Some(nonce) = event_publisher.nonce() {
                 partitions.nonce_event_publishers.push(nonce);
@@ -656,6 +674,10 @@ mod test {
             None
         }
 
+        fn public_offer(&mut self) -> Option<PublicOfferEventPublisher> {
+            None
+        }
+
         fn nonce(&mut self) -> Option<NonceEventPublisher> {
             None
         }
@@ -727,6 +749,10 @@ mod test {
         }
 
         fn offer(&mut self) -> Option<OfferEventPublisher> {
+            None
+        }
+
+        fn public_offer(&mut self) -> Option<PublicOfferEventPublisher> {
             None
         }
 

@@ -20,6 +20,8 @@ use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
+use crate::public_offer::aggregate::PublicOffer;
+use crate::public_offer::views::{AllPublicOffersView, PublicOfferView};
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
@@ -42,6 +44,7 @@ pub struct CommandHandlers {
     pub offer: CommandHandler<Offer>,
     pub nonce: CommandHandler<Nonce>,
     pub status_list: CommandHandler<StatusListAggregate>,
+    pub public_offer: CommandHandler<PublicOffer>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -56,9 +59,11 @@ type Queries = ViewRepositories<
     dyn ViewRepository<NonceView, Nonce>,
     dyn ViewRepository<StatusListView, StatusListAggregate>,
     dyn ViewRepository<AllStatusListsView, StatusListAggregate>,
+    dyn ViewRepository<PublicOfferView, PublicOffer>,
+    dyn ViewRepository<AllPublicOffersView, PublicOffer>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1>
+pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1, PO, PO1>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
@@ -68,6 +73,8 @@ where
     N: ViewRepository<NonceView, Nonce> + ?Sized,
     SL: ViewRepository<StatusListView, StatusListAggregate> + ?Sized,
     SL1: ViewRepository<AllStatusListsView, StatusListAggregate> + ?Sized,
+    PO: ViewRepository<PublicOfferView, PublicOffer> + ?Sized,
+    PO1: ViewRepository<AllPublicOffersView, PublicOffer> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
@@ -77,6 +84,8 @@ where
     pub nonce: Arc<N>,
     pub status_list: Arc<SL>,
     pub all_status_lists: Arc<SL1>,
+    pub public_offer: Arc<PO>,
+    pub all_public_offers: Arc<PO1>,
 }
 
 impl Clone for Queries {
@@ -90,6 +99,8 @@ impl Clone for Queries {
             nonce: self.nonce.clone(),
             status_list: self.status_list.clone(),
             all_status_lists: self.all_status_lists.clone(),
+            public_offer: self.public_offer.clone(),
+            all_public_offers: self.all_public_offers.clone(),
         }
     }
 }

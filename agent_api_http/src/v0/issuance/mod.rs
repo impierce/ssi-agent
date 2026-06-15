@@ -62,8 +62,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                 .route("/take-public-offer-offline/{offer_id}", post(take_public_offer_offline))
                 .route("/take-public-offer-online/{offer_id}", post(take_public_offer_online))
                 .route(
-                    "/delete-public-offer/{offer_id}",
-                    axum::routing::delete(delete_public_offer),
+                    "/delete-public-offer/{offer_id}", post(delete_public_offer),
                 ),
         )
         .route(

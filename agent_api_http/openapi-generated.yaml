@@ -139,7 +139,7 @@ paths:
         '201':
           description: Public offer created successfully
         '404':
-          description: Offer not found
+          description: Template not found or offer already exists
   /v0/credential-configurations:
     post:
       tags:
@@ -498,7 +498,7 @@ paths:
         '200':
           description: Profile updated successfully
   /v0/remove-public-offer/{offer_id}:
-    delete:
+    post:
       tags:
       - Issuance
       summary: Delete a public offer
@@ -506,12 +506,13 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: The ID of the public offer
         required: true
         schema:
           type: string
       responses:
         '204':
-          description: Public offer deleted
+          description: Public offer deleted successfully
         '404':
           description: Public offer not found
   /v0/take-public-offer-offline/{offer_id}:
@@ -523,12 +524,13 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: The ID of the public offer
         required: true
         schema:
           type: string
       responses:
         '204':
-          description: Public offer is now inactive
+          description: Public offer taken offline successfully
         '404':
           description: Public offer not found
   /v0/take-public-offer-online/{offer_id}:
@@ -540,12 +542,13 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: The ID of the public offer
         required: true
         schema:
           type: string
       responses:
         '204':
-          description: Public offer is now active
+          description: Public offer taken online successfully
         '404':
           description: Public offer not found
   /v0/templates/create-template:
@@ -1227,6 +1230,7 @@ components:
       - credential_ids
       - pre_authorized_code
       - status
+      - successful_issuances
       properties:
         credential_ids:
           type: array
@@ -1271,6 +1275,10 @@ components:
           type:
           - string
           - 'null'
+        successful_issuances:
+          type: integer
+          format: int64
+          minimum: 0
         tx_code:
           type:
           - string

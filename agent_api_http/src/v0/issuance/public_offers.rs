@@ -1,4 +1,6 @@
-use crate::handlers::query_handler;
+use crate::handlers::{command_handler, query_handler};
+use agent_issuance::public_offer::aggregate::PublicOffer;
+use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::state::IssuanceState;
 use axum::{
     extract::{Path, State},
@@ -8,10 +10,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::{LazyLock, RwLock},
-};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -35,32 +34,17 @@ pub struct CreatePublicOfferRequest {
     pub template_id: String,
 }
 
-#[derive(Clone, Debug, Default)]
-struct PublicOfferRecord {
-    template_id: String,
-    amount_issued: u64,
-    active: bool,
-    deleted: bool,
-}
-
-static PUBLIC_OFFERS: LazyLock<RwLock<HashMap<String, PublicOfferRecord>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
-
-pub(crate) fn can_resolve_public_offer(offer_id: &str) -> bool {
-    let public_offers = PUBLIC_OFFERS.read().expect("public offers lock poisoned");
-
-    match public_offers.get(offer_id) {
-        Some(record) => record.active && !record.deleted,
-        None => true,
-    }
-}
-
-pub(crate) fn increment_public_offer_claims(offer_id: &str) {
-    let mut public_offers = PUBLIC_OFFERS.write().expect("public offers lock poisoned");
-
-    if let Some(record) = public_offers.get_mut(offer_id) {
-        if record.active && !record.deleted {
-            record.amount_issued = record.amount_issued.saturating_add(1);
+impl From<&PublicOffer> for PublicOfferStatusDto {
+    fn from(offer: &PublicOffer) -> Self {
+        PublicOfferStatusDto {
+            id: offer.id.clone(),
+            template_id: offer.template_id.clone(),
+            amount_issued: 0,
+            status: if offer.active && !offer.deleted {
+                PublicOfferStatus::Active
+            } else {
+                PublicOfferStatus::Inactive
+            },
         }
     }
 }
@@ -75,25 +59,24 @@ pub(crate) fn increment_public_offer_claims(offer_id: &str) {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_public_offers() -> Result<Response, ApiError> {
-    let public_offers = PUBLIC_OFFERS.read().expect("public offers lock poisoned");
+pub(crate) async fn all_public_offers(
+    State(state): State<Arc<IssuanceState>>,
+) -> Result<Response, ApiError> {
+    let all_offers = query_handler("all_public_offers", &state.query.all_public_offers)
+        .await?
+        .unwrap_or_default();
 
-    let payload = public_offers
-        .iter()
-        .filter(|(_, record)| !record.deleted)
-        .map(|(offer_id, record)| PublicOfferStatusDto {
-            id: offer_id.clone(),
-            template_id: record.template_id.clone(),
-            amount_issued: record.amount_issued,
-            status: if record.active {
-                PublicOfferStatus::Active
-            } else {
-                PublicOfferStatus::Inactive
-            },
-        })
-        .collect::<Vec<_>>();
+    let mut offers = Vec::with_capacity(all_offers.offers.len());
 
-    Ok((StatusCode::OK, Json(payload)).into_response())
+    for public_offer in all_offers.offers.values() {
+        let mut dto = PublicOfferStatusDto::from(public_offer);
+        if let Some(offer_view) = query_handler(&public_offer.id, &state.query.offer).await? {
+            dto.amount_issued = offer_view.successful_issuances;
+        }
+        offers.push(dto);
+    }
+
+    Ok((StatusCode::OK, Json(offers)).into_response())
 }
 
 /// Create a public offer mapping
@@ -104,35 +87,29 @@ pub(crate) async fn all_public_offers() -> Result<Response, ApiError> {
     request_body = CreatePublicOfferRequest,
     responses(
         (status = 201, description = "Public offer created successfully"),
-        (status = 404, description = "Offer not found")
+        (status = 404, description = "Template not found or offer already exists")
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_public_offer(
-    State(state): State<std::sync::Arc<IssuanceState>>,
-    Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
+    State(state): State<Arc<IssuanceState>>,
+    Json(CreatePublicOfferRequest {
+        offer_id,
+        template_id,
+    }): Json<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
 
-    let mut public_offers = PUBLIC_OFFERS.write().expect("public offers lock poisoned");
+    let command = PublicOfferCommand::Create {
+        offer_id: offer_id.clone(),
+        template_id,
+    };
 
-    public_offers
-        .entry(offer_id)
-        .and_modify(|record: &mut PublicOfferRecord| {
-            record.template_id = template_id.clone();
-            record.active = true;
-            record.deleted = false;
-        })
-        .or_insert(PublicOfferRecord {
-            template_id,
-            amount_issued: 0,
-            active: true,
-            deleted: false,
-        });
+    command_handler(&offer_id, &state.command.public_offer, command).await?;
 
-    Ok(StatusCode::CREATED.into_response())
+    Ok((StatusCode::CREATED).into_response())
 }
 
 /// Take a public offer offline
@@ -140,26 +117,26 @@ pub(crate) async fn create_public_offer(
     post,
     path = "/take-public-offer-offline/{offer_id}",
     tags = ["Issuance"],
+    params(
+        ("offer_id" = String, Path, description = "The ID of the public offer")
+    ),
     responses(
-        (status = 204, description = "Public offer is now inactive"),
+        (status = 204, description = "Public offer taken offline successfully"),
         (status = 404, description = "Public offer not found")
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn take_public_offer_offline(Path(offer_id): Path<String>) -> Result<Response, ApiError> {
-    let mut public_offers = PUBLIC_OFFERS.write().expect("public offers lock poisoned");
-
-    let Some(record) = public_offers.get_mut(&offer_id) else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND));
+pub(crate) async fn take_public_offer_offline(
+    State(state): State<Arc<IssuanceState>>,
+    Path(offer_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = PublicOfferCommand::TakeOffline {
+        offer_id: offer_id.clone(),
     };
 
-    if record.deleted {
-        return Err(ApiError::new(StatusCode::NOT_FOUND));
-    }
+    command_handler(&offer_id, &state.command.public_offer, command).await?;
 
-    record.active = false;
-
-    Ok(StatusCode::NO_CONTENT.into_response())
+    Ok((StatusCode::NO_CONTENT).into_response())
 }
 
 /// Take a public offer online
@@ -167,48 +144,64 @@ pub(crate) async fn take_public_offer_offline(Path(offer_id): Path<String>) -> R
     post,
     path = "/take-public-offer-online/{offer_id}",
     tags = ["Issuance"],
+    params(
+        ("offer_id" = String, Path, description = "The ID of the public offer")
+    ),
     responses(
-        (status = 204, description = "Public offer is now active"),
+        (status = 204, description = "Public offer taken online successfully"),
         (status = 404, description = "Public offer not found")
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn take_public_offer_online(Path(offer_id): Path<String>) -> Result<Response, ApiError> {
-    let mut public_offers = PUBLIC_OFFERS.write().expect("public offers lock poisoned");
-
-    let Some(record) = public_offers.get_mut(&offer_id) else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND));
+pub(crate) async fn take_public_offer_online(
+    State(state): State<Arc<IssuanceState>>,
+    Path(offer_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = PublicOfferCommand::TakeOnline {
+        offer_id: offer_id.clone(),
     };
 
-    if record.deleted {
-        return Err(ApiError::new(StatusCode::NOT_FOUND));
-    }
+    command_handler(&offer_id, &state.command.public_offer, command).await?;
 
-    record.active = true;
-
-    Ok(StatusCode::NO_CONTENT.into_response())
+    Ok((StatusCode::NO_CONTENT).into_response())
 }
 
 /// Delete a public offer
 #[utoipa::path(
-    delete,
+    post,
     path = "/remove-public-offer/{offer_id}",
     tags = ["Issuance"],
+    params(
+        ("offer_id" = String, Path, description = "The ID of the public offer")
+    ),
     responses(
-        (status = 204, description = "Public offer deleted"),
+        (status = 204, description = "Public offer deleted successfully"),
         (status = 404, description = "Public offer not found")
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn delete_public_offer(Path(offer_id): Path<String>) -> Result<Response, ApiError> {
-    let mut public_offers = PUBLIC_OFFERS.write().expect("public offers lock poisoned");
-
-    let Some(record) = public_offers.get_mut(&offer_id) else {
-        return Err(ApiError::new(StatusCode::NOT_FOUND));
+pub(crate) async fn delete_public_offer(
+    State(state): State<Arc<IssuanceState>>,
+    Path(offer_id): Path<String>,
+) -> Result<Response, ApiError> {
+    let command = PublicOfferCommand::Delete {
+        offer_id: offer_id.clone(),
     };
 
-    record.active = false;
-    record.deleted = true;
+    command_handler(&offer_id, &state.command.public_offer, command).await?;
 
-    Ok(StatusCode::NO_CONTENT.into_response())
+    Ok((StatusCode::NO_CONTENT).into_response())
 }
+
+/// Check if a public offer can be resolved (is active and not deleted)
+pub(crate) async fn can_resolve_public_offer(
+    state: &Arc<IssuanceState>,
+    offer_id: &str,
+) -> Result<bool, ApiError> {
+    match query_handler(offer_id, &state.query.public_offer).await? {
+        Some(offer) => Ok(offer.active && !offer.deleted),
+        // If there is no public-offer record, treat it as a normal offer.
+        None => Ok(true),
+    }
+}
+

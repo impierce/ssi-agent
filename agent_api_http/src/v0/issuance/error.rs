@@ -4,7 +4,8 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
-    offer::error::OfferError, server_config::error::ServerConfigError, status_list::error::StatusListError,
+    offer::error::OfferError, public_offer::error::PublicOfferError, server_config::error::ServerConfigError,
+    status_list::error::StatusListError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -155,6 +156,17 @@ impl IntoApiErrorExt for StatusListError {
     }
 }
 
+impl IntoApiErrorExt for PublicOfferError {
+    fn into_api_error(self) -> ApiError {
+        use PublicOfferError::*;
+
+        match self {
+            AlreadyExists => ApiError::new(StatusCode::CONFLICT),
+            NotFound => ApiError::new(StatusCode::NOT_FOUND),
+        }
+    }
+}
+
 pub enum PublicError {
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
@@ -252,6 +264,15 @@ impl IntoPublicError for OfferError {
             SendCredentialOfferError(_) => PublicError::InternalServerError,
             UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
             InvalidCredentialOfferUriError(_) => PublicError::InternalServerError,
+        }
+    }
+}
+
+impl IntoPublicError for PublicOfferError {
+    fn into_public_error(self) -> PublicError {
+        match self {
+            PublicOfferError::NotFound => PublicError::NotFoundError,
+            _ => PublicError::InternalServerError,
         }
     }
 }
