@@ -62,6 +62,10 @@ pub(crate) async fn create_catalog(
 ) -> Result<Response, ApiError> {
     let catalog_id = uuid::Uuid::new_v4().to_string();
 
+     if display.name.trim().is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
+    }
+
     let command = CatalogCommand::CreateCatalog {
         catalog_id: catalog_id.clone(),
         display,
@@ -199,8 +203,12 @@ pub(crate) async fn update_display(
 ) -> Result<Response, ApiError> {
     let command = CatalogCommand::UpdateDisplay {
         catalog_id: catalog_id.clone(),
-        display,
+        display: display.clone(),
     };
+
+      if display.name.trim().is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST));
+    }
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;
 

@@ -13,4 +13,7 @@ pub enum CatalogError {
 
     #[error("Template not in Catalog: {0}")]
     TemplateNotInCatalog(String),
+
+    #[error("Missing required field: {0}")]
+    MissingField(String),
 }

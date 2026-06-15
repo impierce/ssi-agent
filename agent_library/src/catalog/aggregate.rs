@@ -64,7 +64,11 @@ impl Aggregate for Catalog {
                 display,
                 visibility,
             } => {
-                // TODO! Does a catalog with the same name already exist?
+                if display.name.trim().is_empty() {
+                    return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()
+                    ));
+                }
+
                 Ok(vec![CatalogCreated {
                     id: catalog_id,
                     display,
