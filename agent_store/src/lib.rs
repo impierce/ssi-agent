@@ -799,6 +799,7 @@ mod test {
             server_config_event_publishers,
             credential_event_publishers,
             offer_event_publishers,
+            public_offer_event_publishers,
             nonce_event_publishers,
             status_list_event_publishers,
             holder_credential_event_publishers,
@@ -820,6 +821,7 @@ mod test {
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
+        assert_eq!(public_offer_event_publishers.len(), 0);
         assert_eq!(nonce_event_publishers.len(), 0);
         assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(holder_credential_event_publishers.len(), 0);
