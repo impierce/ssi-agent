@@ -59,11 +59,9 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
             Router::new()
                 .route("/get-all-public-offers", get(all_public_offers))
                 .route("/create-public-offer", post(create_public_offer))
-                .route("/take-public-offer-offline/{offer_id}", post(take_public_offer_offline))
-                .route("/take-public-offer-online/{offer_id}", post(take_public_offer_online))
-                .route(
-                    "/delete-public-offer/{offer_id}", post(delete_public_offer),
-                ),
+                .route("/take-public-offer-offline", post(take_public_offer_offline))
+                .route("/take-public-offer-online", post(take_public_offer_online))
+                .route("/delete-public-offer", post(delete_public_offer)),
         )
         .route(
             "/.well-known/oauth-authorization-server",

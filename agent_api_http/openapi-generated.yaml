@@ -213,6 +213,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+  /v0/delete-public-offer:
+    post:
+      tags:
+      - Issuance
+      summary: Delete a public offer
+      operationId: delete_public_offer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePublicOfferRequest'
+        required: true
+      responses:
+        '204':
+          description: Public offer deleted successfully
+        '404':
+          description: Public offer not found
   /v0/documents:
     get:
       tags:
@@ -497,55 +514,35 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
-  /v0/remove-public-offer/{offer_id}:
-    post:
-      tags:
-      - Issuance
-      summary: Delete a public offer
-      operationId: delete_public_offer
-      parameters:
-      - name: offer_id
-        in: path
-        description: The ID of the public offer
-        required: true
-        schema:
-          type: string
-      responses:
-        '204':
-          description: Public offer deleted successfully
-        '404':
-          description: Public offer not found
-  /v0/take-public-offer-offline/{offer_id}:
+  /v0/take-public-offer-offline:
     post:
       tags:
       - Issuance
       summary: Take a public offer offline
       operationId: take_public_offer_offline
-      parameters:
-      - name: offer_id
-        in: path
-        description: The ID of the public offer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TakePublicOfferOfflineRequest'
         required: true
-        schema:
-          type: string
       responses:
         '204':
           description: Public offer taken offline successfully
         '404':
           description: Public offer not found
-  /v0/take-public-offer-online/{offer_id}:
+  /v0/take-public-offer-online:
     post:
       tags:
       - Issuance
       summary: Take a public offer online
       operationId: take_public_offer_online
-      parameters:
-      - name: offer_id
-        in: path
-        description: The ID of the public offer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TakePublicOfferOnlineRequest'
         required: true
-        schema:
-          type: string
       responses:
         '204':
           description: Public offer taken online successfully
@@ -1046,6 +1043,13 @@ components:
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
       - european_learning_model_v3-3
+    DeletePublicOfferRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
+          type: string
     DeleteTemplateEndpointRequest:
       type: object
       required:
@@ -1435,6 +1439,20 @@ components:
       - id
       properties:
         id:
+          type: string
+    TakePublicOfferOfflineRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
+          type: string
+    TakePublicOfferOnlineRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
           type: string
     TargetUrlOfferEndpointRequest:
       type: object

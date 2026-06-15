@@ -3,7 +3,7 @@ use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::state::IssuanceState;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -32,6 +32,24 @@ pub enum PublicOfferStatus {
 pub struct CreatePublicOfferRequest {
     pub offer_id: String,
     pub template_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TakePublicOfferOfflineRequest {
+    pub offer_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TakePublicOfferOnlineRequest {
+    pub offer_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePublicOfferRequest {
+    pub offer_id: String,
 }
 
 impl From<&PublicOffer> for PublicOfferStatusDto {
@@ -115,11 +133,9 @@ pub(crate) async fn create_public_offer(
 /// Take a public offer offline
 #[utoipa::path(
     post,
-    path = "/take-public-offer-offline/{offer_id}",
+    path = "/take-public-offer-offline",
     tags = ["Issuance"],
-    params(
-        ("offer_id" = String, Path, description = "The ID of the public offer")
-    ),
+    request_body = TakePublicOfferOfflineRequest,
     responses(
         (status = 204, description = "Public offer taken offline successfully"),
         (status = 404, description = "Public offer not found")
@@ -128,7 +144,7 @@ pub(crate) async fn create_public_offer(
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_offline(
     State(state): State<Arc<IssuanceState>>,
-    Path(offer_id): Path<String>,
+    Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
         offer_id: offer_id.clone(),
@@ -142,11 +158,9 @@ pub(crate) async fn take_public_offer_offline(
 /// Take a public offer online
 #[utoipa::path(
     post,
-    path = "/take-public-offer-online/{offer_id}",
+    path = "/take-public-offer-online",
     tags = ["Issuance"],
-    params(
-        ("offer_id" = String, Path, description = "The ID of the public offer")
-    ),
+    request_body = TakePublicOfferOnlineRequest,
     responses(
         (status = 204, description = "Public offer taken online successfully"),
         (status = 404, description = "Public offer not found")
@@ -155,7 +169,7 @@ pub(crate) async fn take_public_offer_offline(
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_online(
     State(state): State<Arc<IssuanceState>>,
-    Path(offer_id): Path<String>,
+    Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
         offer_id: offer_id.clone(),
@@ -169,11 +183,9 @@ pub(crate) async fn take_public_offer_online(
 /// Delete a public offer
 #[utoipa::path(
     post,
-    path = "/remove-public-offer/{offer_id}",
+    path = "/delete-public-offer",
     tags = ["Issuance"],
-    params(
-        ("offer_id" = String, Path, description = "The ID of the public offer")
-    ),
+    request_body = DeletePublicOfferRequest,
     responses(
         (status = 204, description = "Public offer deleted successfully"),
         (status = 404, description = "Public offer not found")
@@ -182,7 +194,7 @@ pub(crate) async fn take_public_offer_online(
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_public_offer(
     State(state): State<Arc<IssuanceState>>,
-    Path(offer_id): Path<String>,
+    Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
         offer_id: offer_id.clone(),
