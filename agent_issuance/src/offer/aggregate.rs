@@ -54,7 +54,7 @@ pub struct Offer {
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,
     pub offer_link: Option<Url>,
-    pub successful_issuances: u64,
+    pub successful_issuances: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]

@@ -17,7 +17,7 @@ use std::sync::Arc;
 pub struct PublicOfferStatusDto {
     pub id: String,
     pub template_id: String,
-    pub amount_issued: u64,
+    pub amount_issued: u32,
     pub status: PublicOfferStatus,
 }
 

@@ -1281,7 +1281,7 @@ components:
           - 'null'
         successful_issuances:
           type: integer
-          format: int64
+          format: int32
           minimum: 0
         tx_code:
           type:
@@ -1401,7 +1401,7 @@ components:
       properties:
         amountIssued:
           type: integer
-          format: int64
+          format: int32
           minimum: 0
         id:
           type: string
