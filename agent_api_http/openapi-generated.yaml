@@ -9,19 +9,19 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
-  /v0/catalog/add-template:
+  /v0/catalog/add-templates:
     post:
       tags:
       - Library
       - Catalog
       summary: Add a template to a catalog
       description: Adds a template to a catalog by its ID.
-      operationId: add_template
+      operationId: add_templates
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddTemplateRequest'
+              $ref: '#/components/schemas/AddTemplatesRequest'
         required: true
       responses:
         '200':
@@ -774,15 +774,17 @@ components:
       properties:
         url:
           type: string
-    AddTemplateRequest:
+    AddTemplatesRequest:
       type: object
       properties:
         catalogId:
           type: string
           default: ''
-        templateId:
-          type: string
-          default: ''
+        templateIds:
+          type: array
+          items:
+            type: string
+          default: []
     Catalog:
       type: object
       required:
