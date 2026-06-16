@@ -366,8 +366,15 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let mut credential_isser = issuance::router(issuance_state.clone());
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

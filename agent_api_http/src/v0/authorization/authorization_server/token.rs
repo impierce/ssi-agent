@@ -159,8 +159,15 @@ pub mod tests {
         credentials(&mut app, &credential_configuration_id).await;
         let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_authorization::state::initialize(&authorization_state)
             .await
