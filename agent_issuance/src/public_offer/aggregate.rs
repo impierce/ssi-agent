@@ -34,7 +34,7 @@ impl Aggregate for PublicOffer {
     ) -> Result<Vec<Self::Event>, Self::Error> {
         match command {
             PublicOfferCommand::Create { offer_id, template_id } => {
-                if !self.id.is_empty() {
+                if !self.id.is_empty() && !self.deleted {
                     return Err(PublicOfferError::AlreadyExists);
                 }
 
@@ -164,6 +164,51 @@ pub mod tests {
             }])
             .when(PublicOfferCommand::Create { offer_id, template_id })
             .then_expect_error(PublicOfferError::AlreadyExists);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_recreate_public_offer_after_delete_succeeds() {
+        let offer_id = "public-offer-123".to_string();
+        let original_template_id = "template-456".to_string();
+        let new_template_id = "template-789".to_string();
+
+        let issuance_services = IssuanceServices::default().await;
+
+        let mut aggregate = PublicOffer::default();
+        aggregate.apply(PublicOfferEvent::Created {
+            offer_id: offer_id.clone(),
+            template_id: original_template_id,
+            created_at: chrono::Utc::now(),
+        });
+        aggregate.apply(PublicOfferEvent::Deleted {
+            offer_id: offer_id.clone(),
+        });
+
+        let events = aggregate
+            .handle(
+                PublicOfferCommand::Create {
+                    offer_id: offer_id.clone(),
+                    template_id: new_template_id.clone(),
+                },
+                &issuance_services,
+            )
+            .await
+            .expect("recreate command should succeed after delete");
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            PublicOfferEvent::Created {
+                offer_id: emitted_offer_id,
+                template_id: emitted_template_id,
+                created_at,
+            } => {
+                assert_eq!(emitted_offer_id, &offer_id);
+                assert_eq!(emitted_template_id, &new_template_id);
+                assert!(*created_at <= chrono::Utc::now());
+            }
+            _ => panic!("expected Created event"),
+        }
     }
 
     #[rstest]

@@ -41,7 +41,14 @@ pub struct AllPublicOffersView {
 
 impl View<PublicOffer> for AllPublicOffersView {
     fn update(&mut self, event: &cqrs_es::EventEnvelope<PublicOffer>) {
-        self.offers.entry(event.aggregate_id.clone()).or_default().update(event);
+        match &event.payload {
+            crate::public_offer::event::PublicOfferEvent::Deleted { .. } => {
+                self.offers.remove(&event.aggregate_id);
+            }
+            _ => {
+                self.offers.entry(event.aggregate_id.clone()).or_default().update(event);
+            }
+        }
     }
 }
 
@@ -264,7 +271,6 @@ pub mod tests {
         };
 
         view.update(&event_deleted);
-        let offer = &view.offers["offer-1"];
-        assert!(offer.deleted);
+        assert!(!view.offers.contains_key("offer-1"));
     }
 }
