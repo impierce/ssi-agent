@@ -77,9 +77,7 @@ impl From<&PublicOffer> for PublicOfferStatusDto {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_public_offers(
-    State(state): State<Arc<IssuanceState>>,
-) -> Result<Response, ApiError> {
+pub(crate) async fn all_public_offers(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_offers = query_handler("all_public_offers", &state.query.all_public_offers)
         .await?
         .unwrap_or_default();
@@ -111,10 +109,7 @@ pub(crate) async fn all_public_offers(
 #[axum_macros::debug_handler]
 pub(crate) async fn create_public_offer(
     State(state): State<Arc<IssuanceState>>,
-    Json(CreatePublicOfferRequest {
-        offer_id,
-        template_id,
-    }): Json<CreatePublicOfferRequest>,
+    Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
@@ -206,14 +201,10 @@ pub(crate) async fn delete_public_offer(
 }
 
 /// Check if a public offer can be resolved (is active and not deleted)
-pub(crate) async fn can_resolve_public_offer(
-    state: &Arc<IssuanceState>,
-    offer_id: &str,
-) -> Result<bool, ApiError> {
+pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_id: &str) -> Result<bool, ApiError> {
     match query_handler(offer_id, &state.query.public_offer).await? {
         Some(offer) => Ok(offer.active && !offer.deleted),
         // If there is no public-offer record, treat it as a normal offer.
         None => Ok(true),
     }
 }
-

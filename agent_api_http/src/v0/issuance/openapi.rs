@@ -5,8 +5,8 @@ use crate::v0::issuance::offers::{
     send::{__path_individual_offer, __path_organization_offer},
 };
 use crate::v0::issuance::public_offers::{
-    __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer,
-    __path_take_public_offer_offline, __path_take_public_offer_online,
+    __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer, __path_take_public_offer_offline,
+    __path_take_public_offer_online,
 };
 use utoipa::OpenApi;
 

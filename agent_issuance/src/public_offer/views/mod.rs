@@ -41,10 +41,7 @@ pub struct AllPublicOffersView {
 
 impl View<PublicOffer> for AllPublicOffersView {
     fn update(&mut self, event: &cqrs_es::EventEnvelope<PublicOffer>) {
-        self.offers
-            .entry(event.aggregate_id.clone())
-            .or_insert_with(PublicOfferView::default)
-            .update(event);
+        self.offers.entry(event.aggregate_id.clone()).or_default().update(event);
     }
 }
 

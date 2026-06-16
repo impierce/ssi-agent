@@ -4,17 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum PublicOfferCommand {
-    Create {
-        offer_id: String,
-        template_id: String,
-    },
-    TakeOffline {
-        offer_id: String,
-    },
-    TakeOnline {
-        offer_id: String,
-    },
-    Delete {
-        offer_id: String,
-    },
+    Create { offer_id: String, template_id: String },
+    TakeOffline { offer_id: String },
+    TakeOnline { offer_id: String },
+    Delete { offer_id: String },
 }
