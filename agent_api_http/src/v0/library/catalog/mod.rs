@@ -90,9 +90,9 @@ pub(crate) async fn create_catalog(
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
-pub struct AddTemplateRequest {
+pub struct AddTemplatesRequest {
     pub catalog_id: String,
-    pub template_id: String,
+    pub template_ids: Vec<String>,
 }
 
 /// Add a template to a catalog
@@ -100,26 +100,26 @@ pub struct AddTemplateRequest {
 /// Adds a template to a catalog by its ID.
 #[utoipa::path(
     post,
-    path = "/catalog/add-template",
+    path = "/catalog/add-templates",
     tags = ["Library", "Catalog"],
     request_body(
-        content = AddTemplateRequest,
+        content = AddTemplatesRequest,
         ),
     responses(
         (status = 200, description = "Catalog updated successfully", body = Catalog)
     )
     )]
 #[axum_macros::debug_handler]
-pub(crate) async fn add_template(
+pub(crate) async fn add_templates(
     State(state): State<Arc<LibraryState>>,
-    Json(AddTemplateRequest {
+    Json(AddTemplatesRequest {
         catalog_id,
-        template_id,
-    }): Json<AddTemplateRequest>,
+        template_ids,
+    }): Json<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    let command = CatalogCommand::AddTemplateId {
+    let command = CatalogCommand::AddTemplateIds {
         catalog_id: catalog_id.clone(),
-        template_id,
+        template_ids,
     };
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;

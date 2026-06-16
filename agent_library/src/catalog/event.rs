@@ -18,9 +18,9 @@ pub enum CatalogEvent {
         id: String,
         visibility: CatalogVisibility,
     },
-    TemplateIdAdded {
+    TemplateIdsAdded {
         id: String,
-        template_id: String,
+        template_ids: Vec<String>,
     },
     TemplateIdRemoved {
         id: String,

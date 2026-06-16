@@ -5,8 +5,8 @@ pub enum CatalogError {
     #[error("Catalog name already exists: {0}")]
     DuplicateName(String),
 
-    #[error("Template not found: {0}")]
-    TemplateNotFound(String),
+    #[error("Templates not found: {0}")]
+    TemplatesNotFound(String),
 
     #[error("Template already in Catalog: {0}")]
     TemplateAlreadyInCatalog(String),

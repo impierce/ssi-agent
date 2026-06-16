@@ -65,8 +65,7 @@ impl Aggregate for Catalog {
                 visibility,
             } => {
                 if display.name.trim().is_empty() {
-                    return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()
-                    ));
+                    return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()));
                 }
 
                 Ok(vec![CatalogCreated {
@@ -83,24 +82,33 @@ impl Aggregate for Catalog {
                 id: catalog_id,
                 visibility,
             }]),
-            AddTemplateId {
+            AddTemplateIds {
                 catalog_id,
-                template_id,
+                template_ids,
             } => {
-                // TODO! Check if the template is a demo template, should be immutable!
-                if !services.template_exists(&template_id).await {
-                    return Err(CatalogError::TemplateNotFound(template_id));
+                // Check if all template IDs exist before proceeding
+                let missing_templates = services.missing_templates(&template_ids).await;
+
+                if !missing_templates.is_empty() {
+                    return Err(CatalogError::TemplatesNotFound(format!(
+                        "{}",
+                        missing_templates.join(", ")
+                    )));
                 }
-                if self.template_ids.contains(&template_id) {
-                    debug!(
-                        "Template ID {} already in catalog {}, ignoring AddTemplateId command",
-                        template_id, catalog_id
-                    );
+
+                let new_template_ids: Vec<String> = template_ids
+                    .into_iter()
+                    .filter(|id| !self.template_ids.contains(id))
+                    .collect();
+
+                if new_template_ids.is_empty() {
+                    debug!("No new template IDs to add, ignoring AddTemplateIds command");
                     return Ok(vec![]);
                 }
-                Ok(vec![TemplateIdAdded {
+
+                Ok(vec![TemplateIdsAdded {
                     id: catalog_id,
-                    template_id,
+                    template_ids: new_template_ids,
                 }])
             }
             RemoveTemplateId {
@@ -108,7 +116,7 @@ impl Aggregate for Catalog {
                 template_id,
             } => {
                 if !services.template_exists(&template_id).await {
-                    return Err(CatalogError::TemplateNotFound(template_id));
+                    return Err(CatalogError::TemplatesNotFound(template_id));
                 }
                 if !self.template_ids.contains(&template_id) {
                     debug!(
@@ -149,8 +157,8 @@ impl Aggregate for Catalog {
                 self.visibility = visibility;
                 self.modified_at = Utc::now();
             }
-            TemplateIdAdded { id: _, template_id } => {
-                self.template_ids.push(template_id);
+            TemplateIdsAdded { id: _, template_ids } => {
+                self.template_ids.extend(template_ids);
                 self.modified_at = Utc::now();
             }
             TemplateIdRemoved { id: _, template_id } => {
@@ -190,6 +198,13 @@ pub mod catalog_tests {
     impl CatalogServices for MockCatalogServices {
         async fn template_exists(&self, _id: &str) -> bool {
             self.template_exists
+        }
+        async fn missing_templates(&self, ids: &[String]) -> Vec<String> {
+            if self.template_exists {
+                vec![]
+            } else {
+                ids.to_vec()
+            }
         }
     }
 
@@ -258,8 +273,8 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_add_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
-        let template_id = "template-001".to_string();
+    async fn test_add_template_ids(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
+        let template_ids = ["template-001".to_string(), "template-002".to_string()].to_vec();
 
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given(vec![CatalogEvent::CatalogCreated {
@@ -267,13 +282,13 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::AddTemplateId {
+            .when(CatalogCommand::AddTemplateIds {
                 catalog_id: catalog_id.clone(),
-                template_id: template_id.clone(),
+                template_ids: template_ids.clone(),
             })
-            .then_expect_events(vec![CatalogEvent::TemplateIdAdded {
+            .then_expect_events(vec![CatalogEvent::TemplateIdsAdded {
                 id: catalog_id,
-                template_id,
+                template_ids,
             }])
     }
 
@@ -284,7 +299,7 @@ pub mod catalog_tests {
         display: CatalogDisplay,
         visibility: CatalogVisibility,
     ) {
-        let template_id = "template-001".to_string();
+        let template_ids = ["template-001".to_string(), "template-002".to_string()].to_vec();
 
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given(vec![
@@ -293,14 +308,14 @@ pub mod catalog_tests {
                     display,
                     visibility,
                 },
-                CatalogEvent::TemplateIdAdded {
+                CatalogEvent::TemplateIdsAdded {
                     id: catalog_id.clone(),
-                    template_id: template_id.clone(),
+                    template_ids: template_ids.clone(),
                 },
             ])
-            .when(CatalogCommand::AddTemplateId {
+            .when(CatalogCommand::AddTemplateIds {
                 catalog_id,
-                template_id,
+                template_ids,
             })
             .then_expect_events(vec![])
     }
@@ -312,7 +327,7 @@ pub mod catalog_tests {
         display: CatalogDisplay,
         visibility: CatalogVisibility,
     ) {
-        let template_id = "nonexistent-template".to_string();
+        let template_ids = ["nonexistent-template".to_string(), "template-002".to_string()].to_vec();
 
         CatalogTestFramework::with(MockCatalogServices::finds_no_templates())
             .given(vec![CatalogEvent::CatalogCreated {
@@ -320,17 +335,18 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::AddTemplateId {
+            .when(CatalogCommand::AddTemplateIds {
                 catalog_id,
-                template_id: template_id.clone(),
+                template_ids: template_ids.clone(),
             })
-            .then_expect_error_message(&format!("Template not found: {}", template_id))
+            .then_expect_error_message(&format!("Templates not found: {}", template_ids.join(", ")))
     }
 
     #[rstest]
     #[serial_test::serial]
     async fn test_remove_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
-        let template_id = "template-001".to_string();
+        let existing_templates = ["template-001".to_string(), "template-002".to_string()].to_vec();
+        let to_remove = "template-001".to_string();
 
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given(vec![
@@ -339,18 +355,18 @@ pub mod catalog_tests {
                     display,
                     visibility,
                 },
-                CatalogEvent::TemplateIdAdded {
+                CatalogEvent::TemplateIdsAdded {
                     id: catalog_id.clone(),
-                    template_id: template_id.clone(),
+                    template_ids: existing_templates.clone(),
                 },
             ])
             .when(CatalogCommand::RemoveTemplateId {
                 catalog_id: catalog_id.clone(),
-                template_id: template_id.clone(),
+                template_id: to_remove.clone(),
             })
             .then_expect_events(vec![CatalogEvent::TemplateIdRemoved {
                 id: catalog_id,
-                template_id,
+                template_id: to_remove,
             }])
     }
 
@@ -395,7 +411,7 @@ pub mod catalog_tests {
                 catalog_id,
                 template_id: template_id.clone(),
             })
-            .then_expect_error_message(&format!("Template not found: {}", template_id))
+            .then_expect_error_message(&format!("Templates not found: {}", template_id))
     }
 
     #[rstest]

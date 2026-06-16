@@ -17,9 +17,9 @@ pub enum CatalogCommand {
         catalog_id: String,
         visibility: CatalogVisibility,
     },
-    AddTemplateId {
+    AddTemplateIds {
         catalog_id: String,
-        template_id: String,
+        template_ids: Vec<String>,
     },
     RemoveTemplateId {
         catalog_id: String,

@@ -27,7 +27,7 @@ impl IntoApiErrorExt for CatalogError {
                 .title("Duplicate Catalog Name")
                 .source(self)
                 .finish(),
-            CatalogError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+            CatalogError::TemplatesNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
                 .source(self)
                 .finish(),
@@ -37,6 +37,10 @@ impl IntoApiErrorExt for CatalogError {
                 .finish(),
             CatalogError::TemplateNotInCatalog(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not In Catalog")
+                .source(self)
+                .finish(),
+            CatalogError::MissingField(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Missing Required Field")
                 .source(self)
                 .finish(),
         }

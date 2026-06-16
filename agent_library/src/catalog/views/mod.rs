@@ -28,10 +28,8 @@ impl View<Catalog> for Catalog {
             VisibilityUpdated { id: _, visibility } => {
                 self.visibility.clone_from(visibility);
             }
-            TemplateIdAdded { id: _, template_id } => {
-                if !self.template_ids.contains(template_id) {
-                    self.template_ids.push(template_id.clone());
-                }
+            TemplateIdsAdded { id: _, template_ids } => {
+                self.template_ids.extend(template_ids.iter().cloned());
             }
             TemplateIdRemoved { id: _, template_id } => {
                 self.template_ids.retain(|id| id != template_id);
