@@ -12,6 +12,11 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// public-offer aggregate ID is namespaced, so it doesn't collide with existing offer streams.
+fn public_offer_aggregate_id(offer_id: &str) -> String {
+    format!("public_offer:{offer_id}")
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicOfferStatusDto {
@@ -120,7 +125,8 @@ pub(crate) async fn create_public_offer(
         template_id,
     };
 
-    command_handler(&offer_id, &state.command.public_offer, command).await?;
+    let aggregate_id = public_offer_aggregate_id(&offer_id);
+    command_handler(&aggregate_id, &state.command.public_offer, command).await?;
 
     Ok((StatusCode::CREATED).into_response())
 }
@@ -145,7 +151,8 @@ pub(crate) async fn take_public_offer_offline(
         offer_id: offer_id.clone(),
     };
 
-    command_handler(&offer_id, &state.command.public_offer, command).await?;
+    let aggregate_id = public_offer_aggregate_id(&offer_id);
+    command_handler(&aggregate_id, &state.command.public_offer, command).await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -170,7 +177,8 @@ pub(crate) async fn take_public_offer_online(
         offer_id: offer_id.clone(),
     };
 
-    command_handler(&offer_id, &state.command.public_offer, command).await?;
+    let aggregate_id = public_offer_aggregate_id(&offer_id);
+    command_handler(&aggregate_id, &state.command.public_offer, command).await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -195,14 +203,17 @@ pub(crate) async fn delete_public_offer(
         offer_id: offer_id.clone(),
     };
 
-    command_handler(&offer_id, &state.command.public_offer, command).await?;
+    let aggregate_id = public_offer_aggregate_id(&offer_id);
+    command_handler(&aggregate_id, &state.command.public_offer, command).await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
 
 /// Check if a public offer can be resolved (is active and not deleted)
 pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_id: &str) -> Result<bool, ApiError> {
-    match query_handler(offer_id, &state.query.public_offer).await? {
+    let aggregate_id = public_offer_aggregate_id(offer_id);
+
+    match query_handler(&aggregate_id, &state.query.public_offer).await? {
         Some(offer) => Ok(offer.active && !offer.deleted),
         // If there is no public-offer record, treat it as a normal offer.
         None => Ok(true),
