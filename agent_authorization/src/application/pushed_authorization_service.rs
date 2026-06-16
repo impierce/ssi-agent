@@ -64,6 +64,8 @@ impl PushedAuthorizationService {
                 } else {
                     return Err(PushedAuthorizationError::MissingCodeChallengeError);
                 }
+
+                // todo: add code_challenge validation
             }
         }
 

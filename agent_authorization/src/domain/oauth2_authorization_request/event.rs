@@ -29,7 +29,7 @@ pub enum OAuth2AuthorizationRequestEvent {
 
         expires_at: i64,
 
-        openid4vp_presentation: Option<serde_json::Value>,
+        openid4vp_request: Option<serde_json::Value>,
     },
     OAuth2AuthorizationRequestExpired {
         oauth2_authorization_request_id: String,

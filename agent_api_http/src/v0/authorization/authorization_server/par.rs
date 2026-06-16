@@ -94,6 +94,7 @@ pub mod tests {
         issuance::{self, credentials::tests::credentials, offers::tests::offers},
     };
     use agent_authorization::{
+        application::interactive_authorization_service::INTERACTION_TYPE_OPENID4VP,
         domain::oauth2_authorization_request::aggregate::test_utils::code_challenge,
         services::OAuth2AuthorizationRequestDomainServices, state::UNIME_REDIRECT_URI,
     };
@@ -113,7 +114,7 @@ pub mod tests {
         authorization_request::CodeChallengeMethod,
         credential_offer::AuthorizationCode,
         wallet::PushedAuthorizationResponse,
-        InteractiveAuthorizationResponse,
+        InteractiveAuthorizationResponse, InteractiveAuthorizationStatus,
     };
     use serde_json::json;
     use tower::Service as _;
@@ -196,7 +197,7 @@ pub mod tests {
                                     claims: None,
                                 }]),
                             },
-                            interaction_types_supported: "urn:openid:dcp:iae:openid4vp_presentation".to_string(),
+                            interaction_types_supported: INTERACTION_TYPE_OPENID4VP.to_string(),
                         }))
                         .unwrap(),
                     ))
@@ -321,6 +322,12 @@ pub mod tests {
 
         let mut app = authorization::router((authorization_state, issuance_state));
 
-        let _interactive_authorization_request = interactive_authorization_request(&mut app, issuer_state).await;
+        let interactive_authorization_request = interactive_authorization_request(&mut app, issuer_state).await;
+
+        assert_eq!(
+            interactive_authorization_request.status,
+            InteractiveAuthorizationStatus::Ok
+        );
+        // TODO: more field checks needed on the response
     }
 }

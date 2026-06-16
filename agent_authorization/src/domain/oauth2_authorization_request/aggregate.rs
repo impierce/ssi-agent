@@ -44,9 +44,9 @@ pub struct OAuth2AuthorizationRequest {
     pub expires_at: i64,
     pub consent_status: ConsentStatus,
 
-    // TODO: This does not belong here, but with the current architecturefor now we need it to be able to link the
+    // TODO: This does not belong here, but with the current architecture for now we need it to be able to link the
     // authorization request to the interaction session in the interactive authorization flow.
-    pub openid4vp_presentation: Option<serde_json::Value>,
+    pub openid4vp_request: Option<serde_json::Value>,
 }
 
 #[async_trait]
@@ -74,9 +74,11 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 expires_at,
                 interaction_type,
             } => {
+                // TODO: refactor state handling according to https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.3
+                // Currently the unwrap_or_default is a shortcut for the fact it's optional in the PAR but we haven't made it optional in the OID4VP request
                 let state = pushed_authorization_request.issuer_state.clone().unwrap_or_default();
 
-                let openid4vp_presentation = if let Some(InteractionType::OpenId4VpPresentation) = interaction_type {
+                let openid4vp_request = if let Some(InteractionType::OpenId4VpPresentation) = interaction_type {
                     Some(
                         services
                             .openid4vp_presentation_service
@@ -101,7 +103,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     code_challenge: pushed_authorization_request.code_challenge,
                     code_challenge_method: pushed_authorization_request.code_challenge_method,
                     expires_at,
-                    openid4vp_presentation,
+                    openid4vp_request,
                 }])
             }
             GrantConsent => {
@@ -139,6 +141,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     .await
                     .map_err(OpenID4VpVerificationError)?;
 
+                // TODO: is this expiry date the only factor preventing replay? Not sure to use Nonce, state, or auth_session but one of these need to be invalidated after being used once.
                 let now = chrono::Utc::now().timestamp();
                 if now > self.expires_at {
                     Ok(vec![OAuth2AuthorizationRequestExpired {
@@ -173,7 +176,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 code_challenge,
                 code_challenge_method,
                 expires_at,
-                openid4vp_presentation,
+                openid4vp_request,
             } => {
                 self.oauth2_authorization_request_id = oauth2_authorization_request_id;
                 self.response_type = response_type;
@@ -186,7 +189,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                 self.code_challenge = code_challenge;
                 self.code_challenge_method = code_challenge_method;
                 self.expires_at = expires_at;
-                self.openid4vp_presentation = openid4vp_presentation;
+                self.openid4vp_request = openid4vp_request;
             }
             OAuth2AuthorizationRequestExpired {
                 oauth2_authorization_request_id,
@@ -251,7 +254,7 @@ pub mod oauth2_authorization_request_tests {
                     code_challenge: pushed_authorization_request.code_challenge,
                     code_challenge_method: pushed_authorization_request.code_challenge_method,
                     expires_at,
-                    openid4vp_presentation: None,
+                    openid4vp_request: None,
                 },
             ]);
     }
@@ -407,7 +410,7 @@ pub mod test_utils {
             code_challenge: pushed_authorization_request.code_challenge,
             code_challenge_method: pushed_authorization_request.code_challenge_method,
             expires_at,
-            openid4vp_presentation: None,
+            openid4vp_request: None,
         }
     }
 }

@@ -21,6 +21,8 @@ pub trait OpenId4VpPresentationService: Send + Sync {
     async fn verify_openid4vp_response(&self, openid4vp_response: serde_json::Value) -> anyhow::Result<()>;
 }
 
+/// This struct is used to hold the services required for the OAuth2AuthorizationRequest aggregate.
+/// Currently we only support the OpenId4VpPresentationService, but more services can be added in the future as needed.
 pub struct OAuth2AuthorizationRequestDomainServices {
     pub openid4vp_presentation_service: Box<dyn OpenId4VpPresentationService>,
 }

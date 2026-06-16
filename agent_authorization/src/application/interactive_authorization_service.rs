@@ -12,6 +12,9 @@ use crate::{
     state::{AuthorizationState, UNIME_CLIENT_ID},
 };
 
+/// This is the only interaction type that is currently supported by the Interactive Authorization Service. Will also stay the only type for the foreseeable future since it's the only one well-defined by OID4VCI 1.1 spec https://openid.github.io/OpenID4VCI/openid-4-verifiable-credential-issuance-1_1-wg-draft.html
+pub const INTERACTION_TYPE_OPENID4VP: &str = "urn:openid:dcp:iae:openid4vp_presentation";
+
 // TODO: improve error handling
 #[derive(Debug, Error)]
 pub enum InteractiveAuthorizationError {
@@ -51,7 +54,7 @@ impl InteractiveAuthorizationService {
             interaction_types_supported,
         } = interactive_authorization_request;
 
-        if interaction_types_supported != "urn:openid:dcp:iae:openid4vp_presentation" {
+        if interaction_types_supported != INTERACTION_TYPE_OPENID4VP {
             return Err(InteractiveAuthorizationError::UnsupportedInteractionTypesError(
                 interaction_types_supported,
             ));
@@ -86,6 +89,8 @@ impl InteractiveAuthorizationService {
                 } else {
                     return Err(InteractiveAuthorizationError::MissingCodeChallengeError);
                 }
+
+                // todo: add code_challenge validation
             }
         }
 
@@ -120,11 +125,11 @@ impl InteractiveAuthorizationService {
             "Failed to retrieve created OAuth2 authorization request".to_string(),
         ))?;
 
-        let openid4vp_presentation =
+        let openid4vp_request =
             oauth2_authorization_request_view
-                .openid4vp_presentation
+                .openid4vp_request
                 .ok_or(InteractiveAuthorizationError::Internal(
-                    "Failed to retrieve OpenID4VP presentation from OAuth2 authorization request".to_string(),
+                    "Failed to retrieve OpenID4VP request from OAuth2 authorization request".to_string(),
                 ))?;
 
         Ok(InteractiveAuthorizationResponse {
@@ -132,7 +137,7 @@ impl InteractiveAuthorizationService {
             code: None,
             interaction_type: Some(InteractionType::OpenId4VpPresentation),
             auth_session: Some(oauth2_authorization_request_id),
-            openid4vp_request: Some(openid4vp_presentation),
+            openid4vp_request: Some(openid4vp_request),
             request_uri: None,
             expires_in: None,
         })

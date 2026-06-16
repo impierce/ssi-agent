@@ -151,6 +151,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
             // `enable_interactive_authorization_flow` is disabled, then the `require_pushed_authorization_requests`
             // field will be set to `Some(true)`, and the `interactive_authorization_endpoint` and
             // `require_interactive_authorization_request` fields will be set to `None`.
+            // Keep in mind: the pre-authorized code flow is still supported, independent of what is enabled/required here.
             let (
                 require_pushed_authorization_requests,
                 interactive_authorization_endpoint,

@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use oid4vp::dcql::dcql_query::{ClaimQuery, CredentialQuery, CredentialQueryId, DcqlQuery, Format, MetaTypes};
 use std::sync::Arc;
 
+/// This adapter bridges `agent_verification` functionality which is needed in `agent_authorization` during the interactive authorization flow, specifically for handling openID4VP presentation requests and responses.
 pub struct VerificationAuthorizationAdapter {
     verification_state: Arc<VerificationState>,
 }
@@ -30,6 +31,7 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         // TODO: Make claims and credential formats configurable by the client, rather than hardcoded.
         // Currently only applicable when `enable_interactive_authorization_flow` is true. When false,
         // the authorization server defaults to the Authorization Code flow.
+        // The hardcoded claims below are set to request the EduID and Entitlement credentials.
         let eduid_claims: Vec<ClaimQuery> = serde_json::from_value(serde_json::json!([
             {"path": ["name"]},
             {"path": ["given_name"]},
@@ -109,7 +111,7 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         .ok_or_else(|| anyhow::anyhow!("Failed to convert to OID4VP authorization request"))?
         .clone();
 
-        // TODO:
+        // Normal OID4VP flows would use "direct_post" response mode, which this value is by default, but since this is an interactive authorization flow the "iae_post" response mode must be used. Spec: https://openid.github.io/OpenID4VCI/openid-4-verifiable-credential-issuance-1_1-wg-draft.html#section-6.2.1.1
         authorization_request.body.extension.response_mode = "iae_post".to_string();
 
         Ok(serde_json::json!(authorization_request))
@@ -123,6 +125,8 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         } else {
             return Err(anyhow::anyhow!("Authorization response is missing `state` parameter"));
         };
+
+        // TODO: perhaps this is a good place to invalidate the `state` parameter after it's used, to prevent replay attacks? See comment under `SubmitOpenId4VpResponse` in `agent_authorization/src/domain/oauth2_authorization_request/aggregate.rs` as well.
 
         let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
