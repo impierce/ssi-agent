@@ -8,7 +8,7 @@ pub enum AuthorizationCodeCommand {
     CreateAuthorizationCode {
         authorization_code_id: String,
         client_id: String,
-        redirect_uri: Url,
+        redirect_uri: Option<Url>,
         code_challenge: Option<String>,
         code_challenge_method: Option<CodeChallengeMethod>,
         issuer_state: Option<String>,

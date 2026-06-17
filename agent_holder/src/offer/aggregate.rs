@@ -437,8 +437,15 @@ pub mod tests {
 
         let mut issuance_router = issuance::router((issuance_state.clone(), library_state));
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
