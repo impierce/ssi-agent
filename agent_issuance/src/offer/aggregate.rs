@@ -435,7 +435,7 @@ pub mod tests {
     type OfferTestFramework = TestFramework<Offer>;
 
     // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
-    // TODO: refactor test
+    #[expect(dead_code)]
     fn run_with_large_stack<F>(test: F)
     where
         F: FnOnce() + Send + 'static,
@@ -569,7 +569,10 @@ pub mod tests {
             ]);
     }
 
-    #[rstest]
+    // Note: This test cannot use #[future(awt)] fixtures because rstest evaluates those fixtures
+    // outside the test function body, before entering run_with_large_stack. This would cause a stack
+    // overflow before the large stack is available. Instead, all fixture setup is done manually inside
+    // the large-stack wrapper using the test helper functions directly.
     #[serial_test::serial]
     fn test_verify_credential_response() {
         run_with_large_stack(move || {
