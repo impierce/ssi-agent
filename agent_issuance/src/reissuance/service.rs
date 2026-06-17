@@ -270,6 +270,44 @@ mod tests {
         )
         .await
         .unwrap();
+
+        let credential_configuration = serde_json::from_value::<CredentialConfiguration>(json!({
+            "credential_configuration_id": "VCDM SD-JWT VC",
+            "format": "vc+sd-jwt",
+            "type": ["VerifiableCredential"],
+            "display": [
+                {
+                    "name": "VCDM SD-JWT Credential",
+                    "locale": "en"
+                }
+            ],
+            "claims": [
+                {
+                    "path": ["credentialSubject", "first_name"],
+                    "display": [{ "name": "First Name", "locale": "en" }]
+                },
+                {
+                    "path": ["credentialSubject", "last_name"],
+                    "display": [{ "name": "Last Name", "locale": "en" }]
+                },
+                {
+                    "path": ["credentialSubject", "dob"],
+                    "display": [{ "name": "Date of Birth", "locale": "en" }]
+                }
+            ]
+        }))
+        .unwrap();
+
+        command_handler(
+            SERVER_CONFIG_ID,
+            &state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration,
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
     }
 
     async fn credential_configuration(
@@ -295,6 +333,13 @@ mod tests {
                 "first_name": "Ferris",
                 "last_name": "Rustacean",
                 "dob": "2010-01-01"
+            }),
+            "VCDM SD-JWT VC" => json!({
+                "credentialSubject": {
+                    "first_name": "Ferris",
+                    "last_name": "Rustacean",
+                    "dob": "2010-01-01"
+                }
             }),
             _ => json!({
                 "credentialSubject": {
@@ -454,5 +499,63 @@ mod tests {
         assert_eq!(reissuance.trigger_type.as_deref(), Some("manual"));
         assert_eq!(reissuance.triggered_by.as_deref(), Some("unitrust"));
         assert_eq!(reissuance.status_action, None);
+    }
+
+    #[async_std::test]
+    async fn create_reissuance_prepares_vc_sd_jwt_credential_offer_and_relation() {
+        let state = test_state().await;
+        create_original_credential(&state, "original-credential-id", "VCDM SD-JWT VC").await;
+        let service = ReissuanceService::default();
+
+        let response = service
+            .create(
+                &state,
+                reissuance_request(
+                    "VCDM SD-JWT VC",
+                    json!({
+                        "credentialSubject": {
+                            "first_name": "Ferris",
+                            "last_name": "Reissued",
+                            "dob": "2010-01-01"
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.reissuance_id, "reissuance-id");
+        assert_eq!(response.original_credential_id, "original-credential-id");
+        assert_eq!(response.new_credential_id, "new-credential-id");
+        assert_eq!(response.offer_id, "offer-id");
+        assert_eq!(response.credential_configuration_id, "VCDM SD-JWT VC");
+
+        let original_credential = query_handler("original-credential-id", &state.query.credential)
+            .await
+            .unwrap()
+            .unwrap();
+        let new_credential = query_handler("new-credential-id", &state.query.credential)
+            .await
+            .unwrap()
+            .unwrap();
+        let offer = query_handler("offer-id", &state.query.offer).await.unwrap().unwrap();
+        let reissuance = query_handler("reissuance-id", &state.query.reissuance)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            original_credential.data.unwrap().raw["credentialSubject"]["last_name"],
+            json!("Rustacean")
+        );
+        assert_eq!(
+            new_credential.data.unwrap().raw["credentialSubject"]["last_name"],
+            json!("Reissued")
+        );
+        assert_eq!(offer.credential_ids, vec!["new-credential-id"]);
+        assert_eq!(reissuance.original_credential_id, "original-credential-id");
+        assert_eq!(reissuance.new_credential_id, "new-credential-id");
+        assert_eq!(reissuance.offer_id, "offer-id");
+        assert_eq!(reissuance.credential_configuration_id, "VCDM SD-JWT VC");
     }
 }
