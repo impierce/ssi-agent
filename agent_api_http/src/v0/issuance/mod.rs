@@ -6,6 +6,7 @@ pub mod nonce;
 pub mod offers;
 pub mod openapi;
 pub mod public_offers;
+pub mod reissuance;
 
 pub mod error;
 
@@ -25,6 +26,7 @@ use crate::v0::issuance::{
         all_offers, offer, offers,
         send::{individual_offer, organization_offer},
     },
+    reissuance::create_credential_reissuance,
     public_offers::{
         all_public_offers, create_public_offer, delete_public_offer, take_public_offer_offline,
         take_public_offer_online,
@@ -49,6 +51,7 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
                 )
+                .route("/credential-reissuance", post(create_credential_reissuance))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
