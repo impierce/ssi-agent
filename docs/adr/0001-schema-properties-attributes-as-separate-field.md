@@ -23,6 +23,8 @@ The question was: should this attribute metadata be embedded **inside** the JSON
 
 Keep `schemaPropertiesAttributes` as a **separate top-level field**, independent of the `schema` field.
 
+Address attribute entries by **JSON Pointer paths to leaf claims**, rather than by embedding metadata in object nodes or inventing a separate path syntax.
+
 ---
 
 ## Rationale
@@ -39,11 +41,23 @@ The `schema` field describes **what data looks like** — it is a structural con
 
 Mixing these two concerns inside a single JSON document creates semantic confusion. A third-party developer reading the schema should not need to parse or understand platform-specific metadata to use the schema for its primary purpose.
 
-### 3. Clean extensibility
+### 3. Deterministic claim addressing
+
+Claim metadata is meaningful at the level of actual claim values, not merely at the level of object containers. A nested object such as `address` or `achievement.criteria` is structure; the meaningful claim surface is the set of leaf values beneath it.
+
+Using JSON Pointer paths to leaf claims gives UniCore a standard, deterministic way to refer to those claims:
+
+- `/name`
+- `/address/city`
+- `/achievement/criteria/narrative`
+
+This choice avoids ambiguity in nested schemas, aligns with how frontends derive fields from the schema tree, and removes the need for a UniCore-specific path notation.
+
+### 4. Clean extensibility
 
 Adding new attribute flags in the future (e.g. a `mandatory` flag for required submission, or a `pattern` override hint) is straightforward when attributes live in their own field. Embedding these in the JSON Schema would require every consumer to understand and ignore an ever-growing set of `x-` keywords.
 
-### 4. Simpler schema storage and versioning
+### 5. Simpler schema storage and versioning
 
 JSON Schema documents are often stored, cached, or forwarded verbatim by tooling. A schema that contains only standard JSON Schema keywords is safe to store and forward without stripping. A schema with embedded `x-` metadata requires either stripping before forwarding or ensuring downstream consumers handle unknown keywords gracefully.
 
@@ -78,6 +92,7 @@ JSON Schema documents are often stored, cached, or forwarded verbatim by tooling
 
 - The `schema` field remains a clean, standards-compliant JSON Schema document with no platform-specific extensions.
 - `schemaPropertiesAttributes` keys use **JSON Pointer** notation (RFC 6901) to address leaf fields within the nested schema, providing an unambiguous and standard path format.
+- Object container nodes are not directly addressable through `schemaPropertiesAttributes`; metadata is attached to leaf claims only.
 
 ---
 
@@ -87,3 +102,7 @@ An earlier implementation automatically injected `"additionalProperties": false`
 
 - Consumers who want to understand claim projection metadata must read both fields. This is an acceptable tradeoff given the audience (issuer-facing admin API, not credential holder tooling).
 - When displaying the schema in a frontend form builder, the UI layer is responsible for merging the two fields into a combined view if needed.
+
+## Related Documentation
+
+For the current shape and behavior of templates across supported data models, see [Template Model](../template-model.md).

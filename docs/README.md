@@ -24,6 +24,7 @@ These markdown files are used as input for generating the official documentation
 
 - **[AI Context & Code Navigation](./glossary/CONTEXT.md)** - Architecture patterns and bounded context mapping
 - **[Glossary Overview](./glossary/)** - How to use ubiquitous language and AI context
+- **[Template Model](./template-model.md)** - Current template structure, reasoning, and data-model-specific behavior
 - **[Architecture Decision Records](./adr/)** - Why certain design choices were made
 - **[Deployment](./deployment/)** - Production deployment guides
 - **[Problem Details](./problem-details/)** - Troubleshooting and error handling
