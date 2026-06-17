@@ -168,9 +168,18 @@ pub(crate) async fn credential_reissuance(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{v0::issuance::router, API_VERSION};
+    use crate::{
+        v0::{
+            authorization,
+            authorization::authorization_server::token::tests::token,
+            issuance::{credential_issuer::credential::tests::TEST_NONCE, router},
+        },
+        API_VERSION,
+    };
+    use agent_authorization::services::AuthorizationServices;
     use agent_issuance::{
-        credential::{command::CredentialCommand, entity::Data},
+        credential::{aggregate::Status as CredentialStatus, command::CredentialCommand, entity::Data},
+        nonce::command::NonceCommand,
         server_config::command::ServerConfigCommand,
         services::IssuanceServices,
         state::{initialize, SERVER_CONFIG_ID},
@@ -180,13 +189,17 @@ mod tests {
         config::CredentialConfiguration,
         handlers::{command_handler, query_handler},
     };
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::{self, Body},
-        http::{self, Request},
+        http::{self, header, Method, Request},
     };
+    use oid4vci::credential_offer::AuthorizationCode;
     use serde_json::{json, Value};
+    use serial_test::serial;
     use tower::ServiceExt;
+
+    const CREDENTIAL_PROOF_JWT: &str = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
 
     async fn test_state() -> Arc<IssuanceState> {
         let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
@@ -334,6 +347,90 @@ mod tests {
         assert_eq!(reissuance.status_action, None);
         assert_eq!(new_credential.data.unwrap().raw["last_name"], json!("Reissued"));
         assert_eq!(offer.credential_ids, vec![new_credential_id.to_string()]);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_reissued_credential_can_be_issued_through_oid4vci() {
+        let state = test_state().await;
+        create_original_credential(&state).await;
+
+        let (status, body) = post_reissuance(state.clone()).await;
+
+        assert_eq!(status, StatusCode::CREATED);
+        let offer_id = body["offerId"].as_str().unwrap();
+        let new_credential_id = body["newCredentialId"].as_str().unwrap();
+
+        let authorization_state =
+            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut authorization_app = authorization::router((authorization_state, state.clone()));
+        let access_token = token(
+            &mut authorization_app,
+            false,
+            (
+                Some(AuthorizationCode {
+                    issuer_state: Some(offer_id.to_string()),
+                    authorization_server: None,
+                }),
+                None,
+            ),
+        )
+        .await;
+
+        command_handler(
+            TEST_NONCE,
+            &state.command.nonce,
+            NonceCommand::GenerateNonce {
+                c_nonce: TEST_NONCE.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let app = router(state.clone());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/openid4vci/credential")
+                    .header(header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .header(header::AUTHORIZATION, format!("Bearer {access_token}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "credential_configuration_id": "SD-JWT VC",
+                            "proofs": {
+                                "jwt": [CREDENTIAL_PROOF_JWT]
+                            }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).unwrap(),
+            "application/json"
+        );
+
+        let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(body["credentials"][0]["credential"].is_string());
+
+        let credential = query_handler(new_credential_id, &state.query.credential)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(credential.status, CredentialStatus::Issued);
+        assert!(credential.signed.is_some());
     }
 
     #[tokio::test]
