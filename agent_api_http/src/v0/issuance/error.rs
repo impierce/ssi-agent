@@ -4,7 +4,8 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
-    offer::error::OfferError, server_config::error::ServerConfigError, status_list::error::StatusListError,
+    offer::error::OfferError, reissuance::service::ReissuanceServiceError, server_config::error::ServerConfigError,
+    status_list::error::StatusListError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -151,6 +152,49 @@ impl IntoApiErrorExt for StatusListError {
             StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListQueryError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListUrlParsingError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    }
+}
+
+impl IntoApiErrorExt for ReissuanceServiceError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            ReissuanceServiceError::OriginalCredentialNotFound(credential_id) => {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("Original Credential Not Found")
+                    .type_url(type_url("issuance#original-credential-not-found"))
+                    .message(format!("Original credential `{credential_id}` was not found."))
+                    .finish()
+            }
+            ReissuanceServiceError::CredentialConfigurationNotFound(configuration_id) => {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("Credential Configuration Not Found")
+                    .type_url(type_url("issuance#credential-configuration-not-found"))
+                    .message(format!("Credential configuration `{configuration_id}` was not found."))
+                    .finish()
+            }
+            ReissuanceServiceError::InvalidCredentialPayload => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Credential Payload")
+                .type_url(type_url("issuance#invalid-credential-payload"))
+                .message("Credential payload must be a JSON object.")
+                .finish(),
+            ReissuanceServiceError::UnsupportedCredentialFormat(format) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Credential Format")
+                .type_url(type_url("issuance#unsupported-credential-format"))
+                .message(format!("Credential format is not supported for reissuance: {format}"))
+                .finish(),
+            ReissuanceServiceError::Policy(error) => ApiError::builder(StatusCode::FORBIDDEN)
+                .title("Reissuance Not Allowed")
+                .type_url(type_url("issuance#reissuance-not-allowed"))
+                .message(error.to_string())
+                .finish(),
+            ReissuanceServiceError::Query(error) | ReissuanceServiceError::Command(error) => {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Credential Reissuance Failed")
+                    .type_url(type_url("issuance#credential-reissuance-failed"))
+                    .message(error)
+                    .finish()
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
 pub mod offers;
 pub mod openapi;
+pub mod reissuance;
 
 pub mod error;
 
@@ -26,6 +27,7 @@ use crate::v0::issuance::{
         all_offers, offer, offers,
         send::{individual_offer, organization_offer},
     },
+    reissuance::create_credential_reissuance,
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
@@ -44,6 +46,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                     get(credentials::credential).patch(patch_credential),
                 )
                 .route("/credential-configurations", post(credential_configurations))
+                .route("/credential-reissuance", post(create_credential_reissuance))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
