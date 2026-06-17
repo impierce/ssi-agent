@@ -1,3 +1,4 @@
+use crate::v0::issuance::reissuance::{__path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances};
 use crate::v0::issuance::credentials::{
     __path_all_credentials, __path_create_credentials_batch, __path_credential, __path_credentials,
     __path_patch_credential, __path_verify_credentials_batch,
@@ -29,6 +30,9 @@ use utoipa::{
         offers,
         individual_offer,
         organization_offer,
+        credential_reissuances,
+        all_credential_reissuances,
+        credential_reissuance,
         all_public_offers,
         create_public_offer,
         take_public_offer_offline,

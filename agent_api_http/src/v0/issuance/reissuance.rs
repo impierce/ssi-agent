@@ -2,11 +2,14 @@ use crate::error::{type_url, IntoApiErrorExt};
 use crate::handlers::query_handler;
 use agent_issuance::{
     credential::aggregate::CredentialExpiry,
-    reissuance::service::{CreateReissuanceRequest, ReissuanceService},
+    reissuance::{
+        service::{CreateReissuanceRequest, ReissuanceService},
+        views::ReissuanceView,
+    },
     state::IssuanceState,
 };
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Path, State},
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
@@ -49,7 +52,7 @@ pub struct CreateCredentialReissuanceResponse {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn create_credential_reissuance(
+pub(crate) async fn credential_reissuances(
     State(state): State<Arc<IssuanceState>>,
     Json(CreateCredentialReissuanceRequest {
         original_credential_id,
@@ -106,4 +109,58 @@ pub(crate) async fn create_credential_reissuance(
         }),
     )
         .into_response())
+}
+
+#[utoipa::path(
+    get,
+    path = "/credential-reissuance",
+    operation_id = "get_all_credential_reissuances",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "All credential reissuance relations retrieved successfully", body = [ReissuanceView])
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn all_credential_reissuances(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
+    let reissuances = query_handler("all_reissuances", &state.query.all_reissuances)
+        .await
+        .map_err(|_| {
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Failed to query credential reissuances")
+                .type_url(type_url("issuance#query-credential-reissuances-failed"))
+                .message("Failed to query the credential reissuance relations.")
+                .finish()
+        })?
+        .map(|all_reissuances_view| all_reissuances_view.reissuances.into_values().collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    Ok((StatusCode::OK, Json(reissuances)).into_response())
+}
+
+#[utoipa::path(
+    get,
+    path = "/credential-reissuance/{reissuance_id}",
+    operation_id = "get_credential_reissuance_by_id",
+    tags = ["Issuance"],
+    responses(
+        (status = 200, description = "Credential reissuance relation retrieved successfully", body = ReissuanceView),
+        (status = 404, description = "Credential reissuance relation not found")
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn credential_reissuance(
+    State(state): State<Arc<IssuanceState>>,
+    Path(reissuance_id): Path<String>,
+) -> Result<Response, ApiError> {
+    query_handler(&reissuance_id, &state.query.reissuance)
+        .await
+        .map_err(|_| {
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Failed to query credential reissuance")
+                .type_url(type_url("issuance#query-credential-reissuance-failed"))
+                .message("Failed to query the credential reissuance relation.")
+                .finish()
+        })?
+        .map(|reissuance_view| (StatusCode::OK, Json(reissuance_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
