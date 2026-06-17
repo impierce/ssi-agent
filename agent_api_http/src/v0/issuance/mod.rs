@@ -27,7 +27,7 @@ use crate::v0::issuance::{
         all_offers, offer, offers,
         send::{individual_offer, organization_offer},
     },
-    reissuance::create_credential_reissuance,
+    reissuance::{all_credential_reissuances, credential_reissuance, credential_reissuances},
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
@@ -46,7 +46,11 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                     get(credentials::credential).patch(patch_credential),
                 )
                 .route("/credential-configurations", post(credential_configurations))
-                .route("/credential-reissuance", post(create_credential_reissuance))
+                .route(
+                    "/credential-reissuance",
+                    post(credential_reissuances).get(all_credential_reissuances),
+                )
+                .route("/credential-reissuance/{reissuance_id}", get(credential_reissuance))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
