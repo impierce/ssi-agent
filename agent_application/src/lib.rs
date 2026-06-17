@@ -35,7 +35,7 @@ pub async fn run() -> io::Result<()> {
     let subject = Arc::new(Subject::new().await);
     let state = state(subject).await?;
 
-    serve(app(state)).await
+    serve(router(state)).await
 }
 
 pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
