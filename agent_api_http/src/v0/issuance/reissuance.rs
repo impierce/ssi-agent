@@ -164,3 +164,251 @@ pub(crate) async fn credential_reissuance(
         .map(|reissuance_view| (StatusCode::OK, Json(reissuance_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{v0::issuance::router, API_VERSION};
+    use agent_issuance::{
+        credential::{command::CredentialCommand, entity::Data},
+        server_config::command::ServerConfigCommand,
+        services::IssuanceServices,
+        state::{initialize, SERVER_CONFIG_ID},
+    };
+    use agent_secret_manager::service::Service;
+    use agent_shared::{
+        config::CredentialConfiguration,
+        handlers::{command_handler, query_handler},
+    };
+    use agent_store::{in_memory::InMemory, issuance_state};
+    use axum::{
+        body::{self, Body},
+        http::{self, Request},
+    };
+    use serde_json::{json, Value};
+    use tower::ServiceExt;
+
+    async fn test_state() -> Arc<IssuanceState> {
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&state).await.unwrap();
+        add_sd_jwt_credential_configuration(&state).await;
+        state
+    }
+
+    async fn add_sd_jwt_credential_configuration(state: &IssuanceState) {
+        let credential_configuration = serde_json::from_value::<CredentialConfiguration>(json!({
+            "credential_configuration_id": "SD-JWT VC",
+            "format": "dc+sd-jwt",
+            "display": [
+                {
+                    "name": "SD-JWT VC Credential",
+                    "locale": "en"
+                }
+            ],
+            "claims": [
+                {
+                    "path": ["first_name"],
+                    "display": [{ "name": "First Name", "locale": "en" }]
+                },
+                {
+                    "path": ["last_name"],
+                    "display": [{ "name": "Last Name", "locale": "en" }]
+                },
+                {
+                    "path": ["dob"],
+                    "display": [{ "name": "Date of Birth", "locale": "en" }]
+                }
+            ]
+        }))
+        .unwrap();
+
+        command_handler(
+            SERVER_CONFIG_ID,
+            &state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration,
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn create_original_credential(state: &IssuanceState) {
+        let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+            .await
+            .unwrap()
+            .unwrap()
+            .credential_configurations
+            .get("SD-JWT VC")
+            .unwrap()
+            .1
+            .clone();
+
+        command_handler(
+            "original-credential-id",
+            &state.command.credential,
+            CredentialCommand::CreateUnsignedCredential {
+                credential_id: "original-credential-id".to_string(),
+                data: Data {
+                    raw: json!({
+                        "first_name": "Ferris",
+                        "last_name": "Rustacean",
+                        "dob": "2010-01-01"
+                    }),
+                },
+                credential_configuration: Box::new(credential_configuration),
+                expires_at: CredentialExpiry::Never,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn post_reissuance(state: Arc<IssuanceState>) -> (StatusCode, Value) {
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/credential-reissuance"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "originalCredentialId": "original-credential-id",
+                            "credentialConfigurationId": "SD-JWT VC",
+                            "credential": {
+                                "first_name": "Ferris",
+                                "last_name": "Reissued",
+                                "dob": "2010-01-01"
+                            },
+                            "expiresAt": "never",
+                            "reason": "data_changed",
+                            "triggerType": "manual",
+                            "triggeredBy": "unitrust"
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let status = response.status();
+        let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&body).unwrap())
+    }
+
+    #[tokio::test]
+    async fn test_credential_reissuance_endpoint_prepares_offer_and_relation() {
+        let state = test_state().await;
+        create_original_credential(&state).await;
+
+        let (status, body) = post_reissuance(state.clone()).await;
+
+        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(body["originalCredentialId"], "original-credential-id");
+        assert_eq!(body["credentialConfigurationId"], "SD-JWT VC");
+        assert!(body["id"].is_string());
+        assert!(body["newCredentialId"].is_string());
+        assert!(body["offerId"].is_string());
+        assert!(body["credentialOffer"].is_string());
+
+        let reissuance_id = body["id"].as_str().unwrap();
+        let new_credential_id = body["newCredentialId"].as_str().unwrap();
+        let offer_id = body["offerId"].as_str().unwrap();
+
+        let reissuance = query_handler(reissuance_id, &state.query.reissuance)
+            .await
+            .unwrap()
+            .unwrap();
+        let new_credential = query_handler(new_credential_id, &state.query.credential)
+            .await
+            .unwrap()
+            .unwrap();
+        let offer = query_handler(offer_id, &state.query.offer).await.unwrap().unwrap();
+
+        assert_eq!(reissuance.original_credential_id, "original-credential-id");
+        assert_eq!(reissuance.new_credential_id, new_credential_id);
+        assert_eq!(reissuance.offer_id, offer_id);
+        assert_eq!(reissuance.status_action, None);
+        assert_eq!(new_credential.data.unwrap().raw["last_name"], json!("Reissued"));
+        assert_eq!(offer.credential_ids, vec![new_credential_id.to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_all_credential_reissuances_endpoint_returns_relations() {
+        let state = test_state().await;
+        create_original_credential(&state).await;
+        let (status, created_body) = post_reissuance(state.clone()).await;
+        assert_eq!(status, StatusCode::CREATED);
+
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credential-reissuance"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body.as_array().unwrap().len(), 1);
+        assert_eq!(body[0]["id"], created_body["id"]);
+        assert_eq!(body[0]["original_credential_id"], "original-credential-id");
+    }
+
+    #[tokio::test]
+    async fn test_credential_reissuance_endpoint_returns_relation_by_id() {
+        let state = test_state().await;
+        create_original_credential(&state).await;
+        let (status, created_body) = post_reissuance(state.clone()).await;
+        assert_eq!(status, StatusCode::CREATED);
+
+        let reissuance_id = created_body["id"].as_str().unwrap();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credential-reissuance/{reissuance_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["id"], created_body["id"]);
+        assert_eq!(body["original_credential_id"], "original-credential-id");
+        assert_eq!(body["new_credential_id"], created_body["newCredentialId"]);
+    }
+
+    #[tokio::test]
+    async fn test_credential_reissuance_endpoint_returns_not_found_for_unknown_id() {
+        let state = test_state().await;
+        let app = router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credential-reissuance/unknown-reissuance-id"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}
