@@ -13,14 +13,17 @@ These markdown files are used as input for generating the official documentation
 
 ## Quick Navigation
 
-### For Developers & AI Agents
+### For External Stakeholders & API Consumers
 
-- **[Glossary](./glossary/)** - Domain terminology, bounded contexts, and protocol concepts
-- **[AI Context Guide](./glossary/CONTEXT.md)** - Guidance for AI agents working on the codebase
-
-### For Users
-
+- **[Ubiquitous Language](./glossary/ubiquitous-language.md)** - Shared domain terminology (implementation-free, publishable)
 - **[Introduction](./introduction/)** - Quick start and feature overview
 - **[Configuration](./configuration/)** - Setup and environment variables
+- **[API Documentation](https://beta.docs.impierce.com/unicore/)** - OpenAPI specification
+
+### For Developers & AI Agents
+
+- **[AI Context & Code Navigation](./glossary/CONTEXT.md)** - Architecture patterns and bounded context mapping
+- **[Glossary Overview](./glossary/)** - How to use ubiquitous language and AI context
+- **[Architecture Decision Records](./adr/)** - Why certain design choices were made
 - **[Deployment](./deployment/)** - Production deployment guides
 - **[Problem Details](./problem-details/)** - Troubleshooting and error handling
