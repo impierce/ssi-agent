@@ -61,6 +61,7 @@ pub struct TokenIssuanceService {}
 // For now, we pass through the Token Request's authorization_details as-is.
 impl TokenIssuanceService {
     async fn can_redeem_offer(issuance_state: &IssuanceState, offer_id: &str) -> Result<bool, TokenIssuanceError> {
+        // TODO: This mirrors the `public_offer_aggregate_id()`. Aggregate IDs should be generated in a consistent way in a single place.
         let aggregate_id = format!("public_offer:{offer_id}");
 
         let public_offer = query_handler(&aggregate_id, &issuance_state.query.public_offer)
