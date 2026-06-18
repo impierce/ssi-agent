@@ -39,6 +39,7 @@ impl std::fmt::Debug for IssuanceState {
         f.debug_struct("IssuanceState")
             .field("subject", &self.subject)
             .finish_non_exhaustive()
+        // We intentionally do not include the command handlers and queries in the debug output, as they don't contain useful information.
     }
 }
 
