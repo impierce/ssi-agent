@@ -191,7 +191,7 @@ pub(crate) async fn create_public_offer(
     }
 
     // Validate that the template schema only contains const-only leaf fields
-    validate_schema_has_only_consts(&*template.schema).map_err(|e| e.into_api_error())?;
+    validate_schema_has_only_consts(&template.schema).map_err(|e| e.into_api_error())?;
 
     let command = PublicOfferCommand::Create {
         offer_id: offer_id.clone(),
