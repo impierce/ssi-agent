@@ -54,6 +54,7 @@ pub struct Offer {
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,
     pub offer_link: Option<Url>,
+    #[serde(default)]
     pub successful_issuances: u32,
 }
 

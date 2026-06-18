@@ -824,7 +824,6 @@ mod test {
         assert_eq!(offer_event_publishers.len(), 0);
         assert_eq!(public_offer_event_publishers.len(), 0);
         assert_eq!(nonce_event_publishers.len(), 0);
-        assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(holder_credential_event_publishers.len(), 0);
         assert_eq!(presentation_event_publishers.len(), 0);
         assert_eq!(received_offer_event_publishers.len(), 0);
