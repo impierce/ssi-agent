@@ -20,6 +20,8 @@ use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
+use crate::public_offer::aggregate::PublicOffer;
+use crate::public_offer::views::{AllPublicOffersView, PublicOfferView};
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
@@ -34,6 +36,15 @@ pub struct IssuanceState {
     pub subject: Arc<Subject>,
 }
 
+impl std::fmt::Debug for IssuanceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IssuanceState")
+            .field("subject", &self.subject)
+            .finish_non_exhaustive()
+        // We intentionally do not include the command handlers and queries in the debug output, as they don't contain useful information.
+    }
+}
+
 /// The command handlers are used to execute commands on the aggregates.
 #[derive(Clone)]
 pub struct CommandHandlers {
@@ -42,6 +53,7 @@ pub struct CommandHandlers {
     pub offer: CommandHandler<Offer>,
     pub nonce: CommandHandler<Nonce>,
     pub status_list: CommandHandler<StatusListAggregate>,
+    pub public_offer: CommandHandler<PublicOffer>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -56,9 +68,11 @@ type Queries = ViewRepositories<
     dyn ViewRepository<NonceView, Nonce>,
     dyn ViewRepository<StatusListView, StatusListAggregate>,
     dyn ViewRepository<AllStatusListsView, StatusListAggregate>,
+    dyn ViewRepository<PublicOfferView, PublicOffer>,
+    dyn ViewRepository<AllPublicOffersView, PublicOffer>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1>
+pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1, PO, PO1>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
@@ -68,6 +82,8 @@ where
     N: ViewRepository<NonceView, Nonce> + ?Sized,
     SL: ViewRepository<StatusListView, StatusListAggregate> + ?Sized,
     SL1: ViewRepository<AllStatusListsView, StatusListAggregate> + ?Sized,
+    PO: ViewRepository<PublicOfferView, PublicOffer> + ?Sized,
+    PO1: ViewRepository<AllPublicOffersView, PublicOffer> + ?Sized,
 {
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
@@ -77,6 +93,8 @@ where
     pub nonce: Arc<N>,
     pub status_list: Arc<SL>,
     pub all_status_lists: Arc<SL1>,
+    pub public_offer: Arc<PO>,
+    pub all_public_offers: Arc<PO1>,
 }
 
 impl Clone for Queries {
@@ -90,6 +108,8 @@ impl Clone for Queries {
             nonce: self.nonce.clone(),
             status_list: self.status_list.clone(),
             all_status_lists: self.all_status_lists.clone(),
+            public_offer: self.public_offer.clone(),
+            all_public_offers: self.all_public_offers.clone(),
         }
     }
 }
@@ -145,6 +165,27 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
         None => {
             info!("Initializing server metadata ...");
 
+            // If `enable_interactive_authorization_flow` is enabled, then the `require_pushed_authorization_requests`
+            // field will be set to `None`, and the `interactive_authorization_endpoint` and
+            // `require_interactive_authorization_request` fields will be set to the corresponding values. If
+            // `enable_interactive_authorization_flow` is disabled, then the `require_pushed_authorization_requests`
+            // field will be set to `Some(true)`, and the `interactive_authorization_endpoint` and
+            // `require_interactive_authorization_request` fields will be set to `None`.
+            // Keep in mind: the pre-authorized code flow is still supported, independent of what is enabled/required here.
+            let (
+                require_pushed_authorization_requests,
+                interactive_authorization_endpoint,
+                require_interactive_authorization_request,
+            ) = if config().enable_interactive_authorization_flow {
+                info!("Interactive authorization flow is enabled. Initializing interactive authorization endpoints in server metadata.");
+
+                (None, Some(public_url.append_path_segment("auth/par")), Some(true))
+            } else {
+                info!("Interactive authorization flow is disabled. Interactive authorization endpoints will not be included in the server metadata.");
+
+                (Some(true), None, None)
+            };
+
             let command = ServerConfigCommand::InitializeServerMetadata {
                 // TODO: Move this to `agent_authorization`.
                 authorization_server_metadata: Box::new(AuthorizationServerMetadata {
@@ -152,7 +193,9 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                     authorization_endpoint: Some(public_url.append_path_segment("auth/authorize")),
                     token_endpoint: Some(public_url.append_path_segment("auth/token")),
                     pushed_authorization_request_endpoint: Some(public_url.append_path_segment("auth/par")),
-                    require_pushed_authorization_requests: Some(true),
+                    require_pushed_authorization_requests,
+                    interactive_authorization_endpoint,
+                    require_interactive_authorization_request,
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {

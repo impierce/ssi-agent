@@ -10,6 +10,8 @@ pub enum AuthorizationRequestCommand {
         state: String,
         nonce: String,
         dcql_query: Option<DcqlQuery>,
+        // If set to `None`, the default response mode will be used (which is currently `direct_post`).
+        alternative_response_mode: Option<String>,
     },
     SignAuthorizationRequestObject,
     VerifyAuthorizationResponse {
