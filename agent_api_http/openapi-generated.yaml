@@ -1785,7 +1785,7 @@ tags:
 - name: Templates
   description: Create and manage templates which provide the structure for credentials to be issued.
 - name: Catalogs
-  description: Create and manage Catalogs to organize and share your templates.
+  description: Create and manage catalogs to organize and share your templates.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation
