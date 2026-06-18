@@ -112,7 +112,7 @@ impl Aggregate for Catalog {
                 if !missing_templates.is_empty() {
                     return Err(CatalogError::TemplatesNotFound(format!(
                         "{}",
-                        missing_templates.join(", ")
+                        missing_templates.join(", ").to_string()
                     )));
                 }
 
