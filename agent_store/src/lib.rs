@@ -10,7 +10,7 @@ use agent_authorization::domain::client::views::ClientView;
 use agent_authorization::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use agent_authorization::domain::oauth2_authorization_request::views::all_oauth2_authorization_requests::AllOAuth2AuthorizationRequestsView;
 use agent_authorization::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
-use agent_authorization::services::AuthorizationServices;
+use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_authorization::state::AuthorizationState;
 use agent_holder::credential::aggregate::Credential as HolderCredential;
 use agent_holder::credential::queries::all_credentials::AllHolderCredentialsView;
@@ -257,6 +257,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<AuthorizationServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
+    oauth2_authorization_request_domain_services: OAuth2AuthorizationRequestDomainServices,
 ) -> AuthorizationState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
@@ -284,7 +285,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         OAuth2AuthorizationRequestView,
         OAuth2AuthorizationRequest,
         AllOAuth2AuthorizationRequestsView,
-    >((), oauth2_authorization_request_event_publishers)
+    >(oauth2_authorization_request_domain_services, oauth2_authorization_request_event_publishers)
     .await;
     let (token_command_handler, access_token, _all_access_tokens) = builder
         .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers)

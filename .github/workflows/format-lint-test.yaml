@@ -33,13 +33,7 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Test
-        # TODO: do not exclude `agent_issuance` (see TODO comment below)
-        run: cargo test --workspace --exclude agent_issuance
-
-      - name: Test (Agent Issuance)
-        # TODO: We set `RUST_MIN_STACK` to 32 MiB to prevent stack overflow in `test_verify_credential_response`.
-        # Investigate removing this workaround after testing refactor.
-        run: RUST_MIN_STACK=33554432 cargo test -p agent_issuance
+        run: cargo test --workspace
 
       - name: Generated files are unchanged
         run: git diff --exit-code

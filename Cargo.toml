@@ -19,6 +19,7 @@ members = [
     "shared-kernel",
 
     "infrastructure/stores/mongodb",
+    "infrastructure/adapters/verification-authorization",
 ]
 
 [workspace.package]
@@ -35,11 +36,11 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "1db24bc" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "1db24bc" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "1db24bc" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "1db24bc" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "1db24bc" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "0a5090e" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "0a5090e" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "0a5090e" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "0a5090e" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "0a5090e" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -52,6 +53,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.4.12"
 derivative = "2.2"
 futures = "0.3"
+mockall = "0.14"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
