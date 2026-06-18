@@ -110,10 +110,7 @@ impl Aggregate for Catalog {
                 let missing_templates = services.missing_templates(&template_ids).await;
 
                 if !missing_templates.is_empty() {
-                    return Err(CatalogError::TemplatesNotFound(format!(
-                        "{}",
-                        missing_templates.join(", ").to_string()
-                    )));
+                    return Err(CatalogError::TemplatesNotFound(missing_templates.join(", ")));
                 }
 
                 let new_template_ids: Vec<String> = template_ids

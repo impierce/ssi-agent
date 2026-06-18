@@ -36,6 +36,6 @@ pub(crate) async fn get_catalog(
                 Some(catalog_view)
             }
         })
-        .map(|catalog_view| (StatusCode::OK, Json(Catalog::from(catalog_view))).into_response())
+        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
