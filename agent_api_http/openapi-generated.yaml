@@ -138,8 +138,10 @@ paths:
       responses:
         '201':
           description: Public offer created successfully
+        '400':
+          description: Template schema invalid for public offers
         '404':
-          description: Template not found or offer already exists
+          description: Template or offer not found
   /v0/credential-configurations:
     post:
       tags:
@@ -1234,7 +1236,6 @@ components:
       - credential_ids
       - pre_authorized_code
       - status
-      - successful_issuances
       properties:
         credential_ids:
           type: array

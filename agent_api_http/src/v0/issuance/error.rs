@@ -163,6 +163,12 @@ impl IntoApiErrorExt for PublicOfferError {
         match self {
             AlreadyExists => ApiError::new(StatusCode::CONFLICT),
             NotFound => ApiError::new(StatusCode::NOT_FOUND),
+            TemplateNotFound => ApiError::new(StatusCode::NOT_FOUND),
+            TemplateNotEligible => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Template Not Eligible for Public Offer")
+                .type_url(type_url("issuance#template-not-eligible-for-public-offer"))
+                .message("Public offers require templates that only contain constant values.")
+                .finish(),
         }
     }
 }
