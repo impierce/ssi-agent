@@ -383,7 +383,10 @@ pub async fn update_credential_configurations(state: &IssuanceState) -> anyhow::
                 .credential_configurations
                 .into_iter()
                 .filter_map(
-                    |(credential_configuration_id, (provisioned, _credential_configuration, _authorization))| {
+                    |(
+                        credential_configuration_id,
+                        (provisioned, _credential_configuration, _authorization, _refresh_service),
+                    )| {
                         (provisioned
                             && !provisioned_credential_configurations.iter().any(
                                 |provisioned_credential_configuration| {

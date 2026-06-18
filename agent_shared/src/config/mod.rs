@@ -540,6 +540,14 @@ pub struct CredentialConfiguration {
     #[schema(schema_with = authorization)]
     #[serde(default)]
     pub authorization: Authorization,
+    #[serde(default, rename = "refreshService", skip_serializing_if = "Option::is_none")]
+    pub refresh_service: Option<RefreshServiceConfiguration>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+pub struct RefreshServiceConfiguration {
+    #[serde(rename = "type")]
+    pub type_: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
@@ -1079,6 +1087,28 @@ mod tests {
 
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json, json!({"type": "in_memory"}));
+    }
+
+    #[test]
+    #[serial]
+    fn credential_configuration_accepts_refresh_service() {
+        let credential_configuration = serde_json::from_value::<CredentialConfiguration>(json!({
+            "credential_configuration_id": "employee-id",
+            "format": "vc+sd-jwt",
+            "type": ["VerifiableCredential"],
+            "refreshService": {
+                "type": "VerifiableCredentialRefreshService2021"
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            credential_configuration
+                .refresh_service
+                .expect("refresh service should parse")
+                .type_,
+            "VerifiableCredentialRefreshService2021"
+        );
     }
 
     #[test]

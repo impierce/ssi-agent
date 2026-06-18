@@ -91,18 +91,19 @@ where
                 ReissuanceServiceError::OriginalCredentialNotFound(request.original_credential_id.clone())
             })?;
 
-        let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-            .await
-            .map_err(|err| ReissuanceServiceError::Query(err.to_string()))?
-            .and_then(|server_config_view| {
-                server_config_view
-                    .credential_configurations
-                    .get(&request.credential_configuration_id)
-                    .cloned()
-            })
-            .ok_or_else(|| {
-                ReissuanceServiceError::CredentialConfigurationNotFound(request.credential_configuration_id.clone())
-            })?;
+        let (_, credential_configuration, authorization, _) =
+            query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+                .await
+                .map_err(|err| ReissuanceServiceError::Query(err.to_string()))?
+                .and_then(|server_config_view| {
+                    server_config_view
+                        .credential_configurations
+                        .get(&request.credential_configuration_id)
+                        .cloned()
+                })
+                .ok_or_else(|| {
+                    ReissuanceServiceError::CredentialConfigurationNotFound(request.credential_configuration_id.clone())
+                })?;
 
         match &credential_configuration.credential_format {
             CredentialFormats::DcSdJwt(_) | CredentialFormats::VcSdJwt(_) => {}

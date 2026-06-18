@@ -1,4 +1,4 @@
-use agent_shared::config::Authorization;
+use agent_shared::config::{Authorization, RefreshServiceConfiguration};
 use cqrs_es::DomainEvent;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_issuer::{
@@ -28,22 +28,54 @@ pub enum ServerConfigEvent {
     CryptographicBindingMethodsUpdated {
         cryptographic_binding_methods_supported: Vec<String>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<
+            String,
+            (
+                bool,
+                CredentialConfigurationsSupportedObject,
+                Authorization,
+                Option<RefreshServiceConfiguration>,
+            ),
+        >,
     },
     SigningAlgorithmsUpdated {
         signing_algorithms_supported: Vec<Algorithm>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<
+            String,
+            (
+                bool,
+                CredentialConfigurationsSupportedObject,
+                Authorization,
+                Option<RefreshServiceConfiguration>,
+            ),
+        >,
     },
     CredentialConfigurationUpdated {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<
+            String,
+            (
+                bool,
+                CredentialConfigurationsSupportedObject,
+                Authorization,
+                Option<RefreshServiceConfiguration>,
+            ),
+        >,
     },
     CredentialConfigurationRemoved {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<
+            String,
+            (
+                bool,
+                CredentialConfigurationsSupportedObject,
+                Authorization,
+                Option<RefreshServiceConfiguration>,
+            ),
+        >,
     },
 }
 
