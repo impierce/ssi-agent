@@ -123,6 +123,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/create-public-offer:
+    post:
+      tags:
+      - Issuance
+      summary: Create a public offer mapping
+      operationId: create_public_offer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePublicOfferRequest'
+        required: true
+      responses:
+        '201':
+          description: Public offer created successfully
+        '400':
+          description: Template schema invalid for public offers
+        '404':
+          description: Template or offer not found
   /v0/credential-configurations:
     post:
       tags:
@@ -196,6 +215,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+  /v0/delete-public-offer:
+    post:
+      tags:
+      - Issuance
+      summary: Delete a public offer
+      operationId: delete_public_offer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePublicOfferRequest'
+        required: true
+      responses:
+        '204':
+          description: Public offer deleted successfully
+        '404':
+          description: Public offer not found
   /v0/documents:
     get:
       tags:
@@ -242,6 +278,21 @@ paths:
                 $ref: '#/components/schemas/Document'
         '404':
           description: Document not found
+  /v0/get-all-public-offers:
+    get:
+      tags:
+      - Issuance
+      summary: Get all public offers
+      operationId: all_public_offers
+      responses:
+        '200':
+          description: Public offers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicOfferStatusDto'
   /v0/holder/credentials:
     get:
       tags:
@@ -465,6 +516,40 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+  /v0/take-public-offer-offline:
+    post:
+      tags:
+      - Issuance
+      summary: Take a public offer offline
+      operationId: take_public_offer_offline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TakePublicOfferOfflineRequest'
+        required: true
+      responses:
+        '204':
+          description: Public offer taken offline successfully
+        '404':
+          description: Public offer not found
+  /v0/take-public-offer-online:
+    post:
+      tags:
+      - Issuance
+      summary: Take a public offer online
+      operationId: take_public_offer_online
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TakePublicOfferOnlineRequest'
+        required: true
+      responses:
+        '204':
+          description: Public offer taken online successfully
+        '404':
+          description: Public offer not found
   /v0/templates/create-template:
     post:
       tags:
@@ -670,6 +755,16 @@ components:
           type:
           - string
           - 'null'
+    CreatePublicOfferRequest:
+      type: object
+      required:
+      - offerId
+      - templateId
+      properties:
+        offerId:
+          type: string
+        templateId:
+          type: string
     CreateTemplateEndpointRequest:
       type: object
       properties:
@@ -950,6 +1045,13 @@ components:
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
       - european_learning_model_v3-3
+    DeletePublicOfferRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
+          type: string
     DeleteTemplateEndpointRequest:
       type: object
       required:
@@ -1178,6 +1280,10 @@ components:
           type:
           - string
           - 'null'
+        successful_issuances:
+          type: integer
+          format: int32
+          minimum: 0
         tx_code:
           type:
           - string
@@ -1281,6 +1387,29 @@ components:
       properties:
         selectivelyDisclosable:
           type: boolean
+    PublicOfferStatus:
+      type: string
+      enum:
+      - Active
+      - Inactive
+    PublicOfferStatusDto:
+      type: object
+      required:
+      - id
+      - templateId
+      - amountIssued
+      - status
+      properties:
+        amountIssued:
+          type: integer
+          format: int32
+          minimum: 0
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/PublicOfferStatus'
+        templateId:
+          type: string
     RemoveConnectionRequest:
       type: object
       required:
@@ -1311,6 +1440,20 @@ components:
       - id
       properties:
         id:
+          type: string
+    TakePublicOfferOfflineRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
+          type: string
+    TakePublicOfferOnlineRequest:
+      type: object
+      required:
+      - offerId
+      properties:
+        offerId:
           type: string
     TargetUrlOfferEndpointRequest:
       type: object
