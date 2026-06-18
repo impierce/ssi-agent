@@ -34,6 +34,14 @@ pub struct IssuanceState {
     pub subject: Arc<Subject>,
 }
 
+impl std::fmt::Debug for IssuanceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IssuanceState")
+            .field("subject", &self.subject)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The command handlers are used to execute commands on the aggregates.
 #[derive(Clone)]
 pub struct CommandHandlers {
