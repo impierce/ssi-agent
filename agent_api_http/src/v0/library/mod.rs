@@ -34,7 +34,7 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/templates/duplicate-template", post(duplicate_template))
                 // catalog Routes
                 .route("/catalog/create-catalog", post(create_catalog))
-                .route("/catalog/delete-catalog", post(delete_catalog))
+                .route("/catalog/delete-catalog/{catalog_id}", post(delete_catalog))
                 .route("/catalog/add-templates", post(add_templates))
                 .route("/catalog/remove-template", post(remove_template))
                 .route("/catalog/update-display", post(update_display))

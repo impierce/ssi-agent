@@ -5,7 +5,6 @@ use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
-// TODO: Add `modified_at` to metadata.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum TemplateEvent {
     TemplateCreated {
