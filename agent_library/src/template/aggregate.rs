@@ -72,7 +72,7 @@ pub enum Visibility {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+#[serde(tag = "type", content = "value", rename_all = "kebab-case")]
 pub enum Expiration {
     /// Never expires.
     Never,

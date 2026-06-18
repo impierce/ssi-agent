@@ -1035,7 +1035,7 @@ components:
           type:
             type: string
             enum:
-            - date_time
+            - date-time
           value:
             type: string
             description: Absolute datetime in ISO 8601 format, e.g. `"2026-12-31T23:59:59Z"`.
