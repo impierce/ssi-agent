@@ -1,11 +1,14 @@
-use agent_issuance::offer::aggregate::Offer;
+use agent_issuance::{
+    offer::aggregate::Offer, refresh_capability::aggregate::RefreshCapability, reissuance::aggregate::Reissuance,
+};
 use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ReissuanceEventPublisher,
-    ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, RefreshCapabilityEventPublisher,
+    ReissuanceEventPublisher, ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher,
+    TemplateEventPublisher,
 };
 use async_nats::Client;
 use async_trait::async_trait;
@@ -20,6 +23,8 @@ use uuid::Uuid;
 #[derive(Default, Debug)]
 pub struct EventPublisherNats {
     pub offer: Option<AggregateEventPublisherNats<Offer>>,
+    pub reissuance: Option<AggregateEventPublisherNats<Reissuance>>,
+    pub refresh_capability: Option<AggregateEventPublisherNats<RefreshCapability>>,
 }
 
 #[derive(Debug)]
@@ -66,10 +71,12 @@ impl EventPublisherNats {
         }
 
         let mut offer = None;
+        let mut reissuance = None;
+        let mut refresh_capability = None;
 
         // Iterate through the list of subjects from the config.
         for subject_config in &nats_config.subjects {
-            if !subject_config.events.offer.is_empty() {
+            if !subject_config.events.offer.is_empty() && offer.is_none() {
                 offer = Some(
                     AggregateEventPublisherNats::<Offer>::new(
                         nats_config.nats_url.clone(),
@@ -79,12 +86,48 @@ impl EventPublisherNats {
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
                 );
-                break;
-                // TODO: Extend this to loop for other aggregates if added.
+            }
+
+            if !subject_config.events.reissuance.is_empty() && reissuance.is_none() {
+                reissuance = Some(
+                    AggregateEventPublisherNats::<Reissuance>::new(
+                        nats_config.nats_url.clone(),
+                        subject_config.name.clone(),
+                        subject_config
+                            .events
+                            .reissuance
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
+                );
+            }
+
+            if !subject_config.events.refresh_capability.is_empty() && refresh_capability.is_none() {
+                refresh_capability = Some(
+                    AggregateEventPublisherNats::<RefreshCapability>::new(
+                        nats_config.nats_url.clone(),
+                        subject_config.name.clone(),
+                        subject_config
+                            .events
+                            .refresh_capability
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
+                );
             }
         }
 
-        let event_publisher = EventPublisherNats { offer };
+        let event_publisher = EventPublisherNats {
+            offer,
+            reissuance,
+            refresh_capability,
+        };
 
         info!("Loaded NATS event publisher: {:?}", event_publisher);
 
@@ -168,11 +211,15 @@ impl EventPublisher for EventPublisherNats {
     }
 
     fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
-        None
+        self.reissuance
+            .take()
+            .map(|publisher| Box::new(publisher) as ReissuanceEventPublisher)
     }
 
-    fn refresh_capability(&mut self) -> Option<agent_store::RefreshCapabilityEventPublisher> {
-        None
+    fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
+        self.refresh_capability
+            .take()
+            .map(|publisher| Box::new(publisher) as RefreshCapabilityEventPublisher)
     }
 }
 

@@ -631,6 +631,10 @@ pub struct Events {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub credential: Vec<CredentialEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reissuance: Vec<ReissuanceEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refresh_capability: Vec<RefreshCapabilityEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub offer: Vec<OfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nonce: Vec<NonceEvent>,
@@ -729,6 +733,17 @@ pub enum CredentialEvent {
     SignedCredentialCreated,
     CredentialSigned,
     NotificationReceived,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum ReissuanceEvent {
+    ReissuanceCreated,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum RefreshCapabilityEvent {
+    RefreshCapabilityCreated,
+    RefreshCapabilityDisabled,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

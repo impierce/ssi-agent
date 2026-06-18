@@ -9,6 +9,7 @@ use agent_identity::{
 };
 use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
+    refresh_capability::aggregate::RefreshCapability, reissuance::aggregate::Reissuance,
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
 use agent_library::template::aggregate::Template;
@@ -50,6 +51,8 @@ pub struct EventPublisherHttp {
     // Issuance
     pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
     pub credential: Option<AggregateEventPublisherHttp<Credential>>,
+    pub reissuance: Option<AggregateEventPublisherHttp<Reissuance>>,
+    pub refresh_capability: Option<AggregateEventPublisherHttp<RefreshCapability>>,
     pub offer: Option<AggregateEventPublisherHttp<Offer>>,
     pub nonce: Option<AggregateEventPublisherHttp<Nonce>>,
     pub status_list: Option<AggregateEventPublisherHttp<StatusListAggregate>>,
@@ -216,6 +219,32 @@ impl EventPublisherHttp {
             )
         });
 
+        let reissuance = (!event_publisher_http.events.reissuance.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<Reissuance>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .reissuance
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
+        let refresh_capability = (!event_publisher_http.events.refresh_capability.is_empty()).then(|| {
+            AggregateEventPublisherHttp::<RefreshCapability>::new(
+                event_publisher_http.target_url.clone(),
+                event_publisher_http.headers.clone(),
+                event_publisher_http
+                    .events
+                    .refresh_capability
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )
+        });
+
         let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
             AggregateEventPublisherHttp::<Offer>::new(
                 event_publisher_http.target_url.clone(),
@@ -319,6 +348,8 @@ impl EventPublisherHttp {
             template,
             server_config,
             credential,
+            reissuance,
+            refresh_capability,
             offer,
             nonce,
             status_list,
@@ -441,11 +472,15 @@ impl EventPublisher for EventPublisherHttp {
     }
 
     fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
-        None
+        self.reissuance
+            .take()
+            .map(|publisher| Box::new(publisher) as ReissuanceEventPublisher)
     }
 
     fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
-        None
+        self.refresh_capability
+            .take()
+            .map(|publisher| Box::new(publisher) as RefreshCapabilityEventPublisher)
     }
 }
 
@@ -544,11 +579,15 @@ mod tests {
         set_config().enable_event_publisher_http();
         set_config().set_event_publisher_http_target_url(target_url.clone());
         set_config().set_event_publisher_http_target_events(Events {
+            reissuance: vec![agent_shared::config::ReissuanceEvent::ReissuanceCreated],
+            refresh_capability: vec![agent_shared::config::RefreshCapabilityEvent::RefreshCapabilityCreated],
             offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
             ..Default::default()
         });
 
         let publisher = EventPublisherHttp::load().unwrap();
+        assert!(publisher.reissuance.is_some());
+        assert!(publisher.refresh_capability.is_some());
 
         // A new event for the `Offer` aggregate.
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
