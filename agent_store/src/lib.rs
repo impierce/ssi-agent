@@ -35,6 +35,9 @@ use agent_issuance::credential::views::CredentialView;
 use agent_issuance::nonce::views::NonceView;
 use agent_issuance::offer::views::all_offers::AllOffersView;
 use agent_issuance::offer::views::OfferView;
+use agent_issuance::refresh_capability::aggregate::RefreshCapability;
+use agent_issuance::refresh_capability::views::all_refresh_capabilities::AllRefreshCapabilitiesView;
+use agent_issuance::refresh_capability::views::RefreshCapabilityView;
 use agent_issuance::reissuance::views::all_reissuances::AllReissuancesView;
 use agent_issuance::reissuance::views::ReissuanceView;
 use agent_issuance::server_config::views::ServerConfigView;
@@ -316,6 +319,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     let Partitions {
         credential_event_publishers,
         reissuance_event_publishers,
+        refresh_capability_event_publishers,
         offer_event_publishers,
         server_config_event_publishers,
         nonce_event_publishers,
@@ -333,6 +337,12 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<ReissuanceView, Reissuance, AllReissuancesView>(
             services.clone(),
             reissuance_event_publishers,
+        )
+        .await;
+    let (refresh_capability_command_handler, refresh_capability, all_refresh_capabilities) = builder
+        .commands_and_queries::<RefreshCapabilityView, RefreshCapability, AllRefreshCapabilitiesView>(
+            services.clone(),
+            refresh_capability_event_publishers,
         )
         .await;
     let (offer_command_handler, offer, all_offers) = builder
@@ -358,6 +368,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         command: agent_issuance::state::CommandHandlers {
             credential: credential_command_handler,
             reissuance: reissuance_command_handler,
+            refresh_capability: refresh_capability_command_handler,
             offer: offer_command_handler,
             server_config: server_config_command_handler,
             nonce: nonce_command_handler,
@@ -369,6 +380,8 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             all_credentials,
             reissuance,
             all_reissuances,
+            refresh_capability,
+            all_refresh_capabilities,
             offer,
             all_offers,
             nonce,
@@ -471,6 +484,7 @@ pub type AccessTokenEventPublisher = Box<dyn Query<AccessToken>>;
 pub type ServerConfigEventPublisher = Box<dyn Query<ServerConfig>>;
 pub type CredentialEventPublisher = Box<dyn Query<Credential>>;
 pub type ReissuanceEventPublisher = Box<dyn Query<Reissuance>>;
+pub type RefreshCapabilityEventPublisher = Box<dyn Query<RefreshCapability>>;
 pub type StatusListEventPublisher = Box<dyn Query<StatusListAggregate>>;
 pub type OfferEventPublisher = Box<dyn Query<Offer>>;
 pub type NonceEventPublisher = Box<dyn Query<Nonce>>;
@@ -494,6 +508,7 @@ pub struct Partitions {
     pub server_config_event_publishers: Vec<ServerConfigEventPublisher>,
     pub credential_event_publishers: Vec<CredentialEventPublisher>,
     pub reissuance_event_publishers: Vec<ReissuanceEventPublisher>,
+    pub refresh_capability_event_publishers: Vec<RefreshCapabilityEventPublisher>,
     pub status_list_event_publishers: Vec<StatusListEventPublisher>,
     pub offer_event_publishers: Vec<OfferEventPublisher>,
     pub nonce_event_publishers: Vec<NonceEventPublisher>,
@@ -523,6 +538,7 @@ pub trait EventPublisher {
     fn server_config(&mut self) -> Option<ServerConfigEventPublisher>;
     fn credential(&mut self) -> Option<CredentialEventPublisher>;
     fn reissuance(&mut self) -> Option<ReissuanceEventPublisher>;
+    fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher>;
     fn offer(&mut self) -> Option<OfferEventPublisher>;
     fn nonce(&mut self) -> Option<NonceEventPublisher>;
     fn status_list(&mut self) -> Option<StatusListEventPublisher>;
@@ -575,6 +591,9 @@ pub(crate) fn partition_event_publishers(event_publishers: Vec<Box<dyn EventPubl
             }
             if let Some(reissuance) = event_publisher.reissuance() {
                 partitions.reissuance_event_publishers.push(reissuance);
+            }
+            if let Some(refresh_capability) = event_publisher.refresh_capability() {
+                partitions.refresh_capability_event_publishers.push(refresh_capability);
             }
             if let Some(offer) = event_publisher.offer() {
                 partitions.offer_event_publishers.push(offer);
@@ -674,6 +693,10 @@ mod test {
             None
         }
 
+        fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
+            None
+        }
+
         fn offer(&mut self) -> Option<OfferEventPublisher> {
             None
         }
@@ -752,6 +775,10 @@ mod test {
             None
         }
 
+        fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
+            None
+        }
+
         fn offer(&mut self) -> Option<OfferEventPublisher> {
             None
         }
@@ -799,6 +826,7 @@ mod test {
             server_config_event_publishers,
             credential_event_publishers,
             reissuance_event_publishers,
+            refresh_capability_event_publishers,
             offer_event_publishers,
             nonce_event_publishers,
             status_list_event_publishers,
@@ -820,6 +848,7 @@ mod test {
         assert_eq!(server_config_event_publishers.len(), 1);
         assert_eq!(credential_event_publishers.len(), 0);
         assert_eq!(reissuance_event_publishers.len(), 0);
+        assert_eq!(refresh_capability_event_publishers.len(), 0);
         assert_eq!(status_list_event_publishers.len(), 0);
         assert_eq!(offer_event_publishers.len(), 0);
         assert_eq!(nonce_event_publishers.len(), 0);

@@ -20,6 +20,9 @@ use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
+use crate::refresh_capability::aggregate::RefreshCapability;
+use crate::refresh_capability::views::all_refresh_capabilities::AllRefreshCapabilitiesView;
+use crate::refresh_capability::views::RefreshCapabilityView;
 use crate::reissuance::aggregate::Reissuance;
 use crate::reissuance::views::all_reissuances::AllReissuancesView;
 use crate::reissuance::views::ReissuanceView;
@@ -46,6 +49,7 @@ pub struct CommandHandlers {
     pub offer: CommandHandler<Offer>,
     pub nonce: CommandHandler<Nonce>,
     pub status_list: CommandHandler<StatusListAggregate>,
+    pub refresh_capability: CommandHandler<RefreshCapability>,
 }
 
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
@@ -57,6 +61,8 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllCredentialsView, Credential>,
     dyn ViewRepository<ReissuanceView, Reissuance>,
     dyn ViewRepository<AllReissuancesView, Reissuance>,
+    dyn ViewRepository<RefreshCapabilityView, RefreshCapability>,
+    dyn ViewRepository<AllRefreshCapabilitiesView, RefreshCapability>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
     dyn ViewRepository<NonceView, Nonce>,
@@ -64,13 +70,15 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllStatusListsView, StatusListAggregate>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, R, R1, O, O1, N, SL, SL1>
+pub struct ViewRepositories<SC, C, C1, R, R1, RC, RC1, O, O1, N, SL, SL1>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
     C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
     R: ViewRepository<ReissuanceView, Reissuance> + ?Sized,
     R1: ViewRepository<AllReissuancesView, Reissuance> + ?Sized,
+    RC: ViewRepository<RefreshCapabilityView, RefreshCapability> + ?Sized,
+    RC1: ViewRepository<AllRefreshCapabilitiesView, RefreshCapability> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
     O1: ViewRepository<AllOffersView, Offer> + ?Sized,
     N: ViewRepository<NonceView, Nonce> + ?Sized,
@@ -82,6 +90,8 @@ where
     pub all_credentials: Arc<C1>,
     pub reissuance: Arc<R>,
     pub all_reissuances: Arc<R1>,
+    pub refresh_capability: Arc<RC>,
+    pub all_refresh_capabilities: Arc<RC1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
     pub nonce: Arc<N>,
@@ -97,6 +107,8 @@ impl Clone for Queries {
             all_credentials: self.all_credentials.clone(),
             reissuance: self.reissuance.clone(),
             all_reissuances: self.all_reissuances.clone(),
+            refresh_capability: self.refresh_capability.clone(),
+            all_refresh_capabilities: self.all_refresh_capabilities.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
             nonce: self.nonce.clone(),

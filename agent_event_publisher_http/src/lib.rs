@@ -17,8 +17,9 @@ use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ReissuanceEventPublisher,
-    ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, RefreshCapabilityEventPublisher,
+    ReissuanceEventPublisher, ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher,
+    TemplateEventPublisher,
 };
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
@@ -440,6 +441,10 @@ impl EventPublisher for EventPublisherHttp {
     }
 
     fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
+        None
+    }
+
+    fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
         None
     }
 }

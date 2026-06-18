@@ -170,6 +170,10 @@ impl EventPublisher for EventPublisherNats {
     fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
         None
     }
+
+    fn refresh_capability(&mut self) -> Option<agent_store::RefreshCapabilityEventPublisher> {
+        None
+    }
 }
 
 #[async_trait]
