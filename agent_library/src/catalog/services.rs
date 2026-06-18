@@ -21,7 +21,7 @@ impl CatalogServices for CatalogServiceImpl {
     }
 
     async fn missing_templates(&self, ids: &[String]) -> Vec<String> {
-        let mut missing = Vec::new(); 
+        let mut missing = Vec::new();
         for id in ids {
             if !self.template_exists(id).await {
                 missing.push(id.clone());
@@ -30,4 +30,3 @@ impl CatalogServices for CatalogServiceImpl {
         missing
     }
 }
-

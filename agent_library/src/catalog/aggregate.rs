@@ -193,7 +193,7 @@ impl Aggregate for Catalog {
                 self.modified_at = Utc::now();
             }
             TemplateIdsRemoved { id: _, template_ids } => {
-                self.template_ids.retain(|id|!template_ids.contains(id));
+                self.template_ids.retain(|id| !template_ids.contains(id));
                 self.modified_at = Utc::now();
             }
             CatalogDeleted { id: _ } => {

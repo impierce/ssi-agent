@@ -62,7 +62,7 @@ pub(crate) async fn create_catalog(
 ) -> Result<Response, ApiError> {
     let catalog_id = uuid::Uuid::new_v4().to_string();
 
-     if display.name.trim().is_empty() {
+    if display.name.trim().is_empty() {
         return Err(ApiError::new(StatusCode::BAD_REQUEST));
     }
 
@@ -151,7 +151,6 @@ pub struct RemoveTemplatesRequest {
     responses(
         (status = 200, description = "Template(s) removed successfully", body = Catalog)
     )
-       
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn remove_templates(
@@ -206,7 +205,7 @@ pub(crate) async fn update_display(
         display: display.clone(),
     };
 
-      if display.name.trim().is_empty() {
+    if display.name.trim().is_empty() {
         return Err(ApiError::new(StatusCode::BAD_REQUEST));
     }
 

@@ -4,7 +4,7 @@ use crate::v0::library::catalog::{
 };
 
 use crate::v0::library::catalog::queries::{
-    get_catalog::__path_get_catalog, get_all_catalogs::__path_get_all_catalogs,
+    get_all_catalogs::__path_get_all_catalogs, get_catalog::__path_get_catalog,
 };
 
 use utoipa::OpenApi;

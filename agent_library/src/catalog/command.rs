@@ -23,7 +23,7 @@ pub enum CatalogCommand {
     },
     RemoveTemplateIds {
         catalog_id: String,
-        template_ids:Vec<String>,
+        template_ids: Vec<String>,
     },
     DeleteCatalog {
         catalog_id: String,
