@@ -14,8 +14,8 @@ paths:
       tags:
       - Library
       - Catalog
-      summary: Add a template to a catalog
-      description: Adds a template to a catalog by its ID.
+      summary: Add one or more templates to a catalog
+      description: Adds one or more templates to a catalog by their IDs.
       operationId: add_templates
       requestBody:
         content:

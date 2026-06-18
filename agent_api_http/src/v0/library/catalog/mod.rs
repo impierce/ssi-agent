@@ -95,9 +95,9 @@ pub struct AddTemplatesRequest {
     pub template_ids: Vec<String>,
 }
 
-/// Add a template to a catalog
+/// Add one or more templates to a catalog
 ///
-/// Adds a template to a catalog by its ID.
+/// Adds one or more templates to a catalog by their IDs.
 #[utoipa::path(
     post,
     path = "/catalog/add-templates",
