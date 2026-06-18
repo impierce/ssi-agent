@@ -54,6 +54,8 @@ pub struct Offer {
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,
     pub offer_link: Option<Url>,
+    #[serde(default)]
+    pub successful_issuances: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -399,9 +401,13 @@ impl Aggregate for Offer {
                 self.subject_id = subject_id;
             }
             CredentialResponseCreated {
-                credential_response, ..
+                credential_response,
+                status,
+                ..
             } => {
                 self.credential_response.replace(credential_response);
+                self.status = status;
+                self.successful_issuances = self.successful_issuances.saturating_add(1);
             }
             TxCodeGenerated { tx_code, .. } => {
                 self.tx_code.replace(tx_code);
