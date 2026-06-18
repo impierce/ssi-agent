@@ -43,6 +43,10 @@ impl IntoApiErrorExt for CatalogError {
                 .title("Missing Required Field")
                 .source(self)
                 .finish(),
+            CatalogError::CatalogNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Catalog Not Found")
+                .source(self)
+                .finish(),
         }
     }
 }

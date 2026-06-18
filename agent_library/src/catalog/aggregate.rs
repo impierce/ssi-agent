@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
 use utoipa::ToSchema;
@@ -74,18 +75,39 @@ impl Aggregate for Catalog {
                     visibility,
                 }])
             }
-            UpdateDisplay { catalog_id, display } => Ok(vec![CatalogDisplayUpdated {
-                id: catalog_id,
-                display,
-            }]),
-            UpdateVisibility { catalog_id, visibility } => Ok(vec![VisibilityUpdated {
-                id: catalog_id,
-                visibility,
-            }]),
+            UpdateDisplay { catalog_id, display } => {
+                if self.is_deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
+
+                if display.name.trim().is_empty() {
+                    return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()));
+                }
+
+                Ok(vec![CatalogDisplayUpdated {
+                    id: catalog_id,
+                    display,
+                }])
+            }
+
+            UpdateVisibility { catalog_id, visibility } => {
+                if self.is_deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
+                Ok(vec![VisibilityUpdated {
+                    id: catalog_id,
+                    visibility,
+                }])
+            }
+
             AddTemplateIds {
                 catalog_id,
                 template_ids,
             } => {
+                if self.is_deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
+
                 // Check if all template IDs exist before proceeding
                 let missing_templates = services.missing_templates(&template_ids).await;
 
@@ -101,6 +123,13 @@ impl Aggregate for Catalog {
                     .filter(|id| !self.template_ids.contains(id))
                     .collect();
 
+                let unique: HashSet<_> = new_template_ids.iter().cloned().collect();
+                if unique.len() != new_template_ids.len() {
+                    return Err(CatalogError::DuplicateTemplate(
+                        "Duplicate template IDs found in AddTemplateIds command".to_string(),
+                    ));
+                }
+
                 if new_template_ids.is_empty() {
                     debug!("No new template IDs to add, ignoring AddTemplateIds command");
                     return Ok(vec![]);
@@ -115,6 +144,9 @@ impl Aggregate for Catalog {
                 catalog_id,
                 template_id,
             } => {
+                if self.is_deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
                 if !services.template_exists(&template_id).await {
                     return Err(CatalogError::TemplatesNotFound(template_id));
                 }
