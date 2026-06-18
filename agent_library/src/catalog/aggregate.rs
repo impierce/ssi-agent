@@ -65,6 +65,7 @@ impl Aggregate for Catalog {
                 display,
                 visibility,
             } => {
+                
                 if display.name.trim().is_empty() {
                     return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()));
                 }
@@ -123,8 +124,8 @@ impl Aggregate for Catalog {
                     .filter(|id| !self.template_ids.contains(id))
                     .collect();
 
-                let unique: HashSet<_> = new_template_ids.iter().cloned().collect();
-                if unique.len() != new_template_ids.len() {
+                let unique_templates: HashSet<_> = new_template_ids.iter().cloned().collect();
+                if unique_templates.len() != new_template_ids.len() {
                     return Err(CatalogError::DuplicateTemplate(
                         "Duplicate template IDs found in AddTemplateIds command".to_string(),
                     ));

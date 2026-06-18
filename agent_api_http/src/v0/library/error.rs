@@ -23,20 +23,8 @@ impl IntoApiErrorExt for TemplateError {
 impl IntoApiErrorExt for CatalogError {
     fn into_api_error(self) -> ApiError {
         match self {
-            CatalogError::DuplicateName(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Duplicate Catalog Name")
-                .source(self)
-                .finish(),
             CatalogError::TemplatesNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
-                .source(self)
-                .finish(),
-            CatalogError::TemplateAlreadyInCatalog(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Template Already In Catalog")
-                .source(self)
-                .finish(),
-            CatalogError::TemplateNotInCatalog(_) => ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not In Catalog")
                 .source(self)
                 .finish(),
             CatalogError::MissingField(_) => ApiError::builder(StatusCode::BAD_REQUEST)
@@ -45,6 +33,10 @@ impl IntoApiErrorExt for CatalogError {
                 .finish(),
             CatalogError::CatalogNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Catalog Not Found")
+                .source(self)
+                .finish(),
+            CatalogError::DuplicateTemplate(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Duplicate Template Found")
                 .source(self)
                 .finish(),
         }
