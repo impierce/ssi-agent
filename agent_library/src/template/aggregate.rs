@@ -6,12 +6,11 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use tracing::{debug, info};
 
-use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
-use super::open_badges::{
-    ensure_schema_required_keys, validate_open_badges_required_properties,
-    validate_open_badges_schema_properties,
-};
 pub use super::open_badges::open_badges_required_leaf_paths;
+use super::open_badges::{
+    ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
+};
+use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -947,7 +946,6 @@ fn trim_and_deduplicate_attribute_keys(
     }
     Ok(result)
 }
-
 
 /// Ensures the `non_removable` flag on each property attribute preserves the existing
 /// system-determined value. Users cannot alter `non_removable` through commands.
