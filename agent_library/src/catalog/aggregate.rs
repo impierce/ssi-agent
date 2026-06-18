@@ -89,7 +89,6 @@ impl Aggregate for Catalog {
                     display,
                 }])
             }
-
             UpdateVisibility { catalog_id, visibility } => {
                 if self.is_deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
@@ -99,7 +98,6 @@ impl Aggregate for Catalog {
                     visibility,
                 }])
             }
-
             AddTemplateIds {
                 catalog_id,
                 template_ids,
