@@ -10,6 +10,4 @@ pub enum CatalogError {
     CatalogNotFound(String),
     #[error("Duplicate templates found: {0}")]
     DuplicateTemplate(String),
-
-    
 }
