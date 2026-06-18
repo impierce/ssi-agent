@@ -83,23 +83,23 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Catalog'
-  /v0/catalog/remove-template:
+  /v0/catalog/remove-templates:
     post:
       tags:
       - Library
       - Catalog
-      summary: Remove a template from a catalog
-      description: Removes a template from a catalog by its ID.
-      operationId: remove_template
+      summary: Remove one or more templates from a catalog
+      description: Removes one or more templates from a catalog by their ID.
+      operationId: remove_templates
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RemoveTemplateRequest'
+              $ref: '#/components/schemas/RemoveTemplatesRequest'
         required: true
       responses:
         '200':
-          description: Catalog removed successfully
+          description: Template(s) removed successfully
           content:
             application/json:
               schema:
@@ -1526,15 +1526,17 @@ components:
       properties:
         id:
           type: string
-    RemoveTemplateRequest:
+    RemoveTemplatesRequest:
       type: object
       properties:
         catalogId:
           type: string
           default: ''
-        templateId:
-          type: string
-          default: ''
+        templateIds:
+          type: array
+          items:
+            type: string
+          default: []
     Source:
       type: string
       enum:

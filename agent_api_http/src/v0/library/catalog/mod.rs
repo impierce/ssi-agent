@@ -133,37 +133,37 @@ pub(crate) async fn add_templates(
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
-pub struct RemoveTemplateRequest {
+pub struct RemoveTemplatesRequest {
     pub catalog_id: String,
-    pub template_id: String,
+    pub template_ids: Vec<String>,
 }
 
-/// Remove a template from a catalog
+/// Remove one or more templates from a catalog
 ///
-/// Removes a template from a catalog by its ID.
+/// Removes one or more templates from a catalog by their ID.
 #[utoipa::path(
     post,
-    path = "/catalog/remove-template",
+    path = "/catalog/remove-templates",
     tags = ["Library", "Catalog"],
     request_body(
-        content = RemoveTemplateRequest,
+        content = RemoveTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Catalog removed successfully", body = Catalog)
+        (status = 200, description = "Template(s) removed successfully", body = Catalog)
     )
        
     )]
 #[axum_macros::debug_handler]
-pub(crate) async fn remove_template(
+pub(crate) async fn remove_templates(
     State(state): State<Arc<LibraryState>>,
-    Json(RemoveTemplateRequest {
+    Json(RemoveTemplatesRequest {
         catalog_id,
-        template_id,
-    }): Json<RemoveTemplateRequest>,
+        template_ids,
+    }): Json<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    let command = CatalogCommand::RemoveTemplateId {
+    let command = CatalogCommand::RemoveTemplateIds {
         catalog_id: catalog_id.clone(),
-        template_id,
+        template_ids,
     };
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;

@@ -21,9 +21,9 @@ pub enum CatalogCommand {
         catalog_id: String,
         template_ids: Vec<String>,
     },
-    RemoveTemplateId {
+    RemoveTemplateIds {
         catalog_id: String,
-        template_id: String,
+        template_ids:Vec<String>,
     },
     DeleteCatalog {
         catalog_id: String,

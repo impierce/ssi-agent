@@ -22,9 +22,9 @@ pub enum CatalogEvent {
         id: String,
         template_ids: Vec<String>,
     },
-    TemplateIdRemoved {
+    TemplateIdsRemoved {
         id: String,
-        template_id: String,
+        template_ids: Vec<String>,
     },
     CatalogDeleted {
         id: String,

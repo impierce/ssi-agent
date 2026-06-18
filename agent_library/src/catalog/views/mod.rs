@@ -31,8 +31,8 @@ impl View<Catalog> for Catalog {
             TemplateIdsAdded { id: _, template_ids } => {
                 self.template_ids.extend(template_ids.iter().cloned());
             }
-            TemplateIdRemoved { id: _, template_id } => {
-                self.template_ids.retain(|id| id != template_id);
+            TemplateIdsRemoved { id: _, template_ids } => {
+                self.template_ids.retain(|id| !template_ids.contains(id));
             }
             CatalogDeleted { id: _ } => {
                 self.is_deleted = true;
