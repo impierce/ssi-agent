@@ -52,6 +52,7 @@ impl Aggregate for AuthorizationRequest {
                 state,
                 nonce,
                 dcql_query,
+                alternative_response_mode,
             } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
@@ -99,7 +100,7 @@ impl Aggregate for AuthorizationRequest {
                             .client_id(ClientId::from_str(&client_id).unwrap())
                             .scope(Scope::openid())
                             .response_uri(redirect_uri)
-                            .response_mode("direct_post".to_string())
+                            .response_mode(alternative_response_mode.unwrap_or_else(|| "direct_post".to_string()))
                             .client_metadata(oid4vp_client_metadata)
                             .state(state)
                             .nonce(nonce)
@@ -341,6 +342,7 @@ pub mod tests {
                 state: "state".to_string(),
                 nonce: "nonce".to_string(),
                 dcql_query: None,
+                alternative_response_mode: None,
             })
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {

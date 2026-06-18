@@ -1,6 +1,5 @@
 use async_trait::async_trait;
-use identity_core::convert::{FromJson as _, ToJson as _};
-use jsonwebtoken::{decode_header, jwk::Jwk as JsonWebTokenJwk, DecodingKey};
+use jsonwebtoken::decode_header;
 use oauth_tsl::{
     relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
     status_list::{StatusList, StatusType},
@@ -14,6 +13,8 @@ use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 use tracing::{info, warn};
 use url::Url;
+
+use crate::convert_iota_jwk_to_decoding_key;
 
 #[derive(Error, Debug)]
 pub enum CredentialStatusCheckerError {
@@ -110,15 +111,9 @@ impl CredentialStatusChecker {
                 .await
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            // Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
-            let decoding_key = public_key_jwk
-                .to_json()
-                .ok()
-                .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
-                .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok())
-                .ok_or(CredentialStatusCheckerError::FailedToGetCredentialStatus(
-                    "Failed to create decoding key".to_string(),
-                ))?;
+            let decoding_key = convert_iota_jwk_to_decoding_key(&public_key_jwk).ok_or(
+                CredentialStatusCheckerError::FailedToGetCredentialStatus("Failed to create decoding key".to_string()),
+            )?;
 
             // TODO: move this logic to the OAuth TSL library.
             let decoded_jwt = decrypt_status_list_token(&status_list_jwt, decoding_key)
