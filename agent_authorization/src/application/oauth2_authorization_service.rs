@@ -81,7 +81,7 @@ impl OAuth2AuthorizationService {
                 let command = AuthorizationCodeCommand::CreateAuthorizationCode {
                     authorization_code_id: authorization_code_id.clone(),
                     client_id,
-                    redirect_uri: redirect_uri.clone(),
+                    redirect_uri: Some(redirect_uri.clone()),
                     code_challenge: oauth2_authorization_request.code_challenge,
                     code_challenge_method: oauth2_authorization_request.code_challenge_method,
                     issuer_state: oauth2_authorization_request.issuer_state,

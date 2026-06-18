@@ -13,15 +13,17 @@ agent_event_publisher_nats = { path = "../agent_event_publisher_nats" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
+agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
-did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
+verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
+did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
