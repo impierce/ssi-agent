@@ -1,8 +1,16 @@
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::{
+    config::config,
+    handlers::{command_handler, query_handler},
+    UrlAppendHelpers,
+};
 use oid4vci::{credential_format_profiles::CredentialFormats, credential_offer::GrantType};
 
 use crate::{
-    credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
+    credential::{
+        aggregate::{CredentialExpiry, CredentialRefreshService},
+        command::CredentialCommand,
+        entity::Data,
+    },
     offer::command::OfferCommand,
     refresh_capability::service::{RefreshCapabilityService, RefreshCapabilityServiceError},
     reissuance::{
@@ -124,12 +132,30 @@ where
             })
             .await?;
 
+        let refresh_capability = RefreshCapabilityService::default()
+            .create_for_credential(state, &request.new_credential_id, refresh_service.as_ref())
+            .await?;
+
+        let credential_refresh_service =
+            refresh_service
+                .as_ref()
+                .zip(refresh_capability.as_ref())
+                .map(|(refresh_service, refresh_capability)| CredentialRefreshService {
+                    type_: refresh_service.type_.clone(),
+                    url: config()
+                        .public_url
+                        .append_path_segment("credential-refresh")
+                        .to_string(),
+                    refresh_token: refresh_capability.refresh_reference.clone(),
+                });
+
         let create_credential_command = CredentialCommand::CreateUnsignedCredential {
             credential_id: request.new_credential_id.clone(),
             data: Data {
                 raw: request.credential,
             },
             credential_configuration: Box::new(credential_configuration.clone()),
+            refresh_service: credential_refresh_service,
             expires_at: request.expires_at,
         };
 
@@ -140,10 +166,6 @@ where
         )
         .await
         .map_err(|err| ReissuanceServiceError::Command(err.to_string()))?;
-
-        RefreshCapabilityService::default()
-            .create_for_credential(state, &request.new_credential_id, refresh_service.as_ref())
-            .await?;
 
         if query_handler(&request.offer_id, &state.query.offer)
             .await
@@ -402,6 +424,7 @@ mod tests {
                 credential_id: credential_id.to_string(),
                 data: Data { raw: credential },
                 credential_configuration: Box::new(credential_configuration),
+                refresh_service: None,
                 expires_at: CredentialExpiry::Never,
             },
         )
@@ -581,6 +604,21 @@ mod tests {
             .expect("new credential should have a refresh capability");
 
         assert_eq!(refresh_capability.status, RefreshCapabilityStatus::Active);
+
+        let new_credential = query_handler("new-credential-id", &state.query.credential)
+            .await
+            .unwrap()
+            .unwrap();
+        let new_credential_data = new_credential.data.unwrap().raw;
+
+        assert_eq!(
+            new_credential_data["refreshService"],
+            json!({
+                "type": "VerifiableCredentialRefreshService2021",
+                "url": "https://my-domain.example.org/credential-refresh",
+                "refreshToken": refresh_capability.refresh_reference
+            })
+        );
     }
 
     #[async_std::test]

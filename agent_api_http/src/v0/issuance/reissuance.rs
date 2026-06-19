@@ -271,6 +271,7 @@ mod tests {
                     }),
                 },
                 credential_configuration: Box::new(credential_configuration),
+                refresh_service: None,
                 expires_at: CredentialExpiry::Never,
             },
         )

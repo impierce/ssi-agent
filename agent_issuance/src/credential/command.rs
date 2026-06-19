@@ -4,7 +4,7 @@ use oid4vci::{
 };
 use serde::Deserialize;
 
-use crate::credential::aggregate::CredentialStatus;
+use crate::credential::aggregate::{CredentialRefreshService, CredentialStatus};
 
 use super::{aggregate::CredentialExpiry, entity::Data};
 
@@ -15,6 +15,7 @@ pub enum CredentialCommand {
         credential_id: String,
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
+        refresh_service: Option<CredentialRefreshService>,
         expires_at: CredentialExpiry,
     },
     CreateSignedCredential {

@@ -1,6 +1,7 @@
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
+use agent_issuance::credential::aggregate::CredentialRefreshService;
 use agent_issuance::refresh_capability::service::RefreshCapabilityService;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -12,6 +13,8 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_shared::config::config;
+use agent_shared::UrlAppendHelpers;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -105,53 +108,68 @@ pub(crate) async fn credentials(
                     .finish()
             })?;
 
-    let command = if is_signed {
-        // For a signed credential, ensure that the credential is a string.
-        if !credential.is_string() {
-            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Credential Type")
-                .type_url(type_url("issuance#invalid-credential-type"))
-                .message("For signed credentials, the credential must be a string.")
-                .finish());
-        }
+    let command =
+        if is_signed {
+            // For a signed credential, ensure that the credential is a string.
+            if !credential.is_string() {
+                return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Credential Type")
+                    .type_url(type_url("issuance#invalid-credential-type"))
+                    .message("For signed credentials, the credential must be a string.")
+                    .finish());
+            }
 
-        CredentialCommand::CreateSignedCredential {
-            credential_id: credential_id.clone(),
-            signed_credential: credential,
-        }
-    } else {
-        // For an unsigned credential, ensure that the credential is an object.
-        if !credential.is_object() {
-            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Credential Type")
-                .type_url(type_url("issuance#invalid-credential-type"))
-                .message("For unsigned credentials, the credential must be an object.")
-                .finish());
-        }
+            CredentialCommand::CreateSignedCredential {
+                credential_id: credential_id.clone(),
+                signed_credential: credential,
+            }
+        } else {
+            // For an unsigned credential, ensure that the credential is an object.
+            if !credential.is_object() {
+                return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Credential Type")
+                    .type_url(type_url("issuance#invalid-credential-type"))
+                    .message("For unsigned credentials, the credential must be an object.")
+                    .finish());
+            }
 
-        CredentialCommand::CreateUnsignedCredential {
-            credential_id: credential_id.clone(),
-            data: Data { raw: credential },
-            credential_configuration: Box::new(credential_configuration.clone()),
-            expires_at,
-        }
-    };
+            let refresh_capability = if !is_signed {
+                RefreshCapabilityService::default()
+                    .create_for_credential(&state, &credential_id, refresh_service.as_ref())
+                    .await
+                    .map_err(|err| {
+                        ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                            .title("Failed to create refresh capability")
+                            .type_url(type_url("issuance#create-refresh-capability-failed"))
+                            .message(err.to_string())
+                            .finish()
+                    })?
+            } else {
+                None
+            };
+
+            let credential_refresh_service = refresh_service.as_ref().zip(refresh_capability.as_ref()).map(
+                |(refresh_service, refresh_capability)| CredentialRefreshService {
+                    type_: refresh_service.type_.clone(),
+                    url: config()
+                        .public_url
+                        .append_path_segment("credential-refresh")
+                        .to_string(),
+                    refresh_token: refresh_capability.refresh_reference.clone(),
+                },
+            );
+
+            CredentialCommand::CreateUnsignedCredential {
+                credential_id: credential_id.clone(),
+                data: Data { raw: credential },
+                credential_configuration: Box::new(credential_configuration.clone()),
+                refresh_service: credential_refresh_service,
+                expires_at,
+            }
+        };
 
     // Create an unsigned/signed credential.
     command_handler(&credential_id, &state.command.credential, command).await?;
-
-    if !is_signed {
-        RefreshCapabilityService::default()
-            .create_for_credential(&state, &credential_id, refresh_service.as_ref())
-            .await
-            .map_err(|err| {
-                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                    .title("Failed to create refresh capability")
-                    .type_url(type_url("issuance#create-refresh-capability-failed"))
-                    .message(err.to_string())
-                    .finish()
-            })?;
-    }
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {

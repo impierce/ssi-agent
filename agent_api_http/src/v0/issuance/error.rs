@@ -195,6 +195,13 @@ impl IntoApiErrorExt for ReissuanceServiceError {
                     .message(error)
                     .finish()
             }
+            ReissuanceServiceError::RefreshCapability(error) => {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Credential Reissuance Failed")
+                    .type_url(type_url("issuance#credential-reissuance-failed"))
+                    .message(error.to_string())
+                    .finish()
+            }
         }
     }
 }

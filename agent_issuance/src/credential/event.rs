@@ -1,4 +1,4 @@
-use crate::credential::aggregate::CredentialStatus;
+use crate::credential::aggregate::{CredentialRefreshService, CredentialStatus};
 
 use super::{aggregate::Status, entity::Data};
 use chrono::{DateTime, Utc};
@@ -18,6 +18,7 @@ pub enum CredentialEvent {
         data: Data,
         notification_id: Option<String>,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
+        refresh_service: Option<CredentialRefreshService>,
         created_at: Option<DateTime<Utc>>,
         expires_at: Option<DateTime<Utc>>,
     },

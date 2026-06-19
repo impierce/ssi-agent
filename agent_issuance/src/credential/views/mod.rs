@@ -14,6 +14,7 @@ impl View<Credential> for Credential {
                 data,
                 credential_configuration,
                 notification_id,
+                refresh_service,
                 created_at,
                 expires_at,
             } => {
@@ -21,6 +22,7 @@ impl View<Credential> for Credential {
                 self.data.replace(data.clone());
                 self.credential_configuration = *credential_configuration.clone();
                 self.notification_id.clone_from(notification_id);
+                self.refresh_service.clone_from(refresh_service);
                 self.created_at.clone_from(created_at);
                 self.expires_at.clone_from(expires_at);
             }

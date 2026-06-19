@@ -80,6 +80,15 @@ pub struct CredentialStatus {
     pub status_list_url: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialRefreshService {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub url: String,
+    pub refresh_token: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct Credential {
     #[serde(rename = "id")]
@@ -93,6 +102,7 @@ pub struct Credential {
     #[schema(schema_with = holder_notifications)]
     pub holder_notifications: Vec<NotificationRequest>,
     pub credential_status: CredentialStatus,
+    pub refresh_service: Option<CredentialRefreshService>,
     #[schema(value_type = Option<String>)]
     pub created_at: Option<DateTime<Utc>>,
     #[schema(value_type = Option<String>)]
@@ -122,6 +132,7 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
+                refresh_service,
                 expires_at,
             } => {
                 #[cfg(feature = "test_utils")]
@@ -145,7 +156,7 @@ impl Aggregate for Credential {
 
                 let mut credential_data = data.raw.clone();
 
-                let credential_data = match &credential_configuration.credential_format {
+                let mut credential_data = match &credential_configuration.credential_format {
                     CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                         parameters:
                             JwtVcJsonParameters {
@@ -204,11 +215,27 @@ impl Aggregate for Credential {
                     }
                 };
 
+                if let Some(refresh_service) = &refresh_service {
+                    credential_data
+                        .insert_at_path(
+                            &["refreshService"],
+                            json!({
+                                "type": refresh_service.type_,
+                                "url": refresh_service.url,
+                                "refreshToken": refresh_service.refresh_token,
+                            }),
+                        )
+                        .ok_or(BuildCredentialError(
+                            "Failed to enter refreshService into the credential".to_string(),
+                        ))?;
+                }
+
                 return Ok(vec![UnsignedCredentialCreated {
                     credential_id,
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
+                    refresh_service,
                     created_at: Some(created_at),
                     expires_at,
                 }]);
@@ -514,6 +541,7 @@ impl Aggregate for Credential {
                 credential_id,
                 data,
                 credential_configuration,
+                refresh_service,
                 notification_id,
                 created_at,
                 expires_at,
@@ -521,6 +549,7 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
+                self.refresh_service = refresh_service;
                 self.notification_id = notification_id;
                 self.created_at = created_at;
                 self.expires_at = expires_at;
@@ -1021,6 +1050,7 @@ pub mod credential_tests {
                     raw: credential_subject,
                 },
                 credential_configuration: Box::new(credential_configuration.clone()),
+                refresh_service: None,
                 expires_at: CredentialExpiry::Never,
             })
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
@@ -1030,7 +1060,47 @@ pub mod credential_tests {
                 },
                 notification_id: Some(notification_id.clone()),
                 credential_configuration: Box::new(credential_configuration),
+                refresh_service: None,
                 created_at: Some(created_at),
+                expires_at: None,
+            }])
+    }
+
+    #[async_std::test]
+    async fn create_unsigned_credential_embeds_refresh_service() {
+        let refresh_service = CredentialRefreshService {
+            type_: "VerifiableCredentialRefreshService2021".to_string(),
+            url: "https://issuer.example.com/credential-refresh".to_string(),
+            refresh_token: "opaque-refresh-reference".to_string(),
+        };
+
+        let mut expected_credential = UNSIGNED_DC_SD_JWT_CREDENTIAL.clone();
+        expected_credential["refreshService"] = json!({
+            "type": "VerifiableCredentialRefreshService2021",
+            "url": "https://issuer.example.com/credential-refresh",
+            "refreshToken": "opaque-refresh-reference"
+        });
+
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given_no_previous_events()
+            .when(CredentialCommand::CreateUnsignedCredential {
+                credential_id: "credential-id".to_string(),
+                data: Data {
+                    raw: BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
+                },
+                credential_configuration: Box::new(DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone()),
+                refresh_service: Some(refresh_service.clone()),
+                expires_at: CredentialExpiry::Never,
+            })
+            .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: "credential-id".to_string(),
+                data: Data {
+                    raw: expected_credential,
+                },
+                notification_id: Some(test_utils::notification_id()),
+                credential_configuration: Box::new(DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone()),
+                refresh_service: Some(refresh_service),
+                created_at: Some(test_utils::created_at()),
                 expires_at: None,
             }])
     }
@@ -1101,6 +1171,7 @@ pub mod credential_tests {
                 },
                 credential_configuration: Box::new(credential_configuration),
                 notification_id: None,
+                refresh_service: None,
                 created_at: Some(created_at),
                 expires_at: None,
             }])
