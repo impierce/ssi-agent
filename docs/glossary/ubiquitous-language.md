@@ -14,6 +14,10 @@ A globally unique, persistent identifier that does not require a centralized reg
 
 **Related**: Credential, Holder, Issuer, Verifier
 
+### DID Method 
+
+The Scheme a DID uses. Supported methods: did_jwk, did_key and did_web. 
+
 ### Credential
 
 A digitally signed assertion of one or more claims about a subject. Credentials support multiple formats and can contain selective disclosure—the ability for a holder to omit certain fields when presenting.
@@ -25,6 +29,13 @@ A digitally signed assertion of one or more claims about a subject. Credentials 
 The entity about whom a credential makes claims. In many cases, the credential subject is also the holder (the entity possessing the credential).
 
 **Related**: Credential, Holder, Claim
+
+### Claim 
+
+A single statement about a credential subject (e.g. name, age, qualitifaction). Claims are the substance of a credential.
+
+**Related**: Credential, Credential Subject
+
 
 ### Holder
 
@@ -50,19 +61,9 @@ A digital container that holds credentials on behalf of a holder. The wallet man
 
 **Related**: Holder, Credential, Presentation
 
-### Claim
-
-A statement or assertion made about a credential subject. Claims form the substance of a credential and typically include attributes like name, age, or professional qualifications.
-
-**Related**: Credential, Credential Subject
-
 ### Proof
 
-Cryptographic evidence (typically a signature or zero-knowledge proof) that validates:
-
-- The credential was issued by the claimed issuer
-- The holder possesses the credential
-- The credential has not been tampered with
+Cryptographic evidence (typically a signature or zero-knowledge proof) that a credential was issued by the claimed issuer, is held by the holder, and is untampered. 
 
 **Related**: Signature, Verification, Credential
 
@@ -78,13 +79,13 @@ A cryptographic operation that binds a credential to its issuer, providing authe
 
 ### OpenID4VCI (OpenID for Verifiable Credential Issuance)
 
-Protocol specification defining how an issuer communicates with a wallet to issue credentials. Supports both direct issuance flows (pre-authorized codes) and interactive authorization code flows.
+Protocol specification defining how an issuer communicates with a wallet to issue credentials. Supports pre-authorized and interactive authorization code flows.
 
 **Related**: Issuance Flow, Credential Offer, Pre-authorized Code
 
 ### OpenID4VP (OpenID for Verifiable Presentations)
 
-Protocol specification defining how a verifier requests and receives credential presentations from a holder. Enables selective disclosure and support for multiple credential formats.
+Protocol specification defining how a verifier requests and receives credential presentations from a holder. Supports selective disclosure and multiple credential formats.
 
 **Related**: Verification Flow, Presentation, Challenge
 
@@ -93,6 +94,18 @@ Protocol specification defining how a verifier requests and receives credential 
 Self-issued OpenID Provider specification allowing a user to act as their own identity provider. Enables direct authentication without requiring a centralized identity provider.
 
 **Related**: Authorization, Self-Issued Credentials
+
+
+### Presentation / Presentation Flow
+
+The OID4VP mechanism by which a holder presents credentials to a verifier. **Not to be confused with Verification Flow** — that is the UniCore+ construct built *on top of* this mechanism. 
+
+### DCQL (Digital Credentials Query Language)
+
+Part of OID4VP spec. A query language for requesting specific credentials and claims from a holder. A Verification Flow generates a DCQL query from a given credential Template. 
+
+**Related**: Credential Template, Presentation   
+
 
 ### Credential Offer
 
@@ -158,17 +171,22 @@ The capability for a holder to omit certain claims from a credential when presen
 
 ### Credential Status
 
-The current state of a credential: valid, expired, revoked, or suspended. Verifiers check credential status during verification to ensure the credential is current and not revoked by the issuer.
+The current state of a credential. Values (verbatim, CredentialStatus.status): VALID, INVALID, SUSPENDED, UNDEFINED. Verifiers check credential status during verification to ensure the credential valid. 
 
 **Related**: Credential, Verification, Issuer
 
 ### Credential Template
 
-A blueprint that defines what a verifiable credential should look like. A template specifies what fields the credential contains, how long it's valid, which fields can be selectively disclosed, and what credential standard it follows (e.g., Open Badges 3.0).
+A reusable blueprint for a credential: its fields, validity, which fields are selectively disclosable, and which data models it follows (e.g., Open Badges 3.0).
 
-Issuers set up a template once and reuse it for every instance of that credential type (e.g., diplomas, membership cards, professional certifications). Templates move through states: `Draft` (being set up) → `Published` (active) → `Archived` (retired) → `Deleted` (no longer needed).
+Issuers set up a template once and reuse it for every instance of that credential type (e.g., diplomas, membership cards, professional certifications). States: `Draft` → `Published` → `Archived` → `Deleted`. 
 
-**Related**: Credential, Issuer, Selective Disclosure, Credential Lifecycle
+**Related**: Credential, Issuer, Selective Disclosure, Credential Lifecycle, Verification Flow 
+
+
+### Credential Configuration 
+
+The OID4VCI-level issuance configuration(credential_configuration_id, format). These configurations are managed implicitly through the Credential Templates. 
 
 ---
 
@@ -179,4 +197,4 @@ Issuers set up a template once and reuse it for every instance of that credentia
 
 ---
 
-**Last updated**: 2026-06-17
+**Last updated**: 2026-06-19 
