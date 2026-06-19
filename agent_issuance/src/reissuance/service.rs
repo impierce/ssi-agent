@@ -4,6 +4,7 @@ use oid4vci::{credential_format_profiles::CredentialFormats, credential_offer::G
 use crate::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
     offer::command::OfferCommand,
+    refresh_capability::service::{RefreshCapabilityService, RefreshCapabilityServiceError},
     reissuance::{
         command::ReissuanceCommand,
         policy::{NoOpReissuancePolicy, ReissuancePolicy, ReissuancePolicyError, ReissuancePolicyRequest},
@@ -39,24 +40,20 @@ pub struct CreateReissuanceResponse {
 pub enum ReissuanceServiceError {
     #[error("Original credential `{0}` was not found")]
     OriginalCredentialNotFound(String),
-
     #[error("Credential configuration `{0}` was not found")]
     CredentialConfigurationNotFound(String),
-
     #[error("Credential payload must be a JSON object")]
     InvalidCredentialPayload,
-
     #[error("Credential format is not supported for reissuance: {0}")]
     UnsupportedCredentialFormat(serde_json::Value),
-
     #[error(transparent)]
     Policy(#[from] ReissuancePolicyError),
-
     #[error("Failed to query state: {0}")]
     Query(String),
-
     #[error("Failed to execute command: {0}")]
     Command(String),
+    #[error(transparent)]
+    RefreshCapability(#[from] RefreshCapabilityServiceError),
 }
 
 pub struct ReissuanceService<P = NoOpReissuancePolicy> {
@@ -91,7 +88,7 @@ where
                 ReissuanceServiceError::OriginalCredentialNotFound(request.original_credential_id.clone())
             })?;
 
-        let (_, credential_configuration, authorization, _) =
+        let (_, credential_configuration, authorization, refresh_service) =
             query_handler(SERVER_CONFIG_ID, &state.query.server_config)
                 .await
                 .map_err(|err| ReissuanceServiceError::Query(err.to_string()))?
@@ -143,6 +140,10 @@ where
         )
         .await
         .map_err(|err| ReissuanceServiceError::Command(err.to_string()))?;
+
+        RefreshCapabilityService::default()
+            .create_for_credential(state, &request.new_credential_id, refresh_service.as_ref())
+            .await?;
 
         if query_handler(&request.offer_id, &state.query.offer)
             .await
@@ -216,6 +217,7 @@ where
 #[cfg(test)]
 mod tests {
     use agent_issuance::credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data};
+    use agent_issuance::refresh_capability::aggregate::RefreshCapabilityStatus;
     use agent_issuance::reissuance::service::{CreateReissuanceRequest, ReissuanceService, ReissuanceServiceError};
     use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
@@ -296,6 +298,48 @@ mod tests {
                     "display": [{ "name": "Date of Birth", "locale": "en" }]
                 }
             ]
+        }))
+        .unwrap();
+
+        command_handler(
+            SERVER_CONFIG_ID,
+            &state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration,
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn add_refreshable_sd_jwt_credential_configuration(state: &IssuanceState) {
+        let credential_configuration = serde_json::from_value::<CredentialConfiguration>(json!({
+            "credential_configuration_id": "SD-JWT VC",
+            "format": "dc+sd-jwt",
+            "display": [
+                {
+                    "name": "SD-JWT VC Credential",
+                    "locale": "en"
+                }
+            ],
+            "claims": [
+                {
+                    "path": ["first_name"],
+                    "display": [{ "name": "First Name", "locale": "en" }]
+                },
+                {
+                    "path": ["last_name"],
+                    "display": [{ "name": "Last Name", "locale": "en" }]
+                },
+                {
+                    "path": ["dob"],
+                    "display": [{ "name": "Date of Birth", "locale": "en" }]
+                }
+            ],
+            "refreshService": {
+                "type": "VerifiableCredentialRefreshService2021"
+            }
         }))
         .unwrap();
 
@@ -500,6 +544,43 @@ mod tests {
         assert_eq!(reissuance.trigger_type.as_deref(), Some("manual"));
         assert_eq!(reissuance.triggered_by.as_deref(), Some("unitrust"));
         assert_eq!(reissuance.status_action, None);
+    }
+
+    #[async_std::test]
+    async fn create_reissuance_creates_refresh_capability_for_refreshable_configuration() {
+        let state = test_state().await;
+        add_refreshable_sd_jwt_credential_configuration(&state).await;
+        create_original_credential(&state, "original-credential-id", "SD-JWT VC").await;
+        let service = ReissuanceService::default();
+
+        service
+            .create(
+                &state,
+                reissuance_request(
+                    "SD-JWT VC",
+                    json!({
+                        "first_name": "Ferris",
+                        "last_name": "Reissued",
+                        "dob": "2010-01-01"
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+
+        // wrong spelling because this is generated by a `format!("all_{}s")`
+        let all_refresh_capabilities = query_handler("all_refresh_capabilitys", &state.query.all_refresh_capabilities)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let refresh_capability = all_refresh_capabilities
+            .refresh_capabilities
+            .values()
+            .find(|refresh_capability| refresh_capability.credential_id == "new-credential-id")
+            .expect("new credential should have a refresh capability");
+
+        assert_eq!(refresh_capability.status, RefreshCapabilityStatus::Active);
     }
 
     #[async_std::test]

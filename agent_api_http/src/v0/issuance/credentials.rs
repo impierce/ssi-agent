@@ -1,6 +1,7 @@
 use crate::error::type_url;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
+use agent_issuance::refresh_capability::service::RefreshCapabilityService;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
     credential::{
@@ -85,23 +86,24 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let (_, credential_configuration, authorization, _) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
-                .message(format!(
-                    "No Credential Configuration found with id: `{credential_configuration_id}`"
-                ))
-                .finish()
-        })?;
+    let (_, credential_configuration, authorization, refresh_service) =
+        query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+            .await?
+            .and_then(|server_config_view| {
+                server_config_view
+                    .credential_configurations
+                    .get(&credential_configuration_id)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("No Credential Configuration Found")
+                    .type_url(type_url("issuance#no-credential-configuration-found"))
+                    .message(format!(
+                        "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    ))
+                    .finish()
+            })?;
 
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
@@ -137,6 +139,19 @@ pub(crate) async fn credentials(
 
     // Create an unsigned/signed credential.
     command_handler(&credential_id, &state.command.credential, command).await?;
+
+    if !is_signed {
+        RefreshCapabilityService::default()
+            .create_for_credential(&state, &credential_id, refresh_service.as_ref())
+            .await
+            .map_err(|err| {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Failed to create refresh capability")
+                    .type_url(type_url("issuance#create-refresh-capability-failed"))
+                    .message(err.to_string())
+                    .finish()
+            })?;
+    }
 
     // Create an offer if it does not exist yet.
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
