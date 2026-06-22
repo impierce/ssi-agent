@@ -18,6 +18,7 @@ These markdown files are used as input for generating the official documentation
 - **[Ubiquitous Language](./glossary/ubiquitous-language.md)** - Shared domain terminology (implementation-free, publishable)
 - **[Introduction](./introduction/)** - Quick start and feature overview
 - **[Configuration](./configuration/)** - Setup and environment variables
+- **[Migration Guides](./migration-guides)** - Step-by-step version migration instructions
 - **[API Documentation](https://beta.docs.impierce.com/unicore/)** - OpenAPI specification
 
 ### For Developers & AI Agents
