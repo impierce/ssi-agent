@@ -78,8 +78,8 @@ impl RefreshCapabilityService {
 #[cfg(test)]
 mod tests {
     use agent_issuance::refresh_capability::command::RefreshCapabilityCommand;
-    use agent_issuance::refresh_capability::service::RefreshCapabilityServiceError;
     use agent_issuance::refresh_capability::service::RefreshCapabilityService;
+    use agent_issuance::refresh_capability::service::RefreshCapabilityServiceError;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::{initialize, IssuanceState};
     use agent_secret_manager::service::Service;
