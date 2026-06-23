@@ -3,6 +3,7 @@ name = "agent_api_http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_authorization = { path = "../agent_authorization" }
@@ -69,6 +70,7 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [
     "test_utils",
 ] }
+verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 futures.workspace = true
 jsonwebtoken.workspace = true

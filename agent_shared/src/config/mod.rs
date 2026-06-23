@@ -332,6 +332,11 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     #[serde(serialize_with = "redact")]
     pub iota_sponsoring_service_auth: Option<String>,
+    // WARNING: When this is enabled, the authorization flow will be interactive. However, in the current form this
+    // means that the issuance flow will always include an OpenID4VP Presentation Request containing a hardcoded DCQL
+    // Query.
+    #[config(default)]
+    pub enable_interactive_authorization_flow: bool,
 }
 
 impl ApplicationConfiguration {
@@ -421,22 +426,31 @@ impl ApplicationConfiguration {
     }
 
     // TODO: make generic: set_enabled(enabled: bool)
-    pub fn enable_event_publisher_http(&mut self) {
-        if let Some(http) = &mut self.event_publishers.http {
-            http.enabled = true;
+    pub fn enable_event_publisher_http(&mut self, index: usize) {
+        if self.event_publishers.http.len() <= index {
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
+        self.event_publishers.http[index].enabled = true;
     }
 
-    pub fn set_event_publisher_http_target_url(&mut self, target_url: String) {
-        if let Some(http) = &mut self.event_publishers.http {
-            http.target_url = target_url;
+    pub fn set_event_publisher_http_target_url(&mut self, index: usize, target_url: String) {
+        if self.event_publishers.http.len() <= index {
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
+        self.event_publishers.http[index].target_url = target_url;
     }
 
-    pub fn set_event_publisher_http_target_events(&mut self, events: Events) {
-        if let Some(http) = &mut self.event_publishers.http {
-            http.events = events;
+    pub fn set_event_publisher_http_target_events(&mut self, index: usize, events: Events) {
+        if self.event_publishers.http.len() <= index {
+            self.event_publishers
+                .http
+                .resize(index + 1, EventPublisherHttp::default());
         }
+        self.event_publishers.http[index].events = events;
     }
 
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
@@ -578,7 +592,8 @@ pub struct Display {
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct EventPublishers {
-    pub http: Option<EventPublisherHttp>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub http: Vec<EventPublisherHttp>,
     pub nats: Option<EventPublisherNats>,
 }
 
@@ -1161,6 +1176,7 @@ mod tests {
                   "kb-jwt_alg_values": ["ES256"]
                 },
               },
+              "enable_interactive_authorization_flow": false
             })
         );
 

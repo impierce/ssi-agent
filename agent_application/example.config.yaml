@@ -15,6 +15,7 @@ did_methods:
     enabled: false
 
 domain_linkage_enabled: false
+enable_interactive_authorization_flow: true
 
 signing_algorithms_supported:
   es256:
@@ -25,17 +26,21 @@ signing_algorithms_supported:
 
 # agent_event_publisher_http
 # Configure here to which events will be dispatched to a specific `target_url`. In the example below, the
-# `EventPublisherHttp` will listen for the `SIOPv2AuthorizationResponseVerified` event which is part of the `connection`
-# aggregate. The events will be dispatched to the `https://my-domain.example.org/event-subscriber` endpoint.
+# `EventPublisherHttp` will listen for the `UnsignedCredentialCreated` and `CredentialSigned` events.
+# The events will be dispatched to the `https://my-domain.example.org/event-subscriber` endpoint.
 event_publishers:
   http:
-    enabled: false
-    target_url: "https://my-domain.example.org/event-subscriber"
-    headers:
-      Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-    events:
-      server_config: []
-      credential: [UnsignedCredentialCreated, CredentialSigned]
+    - enabled: false
+      target_url: "https://my-domain.example.org/event-subscriber"
+      headers:
+        Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
+      events:
+        server_config: []
+        credential: [UnsignedCredentialCreated, CredentialSigned]
+        # To enable the interactive authorization flow for OID4VCIm, the event below needs to be listened to.
+        # authorization_request: [OID4VPAuthorizationResponseVerified]
+
+
   nats:
     enabled: true
     nats_url: "nats://localhost:4222"

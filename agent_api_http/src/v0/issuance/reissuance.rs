@@ -176,7 +176,7 @@ mod tests {
         },
         API_VERSION,
     };
-    use agent_authorization::services::AuthorizationServices;
+    use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
     use agent_issuance::{
         credential::{aggregate::Status as CredentialStatus, command::CredentialCommand, entity::Data},
         nonce::command::NonceCommand,
@@ -361,8 +361,15 @@ mod tests {
         let offer_id = body["offerId"].as_str().unwrap();
         let new_credential_id = body["newCredentialId"].as_str().unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                OAuth2AuthorizationRequestDomainServices::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

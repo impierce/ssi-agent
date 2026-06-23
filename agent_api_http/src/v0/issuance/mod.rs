@@ -6,6 +6,7 @@ pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
 pub mod offers;
 pub mod openapi;
+pub mod public_offers;
 pub mod reissuance;
 
 pub mod error;
@@ -27,16 +28,25 @@ use crate::v0::issuance::{
         all_offers, offer, offers,
         send::{individual_offer, organization_offer},
     },
+    public_offers::{
+        all_public_offers, create_public_offer, delete_public_offer, take_public_offer_offline,
+        take_public_offer_online,
+    },
     reissuance::{all_credential_reissuances, credential_reissuance, credential_reissuances},
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
+use agent_library::state::LibraryState;
 use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
 pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
-    Router::new()
+    router_with_library(issuance_state, None)
+}
+
+pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Option<Arc<LibraryState>>) -> Router {
+    let issuance_router = Router::new()
         .nest(
             API_VERSION,
             Router::new()
@@ -71,5 +81,19 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
             "/vct/{credential_configuration_id}/{version}",
             get(ietf_oauth_sd_jwt_vc::type_metadata),
         )
-        .with_state(issuance_state)
+        .with_state(issuance_state.clone());
+
+    let public_offer_router = Router::new()
+        .nest(
+            API_VERSION,
+            Router::new()
+                .route("/get-all-public-offers", get(all_public_offers))
+                .route("/create-public-offer", post(create_public_offer))
+                .route("/take-public-offer-offline", post(take_public_offer_offline))
+                .route("/take-public-offer-online", post(take_public_offer_online))
+                .route("/delete-public-offer", post(delete_public_offer)),
+        )
+        .with_state((issuance_state, library_state));
+
+    issuance_router.merge(public_offer_router)
 }

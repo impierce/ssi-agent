@@ -12,6 +12,7 @@ impl IntoPublicError for TokenIssuanceError {
             MissingTxCodeError => PublicError::from(TokenErrorResponse::InvalidRequest),
             InvalidTxCodeError => PublicError::from(TokenErrorResponse::InvalidGrant),
             InvalidPreAuthorizedCodeError => PublicError::from(TokenErrorResponse::InvalidGrant),
+            InactivePublicOfferError => PublicError::from(TokenErrorResponse::InvalidGrant),
             UnrequestedTxCodeError => PublicError::from(TokenErrorResponse::InvalidRequest),
             MissingAccessTokenError => PublicError::from(TokenErrorResponse::InvalidRequest),
             Internal(_) => PublicError::InternalServerError,

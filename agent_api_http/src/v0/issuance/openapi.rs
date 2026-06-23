@@ -4,8 +4,12 @@ use crate::v0::issuance::offers::{
     __path_all_offers, __path_offer,
     send::{__path_individual_offer, __path_organization_offer},
 };
-use crate::v0::issuance::reissuance::{
-    __path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances,
+use crate::v0::issuance::{
+    public_offers::{
+        __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer,
+        __path_take_public_offer_offline, __path_take_public_offer_online,
+    },
+    reissuance::{__path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances},
 };
 use utoipa::OpenApi;
 
@@ -22,7 +26,12 @@ use utoipa::OpenApi;
         organization_offer,
         credential_reissuances,
         all_credential_reissuances,
-        credential_reissuance
+        credential_reissuance,
+        all_public_offers,
+        create_public_offer,
+        take_public_offer_offline,
+        take_public_offer_online,
+        delete_public_offer
     ),
     tags(
         (name = "Credentials", description = "Create and revoke verifiable credentials."),
