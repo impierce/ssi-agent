@@ -26,7 +26,7 @@ pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::v0::issuance::{self, credentials::tests::create_test_template};
+    use crate::v0::issuance::{credentials::tests::create_test_template, router};
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state, library_state};
@@ -81,7 +81,7 @@ mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state, &issuance_state).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         let _authorization_server_metadata = oauth_authorization_server(&mut app).await;
     }

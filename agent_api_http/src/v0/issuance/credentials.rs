@@ -1036,7 +1036,7 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         let response = unsigned_credentials_request_with_template(&mut app, "").await;
 
@@ -1053,7 +1053,7 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         let response = unsigned_credentials_request_with_template(&mut app, "missing-template").await;
 
@@ -1073,7 +1073,7 @@ pub mod tests {
         create_test_template(&library_state, &issuance_state).await;
         remove_test_template_configuration(&issuance_state, TEMPLATE_ID).await;
 
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
         let response = unsigned_credentials_request_with_template(&mut app, TEMPLATE_ID).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -1100,7 +1100,7 @@ pub mod tests {
         )
         .await;
 
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
         let response = signed_credentials_with_template(
             &mut app,
             template_id,
@@ -1141,7 +1141,7 @@ pub mod tests {
         )
         .await;
 
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         for template_id in ["draft-template", "archived-template"] {
             let response = unsigned_credentials_request_with_template(&mut app, template_id).await;
@@ -1171,7 +1171,7 @@ pub mod tests {
         )
         .await;
 
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
         let signed_credential = build_test_signed_jwt_vc_json();
         let response =
             signed_credentials_with_template(&mut app, template_id, &signed_credential, Some(json!("never"))).await;
@@ -1200,7 +1200,7 @@ pub mod tests {
         )
         .await;
 
-        let mut app = router((issuance_state, library_state));
+        let mut app = router((issuance_state.clone(), library_state));
         let response =
             signed_credentials_with_template(&mut app, template_id, &build_test_signed_jwt_vc_json(), None).await;
 

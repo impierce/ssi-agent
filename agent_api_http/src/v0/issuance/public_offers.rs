@@ -6,6 +6,7 @@ use agent_issuance::public_offer::error::PublicOfferError;
 use agent_issuance::state::IssuanceState;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Status;
+use axum::Extension;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -136,9 +137,7 @@ impl From<&PublicOffer> for PublicOfferStatusDto {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_public_offers(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
-) -> Result<Response, ApiError> {
+pub(crate) async fn all_public_offers(State(issuance_state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_offers = query_handler("all_public_offers", &issuance_state.query.all_public_offers)
         .await?
         .unwrap_or_default();
@@ -170,15 +169,13 @@ pub(crate) async fn all_public_offers(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_public_offer(
-    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
-
-    // Query the template from library state to validate it exists and has valid schema
-    let library_state = library_state.ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     let template = query_handler(&template_id, &library_state.query.template)
         .await
@@ -217,7 +214,7 @@ pub(crate) async fn create_public_offer(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_offline(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
@@ -243,7 +240,7 @@ pub(crate) async fn take_public_offer_offline(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_online(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
@@ -269,7 +266,7 @@ pub(crate) async fn take_public_offer_online(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_public_offer(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
@@ -296,7 +293,8 @@ pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_i
 #[cfg(test)]
 mod tests {
     use crate::handlers::command_handler;
-    use crate::v0::issuance::{credentials::tests::credentials, router_with_library};
+    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials};
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
@@ -348,11 +346,9 @@ mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
 
         initialize(&issuance_state).await.unwrap();
+        create_test_template_with_auth(&library_state, &issuance_state, true).await;
 
-        (
-            router_with_library(issuance_state, Some(library_state.clone())),
-            library_state,
-        )
+        (router((issuance_state, library_state.clone())), library_state)
     }
 
     async fn create_template(library_state: &Arc<LibraryState>, template_id: &str, schema: Option<Value>) {

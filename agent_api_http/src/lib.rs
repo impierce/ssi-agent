@@ -64,11 +64,11 @@ pub fn app(
                 .map(v0::authorization::router)
                 .unwrap_or_default(),
         )
-        .merge(
-            issuance_state
-                .map(|issuance_state| v0::issuance::router_with_library(issuance_state, library_state.clone()))
-                .unwrap_or_default(),
-        )
+        // .merge(
+        //     issuance_state
+        //         .map(|issuance_state| v0::issuance::router((issuance_state, library_state.clone())))
+        //         .unwrap_or_default(),
+        // )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
         .merge(public::router())

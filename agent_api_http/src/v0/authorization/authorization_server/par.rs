@@ -90,10 +90,10 @@ pub(crate) async fn par(
 pub mod tests {
     use super::*;
     use crate::tests::TEMPLATE_ID;
+    use crate::v0::issuance::router;
     use crate::v0::{
         authorization,
         issuance::{
-            self,
             credentials::tests::{create_test_template_with_auth, credentials},
             offers::tests::offers,
         },
@@ -263,7 +263,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template_with_auth(&library_state, &issuance_state, false).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
@@ -301,7 +301,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();

@@ -26,6 +26,7 @@ pub(crate) async fn token(
 pub mod tests {
     use super::*;
     use crate::tests::TEMPLATE_ID;
+    use crate::v0::issuance::router;
     use crate::v0::{
         authorization::{
             self,
@@ -158,7 +159,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template_with_auth(&library_state, &issuance_state, is_pre_authorized).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
         let grants = offers(&mut app, TEMPLATE_ID).await.unwrap();
@@ -191,8 +192,9 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template_with_auth(&library_state, &issuance_state, true).await;
 
-        let mut issuance_app = issuance::router((issuance_state.clone(), library_state.clone()));
+        let mut issuance_app = router((issuance_state.clone(), library_state));
         credentials(&mut issuance_app).await;
         let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, "001").await.unwrap();
 
@@ -204,7 +206,7 @@ pub mod tests {
             &issuance_state.command.public_offer,
             PublicOfferCommand::Create {
                 offer_id: offer_id.to_string(),
-                template_id: "template-001".to_string(),
+                template_id: TEMPLATE_ID.to_string(),
             },
         )
         .await
@@ -277,6 +279,7 @@ pub mod tests {
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_test_template_with_auth(&library_state, &issuance_state, true).await;
 
         let mut issuance_app = issuance::router((issuance_state.clone(), library_state.clone()));
         credentials(&mut issuance_app).await;
@@ -290,7 +293,7 @@ pub mod tests {
             &issuance_state.command.public_offer,
             PublicOfferCommand::Create {
                 offer_id: offer_id.to_string(),
-                template_id: "template-001".to_string(),
+                template_id: TEMPLATE_ID.to_string(),
             },
         )
         .await

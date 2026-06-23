@@ -35,11 +35,12 @@ pub(crate) async fn authorize(
 pub mod tests {
     use super::*;
     use crate::tests::TEMPLATE_ID;
+    use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::consent::tests::{get_consent, post_consent};
     use crate::v0::authorization::authorization_server::par::tests::par;
     use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials};
     use crate::v0::issuance::offers::tests::offers;
-    use crate::v0::{authorization, issuance};
+    use crate::v0::issuance::router;
     use agent_authorization::services::AuthorizationServices;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_issuance::services::IssuanceServices;
@@ -121,7 +122,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template_with_auth(&library_state, &issuance_state, false).await;
 
-        let mut app = issuance::router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
         let (authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();

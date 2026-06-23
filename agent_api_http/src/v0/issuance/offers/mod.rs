@@ -369,7 +369,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state, &issuance_state).await;
 
-        let mut app = router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state, library_state));
 
         credentials(&mut app).await;
         let (_authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
@@ -387,7 +387,7 @@ pub mod tests {
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_test_template(&library_state, &issuance_state).await;
 
-        let mut app = router((issuance_state.clone(), library_state));
+        let mut app = router((issuance_state, library_state));
 
         credentials(&mut app).await;
         let none = offers(&mut app, TEMPLATE_ID).await;
