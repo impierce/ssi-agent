@@ -139,6 +139,28 @@ paths:
       responses:
         '201':
           description: Credential configuration updated successfully
+  /v0/credential-refresh:
+    post:
+      tags:
+      - Issuance
+      operationId: refresh_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRefreshRequest'
+        required: true
+      responses:
+        '200':
+          description: Credential refresh continuation prepared successfully
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+        '403':
+          description: Credential refresh cannot proceed
+        '404':
+          description: Refresh reference not found
   /v0/credential-reissuance:
     get:
       tags:
@@ -995,6 +1017,13 @@ components:
       - Created
       - Pending
       - Issued
+    CredentialRefreshRequest:
+      type: object
+      required:
+      - refreshToken
+      properties:
+        refreshToken:
+          type: string
     CredentialRefreshService:
       type: object
       required:

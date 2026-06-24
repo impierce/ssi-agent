@@ -101,12 +101,12 @@ mod tests {
     use super::*;
     use crate::{v0::issuance::router, API_VERSION};
     use agent_issuance::{
-        refresh_capability::service::RefreshCapabilityService,
+        refresh_capability::{command::RefreshCapabilityCommand, service::RefreshCapabilityService},
         services::IssuanceServices,
         state::{initialize, IssuanceState},
     };
     use agent_secret_manager::service::Service;
-    use agent_shared::config::RefreshServiceConfiguration;
+    use agent_shared::{config::RefreshServiceConfiguration, handlers::command_handler};
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
@@ -169,5 +169,33 @@ mod tests {
         let status = post_credential_refresh(state, &refresh_capability.refresh_reference).await;
 
         assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn credential_refresh_returns_not_found_for_disabled_reference() {
+        let state = test_state().await;
+        let refresh_capability = RefreshCapabilityService::default()
+            .create_for_credential(
+                &state,
+                "credential-id",
+                Some(&RefreshServiceConfiguration {
+                    type_: "VerifiableCredentialRefreshService2021".to_string(),
+                }),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        command_handler(
+            &refresh_capability.refresh_reference,
+            &state.command.refresh_capability,
+            RefreshCapabilityCommand::DisableRefreshCapability,
+        )
+        .await
+        .unwrap();
+
+        let status = post_credential_refresh(state, &refresh_capability.refresh_reference).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 }

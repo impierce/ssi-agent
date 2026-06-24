@@ -1,4 +1,5 @@
 use crate::v0::issuance::credential_configurations::__path_credential_configurations;
+use crate::v0::issuance::credential_refresh::__path_credential_refresh;
 use crate::v0::issuance::credentials::{__path_all_credentials, __path_credential, __path_credentials};
 use crate::v0::issuance::offers::{
     __path_all_offers, __path_offer,
@@ -22,7 +23,8 @@ use utoipa::OpenApi;
         organization_offer,
         credential_reissuances,
         all_credential_reissuances,
-        credential_reissuance
+        credential_reissuance,
+        credential_refresh
     ),
     tags(
         (name = "Credentials", description = "Create and revoke verifiable credentials."),
