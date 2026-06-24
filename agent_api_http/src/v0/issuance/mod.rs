@@ -1,6 +1,7 @@
 // Endpoint handlers
 pub mod credential_configurations;
 pub mod credential_issuer;
+pub mod credential_refresh;
 pub mod credentials;
 pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
@@ -21,6 +22,7 @@ use crate::v0::issuance::{
             oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
         },
     },
+    credential_refresh::credential_refresh,
     credentials::{all_credentials, credentials, patch_credential},
     nonce::nonce,
     offers::{
@@ -50,6 +52,7 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                     "/credential-reissuance",
                     post(credential_reissuances).get(all_credential_reissuances),
                 )
+                .route("/credential-refresh", post(credential_refresh))
                 .route("/credential-reissuance/{reissuance_id}", get(credential_reissuance))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
