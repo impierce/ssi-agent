@@ -40,6 +40,19 @@ pub trait RefreshPreparationHook: Send + Sync {
     ) -> Result<RefreshPreparationInput, RefreshPreparationError>;
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct NoOpRefreshPreparationHook;
+
+#[async_trait]
+impl RefreshPreparationHook for NoOpRefreshPreparationHook {
+    async fn prepare(
+        &self,
+        _request: &RefreshPreparationRequest,
+    ) -> Result<RefreshPreparationInput, RefreshPreparationError> {
+        Err(RefreshPreparationError::RefreshUnavailable)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
