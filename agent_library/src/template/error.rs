@@ -36,4 +36,10 @@ pub enum TemplateError {
     DuplicateSchemaPropertiesAttributeKey(String),
     #[error("A template must not be in \"Draft\" stage when making it public")]
     DraftTemplateCannotBePublic,
+    #[error("No Source Template found with id: `{0}`")]
+    SourceTemplateNotFound(String),
+    #[error("The `id` field is required to update a template.")]
+    TemplateIdMissing,
+    #[error("No Template found with id: `{0}`")]
+    TemplateNotFound(String),
 }

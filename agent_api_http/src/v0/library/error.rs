@@ -92,6 +92,24 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("library#draft-template-cannot-be-public"))
                 .source(self)
                 .finish(),
+            TemplateError::SourceTemplateNotFound(ref id) => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Source Template Not Found")
+                .type_url(type_url("library#source-template-not-found"))
+                .message(format!("No Source Template found with id: `{id}`"))
+                .source(self)
+                .finish(),
+            TemplateError::TemplateIdMissing => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Template ID Missing")
+                .type_url(type_url("library#template-id-missing"))
+                .message("The `id` field is required to update a template.")
+                .source(self)
+                .finish(),
+            TemplateError::TemplateNotFound(ref template_id) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("library#template-not-found"))
+                .message(format!("No Template found with id: `{template_id}`"))
+                .source(self)
+                .finish(),
         }
     }
 }
@@ -280,6 +298,36 @@ mod tests {
                 "title": "Draft Template Cannot Be Public",
                 "status": 422,
                 "detail": "A template must not be in \"Draft\" stage when making it public"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::SourceTemplateNotFound("source-id".to_string()),
+            json!({
+                "type": type_url("library#source-template-not-found"),
+                "title": "Source Template Not Found",
+                "status": 422,
+                "detail": "No Source Template found with id: `source-id`"
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::TemplateIdMissing,
+            json!({
+                "type": type_url("library#template-id-missing"),
+                "title": "Template ID Missing",
+                "status": 400,
+                "detail": "The `id` field is required to update a template."
+            })
+        );
+
+        assert_problem_details!(
+            TemplateError::TemplateNotFound("missing-id".to_string()),
+            json!({
+                "type": type_url("library#template-not-found"),
+                "title": "Template Not Found",
+                "status": 404,
+                "detail": "No Template found with id: `missing-id`"
             })
         );
     }
