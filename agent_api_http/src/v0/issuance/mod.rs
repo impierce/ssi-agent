@@ -42,6 +42,7 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
         .nest(
             API_VERSION,
             Router::new()
+                .route("/credentials", post(credentials).get(all_credentials))
                 .route(
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
@@ -50,7 +51,6 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
                 .route("/offers/send-offer-to-organization", post(organization_offer))
-                .route("/credentials", post(credentials).get(all_credentials))
                 // Public offers
                 .route("/get-all-public-offers", get(all_public_offers))
                 .route("/create-public-offer", post(create_public_offer))
