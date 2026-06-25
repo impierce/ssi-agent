@@ -44,8 +44,8 @@ pub struct CreateCredentialReissuanceResponse {
 
 #[utoipa::path(
     post,
-    path = "/credential-reissuance",
-    operation_id = "create_credential_reissuance",
+    path = "/reissue-credential",
+    operation_id = "reissue_credential",
     tags = ["Issuance"],
     responses(
         (status = 201, description = "Credential reissuance prepared successfully", body = CreateCredentialReissuanceResponse)
@@ -113,8 +113,8 @@ pub(crate) async fn credential_reissuances(
 
 #[utoipa::path(
     get,
-    path = "/credential-reissuance",
-    operation_id = "get_all_credential_reissuances",
+    path = "/list-all-credential-reissuances",
+    operation_id = "list_all_credential_reissuances",
     tags = ["Issuance"],
     responses(
         (status = 200, description = "All credential reissuance relations retrieved successfully", body = [ReissuanceView])
@@ -139,8 +139,8 @@ pub(crate) async fn all_credential_reissuances(State(state): State<Arc<IssuanceS
 
 #[utoipa::path(
     get,
-    path = "/credential-reissuance/{reissuance_id}",
-    operation_id = "get_credential_reissuance_by_id",
+    path = "/get-credential-reissuance/{id}",
+    operation_id = "get_credential_reissuance",
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Credential reissuance relation retrieved successfully", body = ReissuanceView),
@@ -284,7 +284,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("{API_VERSION}/credential-reissuance"))
+                    .uri(format!("{API_VERSION}/reissue-credential"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
@@ -452,7 +452,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::GET)
-                    .uri(format!("{API_VERSION}/credential-reissuance"))
+                    .uri(format!("{API_VERSION}/list-all-credential-reissuances"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -481,7 +481,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::GET)
-                    .uri(format!("{API_VERSION}/credential-reissuance/{reissuance_id}"))
+                    .uri(format!("{API_VERSION}/get-credential-reissuance/{reissuance_id}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -506,7 +506,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(http::Method::GET)
-                    .uri(format!("{API_VERSION}/credential-reissuance/unknown-reissuance-id"))
+                    .uri(format!("{API_VERSION}/get-credential-reissuance/unknown-reissuance-id"))
                     .body(Body::empty())
                     .unwrap(),
             )

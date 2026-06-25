@@ -158,11 +158,11 @@ paths:
       responses:
         '201':
           description: Credential configuration updated successfully
-  /v0/credential-reissuance:
+  /v0/list-all-credential-reissuances:
     get:
       tags:
       - Issuance
-      operationId: get_all_credential_reissuances
+      operationId: list_all_credential_reissuances
       responses:
         '200':
           description: All credential reissuance relations retrieved successfully
@@ -172,10 +172,11 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Reissuance'
+  /v0/reissue-credential:
     post:
       tags:
       - Issuance
-      operationId: create_credential_reissuance
+      operationId: reissue_credential
       requestBody:
         content:
           application/json:
@@ -189,13 +190,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
-  /v0/credential-reissuance/{reissuance_id}:
+  /v0/get-credential-reissuance/{id}:
     get:
       tags:
       - Issuance
-      operationId: get_credential_reissuance_by_id
+      operationId: get_credential_reissuance
       parameters:
-      - name: reissuance_id
+      - name: id
         in: path
         required: true
         schema:

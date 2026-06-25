@@ -56,11 +56,9 @@ pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Op
                     get(credentials::credential).patch(patch_credential),
                 )
                 .route("/credential-configurations", post(credential_configurations))
-                .route(
-                    "/credential-reissuance",
-                    post(credential_reissuances).get(all_credential_reissuances),
-                )
-                .route("/credential-reissuance/{reissuance_id}", get(credential_reissuance))
+                .route("/reissue-credential", post(credential_reissuances))
+                .route("/list-all-credential-reissuances", get(all_credential_reissuances))
+                .route("/get-credential-reissuance/{id}", get(credential_reissuance))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
