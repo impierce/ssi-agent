@@ -402,6 +402,7 @@ pub mod tests {
                 r#type: vec!["VerifiableCredential".to_string()],
                 schema: Box::new(None),
                 schema_properties_attributes: None,
+                pre_authorized: true,
             },
         )
         .await
@@ -489,7 +490,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": received_offer_id,
-                            "templateId": TEMPLATE_ID,
+                            "templateIds": [TEMPLATE_ID],
                         }))
                         .unwrap(),
                     ))

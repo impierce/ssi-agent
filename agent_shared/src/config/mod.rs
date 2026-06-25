@@ -21,7 +21,6 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
@@ -259,8 +258,6 @@ pub struct ApplicationConfiguration {
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
-    #[config(default)]
-    pub credential_configuration_file: Option<Box<PathBuf>>,
     #[config(default = "
         HashMap::from(
             [
@@ -1494,9 +1491,6 @@ mod tests {
 
         // Some display information is set
         assert_eq!(config.display.len(), 1);
-
-        // The Credential Configuration file is set to `None`
-        assert!(config.credential_configuration_file.is_none());
     }
 
     #[test]

@@ -196,11 +196,10 @@ pub(crate) async fn credential(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::{
-        credentials::tests::{create_test_template_with_auth, credentials},
+        credentials::tests::{create_test_template_with_auth, credentials_with_template, setup_library_state},
         router,
     };
     use crate::API_VERSION;
@@ -218,7 +217,7 @@ pub mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state, library_state, EventPublisher};
+    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -243,6 +242,7 @@ pub mod tests {
         async fn prepare_credential_event_trigger(
             &self,
             app: Arc<Mutex<Option<Router>>>,
+            template_id: String,
             is_self_signed: bool,
             delay: u64,
         );
@@ -255,6 +255,7 @@ pub mod tests {
         async fn prepare_credential_event_trigger(
             &self,
             app: Arc<Mutex<Option<Router>>>,
+            template_id: String,
             is_self_signed: bool,
             delay: u64,
         ) {
@@ -276,7 +277,7 @@ pub mod tests {
                                 // The 'backend' server can either opt for an already signed credential...
                                 let credentials_endpoint_request = if is_self_signed {
                                     CredentialsEndpointRequest {
-                                        template_id: TEMPLATE_ID.to_string(),
+                                        template_id: template_id.clone(),
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
@@ -285,7 +286,7 @@ pub mod tests {
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
                                     CredentialsEndpointRequest {
-                                        template_id: TEMPLATE_ID.to_string(),
+                                        template_id: template_id.clone(),
                                         offer_id: offer_id.clone(),
                                         credential: json!({
                                             "credentialSubject": {
@@ -331,6 +332,7 @@ pub mod tests {
     pub async fn credential(
         issuance_app: &mut Router,
         issuance_state: &Arc<IssuanceState>,
+        template_id: &str,
         access_token: String,
         external_server: Option<MockServer>,
     ) -> (String, String) {
@@ -350,7 +352,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": TEMPLATE_ID,
+                            "credential_configuration_id": template_id,
                             "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
                                         IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
                                         a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
@@ -435,8 +437,8 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template_with_auth(&library_state, &issuance_state, is_pre_authorized).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_auth(&library_state, is_pre_authorized).await;
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
@@ -451,6 +453,7 @@ pub mod tests {
             external_server
                 .prepare_credential_event_trigger(
                     Arc::new(Mutex::new(Some(issuance_app.clone()))),
+                    template_id.clone(),
                     is_self_signed,
                     delay,
                 )
@@ -461,10 +464,10 @@ pub mod tests {
         // start of the flow, since the `external_server` will do this once it is triggered by the
         // `CredentialRequestVerified` event.
         if !with_external_server {
-            credentials(&mut issuance_app).await;
+            credentials_with_template(&mut issuance_app, &template_id).await;
         }
 
-        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
+        let grants = offers(&mut issuance_app, &template_id).await.unwrap();
 
         let authorization_state = Arc::new(
             authorization_state(
@@ -499,7 +502,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": TEMPLATE_ID,
+                            "credential_configuration_id": template_id,
                             "proofs": {
                                 "jwt":[jwt]
                             }

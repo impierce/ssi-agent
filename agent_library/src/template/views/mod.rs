@@ -27,6 +27,7 @@ impl View<Template> for Template {
                 r#type,
                 schema,
                 schema_properties_attributes,
+                pre_authorized,
             } => {
                 self.template_id.clone_from(template_id);
                 self.source_template_id.clone_from(source_template_id);
@@ -44,6 +45,7 @@ impl View<Template> for Template {
                 self.schema.clone_from(schema);
                 self.schema_properties_attributes
                     .clone_from(schema_properties_attributes);
+                self.pre_authorized = *pre_authorized;
             }
             TitleUpdated {
                 template_id: _,
@@ -130,6 +132,14 @@ impl View<Template> for Template {
                 self.credential_expiration = credential_expiration.clone();
                 self.modified_at.replace(modified_at.clone());
             }
+            PreAuthorizedUpdated {
+                template_id: _,
+                pre_authorized,
+                modified_at,
+            } => {
+                self.pre_authorized = *pre_authorized;
+                self.modified_at.replace(modified_at.clone());
+            }
             TemplateDeleted { template_id: _ } => {
                 self.status = Status::Deleted;
             }
@@ -170,6 +180,7 @@ mod tests {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: true,
         })
     }
 

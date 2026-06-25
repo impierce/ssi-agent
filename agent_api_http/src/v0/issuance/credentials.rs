@@ -170,10 +170,18 @@ pub(crate) async fn credentials(
                 .finish());
         }
 
-        validate_signed_credential_format_matches_configuration(
-            credential.as_str().expect("signed credential must be a string"),
-            &credential_configuration,
-        )?;
+        let signed_credential = match credential.as_str() {
+            Some(value) => value,
+            None => {
+                return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Credential Type")
+                    .type_url(type_url("issuance#invalid-credential-type"))
+                    .message("For signed credentials, the credential must be a string.")
+                    .finish())
+            }
+        };
+
+        validate_signed_credential_format_matches_configuration(signed_credential, &credential_configuration)?;
 
         CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.clone(),
@@ -227,7 +235,7 @@ pub(crate) async fn credentials(
 
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_configuration_ids: vec![credential_configuration_id.clone()],
+            template_ids: vec![credential_configuration_id.clone()],
             grant_types,
             tx_code_constraints,
             delivery_options: None,
@@ -239,7 +247,7 @@ pub(crate) async fn credentials(
     let command = OfferCommand::AddCredentials {
         offer_id: offer_id.clone(),
         credential_ids: vec![credential_id.clone()],
-        credential_configuration_ids: vec![credential_configuration_id],
+        template_ids: vec![credential_configuration_id],
     };
 
     // Add the credential to the offer.
@@ -578,16 +586,13 @@ pub mod tests {
     use crate::tests::{OFFER_ID, TEMPLATE_ID};
     use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
-    use agent_issuance::{
-        server_config::command::ServerConfigCommand, services::IssuanceServices, state::initialize,
-        state::SERVER_CONFIG_ID,
-    };
-    use agent_library::template::aggregate::{Logo, Status};
+    use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+    use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_library::template::aggregate::{DataModel, Display, Expiration, HolderType, Status, Visibility};
     use agent_library::template::command::TemplateCommand;
-    use agent_library::template::event::{Display, Visibility};
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
-    use agent_shared::config::{CredentialConfiguration, TESTINDEX};
+    use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
     use agent_store::{issuance_state, library_state};
     use axum::{
@@ -625,206 +630,203 @@ pub mod tests {
         });
     }
 
-    /// Creates a test template in the library state and registers a matching credential
-    /// configuration in the issuance state. Returns the template ID.
-    /// The `pre_authorized` parameter controls the authorization flow type for the credential configuration.
-    pub async fn create_test_template_with_auth(
-        library_state: &LibraryState,
-        issuance_state: &IssuanceState,
+    /// Creates a [LibraryState] with the [CredentialConfigurationProjection] properly wired
+    /// to the given [IssuanceState], mirroring the production application setup. When a template
+    /// is created or updated through this library state, the credential configuration in the
+    /// issuance state is automatically synchronized via the projection.
+    pub async fn setup_library_state(issuance_state: &Arc<IssuanceState>) -> Arc<LibraryState> {
+        let (projection, view_handle) = CredentialConfigurationProjection::new(issuance_state.clone());
+        let lib = Arc::new(library_state(&InMemory, Default::default(), vec![Box::new(projection)]).await);
+        assert!(
+            view_handle.set(lib.query.template.clone()).is_ok(),
+            "template view already initialized"
+        );
+        lib
+    }
+
+    pub async fn create_new_template(
+        library_state: &Arc<LibraryState>,
+        status: Status,
+        credential_expiration: Option<Expiration>,
         pre_authorized: bool,
+        data_model: DataModel,
     ) -> String {
+        let mut library_app = crate::v0::library::router(library_state.clone());
+        let response = library_app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/create-new-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "title": "Test Template",
+                            "display": {
+                                "name": "Verifiable Credential",
+                                "logo": {
+                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "altText": "Impierce Logo"
+                                }
+                            },
+                            "dataModel": data_model,
+                            "holderType": HolderType::Individual,
+                            "status": status,
+                            "visibility": Visibility::Private,
+                            "credentialExpiration": credential_expiration,
+                            "type": ["VerifiableCredential"],
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": { "type": "string" },
+                                    "first_name": { "type": "string" },
+                                    "last_name": { "type": "string" }
+                                },
+                                "required": ["first_name", "last_name"]
+                            },
+                            "preAuthorized": pre_authorized
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        body["id"].as_str().unwrap().to_string()
+    }
+
+    async fn update_template_status(library_state: &Arc<LibraryState>, template_id: &str, status: Status) {
+        let mut library_app = crate::v0::library::router(library_state.clone());
+        let response = library_app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/update-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "id": template_id,
+                            "status": status
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    async fn delete_template(library_state: &Arc<LibraryState>, template_id: &str) {
+        let mut library_app = crate::v0::library::router(library_state.clone());
+        let response = library_app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/delete-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "id": template_id
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    /// Creates a test template in the library state and returns its ID.
+    /// The template will be automatically synchronized as a credential configuration in the
+    /// issuance state if the library state was created with [setup_library_with_projection].
+    /// The `pre_authorized` parameter controls the authorization flow type for the credential configuration.
+    pub async fn create_test_template_with_auth(library_state: &Arc<LibraryState>, pre_authorized: bool) -> String {
         let template_id = TEMPLATE_ID.to_string();
 
-        let command = TemplateCommand::CreateNewTemplate {
-            template_id: template_id.clone(),
-            source_template_id: None,
-            title: "Test Template".to_string(),
-            display: Box::new(Some(Display {
-                name: "Verifiable Credential".to_string(),
-                logo: Some(Logo {
-                    uri: "https://www.impierce.com/external/impierce-logo.png".to_string(),
-                    alt_text: Some("Impierce Logo".to_string()),
-                }),
-            })),
-            data_model: agent_library::template::aggregate::DataModel::W3CVcDataModelV1_1,
-            holder_type: agent_library::template::aggregate::HolderType::Individual,
-            tags: None,
-            status: Status::Published,
-            visibility: Visibility::Private,
-            credential_expiration: Some(Expiration::Never),
-            description: None,
-            r#type: vec!["VerifiableCredential".to_string()],
-            schema: Box::new(Some(json!({
-                "type": "object",
-                "properties": {
-                    "id": { "type": "string" },
-                    "first_name": { "type": "string" },
-                    "last_name": { "type": "string" }
-                },
-                "required": ["first_name", "last_name"]
-            }))),
-            schema_properties_attributes: None,
-        };
-
-        agent_shared::handlers::command_handler(&template_id, &library_state.command.template, command)
-            .await
-            .unwrap();
-
-        // Register a credential configuration matching the template_id.
-        // This simulates what the credential_configuration_projection does in production.
-        let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
-            "credential_configuration_id": template_id,
-            "format": "jwt_vc_json",
-            "type": ["VerifiableCredential"],
-            "display": [
-                {
-                    "name": "Verifiable Credential",
-                    "locale": "en",
-                    "logo": {
-                        "uri": "https://www.impierce.com/external/impierce-logo.png",
-                        "alt_text": "Impierce Logo"
-                    }
-                }
-            ],
-            "authorization": { "pre_authorized": pre_authorized }
-        }))
+        command_handler(
+            &template_id,
+            &library_state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Test Template".to_string(),
+                display: Box::new(Some(Display {
+                    name: "Verifiable Credential".to_string(),
+                    logo: None,
+                })),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Published,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "first_name": { "type": "string" },
+                        "last_name": { "type": "string" }
+                    },
+                    "required": ["first_name", "last_name"]
+                }))),
+                schema_properties_attributes: None,
+                pre_authorized,
+            },
+        )
+        .await
         .unwrap();
-
-        let command = ServerConfigCommand::UpdateCredentialConfiguration {
-            credential_configuration,
-            provisioned: false,
-        };
-
-        agent_shared::handlers::command_handler(SERVER_CONFIG_ID, &issuance_state.command.server_config, command)
-            .await
-            .unwrap();
 
         template_id
     }
 
     /// Creates a test template with pre-authorized credential configuration (default).
-    pub async fn create_test_template(library_state: &LibraryState, issuance_state: &IssuanceState) -> String {
-        create_test_template_with_auth(library_state, issuance_state, true).await
-    }
-
-    pub async fn remove_test_template_configuration(issuance_state: &IssuanceState, template_id: &str) {
-        let command = ServerConfigCommand::RemoveCredentialConfiguration {
-            credential_configuration_id: template_id.to_string(),
-            provisioned: false,
-        };
-
-        agent_shared::handlers::command_handler(SERVER_CONFIG_ID, &issuance_state.command.server_config, command)
-            .await
-            .unwrap();
+    pub async fn create_test_template(library_state: &Arc<LibraryState>) -> String {
+        create_test_template_with_auth(library_state, true).await
     }
 
     pub async fn create_test_template_with_status_and_format(
-        library_state: &LibraryState,
-        issuance_state: &IssuanceState,
-        template_id: &str,
+        library_state: &Arc<LibraryState>,
         status: Status,
         credential_expiration: Option<Expiration>,
         format: &str,
     ) -> String {
-        let should_register_configuration = status == Status::Published;
+        let data_model = match format {
+            "jwt_vc_json" => DataModel::W3CVcDataModelV1_1,
+            "vc+sd-jwt" => DataModel::W3CVcDataModelV2_0,
+            _ => panic!("unsupported test format: {format}"),
+        };
         let initial_status = match status.clone() {
             Status::Archived | Status::Deleted => Status::Draft,
             _ => status.clone(),
         };
-        let command = TemplateCommand::CreateNewTemplate {
-            template_id: template_id.to_string(),
-            source_template_id: None,
-            title: "Test Template".to_string(),
-            display: Box::new(Some(Display {
-                name: "Verifiable Credential".to_string(),
-                logo: Some(Logo {
-                    uri: "https://www.impierce.com/external/impierce-logo.png".to_string(),
-                    alt_text: Some("Impierce Logo".to_string()),
-                }),
-            })),
-            data_model: agent_library::template::aggregate::DataModel::W3CVcDataModelV1_1,
-            holder_type: agent_library::template::aggregate::HolderType::Individual,
-            tags: None,
-            status: initial_status,
-            visibility: Visibility::Private,
-            credential_expiration,
-            description: None,
-            r#type: vec!["VerifiableCredential".to_string()],
-            schema: Box::new(Some(json!({
-                "type": "object",
-                "properties": {
-                    "id": { "type": "string" },
-                    "first_name": { "type": "string" },
-                    "last_name": { "type": "string" }
-                },
-                "required": ["first_name", "last_name"]
-            }))),
-            schema_properties_attributes: None,
-        };
 
-        agent_shared::handlers::command_handler(template_id, &library_state.command.template, command)
-            .await
-            .unwrap();
+        let template_id =
+            create_new_template(library_state, initial_status, credential_expiration, true, data_model).await;
 
         match status {
-            Status::Archived => {
-                let command = TemplateCommand::UpdateStatus {
-                    template_id: template_id.to_string(),
-                    status,
-                };
-
-                agent_shared::handlers::command_handler(template_id, &library_state.command.template, command)
-                    .await
-                    .unwrap();
-            }
-            Status::Deleted => {
-                let command = TemplateCommand::DeleteTemplate {
-                    template_id: template_id.to_string(),
-                };
-
-                agent_shared::handlers::command_handler(template_id, &library_state.command.template, command)
-                    .await
-                    .unwrap();
-            }
+            Status::Archived => update_template_status(library_state, &template_id, Status::Archived).await,
+            Status::Deleted => delete_template(library_state, &template_id).await,
             _ => {}
         }
 
-        if should_register_configuration {
-            let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
-                "credential_configuration_id": template_id,
-                "format": format,
-                "type": ["VerifiableCredential"],
-                "display": [
-                    {
-                        "name": "Verifiable Credential",
-                        "locale": "en",
-                        "logo": {
-                            "uri": "https://www.impierce.com/external/impierce-logo.png",
-                            "alt_text": "Impierce Logo"
-                        }
-                    }
-                ],
-                "authorization": { "pre_authorized": true }
-            }))
-            .unwrap();
-
-            let command = ServerConfigCommand::UpdateCredentialConfiguration {
-                credential_configuration,
-                provisioned: false,
-            };
-
-            agent_shared::handlers::command_handler(SERVER_CONFIG_ID, &issuance_state.command.server_config, command)
-                .await
-                .unwrap();
-        }
-
-        template_id.to_string()
+        template_id
     }
 
     fn encode_base64url_json(value: Value) -> String {
         URL_SAFE_NO_PAD.encode(serde_json::to_vec(&value).unwrap())
     }
 
+    /// No _valid_ signature is produced, which is sufficient for the testing purpose.
     fn build_test_signed_jwt_vc_json() -> String {
         let header = encode_base64url_json(json!({
             "alg": "EdDSA",
@@ -1005,12 +1007,12 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
-        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
+        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state, &template_id).await;
         patch_credential(&mut app, credential_endpoint).await;
     }
 
@@ -1021,12 +1023,12 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
-        credentials(&mut app).await;
+        credentials_with_template(&mut app, &template_id).await;
     }
 
     #[tokio::test]
@@ -1035,7 +1037,7 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let library_state = setup_library_state(&issuance_state).await;
         let mut app = router((issuance_state.clone(), library_state));
 
         let response = unsigned_credentials_request_with_template(&mut app, "").await;
@@ -1052,7 +1054,7 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let library_state = setup_library_state(&issuance_state).await;
         let mut app = router((issuance_state.clone(), library_state));
 
         let response = unsigned_credentials_request_with_template(&mut app, "missing-template").await;
@@ -1070,11 +1072,17 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
-        remove_test_template_configuration(&issuance_state, TEMPLATE_ID).await;
+        let template_id = create_new_template(
+            &library_state,
+            Status::Published,
+            Some(Expiration::Never),
+            true,
+            DataModel::W3CVcDataModelV1_1,
+        )
+        .await;
 
         let mut app = router((issuance_state.clone(), library_state));
-        let response = unsigned_credentials_request_with_template(&mut app, TEMPLATE_ID).await;
+        let response = unsigned_credentials_request_with_template(&mut app, &template_id).await;
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1088,12 +1096,9 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        let template_id = "draft-template";
-        create_test_template_with_status_and_format(
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_status_and_format(
             &library_state,
-            &issuance_state,
-            template_id,
             Status::Draft,
             Some(Expiration::Never),
             "jwt_vc_json",
@@ -1103,7 +1108,7 @@ pub mod tests {
         let mut app = router((issuance_state.clone(), library_state));
         let response = signed_credentials_with_template(
             &mut app,
-            template_id,
+            &template_id,
             &build_test_signed_jwt_vc_json(),
             Some(json!("never")),
         )
@@ -1121,20 +1126,16 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template_with_status_and_format(
+        let library_state = setup_library_state(&issuance_state).await;
+        let draft_template_id = create_test_template_with_status_and_format(
             &library_state,
-            &issuance_state,
-            "draft-template",
             Status::Draft,
             Some(Expiration::Never),
             "jwt_vc_json",
         )
         .await;
-        create_test_template_with_status_and_format(
+        let archived_template_id = create_test_template_with_status_and_format(
             &library_state,
-            &issuance_state,
-            "archived-template",
             Status::Archived,
             Some(Expiration::Never),
             "jwt_vc_json",
@@ -1143,7 +1144,7 @@ pub mod tests {
 
         let mut app = router((issuance_state.clone(), library_state));
 
-        for template_id in ["draft-template", "archived-template"] {
+        for template_id in [&draft_template_id, &archived_template_id] {
             let response = unsigned_credentials_request_with_template(&mut app, template_id).await;
 
             assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
@@ -1159,12 +1160,9 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        let template_id = "published-template-with-deadline";
-        create_test_template_with_status_and_format(
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_status_and_format(
             &library_state,
-            &issuance_state,
-            template_id,
             Status::Published,
             Some(Expiration::DateTime("2000-01-01T00:00:00Z".to_string())),
             "jwt_vc_json",
@@ -1174,7 +1172,7 @@ pub mod tests {
         let mut app = router((issuance_state.clone(), library_state));
         let signed_credential = build_test_signed_jwt_vc_json();
         let response =
-            signed_credentials_with_template(&mut app, template_id, &signed_credential, Some(json!("never"))).await;
+            signed_credentials_with_template(&mut app, &template_id, &signed_credential, Some(json!("never"))).await;
 
         assert_eq!(response.status(), StatusCode::CREATED);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1188,12 +1186,9 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        let template_id = "published-template-vc-sd-jwt";
-        create_test_template_with_status_and_format(
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_status_and_format(
             &library_state,
-            &issuance_state,
-            template_id,
             Status::Published,
             Some(Expiration::Never),
             "vc+sd-jwt",
@@ -1202,7 +1197,7 @@ pub mod tests {
 
         let mut app = router((issuance_state.clone(), library_state));
         let response =
-            signed_credentials_with_template(&mut app, template_id, &build_test_signed_jwt_vc_json(), None).await;
+            signed_credentials_with_template(&mut app, &template_id, &build_test_signed_jwt_vc_json(), None).await;
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();

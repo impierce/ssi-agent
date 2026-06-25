@@ -40,6 +40,7 @@ fn create_test_event_template_created(
             r#type: types,
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
         metadata: HashMap::new(),
     }
@@ -210,6 +211,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -304,6 +306,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -355,6 +358,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -481,6 +485,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -566,6 +571,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -631,6 +637,7 @@ async fn test_status_updated_to_archived_removes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -712,6 +719,7 @@ async fn test_schema_updated_refreshes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -794,6 +802,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(schema.clone())),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
     )
     .await
@@ -818,6 +827,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
+            pre_authorized: false,
         },
         metadata: HashMap::new(),
     };

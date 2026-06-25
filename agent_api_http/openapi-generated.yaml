@@ -135,7 +135,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTemplateRequestBody'
+              $ref: '#/components/schemas/CreateNewTemplateRequestBody'
             examples:
               OpenBadges template:
                 description: An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.
@@ -754,17 +754,7 @@ components:
           type:
           - string
           - 'null'
-    CreatePublicOfferRequest:
-      type: object
-      required:
-      - offerId
-      - templateId
-      properties:
-        offerId:
-          type: string
-        templateId:
-          type: string
-    CreateTemplateRequestBody:
+    CreateNewTemplateRequestBody:
       type: object
       properties:
         credentialExpiration:
@@ -790,6 +780,9 @@ components:
           oneOf:
           - $ref: '#/components/schemas/HolderType'
           default: individual
+        preAuthorized:
+          type: boolean
+          default: false
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -824,6 +817,16 @@ components:
           - $ref: '#/components/schemas/Visibility'
           default: private
       additionalProperties: false
+    CreatePublicOfferRequest:
+      type: object
+      required:
+      - offerId
+      - templateId
+      properties:
+        offerId:
+          type: string
+        templateId:
+          type: string
     Credential:
       type: object
       required:
@@ -1491,6 +1494,7 @@ components:
       - visibility
       - credentialExpiration
       - type
+      - preAuthorized
       properties:
         credentialExpiration:
           $ref: '#/components/schemas/Expiration'
@@ -1512,6 +1516,8 @@ components:
           type:
           - string
           - 'null'
+        preAuthorized:
+          type: boolean
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -1565,6 +1571,11 @@ components:
         id:
           type: string
           default: ''
+        preAuthorized:
+          type:
+          - boolean
+          - 'null'
+          default: null
         schema: {}
         schemaPropertiesAttributes:
           type:

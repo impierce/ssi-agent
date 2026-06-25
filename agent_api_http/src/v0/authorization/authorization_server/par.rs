@@ -94,7 +94,7 @@ pub mod tests {
     use crate::v0::{
         authorization,
         issuance::{
-            credentials::tests::{create_test_template_with_auth, credentials},
+            credentials::tests::{create_test_template_with_auth, credentials, setup_library_state},
             offers::tests::offers,
         },
     };
@@ -106,7 +106,7 @@ pub mod tests {
     use agent_authorization::{services::AuthorizationServices, state::UNIME_CLIENT_ID};
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state, library_state};
+    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use agent_verification::services::VerificationServices;
     use axum::{
         body::Body,
@@ -260,8 +260,8 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template_with_auth(&library_state, &issuance_state, false).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, false).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
@@ -299,12 +299,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, false).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 
         credentials(&mut app).await;
-        let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();
+        let (authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 

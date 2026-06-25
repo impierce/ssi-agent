@@ -64,14 +64,14 @@ mod tests {
     use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::credential_issuer::credential::tests::credential;
-    use crate::v0::issuance::credentials::tests::{create_test_template, credentials};
+    use crate::v0::issuance::credentials::tests::{create_test_template, credentials, setup_library_state};
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
     use agent_authorization::services::AuthorizationServices;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state, library_state};
+    use agent_store::{authorization_state, issuance_state};
     use axum::{body::Body, http::Request};
     use oid4vci::errors::ErrorStatusCode;
     use oid4vci::notification_request::NotificationEvent;
@@ -85,8 +85,8 @@ mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
 
         let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
@@ -109,7 +109,8 @@ mod tests {
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
+        let (access_token, notification_id) =
+            credential(&mut issuance_app, &issuance_state, TEMPLATE_ID, access_token, None).await;
 
         let request = Request::builder()
             .uri("/openid4vci/notification")
@@ -136,8 +137,8 @@ mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
 
         let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
 
@@ -160,7 +161,8 @@ mod tests {
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
+        let (access_token, notification_id) =
+            credential(&mut issuance_app, &issuance_state, TEMPLATE_ID, access_token, None).await;
 
         struct TestCase {
             name: &'static str,

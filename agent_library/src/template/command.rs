@@ -21,6 +21,7 @@ pub enum TemplateCommand {
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
         schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+        pre_authorized: bool,
     },
     UpdateTitle {
         template_id: String,
@@ -61,6 +62,10 @@ pub enum TemplateCommand {
     UpdateCredentialExpiration {
         template_id: String,
         credential_expiration: Expiration,
+    },
+    UpdatePreAuthorized {
+        template_id: String,
+        pre_authorized: bool,
     },
     DeleteTemplate {
         template_id: String,

@@ -6,12 +6,13 @@ use crate::{
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
-    state::{IssuanceState, SERVER_CONFIG_ID},
+    state::IssuanceState,
 };
 use agent_library::{
     state::LibraryState,
     template::aggregate::{Status as TemplateStatus, Template},
 };
+use agent_shared::config::Authorization;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -28,7 +29,7 @@ use std::sync::Arc;
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
     pub offer_id: String,
-    pub template_id: String,
+    pub template_ids: Vec<String>,
     #[serde(default)]
     pub delivery_options: Option<DeliveryOptions>,
 }
@@ -39,57 +40,54 @@ pub(crate) async fn offers(
     Extension(library_state): Extension<Arc<LibraryState>>,
     Json(OffersEndpointRequest {
         offer_id,
-        template_id,
+        template_ids,
         delivery_options,
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    if template_id.is_empty() {
+    if template_ids.is_empty() || template_ids.iter().any(|id| id.is_empty()) {
         return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Missing Template ID")
-            .type_url(type_url("issuance#missing-template-id"))
-            .message("The `templateId` field is required and must not be empty.")
+            .title("Missing Template IDs")
+            .type_url(type_url("issuance#missing-template-ids"))
+            .message("The `templateIds` field is required and all IDs must not be empty.")
             .finish());
     }
 
-    let template: Template = query_handler(&template_id, &library_state.query.template)
-        .await?
-        .filter(|t| t.status != TemplateStatus::Deleted)
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Template Not Found")
-                .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{template_id}`"))
-                .finish()
-        })?;
+    // Validate and load all templates.
+    let mut templates = Vec::with_capacity(template_ids.len());
 
-    if template.status != TemplateStatus::Published {
-        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-            .title("Template Not Published")
-            .type_url(type_url("issuance#template-not-published"))
-            .message("Credential offers require the template to be Published.")
-            .finish());
-    }
+    for template_id in &template_ids {
+        let template: Template = query_handler(template_id, &library_state.query.template)
+            .await?
+            .filter(|t| t.status != TemplateStatus::Deleted)
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Template Not Found")
+                    .type_url(type_url("issuance#template-not-found"))
+                    .message(format!("No template found with id: `{template_id}`"))
+                    .finish()
+            })?;
 
-    let credential_configuration_id = template_id.clone();
-
-    let authorization = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-        .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
-        .map(|(_, _, authorization)| authorization)
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
+        // Template must be in "Published" status
+        if template.status != TemplateStatus::Published {
+            return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Template Not Published")
+                .type_url(type_url("issuance#template-not-published"))
                 .message(format!(
-                    "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    "Template `{template_id}` must be Published to be used in an offer."
                 ))
-                .finish()
-        })?;
+                .finish());
+        }
+
+        templates.push(template);
+    }
+
+    // Use first template for authorization/grant determination.
+    let first_template = templates.first().expect("template_ids can not be empty");
+
+    let authorization = Authorization {
+        pre_authorized: first_template.pre_authorized,
+        tx_code_constraints: None,
+    };
 
     let tx_code_constraints = authorization
         .pre_authorized
@@ -105,7 +103,7 @@ pub(crate) async fn offers(
     if query_handler(&offer_id, &state.query.offer).await?.is_none() {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_configuration_ids: vec![credential_configuration_id],
+            template_ids,
             grant_types,
             tx_code_constraints,
             delivery_options,
@@ -178,11 +176,11 @@ pub(crate) async fn offer(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::tests::{OFFER_ID, TEMPLATE_ID};
+    use crate::tests::OFFER_ID;
     use crate::v0::issuance::{
         credentials::tests::{
-            create_test_template, create_test_template_with_status_and_format, credentials,
-            remove_test_template_configuration,
+            create_new_template, create_test_template, create_test_template_with_status_and_format,
+            credentials_with_template, setup_library_state,
         },
         router,
     };
@@ -215,7 +213,7 @@ pub mod tests {
                 .body(Body::from(
                     serde_json::to_vec(&json!({
                         "offerId": OFFER_ID,
-                        "templateId": template_id,
+                        "templateIds": vec![template_id],
                     }))
                     .unwrap(),
                 ))
@@ -308,7 +306,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["title"], "Missing Template ID");
+        assert_eq!(body["title"], "Missing Template IDs");
     }
 
     #[serial_test::serial]
@@ -319,10 +317,8 @@ pub mod tests {
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template_with_status_and_format(
+        let template_id = create_test_template_with_status_and_format(
             &library_state,
-            &issuance_state,
-            "draft-template",
             Status::Draft,
             Some(Expiration::Never),
             "jwt_vc_json",
@@ -330,7 +326,7 @@ pub mod tests {
         .await;
 
         let mut app = router((issuance_state, library_state));
-        let response = post_offer_request(&mut app, "draft-template").await;
+        let response = post_offer_request(&mut app, &template_id).await;
 
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -340,22 +336,29 @@ pub mod tests {
 
     #[serial_test::serial]
     #[tokio::test]
-    async fn test_offers_endpoint_requires_credential_configuration() {
+    async fn test_offers_endpoint_accepts_published_template_without_pre_synced_configuration() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
-        remove_test_template_configuration(&issuance_state, TEMPLATE_ID).await;
+        let template_id = create_new_template(
+            &library_state,
+            Status::Published,
+            Some(Expiration::Never),
+            true,
+            agent_library::template::aggregate::DataModel::W3CVcDataModelV1_1,
+        )
+        .await;
 
         let mut app = router((issuance_state, library_state));
-        let response = post_offer_request(&mut app, TEMPLATE_ID).await;
+        let response = post_offer_request(&mut app, &template_id).await;
 
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["title"], "No Credential Configuration Found");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "application/x-www-form-urlencoded"
+        );
     }
 
     #[serial_test::serial]
@@ -366,13 +369,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
         let mut app = router((issuance_state, library_state));
 
-        credentials(&mut app).await;
-        let (_authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
+        credentials_with_template(&mut app, &template_id).await;
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app, &template_id).await.unwrap();
     }
 
     #[serial_test::serial]
@@ -384,13 +387,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
         let mut app = router((issuance_state, library_state));
 
-        credentials(&mut app).await;
-        let none = offers(&mut app, TEMPLATE_ID).await;
+        credentials_with_template(&mut app, &template_id).await;
+        let none = offers(&mut app, &template_id).await;
 
         // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.
         assert!(none.is_none());

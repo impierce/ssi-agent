@@ -38,7 +38,7 @@ pub mod tests {
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::consent::tests::{get_consent, post_consent};
     use crate::v0::authorization::authorization_server::par::tests::par;
-    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials};
+    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::issuance::router;
     use agent_authorization::services::AuthorizationServices;
@@ -46,7 +46,7 @@ pub mod tests {
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state, library_state};
+    use agent_store::{authorization_state, issuance_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -119,8 +119,8 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template_with_auth(&library_state, &issuance_state, false).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, false).await;
 
         let mut app = router((issuance_state.clone(), library_state));
 

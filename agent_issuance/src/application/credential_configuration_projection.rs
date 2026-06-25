@@ -166,7 +166,11 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
         format,
         type_,
         credential_metadata: CredentialMetadata { display, claims },
-        authorization: Authorization::default(),
+        authorization: Authorization {
+            pre_authorized: template.pre_authorized,
+            // TODO: require in template
+            tx_code_constraints: None,
+        },
     }
 }
 
@@ -289,6 +293,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     status,
                     schema,
                     schema_properties_attributes,
+                    pre_authorized,
                     ..
                 } => {
                     // Only published templates have a credential configuration.
@@ -305,6 +310,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                         status: status.clone(),
                         schema: schema.clone(),
                         schema_properties_attributes: schema_properties_attributes.clone(),
+                        pre_authorized: *pre_authorized,
                         ..Default::default()
                     };
 
@@ -338,7 +344,8 @@ impl Query<Template> for CredentialConfigurationProjection {
                 | DisplayUpdated { template_id, .. }
                 | TypeUpdated { template_id, .. }
                 | SchemaUpdated { template_id, .. }
-                | SchemaPropertiesAttributesUpdated { template_id, .. } => {
+                | SchemaPropertiesAttributesUpdated { template_id, .. }
+                | PreAuthorizedUpdated { template_id, .. } => {
                     self.sync_from_view(template_id).await;
                 }
 

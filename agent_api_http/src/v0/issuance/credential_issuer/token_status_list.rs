@@ -48,7 +48,7 @@ pub mod tests {
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state, library_state};
+    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::{self, Body},
         Router,
@@ -67,7 +67,7 @@ pub mod tests {
         issuance::{
             self,
             credential_issuer::credential::tests::TEST_NONCE,
-            credentials::tests::{create_test_template, credentials},
+            credentials::tests::{create_test_template, credentials, setup_library_state},
             offers::tests::offers,
         },
     };
@@ -82,13 +82,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-        create_test_template(&library_state, &issuance_state).await;
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
 
         let mut app = issuance::router((issuance_state.clone(), library_state));
 
         // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
-        create_test_signed_credential(&mut app, &issuance_state).await;
+        create_test_signed_credential(&mut app, &issuance_state, TEMPLATE_ID).await;
 
         // Fetch the Status List Token
         let token_status_list_response = app
@@ -149,7 +149,11 @@ pub mod tests {
     /// - with_anonymous_access: false
     /// - with_external_server: false
     /// - is_self_signed: false
-    pub async fn create_test_signed_credential(app: &mut Router, issuance_state: &Arc<IssuanceState>) -> String {
+    pub async fn create_test_signed_credential(
+        app: &mut Router,
+        issuance_state: &Arc<IssuanceState>,
+        template_id: &str,
+    ) -> String {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
@@ -159,7 +163,7 @@ pub mod tests {
 
         let credential_endpoint = credentials(app).await;
 
-        let grants = offers(app, TEMPLATE_ID).await.unwrap();
+        let grants = offers(app, template_id).await.unwrap();
 
         let authorization_state = Arc::new(
             authorization_state(
@@ -189,7 +193,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": TEMPLATE_ID,
+                            "credential_configuration_id": template_id,
                             "proofs": {
                                 "jwt":[jwt]
                             }

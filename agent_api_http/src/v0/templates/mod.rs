@@ -40,6 +40,7 @@ pub struct TemplateDto {
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+    pub pre_authorized: bool,
 }
 
 impl From<Template> for TemplateDto {
@@ -59,13 +60,18 @@ impl From<Template> for TemplateDto {
             r#type: value.r#type,
             schema: *value.schema,
             schema_properties_attributes: value.schema_properties_attributes,
+            pre_authorized: value.pre_authorized,
         }
     }
 }
 
+fn default_pre_authorized() -> bool {
+    false
+}
+
 #[derive(Debug, Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
-pub struct CreateTemplateRequestBody {
+pub struct CreateNewTemplateRequestBody {
     pub title: String,
     pub display: Option<Display>,
     pub data_model: DataModel,
@@ -78,6 +84,8 @@ pub struct CreateTemplateRequestBody {
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+    #[serde(default = "default_pre_authorized")]
+    pub pre_authorized: bool,
 }
 
 /// Create a new template
@@ -88,7 +96,7 @@ pub struct CreateTemplateRequestBody {
     path = "/create-new-template",
     tags = ["Library", "Templates"],
     request_body(
-        content = CreateTemplateRequestBody,
+        content = CreateNewTemplateRequestBody,
         examples(
             ("Standard template" = (
                 description = "A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.",
@@ -107,7 +115,7 @@ pub struct CreateTemplateRequestBody {
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
-    Json(CreateTemplateRequestBody {
+    Json(CreateNewTemplateRequestBody {
         title,
         display,
         data_model,
@@ -120,7 +128,8 @@ pub(crate) async fn create_template(
         r#type,
         schema,
         schema_properties_attributes,
-    }): Json<CreateTemplateRequestBody>,
+        pre_authorized,
+    }): Json<CreateNewTemplateRequestBody>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
 
@@ -140,6 +149,7 @@ pub(crate) async fn create_template(
         schema: Box::new(schema),
         schema_properties_attributes: schema_properties_attributes
             .map(|attrs| attrs.into_iter().map(|(k, v)| (k, v.strip_non_removable())).collect()),
+        pre_authorized,
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -211,6 +221,7 @@ pub(crate) async fn duplicate_template(
         r#type: original_template.r#type,
         schema: original_template.schema,
         schema_properties_attributes: original_template.schema_properties_attributes,
+        pre_authorized: original_template.pre_authorized,
     };
 
     command_handler(&new_template_id, &state.command.template, command).await?;
@@ -246,6 +257,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub r#type: Option<Vec<String>>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+    pub pre_authorized: Option<bool>,
 }
 
 /// Update a template
@@ -275,6 +287,7 @@ pub(crate) async fn update_template(
         r#type,
         schema,
         schema_properties_attributes,
+        pre_authorized,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
@@ -365,6 +378,14 @@ pub(crate) async fn update_template(
                 .into_iter()
                 .map(|(k, v)| (k, v.strip_non_removable()))
                 .collect(),
+        };
+        command_handler(&template_id, &state.command.template, command).await?;
+    }
+
+    if let Some(pre_authorized) = pre_authorized {
+        let command = TemplateCommand::UpdatePreAuthorized {
+            template_id: template_id.clone(),
+            pre_authorized,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
@@ -522,6 +543,7 @@ mod tests {
                     "required": ["first_name"]
                 }))),
                 schema_properties_attributes: None,
+                pre_authorized: true,
             },
         )
         .await
@@ -530,7 +552,7 @@ mod tests {
 
     #[test]
     fn create_template_request_accepts_credential_expiration() {
-        let request = serde_json::from_value::<CreateTemplateRequestBody>(json!({
+        let request = serde_json::from_value::<CreateNewTemplateRequestBody>(json!({
             "title": "Standard template",
             "dataModel": "w3c_vc_data_model_v1-1",
             "holderType": "individual",
@@ -543,7 +565,7 @@ mod tests {
 
     #[test]
     fn create_template_request_rejects_legacy_fields() {
-        let creator_error = serde_json::from_value::<CreateTemplateRequestBody>(json!({
+        let creator_error = serde_json::from_value::<CreateNewTemplateRequestBody>(json!({
             "title": "Standard template",
             "dataModel": "w3c_vc_data_model_v1-1",
             "holderType": "individual",
@@ -553,7 +575,7 @@ mod tests {
         .unwrap();
         assert!(creator_error.to_string().contains("creator"));
 
-        let expiration_error = serde_json::from_value::<CreateTemplateRequestBody>(json!({
+        let expiration_error = serde_json::from_value::<CreateNewTemplateRequestBody>(json!({
             "title": "Standard template",
             "dataModel": "w3c_vc_data_model_v1-1",
             "holderType": "individual",
@@ -612,6 +634,7 @@ mod tests {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
+            pre_authorized: false,
         });
 
         let serialized = serde_json::to_value(dto).unwrap();
@@ -683,7 +706,7 @@ mod tests {
 
         let response = create_template(
             State(state),
-            Json(CreateTemplateRequestBody {
+            Json(CreateNewTemplateRequestBody {
                 title: "Created Template".to_string(),
                 display: None,
                 data_model: DataModel::W3CVcDataModelV1_1,
@@ -696,6 +719,7 @@ mod tests {
                 r#type: vec!["EmployeeCredential".to_string()],
                 schema: None,
                 schema_properties_attributes: None,
+                pre_authorized: true,
             }),
         )
         .await
@@ -729,6 +753,7 @@ mod tests {
                 r#type: None,
                 schema: None,
                 schema_properties_attributes: None,
+                pre_authorized: None,
             }),
         )
         .await
@@ -772,6 +797,7 @@ mod tests {
                 r#type: None,
                 schema: None,
                 schema_properties_attributes: None,
+                pre_authorized: None,
             }),
         )
         .await
@@ -805,6 +831,7 @@ mod tests {
                 r#type: Some(vec!["EmployeeCredential".to_string()]),
                 schema: None,
                 schema_properties_attributes: None,
+                pre_authorized: None,
             }),
         )
         .await

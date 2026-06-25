@@ -124,6 +124,10 @@ impl PropertyAttribute {
     }
 }
 
+fn default_pre_authorized() -> bool {
+    false
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Template {
@@ -141,8 +145,12 @@ pub struct Template {
     pub credential_expiration: Expiration,
     pub description: Option<String>,
     pub r#type: Vec<String>,
+    /// JSON schema which defines the structure of the actual content of the credential.
     pub schema: Box<Option<serde_json::Value>>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+    /// The holder is already identified and authorized to receive the credential.
+    #[serde(default = "default_pre_authorized")]
+    pub pre_authorized: bool,
 }
 
 #[async_trait]
@@ -182,6 +190,7 @@ impl Aggregate for Template {
                 r#type,
                 schema,
                 schema_properties_attributes,
+                pre_authorized,
             } => {
                 // Only Draft and Published are allowed on creation.
                 if matches!(status, Status::Archived | Status::Deleted) {
@@ -289,6 +298,7 @@ impl Aggregate for Template {
                     r#type,
                     schema,
                     schema_properties_attributes,
+                    pre_authorized,
                 }])
             }
             UpdateTitle { template_id, title } => {
@@ -534,6 +544,23 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+            UpdatePreAuthorized {
+                template_id,
+                pre_authorized,
+            } => {
+                ensure_template_editable(&self.status)?;
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![PreAuthorizedUpdated {
+                    template_id,
+                    pre_authorized,
+                    modified_at,
+                }])
+            }
         }
     }
 
@@ -559,6 +586,7 @@ impl Aggregate for Template {
                 r#type,
                 schema,
                 schema_properties_attributes,
+                pre_authorized,
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
@@ -575,6 +603,7 @@ impl Aggregate for Template {
                 self.r#type = r#type;
                 self.schema = schema;
                 self.schema_properties_attributes = schema_properties_attributes;
+                self.pre_authorized = pre_authorized;
             }
             TitleUpdated {
                 template_id: _,
@@ -658,6 +687,14 @@ impl Aggregate for Template {
                 modified_at,
             } => {
                 self.credential_expiration = credential_expiration;
+                self.modified_at.replace(modified_at);
+            }
+            PreAuthorizedUpdated {
+                template_id: _,
+                pre_authorized,
+                modified_at,
+            } => {
+                self.pre_authorized = pre_authorized;
                 self.modified_at.replace(modified_at);
             }
             TemplateDeleted { template_id } => {

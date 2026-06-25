@@ -26,11 +26,6 @@ impl IntoApiErrorExt for CredentialError {
                 .type_url(type_url("issuance#unsupported-credential-format"))
                 .source(self)
                 .finish(),
-            UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unsupported Credential Type")
-                .type_url(type_url("issuance#unsupported-credential-type"))
-                .source(self)
-                .finish(),
             InvalidCredentialPayloadError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Payload")
                 .type_url(type_url("issuance#invalid-credential-payload"))
@@ -218,7 +213,6 @@ impl IntoPublicError for CredentialError {
         use CredentialError::*;
         match self {
             UnsupportedCredentialFormat(_) => PublicError::InternalServerError,
-            UnsupportedCredentialType => PublicError::InternalServerError,
             InvalidCredentialPayloadError(_) => PublicError::InternalServerError,
             InvalidIdentifierError => PublicError::InternalServerError,
             InvalidCredentialDataError => PublicError::InternalServerError,
