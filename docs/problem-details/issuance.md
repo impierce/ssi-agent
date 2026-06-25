@@ -219,3 +219,24 @@ This error occurs when the `format` specified in a credential configuration is n
 ### Resolution
 
 Ensure that the `format` field in the credential configuration is set to a supported value. Supported values include: `jwt_vc_json` and `dc+sd-jwt`.
+
+## Credential Reissuance Errors
+
+Credential reissuance can return:
+
+- `issuance#original-credential-not-found` with `404 Not Found` when the original credential does not exist.
+- `issuance#credential-configuration-not-found` with `404 Not Found` when the requested credential configuration does not exist.
+- `issuance#reissuance-not-allowed` with `403 Forbidden` when the reissuance policy rejects the request.
+- `issuance#credential-reissuance-failed` with `500 Internal Server Error` when creating or recording the reissuance fails.
+- `issuance#query-credential-offer-failed`, `issuance#query-credential-reissuances-failed`, or `issuance#query-credential-reissuance-failed` with `500 Internal Server Error` when reading prepared reissuance data fails.
+- A status-only `404 Not Found` when a credential reissuance relation does not exist.
+
+## Credential Refresh Errors
+
+Credential refresh can return:
+
+- `issuance#create-refresh-capability-failed` with `500 Internal Server Error` when creating a refresh capability for a credential fails.
+- `issuance#refresh-reference-not-found` with `404 Not Found` when the refresh reference does not exist or has been disabled.
+- `issuance#credential-refresh-unavailable` with `403 Forbidden` when refresh is known but cannot proceed.
+- `issuance#credential-refresh-preparation-failed` with `500 Internal Server Error` when refresh preparation fails.
+- `issuance#credential-refresh-failed` with `500 Internal Server Error` for other refresh failures.
