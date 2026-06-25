@@ -48,12 +48,10 @@ pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
                     get(credentials::credential).patch(patch_credential),
                 )
                 .route("/credential-configurations", post(credential_configurations))
-                .route(
-                    "/credential-reissuance",
-                    post(credential_reissuances).get(all_credential_reissuances),
-                )
-                .route("/credential-refresh", post(credential_refresh))
-                .route("/credential-reissuance/{reissuance_id}", get(credential_reissuance))
+                .route("/reissue-credential", post(credential_reissuances))
+                .route("/list-all-credential-reissuances", get(all_credential_reissuances))
+                .route("/refresh-credential", post(credential_refresh))
+                .route("/get-credential-reissuance/{id}", get(credential_reissuance))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))

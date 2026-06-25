@@ -153,7 +153,7 @@ pub(crate) async fn credentials(
                     type_: refresh_service.type_.clone(),
                     url: config()
                         .public_url
-                        .append_path_segment("credential-refresh")
+                        .append_path_segment("refresh-credential")
                         .to_string(),
                     refresh_token: refresh_capability.refresh_reference.clone(),
                 },

@@ -28,7 +28,7 @@ pub struct CredentialRefreshRequest {
 
 #[utoipa::path(
     post,
-    path = "/credential-refresh",
+    path = "/refresh-credential",
     operation_id = "refresh_credential",
     tags = ["Issuance"],
     request_body = CredentialRefreshRequest,
@@ -127,7 +127,7 @@ mod tests {
         app.oneshot(
             Request::builder()
                 .method(http::Method::POST)
-                .uri(format!("{API_VERSION}/credential-refresh"))
+                .uri(format!("{API_VERSION}/refresh-credential"))
                 .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                 .body(Body::from(
                     serde_json::to_vec(&json!({
