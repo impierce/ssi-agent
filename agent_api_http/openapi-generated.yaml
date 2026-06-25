@@ -158,6 +158,58 @@ paths:
       responses:
         '201':
           description: Credential configuration updated successfully
+  /v0/list-all-credential-reissuances:
+    get:
+      tags:
+      - Issuance
+      operationId: list_all_credential_reissuances
+      responses:
+        '200':
+          description: All credential reissuance relations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reissuance'
+  /v0/reissue-credential:
+    post:
+      tags:
+      - Issuance
+      operationId: reissue_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialReissuanceRequest'
+        required: true
+      responses:
+        '201':
+          description: Credential reissuance prepared successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
+  /v0/get-credential-reissuance/{id}:
+    get:
+      tags:
+      - Issuance
+      operationId: get_credential_reissuance
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Credential reissuance relation retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reissuance'
+        '404':
+          description: Credential reissuance relation not found
   /v0/credentials:
     get:
       tags:
@@ -755,6 +807,60 @@ components:
           type:
           - string
           - 'null'
+    CreateCredentialReissuanceRequest:
+      type: object
+      required:
+      - originalCredentialId
+      - credentialConfigurationId
+      - credential
+      - expiresAt
+      properties:
+        credential: {}
+        credentialConfigurationId:
+          type: string
+        expiresAt:
+          $ref: '#/components/schemas/CredentialExpiry'
+        originalCredentialId:
+          type: string
+        reason:
+          type:
+          - string
+          - 'null'
+        statusAction:
+          type:
+          - string
+          - 'null'
+        triggerType:
+          type:
+          - string
+          - 'null'
+        triggeredBy:
+          type:
+          - string
+          - 'null'
+    CreateCredentialReissuanceResponse:
+      type: object
+      required:
+      - id
+      - originalCredentialId
+      - newCredentialId
+      - offerId
+      - credentialConfigurationId
+      properties:
+        credentialConfigurationId:
+          type: string
+        credentialOffer:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        newCredentialId:
+          type: string
+        offerId:
+          type: string
+        originalCredentialId:
+          type: string
     CreatePublicOfferRequest:
       type: object
       required:
@@ -1410,6 +1516,46 @@ components:
           $ref: '#/components/schemas/PublicOfferStatus'
         templateId:
           type: string
+    Reissuance:
+      type: object
+      required:
+      - id
+      - original_credential_id
+      - new_credential_id
+      - offer_id
+      - credential_configuration_id
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        credential_configuration_id:
+          type: string
+        id:
+          type: string
+        new_credential_id:
+          type: string
+        offer_id:
+          type: string
+        original_credential_id:
+          type: string
+        reason:
+          type:
+          - string
+          - 'null'
+        status_action:
+          type:
+          - string
+          - 'null'
+        trigger_type:
+          type:
+          - string
+          - 'null'
+        triggered_by:
+          type:
+          - string
+          - 'null'
     RemoveConnectionRequest:
       type: object
       required:

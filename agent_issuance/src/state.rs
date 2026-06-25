@@ -22,6 +22,9 @@ use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
 use crate::public_offer::aggregate::PublicOffer;
 use crate::public_offer::views::{AllPublicOffersView, PublicOfferView};
+use crate::reissuance::aggregate::Reissuance;
+use crate::reissuance::views::all_reissuances::AllReissuancesView;
+use crate::reissuance::views::ReissuanceView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
@@ -50,6 +53,7 @@ impl std::fmt::Debug for IssuanceState {
 pub struct CommandHandlers {
     pub server_config: CommandHandler<ServerConfig>,
     pub credential: CommandHandler<Credential>,
+    pub reissuance: CommandHandler<Reissuance>,
     pub offer: CommandHandler<Offer>,
     pub nonce: CommandHandler<Nonce>,
     pub status_list: CommandHandler<StatusListAggregate>,
@@ -63,6 +67,8 @@ type Queries = ViewRepositories<
     dyn ViewRepository<ServerConfigView, ServerConfig>,
     dyn ViewRepository<CredentialView, Credential>,
     dyn ViewRepository<AllCredentialsView, Credential>,
+    dyn ViewRepository<ReissuanceView, Reissuance>,
+    dyn ViewRepository<AllReissuancesView, Reissuance>,
     dyn ViewRepository<OfferView, Offer>,
     dyn ViewRepository<AllOffersView, Offer>,
     dyn ViewRepository<NonceView, Nonce>,
@@ -72,11 +78,13 @@ type Queries = ViewRepositories<
     dyn ViewRepository<AllPublicOffersView, PublicOffer>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1, PO, PO1>
+pub struct ViewRepositories<SC, C, C1, R, R1, O, O1, N, SL, SL1, PO, PO1>
 where
     SC: ViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: ViewRepository<CredentialView, Credential> + ?Sized,
     C1: ViewRepository<AllCredentialsView, Credential> + ?Sized,
+    R: ViewRepository<ReissuanceView, Reissuance> + ?Sized,
+    R1: ViewRepository<AllReissuancesView, Reissuance> + ?Sized,
     O: ViewRepository<OfferView, Offer> + ?Sized,
     O1: ViewRepository<AllOffersView, Offer> + ?Sized,
     N: ViewRepository<NonceView, Nonce> + ?Sized,
@@ -88,6 +96,8 @@ where
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
     pub all_credentials: Arc<C1>,
+    pub reissuance: Arc<R>,
+    pub all_reissuances: Arc<R1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
     pub nonce: Arc<N>,
@@ -103,6 +113,8 @@ impl Clone for Queries {
             server_config: self.server_config.clone(),
             credential: self.credential.clone(),
             all_credentials: self.all_credentials.clone(),
+            reissuance: self.reissuance.clone(),
+            all_reissuances: self.all_reissuances.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
             nonce: self.nonce.clone(),
