@@ -1,3 +1,5 @@
+use crate::handlers::public_query_handler;
+use crate::v0::issuance::public_offers::can_resolve_public_offer;
 use agent_issuance::{offer::aggregate::Offer, state::IssuanceState};
 use axum::{
     extract::{Path, State},
@@ -9,13 +11,15 @@ use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use std::sync::Arc;
 
-use crate::handlers::public_query_handler;
-
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_offer_uri(
     State(state): State<Arc<IssuanceState>>,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
+    if !can_resolve_public_offer(&state, &offer_id).await? {
+        return Err(ApiError::new(StatusCode::NOT_FOUND));
+    }
+
     match public_query_handler(&offer_id, &state.query.offer).await? {
         Some(Offer {
             credential_offer: Some(CredentialOffer::CredentialOffer(credential_offer_parameters)),

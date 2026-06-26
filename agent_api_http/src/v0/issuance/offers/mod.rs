@@ -7,12 +7,17 @@ use crate::{
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
-    state::{IssuanceState, SERVER_CONFIG_ID},
+    state::IssuanceState,
+};
+use agent_library::{
+    state::LibraryState,
+    template::aggregate::{Status as TemplateStatus, Template},
 };
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Extension,
 };
 use http_api_problem::ApiError;
 use hyper::header;
@@ -24,8 +29,7 @@ use std::sync::Arc;
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
     pub offer_id: String,
-    #[serde(default)]
-    pub credential_configuration_ids: Vec<String>,
+    pub template_ids: Vec<String>,
     #[serde(default)]
     pub delivery_options: Option<DeliveryOptions>,
 }
@@ -34,46 +38,59 @@ pub struct OffersEndpointRequest {
 pub(crate) async fn offers(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(OffersEndpointRequest {
         offer_id,
-        credential_configuration_ids,
+        template_ids,
         delivery_options,
     }): Json<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    // Check if the credential configuration IDs are valid.
-    let credential_configurations = query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        SERVER_CONFIG_ID,
-        &state.query.server_config,
-    )
-    .await?
-    .map(|server_config_view| server_config_view.credential_configurations)
-    // Unreachable error
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
-
-    let persisted_credential_configuration_ids = credential_configurations.keys().collect::<Vec<_>>();
-
-    if let Some(credential_configuration_id) = credential_configuration_ids.iter().find(|credential_configuration_id| {
-        !persisted_credential_configuration_ids.contains(credential_configuration_id)
-    }) {
-        return Err(ApiError::builder(StatusCode::NOT_FOUND)
-            .title("No Credential Configuration Found")
-            .type_url(type_url("issuance#no-credential-configuration-found"))
-            .message(format!(
-                "No Credential Configuration found with id: `{credential_configuration_id}`"
-            ))
+    if template_ids.is_empty() || template_ids.iter().any(|id| id.is_empty()) {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Missing Template IDs")
+            .type_url(type_url("issuance#missing-template-ids"))
+            .message("The `templateIds` field is required and all IDs must not be empty.")
             .finish());
     }
 
-    let authorization = credential_configurations
-        .into_iter()
-        .find_map(|(credential_configuration_id, (_, _, authorization))| {
-            credential_configuration_ids
-                .contains(&credential_configuration_id)
-                .then_some(authorization)
-        })
-        .unwrap_or_default();
+    // Validate and load all templates.
+    let mut templates = Vec::with_capacity(template_ids.len());
+
+    for template_id in &template_ids {
+        let template: Template = query_handler(
+            library_state.authorization_checker.clone(),
+            actor.clone(),
+            template_id,
+            &library_state.query.template,
+        )
+            .await?
+            .filter(|t| t.status != TemplateStatus::Deleted)
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Template Not Found")
+                    .type_url(type_url("issuance#template-not-found"))
+                    .message(format!("No template found with id: `{template_id}`"))
+                    .finish()
+            })?;
+
+        // Template must be in "Published" status
+        if template.status != TemplateStatus::Published {
+            return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Template Not Published")
+                .type_url(type_url("issuance#template-not-published"))
+                .message(format!(
+                    "Template `{template_id}` must be Published to be used in an offer."
+                ))
+                .finish());
+        }
+
+        templates.push(template);
+    }
+
+    // Use first template for authorization/grant determination.
+    let first_template = templates.first().expect("template_ids can not be empty");
+
+    let authorization = first_template.holder_authorization.clone();
 
     let tx_code_constraints = authorization
         .pre_authorized
@@ -98,7 +115,7 @@ pub(crate) async fn offers(
     {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_configuration_ids,
+            template_ids,
             grant_types,
             tx_code_constraints,
             delivery_options,
@@ -197,50 +214,58 @@ pub(crate) async fn offer(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::API_VERSION;
-    use crate::{
-        tests::OFFER_ID,
-        v0::issuance::{credentials::tests::credentials, router},
+    use crate::tests::OFFER_ID;
+    use crate::v0::issuance::{
+        credentials::tests::{
+            create_new_template, create_test_template, create_test_template_with_status_and_format,
+            credentials_with_template, setup_library_state,
+        },
+        router,
     };
+    use crate::API_VERSION;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
+    use agent_library::template::aggregate::{Expiration, Status};
     use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
+    use agent_store::{issuance_state, library_state};
     use axum::{
         body::Body,
-        http::{self, Request},
+        http::{self, Request, StatusCode},
         Router,
     };
     use oid4vci::credential_offer::{
         AuthorizationCode, CredentialOffer, CredentialOfferParameters, Grants, PreAuthorizedCode,
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::str::FromStr;
     use tower::Service as _;
 
+    async fn post_offer_request(app: &mut Router, template_id: &str) -> Response {
+        app.call(
+            Request::builder()
+                .method(http::Method::POST)
+                .uri(format!("{API_VERSION}/offers"))
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "offerId": OFFER_ID,
+                        "templateIds": vec![template_id],
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    }
+
     pub async fn offers(
         app: &mut Router,
-        credential_configuration_id: &str,
+        template_id: &str,
     ) -> Option<(Option<AuthorizationCode>, Option<PreAuthorizedCode>)> {
-        let response = app
-            .call(
-                Request::builder()
-                    .method(http::Method::POST)
-                    .uri(format!("{API_VERSION}/offers"))
-                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                    .body(Body::from(
-                        serde_json::to_vec(&json!({
-                            "offerId": OFFER_ID,
-                            "credentialConfigurationIds": [credential_configuration_id]
-                        }))
-                        .unwrap(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let response = post_offer_request(app, template_id).await;
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
@@ -255,7 +280,7 @@ pub mod tests {
             CredentialOffer::CredentialOffer(credential_offer) => {
                 assert_eq!(
                     &*credential_offer.credential_configuration_ids,
-                    &vec![credential_configuration_id.to_string()]
+                    &vec![template_id.to_string()]
                 );
 
                 let CredentialOfferParameters {
@@ -288,16 +313,107 @@ pub mod tests {
 
     #[serial_test::serial]
     #[tokio::test]
+    async fn test_offers_endpoint_requires_existing_template() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let mut app = router((issuance_state, library_state));
+
+        let response = post_offer_request(&mut app, "missing-template").await;
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Template Not Found");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_offers_endpoint_requires_template_id() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let mut app = router((issuance_state, library_state));
+
+        let response = post_offer_request(&mut app, "").await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Missing Template IDs");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_offers_endpoint_requires_published_template() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Draft,
+            Some(Expiration::Never),
+            "jwt_vc_json",
+        )
+        .await;
+
+        let mut app = router((issuance_state, library_state));
+        let response = post_offer_request(&mut app, &template_id).await;
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Template Not Published");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_offers_endpoint_accepts_published_template_without_pre_synced_configuration() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let template_id = create_new_template(
+            &library_state,
+            Status::Published,
+            Some(Expiration::Never),
+            true,
+            agent_library::template::aggregate::DataModel::W3CVcDataModelV1_1,
+        )
+        .await;
+
+        let mut app = router((issuance_state, library_state));
+        let response = post_offer_request(&mut app, &template_id).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("Content-Type").unwrap(),
+            "application/x-www-form-urlencoded"
+        );
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
-        credentials(&mut app, "001").await;
-        let (_authorization_code, _pre_authorized_code) = offers(&mut app, "001").await.unwrap();
+        let mut app = router((issuance_state, library_state));
+
+        credentials_with_template(&mut app, &template_id).await;
+        let (_authorization_code, _pre_authorized_code) = offers(&mut app, &template_id).await.unwrap();
     }
 
     #[serial_test::serial]
@@ -309,10 +425,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
-        credentials(&mut app, "001").await;
-        let none = offers(&mut app, "001").await;
+        let mut app = router((issuance_state, library_state));
+
+        credentials_with_template(&mut app, &template_id).await;
+        let none = offers(&mut app, &template_id).await;
 
         // When `credential_offer_by_value_enabled` is false, we expect no grants to be returned from the `offers` test function.
         assert!(none.is_none());

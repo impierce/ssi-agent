@@ -35,6 +35,8 @@ pub enum TokenIssuanceError {
     UnrequestedTxCodeError,
     #[error("Pre-Authorized Code is invalid.")]
     InvalidPreAuthorizedCodeError,
+    #[error("Public offer is inactive or deleted.")]
+    InactivePublicOfferError,
 
     #[error("Missing access token")]
     MissingAccessTokenError,
@@ -58,6 +60,21 @@ pub struct TokenIssuanceService {}
 //
 // For now, we pass through the Token Request's authorization_details as-is.
 impl TokenIssuanceService {
+    async fn can_redeem_offer(issuance_state: &IssuanceState, offer_id: &str) -> Result<bool, TokenIssuanceError> {
+        // TODO: This mirrors the `public_offer_aggregate_id()`. Aggregate IDs should be generated in a consistent way in a single place.
+        let aggregate_id = format!("public_offer:{offer_id}");
+
+        let public_offer = public_query_handler(&aggregate_id, &issuance_state.query.public_offer)
+            .await
+            .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;
+
+        Ok(match public_offer {
+            Some(offer) => offer.active && !offer.deleted,
+            // No public-offer record means this is a normal offer.
+            None => true,
+        })
+    }
+
     pub async fn issue_token(
         authorization_state: &AuthorizationState,
         issuance_state: &IssuanceState,
@@ -144,6 +161,14 @@ impl TokenIssuanceService {
                 (client_id, issuer_state, authorization_details)
             }
         };
+
+        if let Some(offer_id) = issuer_state.as_deref() {
+            let is_redeemable = Self::can_redeem_offer(issuance_state, offer_id).await?;
+
+            if !is_redeemable {
+                return Err(InactivePublicOfferError);
+            }
+        }
 
         let access_token_id = uuid::Uuid::new_v4().to_string();
 

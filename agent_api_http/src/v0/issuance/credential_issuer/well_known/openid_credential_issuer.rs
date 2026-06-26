@@ -34,7 +34,13 @@ pub(crate) async fn openid_credential_issuer(State(state): State<Arc<IssuanceSta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{tests::CREDENTIAL_ISSUER_METADATA, v0::issuance::router};
+    use crate::{
+        tests::CREDENTIAL_ISSUER_METADATA,
+        v0::issuance::{
+            self,
+            credentials::tests::{create_test_template, setup_library_state},
+        },
+    };
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state};
@@ -63,11 +69,7 @@ mod tests {
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let credential_issuer_metadata: CredentialIssuerMetadata = serde_json::from_slice(&body).unwrap();
-
-        assert_eq!(credential_issuer_metadata, CREDENTIAL_ISSUER_METADATA.clone());
-
-        credential_issuer_metadata
+        serde_json::from_slice(&body).unwrap()
     }
 
     #[tokio::test]
@@ -76,8 +78,23 @@ mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
-        let _credential_issuer_metadata = openid_credential_issuer(&mut app).await;
+        let mut app = issuance::router((issuance_state.clone(), library_state));
+
+        let credential_issuer_metadata = openid_credential_issuer(&mut app).await;
+
+        assert_eq!(
+            credential_issuer_metadata.credential_issuer,
+            CREDENTIAL_ISSUER_METADATA.credential_issuer
+        );
+        assert_eq!(
+            credential_issuer_metadata.credential_endpoint,
+            CREDENTIAL_ISSUER_METADATA.credential_endpoint
+        );
+        assert!(credential_issuer_metadata
+            .credential_configurations_supported
+            .contains_key(&template_id));
     }
 }

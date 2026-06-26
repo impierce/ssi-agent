@@ -4,7 +4,8 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
-    offer::error::OfferError, server_config::error::ServerConfigError, status_list::error::StatusListError,
+    offer::error::OfferError, public_offer::error::PublicOfferError, server_config::error::ServerConfigError,
+    status_list::error::StatusListError,
 };
 use axum::{response::IntoResponse, response::Response, Json};
 use http_api_problem::ApiError;
@@ -23,11 +24,6 @@ impl IntoApiErrorExt for CredentialError {
             UnsupportedCredentialFormat(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unsupported Credential Format")
                 .type_url(type_url("issuance#unsupported-credential-format"))
-                .source(self)
-                .finish(),
-            UnsupportedCredentialType => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Unsupported Credential Type")
-                .type_url(type_url("issuance#unsupported-credential-type"))
                 .source(self)
                 .finish(),
             InvalidCredentialPayloadError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
@@ -155,6 +151,23 @@ impl IntoApiErrorExt for StatusListError {
     }
 }
 
+impl IntoApiErrorExt for PublicOfferError {
+    fn into_api_error(self) -> ApiError {
+        use PublicOfferError::*;
+
+        match self {
+            AlreadyExists => ApiError::new(StatusCode::CONFLICT),
+            NotFound => ApiError::new(StatusCode::NOT_FOUND),
+            TemplateNotFound => ApiError::new(StatusCode::NOT_FOUND),
+            TemplateNotEligible => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Template Not Eligible for Public Offer")
+                .type_url(type_url("issuance#template-not-eligible-for-public-offer"))
+                .message("Public offers require templates that only contain constant values.")
+                .finish(),
+        }
+    }
+}
+
 pub enum PublicError {
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
@@ -200,7 +213,6 @@ impl IntoPublicError for CredentialError {
         use CredentialError::*;
         match self {
             UnsupportedCredentialFormat(_) => PublicError::InternalServerError,
-            UnsupportedCredentialType => PublicError::InternalServerError,
             InvalidCredentialPayloadError(_) => PublicError::InternalServerError,
             InvalidIdentifierError => PublicError::InternalServerError,
             InvalidCredentialDataError => PublicError::InternalServerError,
@@ -252,6 +264,15 @@ impl IntoPublicError for OfferError {
             SendCredentialOfferError(_) => PublicError::InternalServerError,
             UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
             InvalidCredentialOfferUriError(_) => PublicError::InternalServerError,
+        }
+    }
+}
+
+impl IntoPublicError for PublicOfferError {
+    fn into_public_error(self) -> PublicError {
+        match self {
+            PublicOfferError::NotFound => PublicError::NotFoundError,
+            _ => PublicError::InternalServerError,
         }
     }
 }

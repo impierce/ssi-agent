@@ -66,7 +66,7 @@ where
 {
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
-        .merge(library_state.map(v0::library::router).unwrap_or_default())
+        .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
         .merge(
             authorization_state
                 // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
@@ -76,7 +76,12 @@ where
                 .map(v0::authorization::router)
                 .unwrap_or_default(),
         )
-        .merge(issuance_state.map(v0::issuance::router).unwrap_or_default())
+        .merge(
+            issuance_state
+                .zip(library_state.clone())
+                .map(v0::issuance::router)
+                .unwrap_or_default(),
+        )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
         .merge(public::router())
@@ -87,9 +92,13 @@ where
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(|request: &Request<_>| {
-                            let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                            let path = request
+                                .extensions()
+                                .get::<MatchedPath>()
+                                .map(MatchedPath::as_str)
+                                .unwrap_or_else(|| request.uri().path());
                             info_span!(
-                                "HTTP Request ",
+                                "HTTP Request",
                                 method = ?request.method(),
                                 path,
                             )
@@ -233,11 +242,12 @@ mod tests {
     use tower::ServiceExt;
 
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
+    pub const TEMPLATE_ID: &str = "001";
 
     lazy_static::lazy_static! {
         static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
             vec![(
-                "001".to_string(),
+                TEMPLATE_ID.to_string(),
                 serde_json::from_value(json!({
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [
@@ -273,50 +283,6 @@ mod tests {
                             }
                         ]
                     }}
-                ))
-                .unwrap()
-            ),
-            (
-                "002".to_string(),
-                serde_json::from_value(json!({
-                    "format": "jwt_vc_json",
-                    "cryptographic_binding_methods_supported": [
-                        "did:jwk",
-                        "did:key",
-                    ],
-                    "credential_signing_alg_values_supported": [
-                        "ES256",
-                        "EdDSA"
-                    ],
-                    "credential_definition":{
-                        "type": [
-                            "VerifiableCredential"
-                        ]
-                    },
-                    "proof_types_supported": {
-                        "jwt": {
-                            "proof_signing_alg_values_supported": [
-                                "ES256",
-                                "EdDSA"
-                            ],
-                        }
-                    },
-                    "credential_metadata": {
-                        "display": [
-                            {
-                                "name": "Verifiable Credential",
-                                "locale": "en",
-                                "logo": {
-                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                    "alt_text": "Impierce Logo",
-                                }
-                            }
-                        ]
-                    },
-                    "authorization": {
-                        "pre_authorized": false
-                    }
-                }
                 ))
                 .unwrap()
             )]

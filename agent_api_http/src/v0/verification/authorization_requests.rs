@@ -76,6 +76,7 @@ pub(crate) async fn authorization_requests(
         nonce: nonce.clone(),
         state: state.clone(),
         dcql_query: dcql_query.clone(),
+        alternative_response_mode: None,
     };
 
     // Create the authorization request.

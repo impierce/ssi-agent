@@ -28,6 +28,8 @@ pub enum OAuth2AuthorizationRequestEvent {
         code_challenge_method: Option<CodeChallengeMethod>,
 
         expires_at: i64,
+
+        openid4vp_request: Option<serde_json::Value>,
     },
     OAuth2AuthorizationRequestExpired {
         oauth2_authorization_request_id: String,

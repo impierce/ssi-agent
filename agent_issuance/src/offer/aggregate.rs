@@ -54,6 +54,8 @@ pub struct Offer {
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,
     pub offer_link: Option<Url>,
+    #[serde(default)]
+    pub successful_issuances: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -97,7 +99,7 @@ impl Aggregate for Offer {
             CreateCredentialOffer {
                 offer_id,
                 grant_types,
-                credential_configuration_ids,
+                template_ids,
                 tx_code_constraints,
                 delivery_options,
             } => {
@@ -129,7 +131,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
-                    credential_configuration_ids: CredentialConfigurationIds::try_new(credential_configuration_ids)
+                    credential_configuration_ids: CredentialConfigurationIds::try_new(template_ids)
                         .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
                 }));
@@ -180,7 +182,7 @@ impl Aggregate for Offer {
             AddCredentials {
                 offer_id,
                 credential_ids,
-                credential_configuration_ids,
+                template_ids,
             } => {
                 let mut credential_offer = self
                     .credential_offer
@@ -188,12 +190,12 @@ impl Aggregate for Offer {
                     .ok_or_else(|| MissingCredentialOfferError)?;
 
                 if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
-                    // Deduplicate credential_configuration_ids to ensure uniqueness
+                    // Deduplicate template_ids to ensure uniqueness
                     let credential_configuration_id_set: HashSet<String> = credential_offer
                         .credential_configuration_ids
                         .iter()
                         .cloned()
-                        .chain(credential_configuration_ids)
+                        .chain(template_ids)
                         .collect();
 
                     credential_offer.credential_configuration_ids =
@@ -399,9 +401,13 @@ impl Aggregate for Offer {
                 self.subject_id = subject_id;
             }
             CredentialResponseCreated {
-                credential_response, ..
+                credential_response,
+                status,
+                ..
             } => {
                 self.credential_response.replace(credential_response);
+                self.status = status;
+                self.successful_issuances = self.successful_issuances.saturating_add(1);
             }
             TxCodeGenerated { tx_code, .. } => {
                 self.tx_code.replace(tx_code);
@@ -434,6 +440,21 @@ pub mod tests {
 
     type OfferTestFramework = TestFramework<Offer>;
 
+    // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
+    #[expect(dead_code)]
+    fn run_with_large_stack<F>(test: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        std::thread::Builder::new()
+            .name("offer-aggregate-large-stack".to_string())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(test)
+            .expect("failed to spawn large-stack test thread")
+            .join()
+            .expect("large-stack test thread panicked");
+    }
+
     #[rstest]
     #[serial_test::serial]
     #[allow(clippy::too_many_arguments)]
@@ -449,7 +470,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
@@ -489,7 +510,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
@@ -538,7 +559,7 @@ pub mod tests {
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
@@ -554,54 +575,106 @@ pub mod tests {
             ]);
     }
 
-    #[allow(clippy::too_many_arguments)]
-    #[rstest]
+    // Note: This test cannot use #[future(awt)] fixtures because rstest evaluates those fixtures
+    // outside the test function body, before entering run_with_large_stack. This would cause a stack
+    // overflow before the large stack is available. Instead, all fixture setup is done manually inside
+    // the large-stack wrapper using the test helper functions directly.
     #[serial_test::serial]
-    async fn test_verify_credential_response(
-        offer_id: String,
-        grant_types: Vec<GrantType>,
-        #[future(awt)] holder: Arc<dyn Subject>,
-        #[future(awt)] pre_authorized_code: String,
-        #[future(awt)] credential_offer: CredentialOffer,
-        #[future(awt)] credential_offer_uri: CredentialOffer,
-        #[future(awt)] form_url_encoded_credential_offer: String,
-        #[future(awt)] university_degree_credential_request: CredentialRequest,
-        credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        authorization_server_metadata: Box<AuthorizationServerMetadata>,
-    ) {
-        OfferTestFramework::with(IssuanceServices::default().await)
-            .given(vec![
-                OfferEvent::CredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    grant_types,
-                    credential_offer: credential_offer.clone(),
-                    credential_offer_uri,
-                    pre_authorized_code,
-                    status: Status::Created,
-                    tx_code: None,
-                    delivery_options: None,
-                },
-                OfferEvent::CredentialsAdded {
-                    offer_id: offer_id.clone(),
-                    credential_ids: vec!["credential-id".to_string()],
-                    credential_offer: credential_offer.clone(),
-                },
-                OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                    offer_id: offer_id.clone(),
-                    form_url_encoded_credential_offer,
-                    status: Status::Pending,
-                },
-            ])
-            .when(OfferCommand::VerifyCredentialRequest {
-                offer_id: offer_id.clone(),
-                credential_issuer_metadata,
-                authorization_server_metadata,
-                credential_request: university_degree_credential_request,
-            })
-            .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
-                offer_id: offer_id.clone(),
-                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
-            }]);
+    fn test_verify_credential_response() {
+        run_with_large_stack(move || {
+            async_std::task::block_on(async move {
+                let offer_id = offer_id();
+                let grant_types = grant_types();
+                let static_issuer_url = static_issuer_url();
+                let pre_authorized_code = pre_authorized_code().await;
+                let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
+                    credential_issuer: static_issuer_url.clone(),
+                    credential_configuration_ids: CredentialConfigurationIds::try_new(vec![
+                        "UniversityDegree".to_string()
+                    ])
+                    .expect("Credential configuration ids should not be empty in the test"),
+                    grants: Some(Grants {
+                        authorization_code: None,
+                        pre_authorized_code: Some(PreAuthorizedCode {
+                            pre_authorized_code: pre_authorized_code.clone(),
+                            ..Default::default()
+                        }),
+                    }),
+                }));
+                let credential_offer_uri =
+                    credential_offer_uri(credential_issuer_metadata(static_issuer_url.clone()), offer_id.clone()).await;
+                let form_url_encoded_credential_offer = format!(
+                        "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22UniversityDegree%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D"
+                    );
+                let holder = holder().await;
+                let generated_proof = oid4vci::Proof::builder()
+                    .proof_type(oid4vci::proof::ProofType::Jwt)
+                    .algorithm(Algorithm::EdDSA)
+                    .signer(holder.clone())
+                    .iss(
+                        holder
+                            .identifier("did:key", Algorithm::EdDSA)
+                            .await
+                            .expect("Failed to get holder identifier"),
+                    )
+                    .aud(static_issuer_url.to_string())
+                    .iat(1571324800)
+                    .subject_syntax_type("did:key")
+                    .build()
+                    .await
+                    .expect("Failed to build proof");
+                let proof = match generated_proof {
+                    oid4vci::Proof::Jwt { jwt } => {
+                        assert!(!jwt.is_empty(), "Generated JWT should not be empty");
+                        jwt
+                    }
+                };
+                let university_degree_credential_request = CredentialRequest {
+                        credential_identifier_or_credential_configuration_id:
+                            oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
+                                "UniversityDegree".to_string(),
+                            ),
+                        proofs: Some(oid4vci::proofs::Proofs { jwt: vec![proof] }),
+                    };
+                let credential_issuer_metadata = credential_issuer_metadata(static_issuer_url.clone());
+                let authorization_server_metadata = authorization_server_metadata(static_issuer_url);
+                let subject_id = holder.identifier("did:key", Algorithm::EdDSA).await.unwrap();
+
+                OfferTestFramework::with(IssuanceServices::default().await)
+                    .given(vec![
+                        OfferEvent::CredentialOfferCreated {
+                            offer_id: offer_id.clone(),
+                            grant_types,
+                            credential_offer: credential_offer.clone(),
+                            credential_offer_uri,
+                            pre_authorized_code,
+                            status: Status::Created,
+                            tx_code: None,
+                            delivery_options: None,
+                        },
+                        OfferEvent::CredentialsAdded {
+                            offer_id: offer_id.clone(),
+                            credential_ids: vec!["credential-id".to_string()],
+                            credential_offer: credential_offer.clone(),
+                        },
+                        OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                            offer_id: offer_id.clone(),
+                            form_url_encoded_credential_offer,
+                            status: Status::Pending,
+                        },
+                    ])
+                    .when(OfferCommand::VerifyCredentialRequest {
+                        offer_id: offer_id.clone(),
+                        credential_issuer_metadata,
+                        authorization_server_metadata,
+                        credential_request: university_degree_credential_request,
+                    })
+                    .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
+                        offer_id,
+                        subject_id: Some(subject_id),
+                    }]);
+            });
+        });
     }
 
     #[rstest]

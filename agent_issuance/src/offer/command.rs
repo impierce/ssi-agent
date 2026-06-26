@@ -13,7 +13,7 @@ use serde::Deserialize;
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
-        credential_configuration_ids: Vec<String>,
+        template_ids: Vec<String>,
         grant_types: Vec<GrantType>,
         tx_code_constraints: Option<TxCodeConstraints>,
         delivery_options: Option<DeliveryOptions>,
@@ -21,7 +21,7 @@ pub enum OfferCommand {
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,
-        credential_configuration_ids: Vec<String>,
+        template_ids: Vec<String>,
     },
     SendCredentialOffer {
         offer_id: String,
