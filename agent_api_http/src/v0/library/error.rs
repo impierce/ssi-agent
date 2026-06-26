@@ -136,6 +136,7 @@ impl IntoApiErrorExt for CatalogError {
                 .finish(),
         }
     }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,3 +355,4 @@ mod tests {
         );
     }
 }
+
