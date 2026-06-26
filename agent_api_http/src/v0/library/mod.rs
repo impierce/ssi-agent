@@ -32,7 +32,7 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/delete-template", post(delete_template))
                 .route("/update-template", post(update_template))
                 .route("/duplicate-template", post(duplicate_template))
-                 // Catalog Routes
+                // Catalog Routes
                 .route("/catalog/create-catalog", post(create_catalog))
                 .route("/catalog/delete-catalog/{catalog_id}", post(delete_catalog))
                 .route("/catalog/add-templates", post(add_templates))

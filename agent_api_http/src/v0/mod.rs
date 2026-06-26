@@ -11,5 +11,5 @@ pub use crate::v0::holder::openapi::HolderApi;
 pub use crate::v0::identity::connections::openapi::ConnectionsApi;
 pub use crate::v0::identity::openapi::IdentityApi;
 pub use crate::v0::issuance::openapi::IssuanceApi;
-pub use crate::v0::templates::openapi::TemplatesApi;
 pub use crate::v0::library::catalog::openapi::CatalogsApi;
+pub use crate::v0::templates::openapi::TemplatesApi;
