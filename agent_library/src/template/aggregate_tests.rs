@@ -25,7 +25,7 @@ fn template_created_event_with_status(template_id: &str, status: Status) -> Temp
         r#type: vec![],
         schema: Box::new(None),
         schema_properties_attributes: None,
-        pre_authorized: true,
+        holder_authorization: Authorization::default(),
     }
 }
 
@@ -64,7 +64,7 @@ async fn test_create_template(
             r#type: r#type.clone(),
             schema: Box::new(schema.clone()),
             schema_properties_attributes: schema_properties_attributes.clone(),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -82,7 +82,7 @@ async fn test_create_template(
             r#type,
             schema: Box::new(schema),
             schema_properties_attributes,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -106,7 +106,7 @@ async fn test_create_template_without_title(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("A title is required when creating or updating a template")
 }
@@ -131,7 +131,7 @@ async fn test_create_template_with_empty_title(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("A title is required when creating or updating a template")
 }
@@ -156,7 +156,7 @@ async fn test_create_template_rejects_archived_status_on_create(template_id: Str
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid status on create: only Draft or Published are allowed")
 }
@@ -181,7 +181,7 @@ async fn test_update_title_with_empty_string(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateTitle {
             template_id,
@@ -293,7 +293,7 @@ async fn test_update_type_normalizes_standard_input(template_id: String) {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateType {
             template_id: template_id.clone(),
@@ -348,7 +348,7 @@ async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: 
                 }
             }))),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateType {
             template_id,
@@ -432,7 +432,7 @@ async fn test_create_open_badges_template_rejects_extra_types(template_id: Strin
                 }
             }))),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid type: OpenBadges type includes disallowed extra entries: [ExtraType]")
 }
@@ -457,7 +457,7 @@ async fn test_update_status_reject_invalid_archived_to_draft(template_id: String
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateStatus {
             template_id,
@@ -501,7 +501,7 @@ async fn test_create_open_badges_template_missing_required_achievement_propertie
                 }
             }))),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message(
             "Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [/achievement/criteria, /achievement/name]"
@@ -549,7 +549,7 @@ async fn test_create_open_badges_template_with_array_type_in_schema(template_id:
                 }
             }))),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message(
             "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields."
@@ -620,7 +620,7 @@ async fn test_create_template_with_invalid_schema(template_id: String) {
             r#type: vec![],
             schema: Box::new(Some(invalid_schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
 }
@@ -645,7 +645,7 @@ async fn test_create_template_with_no_schema(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -663,7 +663,7 @@ async fn test_create_template_with_no_schema(template_id: String) {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -691,7 +691,7 @@ async fn test_update_schema_with_invalid_schema(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id,
@@ -727,7 +727,7 @@ async fn test_update_schema_with_valid_schema(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -781,7 +781,7 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [nonexistent]")
 }
@@ -815,7 +815,7 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
 }
@@ -856,7 +856,7 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates")
 }
@@ -897,7 +897,7 @@ async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -935,7 +935,7 @@ async fn test_update_field_attributes_with_no_schema(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -980,7 +980,7 @@ async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -1032,7 +1032,7 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -1101,7 +1101,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
             r#type: vec![],
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -1168,7 +1168,7 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
             r#type: vec![],
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -1243,7 +1243,7 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
             r#type: vec![],
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id,
@@ -1395,7 +1395,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             r#type: vec![],
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -1448,7 +1448,7 @@ async fn test_create_open_badges_template_errors_when_required_properties_missin
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [/achievement/criteria, /achievement/name]")
 }
@@ -1537,7 +1537,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -1555,7 +1555,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -1643,7 +1643,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -1661,7 +1661,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -1720,7 +1720,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(existing_attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id: template_id.clone(),
@@ -1774,7 +1774,7 @@ async fn test_create_open_badges_template_rejects_disallowed_properties(template
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/`: [not_allowed_field]")
 }
@@ -1868,7 +1868,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
             r#type: vec![],
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id,
@@ -1967,7 +1967,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -1985,7 +1985,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -2071,7 +2071,7 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -2089,7 +2089,7 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -2122,7 +2122,7 @@ async fn test_create_template_rejects_array_type(template_id: String) {
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.")
 }
@@ -2154,7 +2154,7 @@ async fn test_update_schema_rejects_array_type(template_id: String) {
             r#type: vec![],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
         .when(TemplateCommand::UpdateSchema {
             template_id,
@@ -2227,7 +2227,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs.clone()),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
@@ -2245,7 +2245,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         }])
 }
 
@@ -2291,7 +2291,7 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
             r#type: vec![],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
-            pre_authorized: true,
+            holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [/address]")
 }

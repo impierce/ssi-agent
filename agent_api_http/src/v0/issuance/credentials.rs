@@ -683,7 +683,9 @@ pub mod tests {
                                 },
                                 "required": ["first_name", "last_name"]
                             },
-                            "preAuthorized": pre_authorized
+                            "holderAuthorization": {
+                                "pre_authorized": pre_authorized
+                            }
                         }))
                         .unwrap(),
                     ))
@@ -780,7 +782,10 @@ pub mod tests {
                     "required": ["first_name", "last_name"]
                 }))),
                 schema_properties_attributes: None,
-                pre_authorized,
+                holder_authorization: agent_shared::config::Authorization {
+                    pre_authorized,
+                    tx_code_constraints: None,
+                },
             },
         )
         .await

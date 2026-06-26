@@ -2,7 +2,7 @@ use crate::server_config::command::ServerConfigCommand;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::template::aggregate::{DataModel, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
-use agent_shared::config::{Authorization, CredentialConfiguration};
+use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, query_handler};
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
@@ -166,11 +166,7 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
         format,
         type_,
         credential_metadata: CredentialMetadata { display, claims },
-        authorization: Authorization {
-            pre_authorized: template.pre_authorized,
-            // TODO: require in template
-            tx_code_constraints: None,
-        },
+        authorization: template.holder_authorization.clone(),
     }
 }
 
@@ -293,7 +289,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     status,
                     schema,
                     schema_properties_attributes,
-                    pre_authorized,
+                    holder_authorization,
                     ..
                 } => {
                     // Only published templates have a credential configuration.
@@ -310,7 +306,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                         status: status.clone(),
                         schema: schema.clone(),
                         schema_properties_attributes: schema_properties_attributes.clone(),
-                        pre_authorized: *pre_authorized,
+                        holder_authorization: holder_authorization.clone(),
                         ..Default::default()
                     };
 
@@ -345,7 +341,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                 | TypeUpdated { template_id, .. }
                 | SchemaUpdated { template_id, .. }
                 | SchemaPropertiesAttributesUpdated { template_id, .. }
-                | PreAuthorizedUpdated { template_id, .. } => {
+                | HolderAuthorizationUpdated { template_id, .. } => {
                     self.sync_from_view(template_id).await;
                 }
 

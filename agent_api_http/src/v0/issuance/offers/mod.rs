@@ -12,7 +12,6 @@ use agent_library::{
     state::LibraryState,
     template::aggregate::{Status as TemplateStatus, Template},
 };
-use agent_shared::config::Authorization;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -84,10 +83,7 @@ pub(crate) async fn offers(
     // Use first template for authorization/grant determination.
     let first_template = templates.first().expect("template_ids can not be empty");
 
-    let authorization = Authorization {
-        pre_authorized: first_template.pre_authorized,
-        tx_code_constraints: None,
-    };
+    let authorization = first_template.holder_authorization.clone();
 
     let tx_code_constraints = authorization
         .pre_authorized

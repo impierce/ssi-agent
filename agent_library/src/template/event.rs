@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
+use agent_shared::config::Authorization;
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -24,7 +25,7 @@ pub enum TemplateEvent {
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
         schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-        pre_authorized: bool,
+        holder_authorization: Authorization,
     },
     TitleUpdated {
         template_id: String,
@@ -76,9 +77,9 @@ pub enum TemplateEvent {
         credential_expiration: Expiration,
         modified_at: String,
     },
-    PreAuthorizedUpdated {
+    HolderAuthorizationUpdated {
         template_id: String,
-        pre_authorized: bool,
+        holder_authorization: Authorization,
         modified_at: String,
     },
     TemplateDeleted {

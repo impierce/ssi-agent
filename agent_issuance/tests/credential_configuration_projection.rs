@@ -6,6 +6,7 @@ use agent_library::template::aggregate::{DataModel, Display, PropertyAttribute, 
 use agent_library::template::command::TemplateCommand;
 use agent_library::template::event::{Expiration, HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
+use agent_shared::config::Authorization;
 use agent_shared::handlers::{command_handler, query_handler};
 use agent_store::in_memory::InMemory;
 use agent_store::{issuance_state, library_state};
@@ -40,7 +41,7 @@ fn create_test_event_template_created(
             r#type: types,
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
         metadata: HashMap::new(),
     }
@@ -211,7 +212,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -306,7 +307,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -358,7 +359,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -485,7 +486,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -571,7 +572,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -637,7 +638,7 @@ async fn test_status_updated_to_archived_removes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -719,7 +720,7 @@ async fn test_schema_updated_refreshes_credential_configuration() {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -802,7 +803,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(schema.clone())),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
     )
     .await
@@ -827,7 +828,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         },
         metadata: HashMap::new(),
     };

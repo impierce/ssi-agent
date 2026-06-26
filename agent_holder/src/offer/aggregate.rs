@@ -335,9 +335,7 @@ pub mod tests {
     };
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::config;
-    use agent_shared::config::config_mut;
-    use agent_shared::config::CredentialConfiguration;
+    use agent_shared::config::{config, config_mut, Authorization, CredentialConfiguration};
     use agent_shared::generate_random_string;
     use agent_shared::handlers::command_handler;
     use agent_store::in_memory::InMemory;
@@ -402,7 +400,7 @@ pub mod tests {
                 r#type: vec!["VerifiableCredential".to_string()],
                 schema: Box::new(None),
                 schema_properties_attributes: None,
-                pre_authorized: true,
+                holder_authorization: Authorization::default(),
             },
         )
         .await

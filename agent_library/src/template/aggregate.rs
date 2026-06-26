@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use agent_shared::config::Authorization;
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
@@ -124,10 +125,6 @@ impl PropertyAttribute {
     }
 }
 
-fn default_pre_authorized() -> bool {
-    false
-}
-
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Template {
@@ -148,9 +145,7 @@ pub struct Template {
     /// JSON schema which defines the structure of the actual content of the credential.
     pub schema: Box<Option<serde_json::Value>>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-    /// The holder is already identified and authorized to receive the credential.
-    #[serde(default = "default_pre_authorized")]
-    pub pre_authorized: bool,
+    pub holder_authorization: Authorization,
 }
 
 #[async_trait]
@@ -190,7 +185,7 @@ impl Aggregate for Template {
                 r#type,
                 schema,
                 schema_properties_attributes,
-                pre_authorized,
+                holder_authorization,
             } => {
                 // Only Draft and Published are allowed on creation.
                 if matches!(status, Status::Archived | Status::Deleted) {
@@ -298,7 +293,7 @@ impl Aggregate for Template {
                     r#type,
                     schema,
                     schema_properties_attributes,
-                    pre_authorized,
+                    holder_authorization,
                 }])
             }
             UpdateTitle { template_id, title } => {
@@ -544,9 +539,9 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
-            UpdatePreAuthorized {
+            UpdateHolderAuthorization {
                 template_id,
-                pre_authorized,
+                holder_authorization,
             } => {
                 ensure_template_editable(&self.status)?;
 
@@ -555,9 +550,9 @@ impl Aggregate for Template {
                 #[cfg(test)]
                 let modified_at = test_utils::modified_at();
 
-                Ok(vec![PreAuthorizedUpdated {
+                Ok(vec![HolderAuthorizationUpdated {
                     template_id,
-                    pre_authorized,
+                    holder_authorization,
                     modified_at,
                 }])
             }
@@ -586,7 +581,7 @@ impl Aggregate for Template {
                 r#type,
                 schema,
                 schema_properties_attributes,
-                pre_authorized,
+                holder_authorization,
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
@@ -603,7 +598,7 @@ impl Aggregate for Template {
                 self.r#type = r#type;
                 self.schema = schema;
                 self.schema_properties_attributes = schema_properties_attributes;
-                self.pre_authorized = pre_authorized;
+                self.holder_authorization = holder_authorization;
             }
             TitleUpdated {
                 template_id: _,
@@ -689,12 +684,12 @@ impl Aggregate for Template {
                 self.credential_expiration = credential_expiration;
                 self.modified_at.replace(modified_at);
             }
-            PreAuthorizedUpdated {
+            HolderAuthorizationUpdated {
                 template_id: _,
-                pre_authorized,
+                holder_authorization,
                 modified_at,
             } => {
-                self.pre_authorized = pre_authorized;
+                self.holder_authorization = holder_authorization;
                 self.modified_at.replace(modified_at);
             }
             TemplateDeleted { template_id } => {

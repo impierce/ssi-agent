@@ -7,6 +7,7 @@ use agent_library::template::aggregate::{
 };
 use agent_library::template::command::TemplateCommand;
 use agent_library::template::error::TemplateError;
+use agent_shared::config::Authorization;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -40,7 +41,7 @@ pub struct TemplateDto {
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-    pub pre_authorized: bool,
+    pub holder_authorization: Authorization,
 }
 
 impl From<Template> for TemplateDto {
@@ -60,13 +61,9 @@ impl From<Template> for TemplateDto {
             r#type: value.r#type,
             schema: *value.schema,
             schema_properties_attributes: value.schema_properties_attributes,
-            pre_authorized: value.pre_authorized,
+            holder_authorization: value.holder_authorization,
         }
     }
-}
-
-fn default_pre_authorized() -> bool {
-    false
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -84,8 +81,7 @@ pub struct CreateNewTemplateRequestBody {
     pub r#type: Vec<String>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-    #[serde(default = "default_pre_authorized")]
-    pub pre_authorized: bool,
+    pub holder_authorization: Authorization,
 }
 
 /// Create a new template
@@ -128,7 +124,7 @@ pub(crate) async fn create_template(
         r#type,
         schema,
         schema_properties_attributes,
-        pre_authorized,
+        holder_authorization,
     }): Json<CreateNewTemplateRequestBody>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
@@ -149,7 +145,7 @@ pub(crate) async fn create_template(
         schema: Box::new(schema),
         schema_properties_attributes: schema_properties_attributes
             .map(|attrs| attrs.into_iter().map(|(k, v)| (k, v.strip_non_removable())).collect()),
-        pre_authorized,
+        holder_authorization,
     };
 
     command_handler(&template_id, &state.command.template, command).await?;
@@ -221,7 +217,7 @@ pub(crate) async fn duplicate_template(
         r#type: original_template.r#type,
         schema: original_template.schema,
         schema_properties_attributes: original_template.schema_properties_attributes,
-        pre_authorized: original_template.pre_authorized,
+        holder_authorization: original_template.holder_authorization,
     };
 
     command_handler(&new_template_id, &state.command.template, command).await?;
@@ -257,7 +253,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub r#type: Option<Vec<String>>,
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
-    pub pre_authorized: Option<bool>,
+    pub holder_authorization: Option<Authorization>,
 }
 
 /// Update a template
@@ -287,7 +283,7 @@ pub(crate) async fn update_template(
         r#type,
         schema,
         schema_properties_attributes,
-        pre_authorized,
+        holder_authorization,
     }): Json<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
@@ -382,10 +378,10 @@ pub(crate) async fn update_template(
         command_handler(&template_id, &state.command.template, command).await?;
     }
 
-    if let Some(pre_authorized) = pre_authorized {
-        let command = TemplateCommand::UpdatePreAuthorized {
+    if let Some(holder_authorization) = holder_authorization {
+        let command = TemplateCommand::UpdateHolderAuthorization {
             template_id: template_id.clone(),
-            pre_authorized,
+            holder_authorization,
         };
         command_handler(&template_id, &state.command.template, command).await?;
     }
@@ -543,7 +539,7 @@ mod tests {
                     "required": ["first_name"]
                 }))),
                 schema_properties_attributes: None,
-                pre_authorized: true,
+                holder_authorization: Authorization::default(),
             },
         )
         .await
@@ -634,7 +630,7 @@ mod tests {
             r#type: vec!["VerifiableCredential".to_string()],
             schema: Box::new(None),
             schema_properties_attributes: None,
-            pre_authorized: false,
+            holder_authorization: Authorization::default(),
         });
 
         let serialized = serde_json::to_value(dto).unwrap();
@@ -719,7 +715,7 @@ mod tests {
                 r#type: vec!["EmployeeCredential".to_string()],
                 schema: None,
                 schema_properties_attributes: None,
-                pre_authorized: true,
+                holder_authorization: Authorization::default(),
             }),
         )
         .await
@@ -753,7 +749,7 @@ mod tests {
                 r#type: None,
                 schema: None,
                 schema_properties_attributes: None,
-                pre_authorized: None,
+                holder_authorization: None,
             }),
         )
         .await
@@ -797,7 +793,7 @@ mod tests {
                 r#type: None,
                 schema: None,
                 schema_properties_attributes: None,
-                pre_authorized: None,
+                holder_authorization: None,
             }),
         )
         .await
@@ -831,7 +827,7 @@ mod tests {
                 r#type: Some(vec!["EmployeeCredential".to_string()]),
                 schema: None,
                 schema_properties_attributes: None,
-                pre_authorized: None,
+                holder_authorization: None,
             }),
         )
         .await

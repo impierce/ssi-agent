@@ -27,7 +27,7 @@ use strum::VariantArray;
 use url::Url;
 
 use crate::{
-    config::openapi::{authorization, credential_metadata},
+    config::openapi::{credential_metadata, tx_code_constraints},
     error::SharedError,
     profile::ApplicationProfile,
 };
@@ -548,15 +548,16 @@ pub struct CredentialConfiguration {
     #[schema(schema_with = credential_metadata)]
     #[serde(flatten)]
     pub credential_metadata: CredentialMetadata,
-    #[schema(schema_with = authorization)]
     #[serde(default)]
     pub authorization: Authorization,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+#[schema(as = HolderAuthorization)]
 pub struct Authorization {
     pub pre_authorized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = tx_code_constraints)]
     pub tx_code_constraints: Option<TxCodeConstraints>,
 }
 
