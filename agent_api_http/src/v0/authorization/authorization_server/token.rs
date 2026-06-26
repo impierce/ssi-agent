@@ -25,6 +25,8 @@ pub(crate) async fn token(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
+    use crate::v0::issuance::router;
     use crate::v0::{
         authorization::{
             self,
@@ -34,7 +36,11 @@ pub mod tests {
                 par::tests::par,
             },
         },
-        issuance::{self, credentials::tests::credentials, offers::tests::offers},
+        issuance::{
+            self,
+            credentials::tests::{create_test_template_with_auth, credentials, setup_library_state},
+            offers::tests::offers,
+        },
     };
     use agent_authorization::services::AuthorizationServices;
     use agent_authorization::state::UNIME_CLIENT_ID;
@@ -150,16 +156,13 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let mut app = issuance::router(issuance_state.clone());
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, is_pre_authorized).await;
 
-        let credential_configuration_id = if is_pre_authorized {
-            "001".to_string()
-        } else {
-            "002".to_string()
-        };
+        let mut app = router((issuance_state.clone(), library_state));
 
-        credentials(&mut app, &credential_configuration_id).await;
-        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+        credentials(&mut app).await;
+        let grants = offers(&mut app, TEMPLATE_ID).await.unwrap();
 
         let authorization_state = Arc::new(
             authorization_state(
@@ -188,9 +191,12 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let mut issuance_app = issuance::router(issuance_state.clone());
-        credentials(&mut issuance_app, "001").await;
-        let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, "001").await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, true).await;
+
+        let mut issuance_app = router((issuance_state.clone(), library_state));
+        credentials(&mut issuance_app).await;
+        let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
 
         let offer_id = crate::tests::OFFER_ID;
         let aggregate_id = format!("public_offer:{offer_id}");
@@ -200,7 +206,7 @@ pub mod tests {
             &issuance_state.command.public_offer,
             PublicOfferCommand::Create {
                 offer_id: offer_id.to_string(),
-                template_id: "template-001".to_string(),
+                template_id: TEMPLATE_ID.to_string(),
             },
         )
         .await
@@ -272,9 +278,12 @@ pub mod tests {
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let mut issuance_app = issuance::router(issuance_state.clone());
-        credentials(&mut issuance_app, "001").await;
-        let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, "001").await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, true).await;
+
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state.clone()));
+        credentials(&mut issuance_app).await;
+        let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
 
         let offer_id = crate::tests::OFFER_ID;
         let aggregate_id = format!("public_offer:{offer_id}");
@@ -284,7 +293,7 @@ pub mod tests {
             &issuance_state.command.public_offer,
             PublicOfferCommand::Create {
                 offer_id: offer_id.to_string(),
-                template_id: "template-001".to_string(),
+                template_id: TEMPLATE_ID.to_string(),
             },
         )
         .await

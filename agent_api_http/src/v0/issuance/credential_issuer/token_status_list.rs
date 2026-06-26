@@ -61,11 +61,14 @@ pub mod tests {
     };
     use oid4vc_core::authentication::verify::Verify;
 
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::{
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
-            credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials, offers::tests::offers,
-            router,
+            self,
+            credential_issuer::credential::tests::TEST_NONCE,
+            credentials::tests::{create_test_template, credentials, setup_library_state},
+            offers::tests::offers,
         },
     };
     use serde_json::json;
@@ -79,10 +82,13 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
+
+        let mut app = issuance::router((issuance_state.clone(), library_state));
 
         // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
-        create_test_signed_credential(&mut app, &issuance_state).await;
+        create_test_signed_credential(&mut app, &issuance_state, TEMPLATE_ID).await;
 
         // Fetch the Status List Token
         let token_status_list_response = app
@@ -143,7 +149,11 @@ pub mod tests {
     /// - with_anonymous_access: false
     /// - with_external_server: false
     /// - is_self_signed: false
-    pub async fn create_test_signed_credential(app: &mut Router, issuance_state: &Arc<IssuanceState>) -> String {
+    pub async fn create_test_signed_credential(
+        app: &mut Router,
+        issuance_state: &Arc<IssuanceState>,
+        template_id: &str,
+    ) -> String {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
@@ -151,11 +161,9 @@ pub mod tests {
             .await
             .unwrap();
 
-        let credential_configuration_id = "001".to_string();
+        let credential_endpoint = credentials(app).await;
 
-        let credential_endpoint = credentials(app, &credential_configuration_id).await;
-
-        let grants = offers(app, &credential_configuration_id).await.unwrap();
+        let grants = offers(app, template_id).await.unwrap();
 
         let authorization_state = Arc::new(
             authorization_state(
@@ -185,7 +193,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
+                            "credential_configuration_id": template_id,
                             "proofs": {
                                 "jwt":[jwt]
                             }

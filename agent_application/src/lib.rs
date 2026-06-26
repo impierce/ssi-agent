@@ -9,8 +9,7 @@ use agent_event_publisher_nats::EventPublisherNats;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{
-    application::policies::issuer_metadata_synchronization_policy::IssuerMetadataSynchronizationPolicy,
-    services::IssuanceServices,
+    application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
@@ -92,8 +91,21 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+                let (credential_configuration_projection, template_view_handle) =
+                    CredentialConfigurationProjection::new(issuance_state.clone());
+
+                let library_state = Arc::new(
+                    agent_store::library_state(
+                        &builder,
+                        library_event_publishers,
+                        vec![Box::new(credential_configuration_projection)],
+                    )
+                    .await,
+                );
+                assert!(
+                    template_view_handle.set(library_state.query.template.clone()).is_ok(),
+                    "template view already initialized"
+                );
 
                 let verification_state = Arc::new(
                     agent_store::verification_state(&builder, verification_services, verification_event_publishers)
@@ -106,14 +118,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
                 (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
-                    Arc::new(
-                        agent_store::library_state(
-                            &builder,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
-                        .await,
-                    ),
+                    library_state,
                     Arc::new(
                         agent_store::authorization_state(
                             &builder,
@@ -134,8 +139,21 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
-                let issuer_metadata_synchronization_policy =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+                let (credential_configuration_projection, template_view_handle) =
+                    CredentialConfigurationProjection::new(issuance_state.clone());
+
+                let library_state = Arc::new(
+                    agent_store::library_state(
+                        &builder,
+                        library_event_publishers,
+                        vec![Box::new(credential_configuration_projection)],
+                    )
+                    .await,
+                );
+                assert!(
+                    template_view_handle.set(library_state.query.template.clone()).is_ok(),
+                    "template view already initialized"
+                );
 
                 let verification_state = Arc::new(
                     agent_store::verification_state(&builder, verification_services, verification_event_publishers)
@@ -148,14 +166,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
                 (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
-                    Arc::new(
-                        agent_store::library_state(
-                            &builder,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
-                        .await,
-                    ),
+                    library_state,
                     Arc::new(
                         agent_store::authorization_state(
                             &builder,
@@ -175,8 +186,21 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await,
                 );
 
-                let issuer_metadata_synchronization_policy =
-                    IssuerMetadataSynchronizationPolicy::new(issuance_state.clone());
+                let (credential_configuration_projection, template_view_handle) =
+                    CredentialConfigurationProjection::new(issuance_state.clone());
+
+                let library_state = Arc::new(
+                    agent_store::library_state(
+                        &InMemory,
+                        library_event_publishers,
+                        vec![Box::new(credential_configuration_projection)],
+                    )
+                    .await,
+                );
+                assert!(
+                    template_view_handle.set(library_state.query.template.clone()).is_ok(),
+                    "template view already initialized"
+                );
 
                 let verification_state = Arc::new(
                     agent_store::verification_state(&InMemory, verification_services, verification_event_publishers)
@@ -191,14 +215,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Arc::new(
                         agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
                     ),
-                    Arc::new(
-                        agent_store::library_state(
-                            &InMemory,
-                            library_event_publishers,
-                            vec![Box::new(issuer_metadata_synchronization_policy)],
-                        )
-                        .await,
-                    ),
+                    library_state,
                     Arc::new(
                         agent_store::authorization_state(
                             &InMemory,

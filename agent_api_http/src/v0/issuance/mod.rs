@@ -1,5 +1,4 @@
 // Endpoint handlers
-pub mod credential_configurations;
 pub mod credential_issuer;
 pub mod credentials;
 pub mod ietf_oauth_sd_jwt_vc;
@@ -11,7 +10,6 @@ pub mod public_offers;
 pub mod error;
 
 use crate::v0::issuance::{
-    credential_configurations::credential_configurations,
     credential_issuer::{
         credential::credential,
         credential_offer::credential_offer_uri,
@@ -39,12 +37,8 @@ use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
 
-pub fn router(issuance_state: Arc<IssuanceState>) -> Router {
-    router_with_library(issuance_state, None)
-}
-
-pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Option<Arc<LibraryState>>) -> Router {
-    let issuance_router = Router::new()
+pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryState>)) -> Router {
+    Router::new()
         .nest(
             API_VERSION,
             Router::new()
@@ -53,11 +47,18 @@ pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Op
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
                 )
-                .route("/credential-configurations", post(credential_configurations))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
-                .route("/offers/send-offer-to-organization", post(organization_offer)),
+                .route("/offers/send-offer-to-organization", post(organization_offer))
+                // Public offers
+                .route("/get-all-public-offers", get(all_public_offers))
+                .route("/create-public-offer", post(create_public_offer))
+                .route("/take-public-offer-offline", post(take_public_offer_offline))
+                .route("/take-public-offer-online", post(take_public_offer_online))
+                .route("/delete-public-offer", post(delete_public_offer))
+                .with_state(issuance_state.clone())
+                .layer(axum::Extension(library_state.clone())),
         )
         .route(
             "/.well-known/oauth-authorization-server",
@@ -74,19 +75,5 @@ pub fn router_with_library(issuance_state: Arc<IssuanceState>, library_state: Op
             "/vct/{credential_configuration_id}/{version}",
             get(ietf_oauth_sd_jwt_vc::type_metadata),
         )
-        .with_state(issuance_state.clone());
-
-    let public_offer_router = Router::new()
-        .nest(
-            API_VERSION,
-            Router::new()
-                .route("/get-all-public-offers", get(all_public_offers))
-                .route("/create-public-offer", post(create_public_offer))
-                .route("/take-public-offer-offline", post(take_public_offer_offline))
-                .route("/take-public-offer-online", post(take_public_offer_online))
-                .route("/delete-public-offer", post(delete_public_offer)),
-        )
-        .with_state((issuance_state, library_state));
-
-    issuance_router.merge(public_offer_router)
+        .with_state(issuance_state)
 }
