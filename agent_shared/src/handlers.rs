@@ -97,7 +97,7 @@ where
             aggregate_id: aggregate_id.to_string(),
             // TODO: Use command variant names when authorization needs finer-grained permissions.
             command_type: std::any::type_name::<A::Command>(),
-            authorization: CommandAuthorization::ActiveUser,
+            authorization: CommandAuthorization::ACTOR_REQUIRED,
         },
     };
 
@@ -327,7 +327,7 @@ mod tests {
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     command_type: std::any::type_name::<String>(),
-                    authorization: CommandAuthorization::ActiveUser,
+                    authorization: CommandAuthorization::ACTOR_REQUIRED,
                 },
             }]
         );

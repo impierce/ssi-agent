@@ -208,9 +208,9 @@ pub(crate) async fn create_public_offer(
         &template_id,
         &library_state.query.template,
     )
-        .await
-        .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
-        .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
+    .await
+    .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
+    .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     // Only non-deleted templates can be offered publicly
     if template.status == Status::Deleted {
@@ -353,7 +353,7 @@ pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_i
 
 #[cfg(test)]
 mod tests {
-    use crate::handlers::command_handler;
+    use crate::handlers::public_command_handler;
     use crate::tests::TEMPLATE_ID;
     use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::router;
@@ -418,7 +418,7 @@ mod tests {
             schema,
         };
 
-        command_handler(template_id, &library_state.command.template, command)
+        public_command_handler(template_id, &library_state.command.template, command)
             .await
             .unwrap();
     }

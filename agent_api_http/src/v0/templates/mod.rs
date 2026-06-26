@@ -642,6 +642,7 @@ pub(crate) async fn delete_template(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
     use agent_store::{in_memory::InMemory, library_state};
     use axum::{body::to_bytes, response::IntoResponse};
     use serde_json::json;
@@ -787,6 +788,7 @@ mod tests {
 
         let response = duplicate_template(
             State(state),
+            RequestActor(None),
             Json(DuplicateTemplateEndpointRequest {
                 source_template_id: "source-template".to_string(),
             }),
@@ -822,6 +824,7 @@ mod tests {
 
         let response = duplicate_template(
             State(state),
+            RequestActor(None),
             Json(DuplicateTemplateEndpointRequest {
                 source_template_id: "deleted-source".to_string(),
             }),
@@ -844,6 +847,7 @@ mod tests {
 
         let response = create_template(
             State(state),
+            RequestActor(None),
             Json(CreateNewTemplateRequestBody {
                 title: "Created Template".to_string(),
                 display: None,
@@ -879,6 +883,7 @@ mod tests {
 
         let response = update_template(
             State(state),
+            RequestActor(None),
             Json(UpdateTemplateEndpointRequest {
                 template_id: String::new(),
                 title: Some("Updated title".to_string()),
@@ -923,6 +928,7 @@ mod tests {
 
         let response = update_template(
             State(state),
+            RequestActor(None),
             Json(UpdateTemplateEndpointRequest {
                 template_id: "deleted-template".to_string(),
                 title: Some("Updated title".to_string()),
@@ -957,6 +963,7 @@ mod tests {
 
         let response = update_template(
             State(state.clone()),
+            RequestActor(None),
             Json(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: None,
@@ -1007,7 +1014,7 @@ mod tests {
         .await
         .unwrap();
 
-        let response = get_templates(State(state)).await.unwrap();
+        let response = get_templates(State(state), RequestActor(None)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -1029,6 +1036,7 @@ mod tests {
 
         let response = delete_template(
             State(state.clone()),
+            RequestActor(None),
             Json(DeleteTemplateEndpointRequest {
                 template_id: "template-to-delete".to_string(),
             }),
@@ -1038,7 +1046,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        let response = get_template(State(state), Path("template-to-delete".to_string()))
+        let response = get_template(State(state), RequestActor(None), Path("template-to-delete".to_string()))
             .await
             .unwrap_err()
             .into_response();

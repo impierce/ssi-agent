@@ -289,4 +289,3 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
 
     Ok(())
 }
-

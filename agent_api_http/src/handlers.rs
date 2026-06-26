@@ -3,6 +3,8 @@ use cqrs_es::{persist::ViewRepository, Aggregate, View};
 use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker};
 use std::sync::Arc;
 
+static ALLOW_ALL_AUTHORIZATION_CHECKER: std::sync::OnceLock<Arc<dyn AuthorizationChecker>> = std::sync::OnceLock::new();
+
 /// Wrapping the `command_handler` function from the `agent_shared` crate to handle errors.
 pub async fn command_handler<A>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
@@ -31,7 +33,9 @@ where
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
     agent_shared::handlers::command_handler(
-        Arc::new(AllowAllAuthorizationChecker),
+        ALLOW_ALL_AUTHORIZATION_CHECKER
+            .get_or_init(|| Arc::new(AllowAllAuthorizationChecker))
+            .clone(),
         None,
         aggregate_id,
         state,

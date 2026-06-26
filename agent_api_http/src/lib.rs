@@ -21,7 +21,7 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
-use http::{header::AUTHORIZATION, HeaderMap};
+use http::HeaderMap;
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
 use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
@@ -172,15 +172,12 @@ impl<'a> HttpActorInput<'a> {
 }
 
 impl ToActor for HttpActorInput<'_> {
-    /// Convert the `Authorization` header into an `Actor` when it contains a
-    /// non-empty `Bearer <token>` value.
+    /// Raw HTTP credentials are not stable actor identifiers.
+    ///
+    /// Actor extractors should read credentials with [`ToActor::auth_value`] and map them to a
+    /// non-sensitive subject before returning an [`Actor`].
     fn to_actor(&self) -> Option<Actor> {
-        self.auth_value(AUTHORIZATION.as_str())
-            .and_then(|authorization_header| authorization_header.strip_prefix("Bearer "))
-            .filter(|token| !token.is_empty())
-            .map(|token| Actor {
-                subject: token.to_string(),
-            })
+        None
     }
 
     /// Read the header identified by `key` as a UTF-8 string slice.
@@ -231,6 +228,7 @@ mod tests {
     use crate::extractors::RequestActor;
     use agent_shared::config::config;
     use axum::{body::Body, routing::get};
+    use http::header::AUTHORIZATION;
     use http::Request;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -310,12 +308,13 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ActorExtractor for MappingActorExtractor {
-        async fn extract_actor(&self, input: &(dyn ToActor + Sync)) -> Option<Actor> {
-            input.to_actor().and_then(|actor| {
-                (actor.subject == "valid-token").then(|| Actor {
+        async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input
+                .bearer_token()
+                .filter(|token| *token == "valid-token")
+                .map(|_| Actor {
                     subject: "user@example.test".to_string(),
                 })
-            })
         }
     }
 
@@ -324,7 +323,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ActorExtractor for CustomHeaderActorExtractor {
-        async fn extract_actor(&self, input: &(dyn ToActor + Sync)) -> Option<Actor> {
+        async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
             input
                 .auth_value("x-custom-actor-token")
                 .filter(|token| *token == "valid-token")

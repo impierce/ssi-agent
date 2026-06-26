@@ -16,13 +16,20 @@ pub trait ToActor: Sync {
     fn auth_value(&self, _key: &str) -> Option<&str> {
         None
     }
+
+    /// Returns a bearer token from the `Authorization` value without treating it as an actor.
+    fn bearer_token(&self) -> Option<&str> {
+        self.auth_value("authorization")
+            .and_then(|authorization_header| authorization_header.strip_prefix("Bearer "))
+            .filter(|token| !token.is_empty())
+    }
 }
 
 /// Extracts an [`Actor`] from an input object.
 #[async_trait]
 pub trait ActorExtractor: Send + Sync + 'static {
     /// Returns the actor that should be attached to the application operation.
-    async fn extract_actor(&self, input: &(dyn ToActor + Sync)) -> Option<Actor>;
+    async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor>;
 }
 
 /// Actor extractor used when no actor context should be attached.
@@ -31,17 +38,26 @@ pub struct NoActorExtractor;
 
 #[async_trait]
 impl ActorExtractor for NoActorExtractor {
-    async fn extract_actor(&self, _input: &(dyn ToActor + Sync)) -> Option<Actor> {
+    async fn extract_actor(&self, _input: &dyn ToActor) -> Option<Actor> {
         None
     }
 }
 
 /// Describes the application operation that is being authorized.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandAuthorization {
-    ActiveUser,
-    Administrator,
-    AdministratorOrEditor,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandAuthorization {
+    /// Domain-defined permission marker understood by the configured checker.
+    pub permission: &'static str,
+}
+
+impl CommandAuthorization {
+    /// Default requirement for commands that only need an authenticated actor.
+    pub const ACTOR_REQUIRED: Self = Self::new("actor_required");
+
+    #[must_use]
+    pub const fn new(permission: &'static str) -> Self {
+        Self { permission }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,7 +101,7 @@ pub enum AuthorizationError {
 /// Decides whether an [`AuthorizationRequest`] is allowed to execute.
 #[async_trait]
 pub trait AuthorizationChecker: Send + Sync {
-    /// Returns `true` when the request is authorized.
+    /// Returns `Ok(())` when the request is authorized.
     async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError>;
 }
 

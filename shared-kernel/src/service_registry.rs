@@ -83,7 +83,7 @@ where
     ///
     /// Returns `ServiceError::SendCommandError` if sending the command fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
-    /// Returns `ServiceError::Forbidden` if authorization denies the command.
+    /// Returns `ServiceError::Authorization` if authorization denies the command.
     /// Returns `ServiceError::CommandError` if the application service returns an error for the
     /// command.
     pub async fn dispatch_command(
@@ -99,7 +99,7 @@ where
     ///
     /// Returns `ServiceError::SendCommandError` if sending the command fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
-    /// Returns `ServiceError::Forbidden` if authorization denies the command.
+    /// Returns `ServiceError::Authorization` if authorization denies the command.
     /// Returns `ServiceError::CommandError` if the application service returns an error for the
     /// command.
     pub async fn dispatch_command_as(
@@ -132,7 +132,7 @@ where
     ///
     /// Returns `ServiceError::SendQueryError` if sending the query fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
-    /// Returns `ServiceError::Forbidden` if authorization denies the query.
+    /// Returns `ServiceError::Authorization` if authorization denies the query.
     /// Returns `ServiceError::QueryError` if the application service returns an error for the
     /// query.
     pub async fn dispatch_query(&self, query: AC::Query) -> Result<AC::View, ServiceError<AC>> {
@@ -144,7 +144,7 @@ where
     ///
     /// Returns `ServiceError::SendQueryError` if sending the query fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
-    /// Returns `ServiceError::Forbidden` if authorization denies the query.
+    /// Returns `ServiceError::Authorization` if authorization denies the query.
     /// Returns `ServiceError::QueryError` if the application service returns an error for the
     /// query.
     pub async fn dispatch_query_as(

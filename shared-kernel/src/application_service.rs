@@ -39,7 +39,7 @@ pub trait ApplicationContext: Send + Sync + 'static {
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError>;
 
     fn command_authorization(&self, _command: &Self::Command) -> CommandAuthorization {
-        CommandAuthorization::ActiveUser
+        CommandAuthorization::ACTOR_REQUIRED
     }
 }
 
@@ -555,7 +555,7 @@ mod tests {
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     command_type: std::any::type_name::<String>(),
-                    authorization: CommandAuthorization::ActiveUser,
+                    authorization: CommandAuthorization::ACTOR_REQUIRED,
                 },
             }]
         );
