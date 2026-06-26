@@ -229,7 +229,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
 pub async fn library_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_publishers: Vec<Box<dyn EventPublisher>>,
-    template_policies: Vec<Box<dyn Query<Template>>>,
+    template_queries: Vec<Box<dyn Query<Template>>>,
 ) -> LibraryState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
@@ -237,8 +237,8 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
-    for policy in template_policies {
-        queries.push(policy);
+    for query in template_queries {
+        queries.push(query);
     }
 
     let (template_command_handler, template, all_templates) = builder

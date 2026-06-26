@@ -1,4 +1,3 @@
-use crate::v0::issuance::credential_configurations::__path_credential_configurations;
 use crate::v0::issuance::credentials::{__path_all_credentials, __path_credential, __path_credentials};
 use crate::v0::issuance::offers::{
     __path_all_offers, __path_offer,
@@ -13,7 +12,6 @@ use utoipa::OpenApi;
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        credential_configurations,
         all_credentials,
         credential,
         credentials,

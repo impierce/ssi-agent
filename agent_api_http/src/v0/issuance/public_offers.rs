@@ -6,6 +6,7 @@ use agent_issuance::public_offer::error::PublicOfferError;
 use agent_issuance::state::IssuanceState;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Status;
+use axum::Extension;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -136,9 +137,7 @@ impl From<&PublicOffer> for PublicOfferStatusDto {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_public_offers(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
-) -> Result<Response, ApiError> {
+pub(crate) async fn all_public_offers(State(issuance_state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let all_offers = query_handler("all_public_offers", &issuance_state.query.all_public_offers)
         .await?
         .unwrap_or_default();
@@ -170,15 +169,13 @@ pub(crate) async fn all_public_offers(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_public_offer(
-    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
-
-    // Query the template from library state to validate it exists and has valid schema
-    let library_state = library_state.ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     let template = query_handler(&template_id, &library_state.query.template)
         .await
@@ -217,7 +214,7 @@ pub(crate) async fn create_public_offer(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_offline(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
@@ -243,7 +240,7 @@ pub(crate) async fn take_public_offer_offline(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_online(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
@@ -269,7 +266,7 @@ pub(crate) async fn take_public_offer_online(
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_public_offer(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
     Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
@@ -296,16 +293,17 @@ pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_i
 #[cfg(test)]
 mod tests {
     use crate::handlers::command_handler;
-    use crate::v0::issuance::{credentials::tests::credentials, router_with_library};
+    use crate::tests::TEMPLATE_ID;
+    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_library::state::LibraryState;
-    use agent_library::template::aggregate::{Status as TemplateStatus, Visibility};
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{issuance_state, library_state};
+    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
@@ -314,8 +312,6 @@ mod tests {
     use serde_json::Value;
     use std::sync::Arc;
     use tower::Service as _;
-
-    const TEMPLATE_ID: &str = "template-001";
 
     async fn create_public_offer_request(offer_id: &str, template_id: &str) -> Request<Body> {
         Request::builder()
@@ -343,32 +339,22 @@ mod tests {
     async fn setup_app() -> (Router, Arc<LibraryState>) {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-
         initialize(&issuance_state).await.unwrap();
 
-        (
-            router_with_library(issuance_state, Some(library_state.clone())),
-            library_state,
-        )
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, true).await;
+
+        (router((issuance_state, library_state.clone())), library_state)
     }
 
-    async fn create_template(library_state: &Arc<LibraryState>, template_id: &str, schema: Option<Value>) {
-        let command = TemplateCommand::CreateTemplate {
+    /// Updates the schema of an existing template for public-offer schema validation tests.
+    /// Uses `UpdateSchema` rather than `CreateNewTemplate` to preserve the template's Published
+    /// status (required for credential creation) while setting the schema under test.
+    async fn update_template_schema(library_state: &Arc<LibraryState>, template_id: &str, schema: Option<Value>) {
+        let Some(schema) = schema else { return };
+        let command = TemplateCommand::UpdateSchema {
             template_id: template_id.to_string(),
-            source_template_id: None,
-            title: Some("Template".to_string()),
-            display: Box::new(None),
-            data_model: None,
-            creator: None,
-            holder_type: None,
-            tags: vec![],
-            status: TemplateStatus::Draft,
-            visibility: Visibility::Private,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(schema),
-            schema_properties_attributes: None,
+            schema,
         };
 
         command_handler(template_id, &library_state.command.template, command)
@@ -424,10 +410,10 @@ mod tests {
     async fn test_create_public_offer_succeeds() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
         // A credential (and its associated offer) must exist before creating a public offer.
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
 
         let response = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
@@ -464,9 +450,9 @@ mod tests {
     async fn test_create_public_offer_fails_when_already_exists() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
 
         let first = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
@@ -488,9 +474,9 @@ mod tests {
     async fn test_take_public_offer_offline() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
         let _ = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
@@ -523,9 +509,9 @@ mod tests {
     async fn test_take_public_offer_online() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
         let _ = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
@@ -573,9 +559,9 @@ mod tests {
     async fn test_delete_public_offer_removes_from_list() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
         let _ = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
@@ -630,7 +616,7 @@ mod tests {
     async fn test_create_public_offer_fails_when_template_not_found() {
         let (mut app, _library_state) = setup_app().await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
 
         let response = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, "missing-template").await)
@@ -645,8 +631,8 @@ mod tests {
     async fn test_create_public_offer_fails_when_template_schema_has_non_const_leaf() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(non_const_schema())).await;
-        credentials(&mut app, "001").await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(non_const_schema())).await;
+        credentials(&mut app).await;
 
         let response = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-pub use super::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Status, Visibility};
+pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
+use agent_shared::config::Authorization;
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -10,20 +11,20 @@ pub enum TemplateEvent {
     TemplateCreated {
         template_id: String,
         source_template_id: Option<String>,
-        // TODO: Make this a required field.
-        title: Option<String>,
+        title: String,
         display: Box<Option<Display>>,
-        data_model: Option<DataModel>,
-        creator: Option<String>,
-        holder_type: Option<HolderType>,
+        data_model: DataModel,
+        holder_type: HolderType,
         modified_at: String,
-        tags: Vec<String>,
+        tags: Option<Vec<String>>,
         status: Status,
         visibility: Visibility,
+        credential_expiration: Expiration,
         description: Option<String>,
         r#type: Vec<String>,
         schema: Box<Option<serde_json::Value>>,
         schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+        holder_authorization: Authorization,
     },
     TitleUpdated {
         template_id: String,
@@ -33,21 +34,6 @@ pub enum TemplateEvent {
     DisplayUpdated {
         template_id: String,
         display: Display,
-        modified_at: String,
-    },
-    DataModelUpdated {
-        template_id: String,
-        data_model: DataModel,
-        modified_at: String,
-    },
-    CreatorUpdated {
-        template_id: String,
-        creator: String,
-        modified_at: String,
-    },
-    HolderTypeUpdated {
-        template_id: String,
-        holder_type: HolderType,
         modified_at: String,
     },
     TagsUpdated {
@@ -83,6 +69,16 @@ pub enum TemplateEvent {
     SchemaPropertiesAttributesUpdated {
         template_id: String,
         schema_properties_attributes: HashMap<String, PropertyAttribute>,
+        modified_at: String,
+    },
+    CredentialExpirationUpdated {
+        template_id: String,
+        credential_expiration: Expiration,
+        modified_at: String,
+    },
+    HolderAuthorizationUpdated {
+        template_id: String,
+        holder_authorization: Authorization,
         modified_at: String,
     },
     TemplateDeleted {

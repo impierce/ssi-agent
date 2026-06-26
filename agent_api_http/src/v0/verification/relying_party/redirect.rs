@@ -127,6 +127,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {

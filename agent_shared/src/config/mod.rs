@@ -21,14 +21,13 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
 use url::Url;
 
 use crate::{
-    config::openapi::{authorization, credential_metadata},
+    config::openapi::{credential_metadata, tx_code_constraints},
     error::SharedError,
     profile::ApplicationProfile,
 };
@@ -259,8 +258,6 @@ pub struct ApplicationConfiguration {
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
-    #[config(default)]
-    pub credential_configuration_file: Option<Box<PathBuf>>,
     #[config(default = "
         HashMap::from(
             [
@@ -551,15 +548,16 @@ pub struct CredentialConfiguration {
     #[schema(schema_with = credential_metadata)]
     #[serde(flatten)]
     pub credential_metadata: CredentialMetadata,
-    #[schema(schema_with = authorization)]
     #[serde(default)]
     pub authorization: Authorization,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+#[schema(as = HolderAuthorization)]
 pub struct Authorization {
     pub pre_authorized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = tx_code_constraints)]
     pub tx_code_constraints: Option<TxCodeConstraints>,
 }
 
@@ -721,15 +719,13 @@ pub enum TemplateEvent {
     TemplateCreated,
     TitleUpdated,
     DisplayUpdated,
-    DataModelUpdated,
-    CreatorUpdated,
-    HolderTypeUpdated,
     TagsUpdated,
     StatusUpdated,
     VisibilityUpdated,
     DescriptionUpdated,
     TypeUpdated,
     SchemaUpdated,
+    CredentialExpirationUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -1496,9 +1492,6 @@ mod tests {
 
         // Some display information is set
         assert_eq!(config.display.len(), 1);
-
-        // The Credential Configuration file is set to `None`
-        assert!(config.credential_configuration_file.is_none());
     }
 
     #[test]

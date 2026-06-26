@@ -26,13 +26,13 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
         .nest(
             API_VERSION,
             Router::new()
-                .route("/templates/{template_id}", get(get_template))
-                .route("/templates/get-all-templates", get(get_templates))
-                .route("/templates/create-template", post(create_template))
-                .route("/templates/delete-template", post(delete_template))
-                .route("/templates/update-template", post(update_template))
-                .route("/templates/duplicate-template", post(duplicate_template))
-                // Catalog Routes
+                .route("/get-template-by-id/{id}", get(get_template))
+                .route("/list-all-templates", get(get_templates))
+                .route("/create-new-template", post(create_template))
+                .route("/delete-template", post(delete_template))
+                .route("/update-template", post(update_template))
+                .route("/duplicate-template", post(duplicate_template))
+                 // Catalog Routes
                 .route("/catalog/create-catalog", post(create_catalog))
                 .route("/catalog/delete-catalog/{catalog_id}", post(delete_catalog))
                 .route("/catalog/add-templates", post(add_templates))
