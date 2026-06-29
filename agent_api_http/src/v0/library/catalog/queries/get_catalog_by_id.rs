@@ -23,7 +23,7 @@ use std::sync::Arc;
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_catalog(
+pub(crate) async fn get_catalog_by_id(
     State(state): State<Arc<LibraryState>>,
     Path(catalog_id): Path<String>,
 ) -> Result<Response, ApiError> {

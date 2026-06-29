@@ -4,14 +4,14 @@ use crate::v0::library::catalog::{
 };
 
 use crate::v0::library::catalog::queries::{
-    get_all_catalogs::__path_get_all_catalogs, get_catalog::__path_get_catalog,
+    get_all_catalogs::__path_get_all_catalogs, get_catalog_by_id::__path_get_catalog_by_id,
 };
 
 use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(create_catalog, delete_catalog, make_catalog_public, make_catalog_private, add_templates, remove_templates, update_display, get_all_catalogs, get_catalog),
+    paths(create_catalog, delete_catalog, make_catalog_public, make_catalog_private, add_templates, remove_templates, update_display, get_all_catalogs, get_catalog_by_id),
     tags(
         (name = "Library", description = "Manage your own templates, browse and import external templates."),
         (name = "Catalogs", description = "Create and manage catalogs to organize and share your templates.")

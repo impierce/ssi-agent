@@ -46,7 +46,7 @@ paths:
         required: true
       responses:
         '200':
-          description: Catalog display updated successfully
+          description: Catalog appearance updated successfully
           content:
             application/json:
               schema:
@@ -652,7 +652,7 @@ paths:
       - Library
       - Catalog
       summary: Make catalog private
-      description: Updates a catalog's visibility to private.
+      description: Updates a catalog's visibility to private. If not otherwise specified, the default visibility is private.
       operationId: make_catalog_private
       requestBody:
         content:
