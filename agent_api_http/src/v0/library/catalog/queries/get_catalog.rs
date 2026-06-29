@@ -15,7 +15,7 @@ use std::sync::Arc;
 /// Retrieve a specific catalog by its ID.
 #[utoipa::path(
     get,
-    path = "/catalog/{catalog_id}",
+    path = "/get-catalog-by-id/{catalog_id}",
     operation_id = "get_catalog_by_id",
     tags = ["Library", "Catalog"],
     responses(

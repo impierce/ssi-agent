@@ -13,7 +13,7 @@ use std::sync::Arc;
 use crate::{
     v0::library::catalog::{
         queries::{get_all_catalogs::get_all_catalogs, get_catalog::get_catalog},
-        {add_templates, create_catalog, delete_catalog, remove_templates, update_display, update_visibility},
+        {add_templates, create_catalog, delete_catalog, remove_templates, update_display, make_catalog_public, make_catalog_private},
     },
     v0::templates::{
         create_template, delete_template, duplicate_template, get_template, get_templates, update_template,
@@ -33,14 +33,15 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 .route("/update-template", post(update_template))
                 .route("/duplicate-template", post(duplicate_template))
                 // Catalog Routes
-                .route("/catalog/create-catalog", post(create_catalog))
-                .route("/catalog/delete-catalog/{catalog_id}", post(delete_catalog))
-                .route("/catalog/add-templates", post(add_templates))
-                .route("/catalog/remove-templates", post(remove_templates))
-                .route("/catalog/update-display", post(update_display))
-                .route("/catalog/update-visibility", post(update_visibility))
-                .route("/catalog/get-all-catalogs", get(get_all_catalogs))
-                .route("/catalog/{catalog_id}", get(get_catalog)),
+                .route("/create-new-catalog", post(create_catalog))
+                .route("/delete-catalog/{catalog_id}", post(delete_catalog))
+                .route("/add-templates-to-catalog", post(add_templates))
+                .route("/remove-templates-from-catalog", post(remove_templates))
+                .route("/change-catalog-appearance", post(update_display))
+                .route("/make-catalog-public", post(make_catalog_public))
+                .route("/make-catalog-private", post(make_catalog_private))
+                .route("/get-all-catalogs", get(get_all_catalogs))
+                .route("/get-catalog-by-id/{catalog_id}", get(get_catalog)),
         )
         .with_state(library_state)
 }

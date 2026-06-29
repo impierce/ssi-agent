@@ -9,7 +9,7 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
-  /v0/catalog/add-templates:
+  /v0/add-templates-to-ca:
     post:
       tags:
       - Library

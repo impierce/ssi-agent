@@ -46,7 +46,7 @@ pub struct CreateCatalogRequest {
 /// Creates a new catalog with the provided display information.
 #[utoipa::path(
     post,
-    path = "/catalog/create-catalog",
+    path = "/create-new-catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = CreateCatalogRequest,
@@ -100,7 +100,7 @@ pub struct AddTemplatesRequest {
 /// Adds one or more templates to a catalog by their IDs.
 #[utoipa::path(
     post,
-    path = "/catalog/add-templates",
+    path = "/add-templates-to-catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = AddTemplatesRequest,
@@ -143,7 +143,7 @@ pub struct RemoveTemplatesRequest {
 /// Removes one or more templates from a catalog by their ID.
 #[utoipa::path(
     post,
-    path = "/catalog/remove-templates",
+    path = "/remove-templates-from-catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = RemoveTemplatesRequest,
@@ -181,12 +181,12 @@ pub struct UpdateCatalogDisplayRequest {
     pub display: CatalogDisplay,
 }
 
-/// Update a catalog's display information
+/// Changes a catalog's display information
 ///
-/// Updates a catalog's display information such as name, description, and icon.
+/// Changes a catalog's display information such as name, description, and icon.
 #[utoipa::path(
     post,
-    path = "/catalog/update-display",
+    path = "/change-catalog-appearance",
     tags = ["Library", "Catalog"],
     request_body(
         content = UpdateCatalogDisplayRequest,
@@ -218,35 +218,83 @@ pub(crate) async fn update_display(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+// #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
+// #[serde(default, rename_all = "camelCase")]
+// pub struct UpdateCatalogVisibilityRequest {
+//     pub catalog_id: String,
+//     pub visibility: CatalogVisibility,
+// }
+
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
-pub struct UpdateCatalogVisibilityRequest {
+pub struct MakeCatalogPublicRequest {
     pub catalog_id: String,
-    pub visibility: CatalogVisibility,
 }
 
-/// Update a catalog's visibility
+/// Make catalog public
 ///
-/// Updates a catalog's visibility (e.g., public, private, draft).
+/// Updates a catalog's visibility to public.
 #[utoipa::path(
     post,
-    path = "/catalog/update-visibility",
+    path = "/make-catalog-public",
     tags = ["Library", "Catalog"],
     request_body(
-        content = UpdateCatalogVisibilityRequest,
+        content = MakeCatalogPublicRequest,
         ),
     responses(
-        (status = 200, description = "Catalog visibility updated successfully", body = Catalog)
+        (status = 200, description = "Catalog make public successfully", body = Catalog)
     )
     )]
 #[axum_macros::debug_handler]
-pub(crate) async fn update_visibility(
+pub(crate) async fn make_catalog_public(
     State(state): State<Arc<LibraryState>>,
-    Json(UpdateCatalogVisibilityRequest { catalog_id, visibility }): Json<UpdateCatalogVisibilityRequest>,
+    Json(MakeCatalogPublicRequest { catalog_id}): Json<MakeCatalogPublicRequest>,
 ) -> Result<Response, ApiError> {
+
     let command = CatalogCommand::UpdateVisibility {
         catalog_id: catalog_id.clone(),
-        visibility,
+        visibility: CatalogVisibility::Public,
+    };
+
+    command_handler(&catalog_id, &state.command.catalog, command).await?;
+
+    // Return the updated catalog
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
+#[serde(default, rename_all = "camelCase")]
+pub struct MakeCatalogPrivateRequest {
+    pub catalog_id: String,
+}
+
+/// Make catalog private
+///
+/// Updates a catalog's visibility to private.
+#[utoipa::path(
+    post,
+    path = "/make-catalog-private",
+    tags = ["Library", "Catalog"],
+    request_body(
+        content = MakeCatalogPrivateRequest,
+        ),
+    responses(
+        (status = 200, description = "Catalog made private successfully.", body = Catalog)
+    )
+    )]
+#[axum_macros::debug_handler]
+pub(crate) async fn make_catalog_private(
+    State(state): State<Arc<LibraryState>>,
+    Json(MakeCatalogPrivateRequest { catalog_id }): Json<MakeCatalogPrivateRequest>,
+) -> Result<Response, ApiError> {
+
+    let command = CatalogCommand::UpdateVisibility {
+        catalog_id: catalog_id.clone(),
+        visibility: CatalogVisibility::Private,
     };
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;
@@ -263,7 +311,7 @@ pub(crate) async fn update_visibility(
 /// Deletes a catalog.
 #[utoipa::path(
     post,
-    path = "/catalog/delete-catalog/{catalog_id}",
+    path = "/delete-catalog/{catalog_id}",
     tags = ["Library", "Catalog"],
     )]
 #[axum_macros::debug_handler]

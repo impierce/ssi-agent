@@ -15,7 +15,7 @@ use std::sync::Arc;
 /// List all available Catalogs.
 #[utoipa::path(
     get,
-    path = "/catalog/get-all-catalogs",
+    path = "/get-all-catalogs",
     operation_id = "get_all_catalogs",
     tags = ["Library", "Catalog"],
     responses(

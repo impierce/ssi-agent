@@ -32,7 +32,6 @@ pub enum CatalogVisibility {
     Public,
     #[default]
     Private,
-    Draft,
 }
 
 #[derive(Debug, Clone, Serialize, Default, PartialEq, Deserialize, ToSchema)]
