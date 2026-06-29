@@ -1,4 +1,5 @@
 use crate::handlers::query_handler;
+use agent_library::catalog::views::CatalogView;
 use agent_library::state::LibraryState;
 use axum::{
     extract::State,
@@ -8,7 +9,6 @@ use axum::{
 use http::StatusCode;
 use http_api_problem::ApiError;
 use std::sync::Arc;
-use agent_library::catalog::views::CatalogView;
 
 /// List all Catalogs
 ///

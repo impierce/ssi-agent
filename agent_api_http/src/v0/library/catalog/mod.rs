@@ -5,7 +5,8 @@ use crate::API_VERSION;
 use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
     command::CatalogCommand,
-    views::{CatalogView}};
+    views::CatalogView,
+};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -241,9 +242,8 @@ pub struct MakeCatalogPublicRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn make_catalog_public(
     State(state): State<Arc<LibraryState>>,
-    Json(MakeCatalogPublicRequest { catalog_id}): Json<MakeCatalogPublicRequest>,
+    Json(MakeCatalogPublicRequest { catalog_id }): Json<MakeCatalogPublicRequest>,
 ) -> Result<Response, ApiError> {
-
     let command = CatalogCommand::UpdateVisibility {
         catalog_id: catalog_id.clone(),
         visibility: CatalogVisibility::Public,
@@ -258,7 +258,6 @@ pub(crate) async fn make_catalog_public(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct MakeCatalogPrivateRequest {
@@ -267,7 +266,7 @@ pub struct MakeCatalogPrivateRequest {
 
 /// Make catalog private
 ///
-/// Updates a catalog's visibility to private. If not otherwise specified, the default visibility is private. 
+/// Updates a catalog's visibility to private. If not otherwise specified, the default visibility is private.
 #[utoipa::path(
     post,
     path = "/make-catalog-private",
@@ -284,7 +283,6 @@ pub(crate) async fn make_catalog_private(
     State(state): State<Arc<LibraryState>>,
     Json(MakeCatalogPrivateRequest { catalog_id }): Json<MakeCatalogPrivateRequest>,
 ) -> Result<Response, ApiError> {
-
     let command = CatalogCommand::UpdateVisibility {
         catalog_id: catalog_id.clone(),
         visibility: CatalogVisibility::Private,

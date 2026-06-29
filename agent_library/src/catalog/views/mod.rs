@@ -1,11 +1,11 @@
 pub mod view_all_catalogs;
 use super::event::CatalogEvent;
-use crate::catalog::aggregate::{CatalogVisibility,CatalogDisplay, Catalog};
+use crate::catalog::aggregate::{Catalog, CatalogDisplay, CatalogVisibility};
+use chrono::DateTime;
 use chrono::Utc;
+use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use chrono::{DateTime};
-use cqrs_es::{EventEnvelope, View};
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize, ToSchema)]
 #[schema(as = Catalog)]
@@ -51,7 +51,6 @@ impl View<Catalog> for CatalogView {
             CatalogDeleted { id: _ } => {
                 self.deleted = true;
             }
-
         }
     }
 }

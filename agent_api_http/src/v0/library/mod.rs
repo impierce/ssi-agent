@@ -13,7 +13,10 @@ use std::sync::Arc;
 use crate::{
     v0::library::catalog::{
         queries::{get_all_catalogs::get_all_catalogs, get_catalog_by_id::get_catalog_by_id},
-        {add_templates, create_catalog, delete_catalog, remove_templates, update_display, make_catalog_public, make_catalog_private},
+        {
+            add_templates, create_catalog, delete_catalog, make_catalog_private, make_catalog_public, remove_templates,
+            update_display,
+        },
     },
     v0::templates::{
         create_template, delete_template, duplicate_template, get_template, get_templates, update_template,
