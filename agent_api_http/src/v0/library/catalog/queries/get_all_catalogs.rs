@@ -9,6 +9,7 @@ use axum::{
 use http::StatusCode;
 use http_api_problem::ApiError;
 use std::sync::Arc;
+use agent_library::catalog::views::CatalogView;
 
 /// List all Catalogs
 ///
@@ -27,10 +28,10 @@ pub(crate) async fn get_all_catalogs(State(state): State<Arc<LibraryState>>) -> 
     let filtered_catalogs = query_handler("all_catalogs", &state.query.all_catalogs)
         .await?
         .map(|all_catalogs_view| {
-            let filtered_catalogs: Vec<Catalog> = all_catalogs_view
+            let filtered_catalogs: Vec<CatalogView> = all_catalogs_view
                 .catalogs
                 .into_values()
-                .filter(|catalog| !catalog.is_deleted)
+                .filter(|catalog| !catalog.deleted)
                 .collect();
 
             filtered_catalogs

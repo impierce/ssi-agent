@@ -16,7 +16,7 @@ pub struct Catalog {
     pub template_ids: Vec<String>,
     pub visibility: CatalogVisibility,
     pub modified_at: DateTime<Utc>,
-    pub is_deleted: bool,
+    pub deleted: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq, ToSchema)]
@@ -75,7 +75,7 @@ impl Aggregate for Catalog {
                 }])
             }
             UpdateDisplay { catalog_id, display } => {
-                if self.is_deleted {
+                if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
 
@@ -89,7 +89,7 @@ impl Aggregate for Catalog {
                 }])
             }
             UpdateVisibility { catalog_id, visibility } => {
-                if self.is_deleted {
+                if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
                 Ok(vec![VisibilityUpdated {
@@ -101,7 +101,7 @@ impl Aggregate for Catalog {
                 catalog_id,
                 template_ids,
             } => {
-                if self.is_deleted {
+                if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
 
@@ -138,7 +138,7 @@ impl Aggregate for Catalog {
                 catalog_id,
                 template_ids,
             } => {
-                if self.is_deleted {
+                if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
 
@@ -193,7 +193,7 @@ impl Aggregate for Catalog {
                 self.modified_at = Utc::now();
             }
             CatalogDeleted { id: _ } => {
-                self.is_deleted = true;
+                self.deleted = true;
             }
         }
     }

@@ -1,12 +1,26 @@
 pub mod view_all_catalogs;
 use super::event::CatalogEvent;
-use crate::catalog::aggregate::Catalog;
+use crate::catalog::aggregate::{CatalogVisibility,CatalogDisplay, Catalog};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use chrono::{DateTime};
 use cqrs_es::{EventEnvelope, View};
 
-pub type CatalogView = Catalog;
+#[derive(Debug, Clone, Deserialize, Default, Serialize, ToSchema)]
+#[schema(as = Catalog)]
+pub struct CatalogView {
+    #[serde(rename = "id")]
+    pub catalog_id: String,
+    pub display: CatalogDisplay,
+    pub template_ids: Vec<String>,
+    pub visibility: CatalogVisibility,
+    pub modified_at: DateTime<Utc>,
+    #[serde(skip)]
+    pub deleted: bool,
+}
 
-impl View<Catalog> for Catalog {
+impl View<Catalog> for CatalogView {
     fn update(&mut self, event: &EventEnvelope<Catalog>) {
         use CatalogEvent::*;
 
@@ -35,8 +49,9 @@ impl View<Catalog> for Catalog {
                 self.template_ids.retain(|id| !template_ids.contains(id));
             }
             CatalogDeleted { id: _ } => {
-                self.is_deleted = true;
+                self.deleted = true;
             }
+
         }
     }
 }

@@ -49,6 +49,7 @@ use agent_issuance::{
 use agent_library::catalog::aggregate::Catalog;
 use agent_library::catalog::services::{CatalogServiceImpl, CatalogServices};
 use agent_library::catalog::views::view_all_catalogs::AllCatalogsView;
+use agent_library::catalog::views::CatalogView;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
@@ -250,7 +251,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
     });
 
     let (catalog_command_handler, catalog, all_catalogs) = builder
-        .commands_and_queries::<Catalog, Catalog, AllCatalogsView>(catalog_services, vec![])
+        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![])
         .await;
 
     LibraryState {
