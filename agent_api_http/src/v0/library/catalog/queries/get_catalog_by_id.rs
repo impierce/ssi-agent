@@ -1,6 +1,6 @@
 use crate::handlers::query_handler;
-use agent_library::catalog::aggregate::Catalog;
 use agent_library::state::LibraryState;
+use agent_library::catalog::views::CatalogView;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -19,7 +19,7 @@ use std::sync::Arc;
     operation_id = "get_catalog_by_id",
     tags = ["Library", "Catalog"],
     responses(
-        (status = 200, description = "Catalog retrieved successfully", body = Catalog)
+        (status = 200, description = "Catalog retrieved successfully", body = CatalogView),
     )
 )]
 #[axum_macros::debug_handler]

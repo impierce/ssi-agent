@@ -5,7 +5,7 @@ use crate::API_VERSION;
 use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
     command::CatalogCommand,
-};
+    views::{CatalogView}};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
@@ -52,7 +52,7 @@ pub struct CreateCatalogRequest {
         content = CreateCatalogRequest,
         ),
     responses(
-        (status = 201, description = "Catalog created successfully", body = Catalog)
+        (status = 201, description = "Catalog created successfully", body = CatalogView)
     )
     )]
 #[axum_macros::debug_handler]
@@ -106,7 +106,7 @@ pub struct AddTemplatesRequest {
         content = AddTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Catalog updated successfully", body = Catalog)
+        (status = 200, description = "Catalog updated successfully", body = CatalogView)
     )
     )]
 #[axum_macros::debug_handler]
@@ -149,7 +149,7 @@ pub struct RemoveTemplatesRequest {
         content = RemoveTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Template(s) removed successfully", body = Catalog)
+        (status = 200, description = "Template(s) removed successfully", body = CatalogView)
     )
     )]
 #[axum_macros::debug_handler]
@@ -192,7 +192,7 @@ pub struct UpdateCatalogDisplayRequest {
         content = UpdateCatalogDisplayRequest,
         ),
     responses(
-        (status = 200, description = "Catalog appearance updated successfully", body = Catalog)
+        (status = 200, description = "Catalog appearance updated successfully", body = CatalogView)
     )
     )]
 #[axum_macros::debug_handler]
@@ -242,7 +242,7 @@ pub struct MakeCatalogPublicRequest {
         content = MakeCatalogPublicRequest,
         ),
     responses(
-        (status = 200, description = "Catalog make public successfully", body = Catalog)
+        (status = 200, description = "Catalog make public successfully", body = CatalogView)
     )
     )]
 #[axum_macros::debug_handler]
@@ -283,7 +283,7 @@ pub struct MakeCatalogPrivateRequest {
         content = MakeCatalogPrivateRequest,
         ),
     responses(
-        (status = 200, description = "Catalog made private successfully.", body = Catalog)
+        (status = 200, description = "Catalog made private successfully.", body = CatalogView)
     )
     )]
 #[axum_macros::debug_handler]

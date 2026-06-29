@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq, ToSchema)]
+#[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq)]
 pub struct Catalog {
     #[serde(rename = "id")]
     pub catalog_id: String,

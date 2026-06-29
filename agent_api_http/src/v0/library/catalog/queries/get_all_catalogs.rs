@@ -1,5 +1,4 @@
 use crate::handlers::query_handler;
-use agent_library::catalog::aggregate::Catalog;
 use agent_library::state::LibraryState;
 use axum::{
     extract::State,
@@ -20,7 +19,7 @@ use agent_library::catalog::views::CatalogView;
     operation_id = "get_all_catalogs",
     tags = ["Library", "Catalog"],
     responses(
-        (status = 200, description = "All catalogs retrieved successfully", body = [Catalog]),
+        (status = 200, description = "All catalogs retrieved successfully", body = [CatalogView]),
     )
 )]
 #[axum_macros::debug_handler]
