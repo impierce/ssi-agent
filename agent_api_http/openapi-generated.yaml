@@ -42,7 +42,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateCatalogDisplayRequest'
+              $ref: '#/components/schemas/ChangeCatalogAppearanceRequest'
         required: true
       responses:
         '200':
@@ -931,6 +931,19 @@ components:
       enum:
       - Public
       - Private
+    ChangeCatalogAppearanceRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        display:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogDisplay'
+          default:
+            name: ''
+            description: ''
+            icon: null
     Connection:
       type: object
       required:
@@ -1851,19 +1864,6 @@ components:
       - published
       - archived
       - deleted
-    UpdateCatalogDisplayRequest:
-      type: object
-      properties:
-        catalogId:
-          type: string
-          default: ''
-        display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
-          default:
-            name: ''
-            description: ''
-            icon: null
     UpdateTemplateEndpointRequest:
       type: object
       properties:

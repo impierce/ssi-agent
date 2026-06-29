@@ -176,7 +176,7 @@ pub(crate) async fn remove_templates(
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
-pub struct UpdateCatalogDisplayRequest {
+pub struct ChangeCatalogAppearanceRequest {
     pub catalog_id: String,
     pub display: CatalogDisplay,
 }
@@ -189,7 +189,7 @@ pub struct UpdateCatalogDisplayRequest {
     path = "/change-catalog-appearance",
     tags = ["Library", "Catalog"],
     request_body(
-        content = UpdateCatalogDisplayRequest,
+        content = ChangeCatalogAppearanceRequest,
         ),
     responses(
         (status = 200, description = "Catalog appearance updated successfully", body = CatalogView)
@@ -198,7 +198,7 @@ pub struct UpdateCatalogDisplayRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn update_display(
     State(state): State<Arc<LibraryState>>,
-    Json(UpdateCatalogDisplayRequest { catalog_id, display }): Json<UpdateCatalogDisplayRequest>,
+    Json(ChangeCatalogAppearanceRequest { catalog_id, display }): Json<ChangeCatalogAppearanceRequest>,
 ) -> Result<Response, ApiError> {
     let command = CatalogCommand::UpdateDisplay {
         catalog_id: catalog_id.clone(),
@@ -217,13 +217,6 @@ pub(crate) async fn update_display(
         .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
-
-// #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-// #[serde(default, rename_all = "camelCase")]
-// pub struct UpdateCatalogVisibilityRequest {
-//     pub catalog_id: String,
-//     pub visibility: CatalogVisibility,
-// }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
