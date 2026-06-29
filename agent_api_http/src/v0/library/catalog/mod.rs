@@ -192,7 +192,7 @@ pub struct UpdateCatalogDisplayRequest {
         content = UpdateCatalogDisplayRequest,
         ),
     responses(
-        (status = 200, description = "Catalog display updated successfully", body = Catalog)
+        (status = 200, description = "Catalog appearance updated successfully", body = Catalog)
     )
     )]
 #[axum_macros::debug_handler]
@@ -274,7 +274,7 @@ pub struct MakeCatalogPrivateRequest {
 
 /// Make catalog private
 ///
-/// Updates a catalog's visibility to private.
+/// Updates a catalog's visibility to private. If not otherwise specified, the default visibility is private. 
 #[utoipa::path(
     post,
     path = "/make-catalog-private",

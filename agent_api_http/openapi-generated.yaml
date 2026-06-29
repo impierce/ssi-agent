@@ -9,7 +9,7 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
-  /v0/add-templates-to-ca:
+  /v0/add-templates-to-catalog:
     post:
       tags:
       - Library
@@ -30,87 +30,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
-  /v0/catalog/create-catalog:
+  /v0/change-catalog-appearance:
     post:
       tags:
       - Library
       - Catalog
-      summary: Create a new catalog
-      description: Creates a new catalog with the provided display information.
-      operationId: create_catalog
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateCatalogRequest'
-        required: true
-      responses:
-        '201':
-          description: Catalog created successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Catalog'
-  /v0/catalog/delete-catalog/{catalog_id}:
-    post:
-      tags:
-      - Library
-      - Catalog
-      summary: Delete a catalog
-      description: Deletes a catalog.
-      operationId: delete_catalog
-      parameters:
-      - name: catalog_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses: {}
-  /v0/catalog/get-all-catalogs:
-    get:
-      tags:
-      - Library
-      - Catalog
-      summary: List all Catalogs
-      description: List all available Catalogs.
-      operationId: get_all_catalogs
-      responses:
-        '200':
-          description: All catalogs retrieved successfully
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Catalog'
-  /v0/catalog/remove-templates:
-    post:
-      tags:
-      - Library
-      - Catalog
-      summary: Remove one or more templates from a catalog
-      description: Removes one or more templates from a catalog by their ID.
-      operationId: remove_templates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RemoveTemplatesRequest'
-        required: true
-      responses:
-        '200':
-          description: Template(s) removed successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Catalog'
-  /v0/catalog/update-display:
-    post:
-      tags:
-      - Library
-      - Catalog
-      summary: Update a catalog's display information
-      description: Updates a catalog's display information such as name, description, and icon.
+      summary: Changes a catalog's display information
+      description: Changes a catalog's display information such as name, description, and icon.
       operationId: update_display
       requestBody:
         content:
@@ -121,48 +47,6 @@ paths:
       responses:
         '200':
           description: Catalog display updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Catalog'
-  /v0/catalog/update-visibility:
-    post:
-      tags:
-      - Library
-      - Catalog
-      summary: Update a catalog's visibility
-      description: Updates a catalog's visibility (e.g., public, private, draft).
-      operationId: update_visibility
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateCatalogVisibilityRequest'
-        required: true
-      responses:
-        '200':
-          description: Catalog visibility updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Catalog'
-  /v0/catalog/{catalog_id}:
-    get:
-      tags:
-      - Library
-      - Catalog
-      summary: Get catalog by ID
-      description: Retrieve a specific catalog by its ID.
-      operationId: get_catalog_by_id
-      parameters:
-      - name: catalog_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Catalog retrieved successfully
           content:
             application/json:
               schema:
@@ -281,6 +165,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/create-new-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Create a new catalog
+      description: Creates a new catalog with the provided display information.
+      operationId: create_catalog
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogRequest'
+        required: true
+      responses:
+        '201':
+          description: Catalog created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/create-new-template:
     post:
       tags:
@@ -405,6 +310,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+  /v0/delete-catalog/{catalog_id}:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Delete a catalog
+      description: Deletes a catalog.
+      operationId: delete_catalog
+      parameters:
+      - name: catalog_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses: {}
   /v0/delete-public-offer:
     post:
       tags:
@@ -515,6 +435,23 @@ paths:
                 $ref: '#/components/schemas/Template'
         '422':
           description: Source Template Not Found
+  /v0/get-all-catalogs:
+    get:
+      tags:
+      - Library
+      - Catalog
+      summary: List all Catalogs
+      description: List all available Catalogs.
+      operationId: get_all_catalogs
+      responses:
+        '200':
+          description: All catalogs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Catalog'
   /v0/get-all-public-offers:
     get:
       tags:
@@ -530,6 +467,27 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PublicOfferStatusDto'
+  /v0/get-catalog-by-id/{catalog_id}:
+    get:
+      tags:
+      - Library
+      - Catalog
+      summary: Get catalog by ID
+      description: Retrieve a specific catalog by its ID.
+      operationId: get_catalog_by_id
+      parameters:
+      - name: catalog_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Catalog retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -688,6 +646,48 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Template'
+  /v0/make-catalog-private:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Make catalog private
+      description: Updates a catalog's visibility to private.
+      operationId: make_catalog_private
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeCatalogPrivateRequest'
+        required: true
+      responses:
+        '200':
+          description: Catalog made private successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+  /v0/make-catalog-public:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Make catalog public
+      description: Updates a catalog's visibility to public.
+      operationId: make_catalog_public
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeCatalogPublicRequest'
+        required: true
+      responses:
+        '200':
+          description: Catalog make public successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/offers:
     get:
       tags:
@@ -791,6 +791,27 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+  /v0/remove-templates-from-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Remove one or more templates from a catalog
+      description: Removes one or more templates from a catalog by their ID.
+      operationId: remove_templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveTemplatesRequest'
+        required: true
+      responses:
+        '200':
+          description: Template(s) removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/take-public-offer-offline:
     post:
       tags:
@@ -913,7 +934,6 @@ components:
       enum:
       - Public
       - Private
-      - Draft
     Connection:
       type: object
       required:
@@ -982,16 +1002,6 @@ components:
           oneOf:
           - $ref: '#/components/schemas/CatalogVisibility'
           default: Private
-    CreatePublicOfferRequest:
-      type: object
-      required:
-      - offerId
-      - templateId
-      properties:
-        offerId:
-          type: string
-        templateId:
-          type: string
     CreateNewTemplateRequestBody:
       type: object
       properties:
@@ -1508,6 +1518,18 @@ components:
           - string
           - 'null'
           format: uri
+    MakeCatalogPrivateRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+    MakeCatalogPublicRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
     Offer:
       type: object
       required:
@@ -1845,16 +1867,6 @@ components:
             name: ''
             description: ''
             icon: null
-    UpdateCatalogVisibilityRequest:
-      type: object
-      properties:
-        catalogId:
-          type: string
-          default: ''
-        visibility:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogVisibility'
-          default: Private
     UpdateTemplateEndpointRequest:
       type: object
       properties:
