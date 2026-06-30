@@ -99,7 +99,7 @@ impl Aggregate for Document {
 
         info!("Handling command: {:?}", command);
 
-        let events: Result<Vec<Self::Event>, Self::Error> = match command {
+        let events: Vec<Self::Event> = match command {
             CreateDocument {
                 document_id,
                 did_method,
@@ -304,7 +304,7 @@ impl Aggregate for Document {
                     || did_method == SupportedDidMethod::IotaTest)
                     .then_some(iota_metadata);
 
-                Ok(vec![DocumentCreated {
+                Ok::<Vec<Self::Event>, Self::Error>(vec![DocumentCreated {
                     document_id,
                     did_method,
                     status,
@@ -609,9 +609,7 @@ impl Aggregate for Document {
                     iota_metadata: Some(iota_metadata),
                 }])
             }
-        };
-
-        let events = events?;
+        }?;
 
         for event in events {
             sink.write(event, self).await;
