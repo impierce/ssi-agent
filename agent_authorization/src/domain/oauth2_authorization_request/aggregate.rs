@@ -59,7 +59,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
     async fn handle(
         &mut self,
         command: Self::Command,
-        _services: &Self::Services,
+        services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;

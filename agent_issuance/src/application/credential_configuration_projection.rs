@@ -4,8 +4,8 @@ use agent_library::template::aggregate::{DataModel, PropertyAttribute, Template}
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::view_repository::DynViewRepository;
 use async_trait::async_trait;
-use cqrs_es::persist::ViewRepository;
 use cqrs_es::{EventEnvelope, Query};
 use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
@@ -17,7 +17,7 @@ use std::{
 };
 use tracing::warn;
 
-type TemplateViewHandle = Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>;
+type TemplateViewHandle = Arc<OnceLock<Arc<dyn DynViewRepository<TemplateView, Template>>>>;
 
 pub struct CredentialConfigurationProjection {
     issuance_state: Arc<IssuanceState>,
