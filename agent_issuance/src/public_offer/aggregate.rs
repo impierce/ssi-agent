@@ -29,22 +29,17 @@ impl Aggregate for PublicOffer {
         _services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
-        match command {
+        let events: Vec<Self::Event> = match command {
             PublicOfferCommand::Create { offer_id, template_id } => {
                 if !self.id.is_empty() && !self.deleted {
                     return Err(PublicOfferError::AlreadyExists);
                 }
 
-                sink.write(
-                    PublicOfferEvent::Created {
-                        offer_id,
-                        template_id,
-                        created_at: chrono::Utc::now(),
-                    },
-                    self,
-                )
-                .await;
-                Ok(())
+                Ok(vec![PublicOfferEvent::Created {
+                    offer_id,
+                    template_id,
+                    created_at: chrono::Utc::now(),
+                }])
             }
             PublicOfferCommand::TakeOffline { offer_id } => {
                 if self.id.is_empty() {
@@ -54,8 +49,7 @@ impl Aggregate for PublicOffer {
                     return Ok(());
                 }
 
-                sink.write(PublicOfferEvent::TakenOffline { offer_id }, self).await;
-                Ok(())
+                Ok(vec![PublicOfferEvent::TakenOffline { offer_id }])
             }
             PublicOfferCommand::TakeOnline { offer_id } => {
                 if self.id.is_empty() {
@@ -65,18 +59,22 @@ impl Aggregate for PublicOffer {
                     return Ok(());
                 }
 
-                sink.write(PublicOfferEvent::TakenOnline { offer_id }, self).await;
-                Ok(())
+                Ok(vec![PublicOfferEvent::TakenOnline { offer_id }])
             }
             PublicOfferCommand::Delete { offer_id } => {
                 if self.id.is_empty() {
                     return Err(PublicOfferError::NotFound);
                 }
 
-                sink.write(PublicOfferEvent::Deleted { offer_id }, self).await;
-                Ok(())
+                Ok(vec![PublicOfferEvent::Deleted { offer_id }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
