@@ -25,14 +25,13 @@ use std::sync::Arc;
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(as = Catalog)]
-pub struct Catalog {
+pub struct CatalogDto {
     #[serde(rename = "id")]
     pub catalog_id: String,
     pub display: CatalogDisplay,
     pub template_ids: Vec<String>,
     pub visibility: CatalogVisibility,
     pub modified_at: DateTime<Utc>,
-    pub is_deleted: bool,
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
