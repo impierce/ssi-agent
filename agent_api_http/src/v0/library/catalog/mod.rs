@@ -8,7 +8,7 @@ use agent_library::catalog::{
     views::CatalogView,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -296,18 +296,27 @@ pub(crate) async fn make_catalog_private(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
+#[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DeleteCatalogRequest {
+    pub catalog_id: String,
+}
+
 /// Delete a catalog
 ///
 /// Deletes a catalog.
 #[utoipa::path(
     post,
-    path = "/delete-catalog/{catalog_id}",
+    path = "/delete-catalog",
     tags = ["Library", "Catalog"],
+    request_body(
+        content = DeleteCatalogRequest,
+        ),
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_catalog(
     State(state): State<Arc<LibraryState>>,
-    Path(catalog_id): Path<String>,
+    Json(DeleteCatalogRequest { catalog_id }): Json<DeleteCatalogRequest>,
 ) -> Result<Response, ApiError> {
     let command = CatalogCommand::DeleteCatalog {
         catalog_id: catalog_id.clone(),

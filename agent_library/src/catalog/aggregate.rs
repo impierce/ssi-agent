@@ -24,7 +24,7 @@ pub struct Catalog {
 pub struct CatalogDisplay {
     pub name: String,
     pub description: String,
-    pub icon: Option<DisplayIcon>,
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ToSchema)]
@@ -32,13 +32,6 @@ pub enum CatalogVisibility {
     Public,
     #[default]
     Private,
-}
-
-#[derive(Debug, Clone, Serialize, Default, PartialEq, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct DisplayIcon {
-    pub url: String,
-    pub alt_text: String,
 }
 
 #[async_trait]
