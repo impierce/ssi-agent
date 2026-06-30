@@ -78,6 +78,7 @@ jsonschema = "0.46"
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }
+mongo-es = "0.4.1"
 oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
 product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.16", package = "product_common", features = [
