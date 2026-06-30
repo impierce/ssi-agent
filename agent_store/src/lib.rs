@@ -59,6 +59,7 @@ use agent_verification::state::VerificationState;
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
 use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
+use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -156,8 +157,8 @@ where
 /// and the all-instances view repository.
 pub type CqrsComponents<A, V, AV> = (
     Arc<dyn Command<A> + Send + Sync>,
-    Arc<dyn ViewRepository<V, A>>,
-    Arc<dyn ViewRepository<AV, A>>,
+    Arc<dyn DynViewRepository<V, A>>,
+    Arc<dyn DynViewRepository<AV, A>>,
 );
 
 /// A trait for building the command and query infrastructure for a given aggregate.

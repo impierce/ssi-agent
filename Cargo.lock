@@ -82,7 +82,7 @@ dependencies = [
  "axum-macros",
  "base64 0.22.1",
  "chrono",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "futures",
  "http 1.4.1",
  "http-api-problem",
@@ -111,6 +111,7 @@ dependencies = [
  "serde_urlencoded",
  "serde_with 3.21.0",
  "serial_test",
+ "shared-kernel",
  "siopv2",
  "thiserror 1.0.69",
  "tokio",
@@ -168,7 +169,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "chrono",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "jsonwebtoken",
  "lazy_static",
  "mockall",
@@ -179,6 +180,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "shared-kernel",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
@@ -204,7 +206,7 @@ dependencies = [
  "agent_verification",
  "anyhow",
  "async-trait",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "http-serde",
  "reqwest 0.12.28",
  "serde",
@@ -226,7 +228,7 @@ dependencies = [
  "async-nats",
  "async-trait",
  "cloudevents-sdk",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "futures",
  "serde",
  "serde_json",
@@ -251,7 +253,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.9",
  "base64 0.22.1",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "identity_core",
  "identity_credential",
  "jsonwebtoken",
@@ -266,6 +268,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "shared-kernel",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "temp-env",
@@ -295,7 +298,7 @@ dependencies = [
  "axum 0.8.9",
  "base64 0.22.1",
  "chrono",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "derivative",
  "did-jwk",
  "did-method-key",
@@ -321,6 +324,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "shared-kernel",
  "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "strum 0.26.3",
@@ -352,7 +356,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chrono",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "derivative",
  "identity_core",
  "identity_credential",
@@ -370,6 +374,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.21.0",
  "serial_test",
+ "shared-kernel",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
@@ -390,7 +395,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "chrono",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "iso8601",
  "jsonschema 0.46.5",
  "lazy_static",
@@ -399,6 +404,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.21.0",
  "serial_test",
+ "shared-kernel",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 1.0.69",
@@ -461,7 +467,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "config",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "dotenvy",
  "http-serde",
  "identity_core",
@@ -479,6 +485,7 @@ dependencies = [
  "serde_json",
  "serde_with 3.21.0",
  "serial_test",
+ "shared-kernel",
  "strum 0.26.3",
  "temp-env",
  "thiserror 1.0.69",
@@ -503,10 +510,11 @@ dependencies = [
  "agent_shared",
  "agent_verification",
  "async-trait",
- "cqrs-es 0.4.12",
- "mongo-es 0.3.0",
+ "cqrs-es",
+ "mongo-es",
  "postgres-es",
  "serde_json",
+ "shared-kernel",
  "sqlx",
  "tokio",
 ]
@@ -522,7 +530,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "chrono",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "did-key",
  "futures",
  "identity_core",
@@ -538,6 +546,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "shared-kernel",
  "siopv2",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -2438,19 +2447,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "cqrs-es"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5da025e9082adb74e8bb2b7e93feed51c711aa6c384cc18ad03b463ed776db64"
-dependencies = [
- "async-trait",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]
@@ -7665,27 +7661,11 @@ dependencies = [
 
 [[package]]
 name = "mongo-es"
-version = "0.3.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79e2cc82dfc3e6742f467c41b83cadfcf8f26049c92e46093d43223815733baf"
+checksum = "3d6354a3fbbbc3079c89597e87481de282c3b7bd6400f66999eabc5a5bcf8971"
 dependencies = [
- "async-trait",
- "cqrs-es 0.4.12",
- "futures",
- "log",
- "mongodb 3.7.0",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "mongo-es"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fdf1bf9c46e9766dcae6daf77d8b7d8308cf96a62d8bb3b63530498f05c8316"
-dependencies = [
- "cqrs-es 0.5.0",
+ "cqrs-es",
  "futures",
  "log",
  "mongodb 3.7.0",
@@ -7716,7 +7696,7 @@ checksum = "224484c5d09285a7b8cb0a0c117e847ebd14cb6e4470ecf68cdb89c503b0edb9"
 name = "mongodb"
 version = "0.1.0"
 dependencies = [
- "mongo-es 0.4.0",
+ "mongo-es",
  "shared-kernel",
  "thiserror 1.0.69",
 ]
@@ -9479,16 +9459,16 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "postgres-es"
-version = "0.4.12"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a380c092ccb97e081e4e418b20f8a7f1a717a30dc38e4096f56a0dd8b0c077c"
+checksum = "2e91abcdbccb940b5eb4ddce60ec993d7675058ad26703ae8389cb5ba997e885"
 dependencies = [
- "async-trait",
- "cqrs-es 0.4.12",
+ "cqrs-es",
  "futures",
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror 2.0.18",
  "tokio",
 ]
 
@@ -11587,7 +11567,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "convert_case 0.11.0",
- "cqrs-es 0.5.0",
+ "cqrs-es",
  "serde",
  "slug",
  "strum 0.28.0",

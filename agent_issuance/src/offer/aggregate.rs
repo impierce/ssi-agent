@@ -1,6 +1,5 @@
 use agent_shared::config::config;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{
@@ -78,24 +77,26 @@ pub enum DeliveryMethod {
     },
 }
 
-#[async_trait]
 impl Aggregate for Offer {
     type Command = OfferCommand;
     type Event = OfferEvent;
     type Error = OfferError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "offer".to_string()
-    }
+    const TYPE: &'static str = "offer";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateCredentialOffer {
                 offer_id,
                 grant_types,
@@ -348,7 +349,13 @@ impl Aggregate for Offer {
                     status: Status::Issued,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -441,7 +448,7 @@ pub mod tests {
     type OfferTestFramework = TestFramework<Offer>;
 
     // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
-    #[expect(dead_code)]
+    // TODO: refactor test
     fn run_with_large_stack<F>(test: F)
     where
         F: FnOnce() + Send + 'static,
@@ -579,6 +586,7 @@ pub mod tests {
     // outside the test function body, before entering run_with_large_stack. This would cause a stack
     // overflow before the large stack is available. Instead, all fixture setup is done manually inside
     // the large-stack wrapper using the test helper functions directly.
+    #[rstest]
     #[serial_test::serial]
     fn test_verify_credential_response() {
         run_with_large_stack(move || {

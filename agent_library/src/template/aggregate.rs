@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use agent_shared::config::Authorization;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use tracing::{debug, info};
@@ -148,28 +147,26 @@ pub struct Template {
     pub holder_authorization: Authorization,
 }
 
-#[async_trait]
 impl Aggregate for Template {
     type Command = TemplateCommand;
     type Event = TemplateEvent;
     type Error = TemplateError;
     type Services = ();
 
-    fn aggregate_type() -> String {
-        "template".to_string()
-    }
+    const TYPE: &'static str = "template";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use TemplateCommand::*;
         use TemplateEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateNewTemplate {
                 template_id,
                 source_template_id,
@@ -556,7 +553,13 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

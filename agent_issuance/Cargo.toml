@@ -9,6 +9,7 @@ publish.workspace = true
 agent_library = { path = "../agent_library" }
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true

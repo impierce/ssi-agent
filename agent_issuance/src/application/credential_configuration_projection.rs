@@ -5,19 +5,19 @@ use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, query_handler};
 use async_trait::async_trait;
-use cqrs_es::persist::ViewRepository;
 use cqrs_es::{EventEnvelope, Query};
 use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
 };
+use shared_kernel::view_repository::DynViewRepository;
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock},
 };
 use tracing::warn;
 
-type TemplateViewHandle = Arc<OnceLock<Arc<dyn ViewRepository<TemplateView, Template>>>>;
+type TemplateViewHandle = Arc<OnceLock<Arc<dyn DynViewRepository<TemplateView, Template>>>>;
 
 pub struct CredentialConfigurationProjection {
     issuance_state: Arc<IssuanceState>,
