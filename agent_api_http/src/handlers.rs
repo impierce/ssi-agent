@@ -1,6 +1,6 @@
 use crate::error::ErrorWrapper;
-use shared_kernel::view_repository::DynViewRepository;
 use cqrs_es::{Aggregate, View};
+use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 /// Wrapping the `command_handler` function from the `agent_shared` crate to handle errors.

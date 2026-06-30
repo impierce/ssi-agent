@@ -16,11 +16,11 @@ use agent_shared::config::{
     config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
-use shared_kernel::view_repository::DynViewRepository;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
+use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};

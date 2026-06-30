@@ -1,9 +1,9 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
-use shared_kernel::view_repository::DynViewRepository;
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
+use shared_kernel::view_repository::DynViewRepository;
 use sqlx::Pool;
 use std::sync::Arc;
 

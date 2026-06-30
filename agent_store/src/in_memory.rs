@@ -1,11 +1,11 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::application_state::Command;
-use shared_kernel::view_repository::DynViewRepository;
 use cqrs_es::{
     mem_store::MemStore,
     persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
+use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 

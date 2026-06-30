@@ -52,7 +52,6 @@ use agent_library::template::views::all_templates::AllTemplatesView;
 use agent_shared::application_state::Command;
 use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
-use shared_kernel::view_repository::DynViewRepository;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use agent_verification::services::VerificationServices;
@@ -60,6 +59,7 @@ use agent_verification::state::VerificationState;
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
 use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
+use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
