@@ -23,7 +23,6 @@ use std::sync::Arc;
 
 /// Data transfer object for Catalogs.
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
 #[schema(as = Catalog)]
 pub struct CatalogDto {
     #[serde(rename = "id")]
