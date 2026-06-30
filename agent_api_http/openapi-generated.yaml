@@ -310,7 +310,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
-  /v0/delete-catalog/{catalog_id}:
+  /v0/delete-catalog:
     post:
       tags:
       - Library
@@ -318,12 +318,12 @@ paths:
       summary: Delete a catalog
       description: Deletes a catalog.
       operationId: delete_catalog
-      parameters:
-      - name: catalog_id
-        in: path
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteCatalogRequest'
         required: true
-        schema:
-          type: string
       responses: {}
   /v0/delete-public-offer:
     post:
@@ -921,9 +921,9 @@ components:
         description:
           type: string
         icon:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/DisplayIcon'
+          type:
+          - string
+          - 'null'
         name:
           type: string
     CatalogVisibility:
@@ -1277,6 +1277,12 @@ components:
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
       - european_learning_model_v3-3
+    DeleteCatalogRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
     DeletePublicOfferRequest:
       type: object
       required:
@@ -1308,16 +1314,6 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/Logo'
         name:
-          type: string
-    DisplayIcon:
-      type: object
-      required:
-      - url
-      - altText
-      properties:
-        altText:
-          type: string
-        url:
           type: string
     Document:
       type: object
