@@ -24,15 +24,12 @@ Review your request payload to confirm that the credential type aligns with thes
 
 ## No Credential Configuration Found
 
-This error is raised when the system cannot find a credential configuration that matches the provided `credentialConfigurationId`. This indicates that either the specified configuration does not exist or it has not been properly set up in the server's settings.
+This error is raised when the system cannot find a credential configuration. The credential configurations are derived from the templates. This error indicates that either the template does not exist, is not in a usable state, or its derived credential configuration is unavailable. If you believe this is an unexpected error, please consider opening an [issue on GitHub](https://github.com/impierce/ssi-agent/issues).
 
 ### Resolution
 
-- **Verify the Identifier:**  
-  Ensure that the `credentialConfigurationId` in your request is correct.
-
-- **Review Server Configuration:**  
-  Verify that the desired credential configuration is defined in the `credential_configurations` section of your `config.yaml` file. Ensure that the `credentialConfigurationId` provided in your request exactly matches the `credential_configuration_id` of the intended configuration.
+- **Review Template State:**  
+  Verify that the target template exists and is `Published` before issuing credentials or creating offers.
 
 ## Unsupported Credential Format
 
@@ -45,76 +42,7 @@ typically occurs when the credential configuration’s `format` does not match a
 
 ### Resolution
 
-Currently
-UniCore only supports the `jwt_vc_json` format. This configuration needs to be set through the
-`credential_configurations` property in the `config.yaml` file, e.g.:
-
-```yaml
-credential_configurations:
-  - credential_configuration_id: my-credential-configuration-id
-    format: jwt_vc_json
-    credential_definition:
-      type:
-        - VerifiableCredential
-```
-
-## Unsupported Credential Type
-
-This error is raised when UniCore encounters a credential type that is not recognized or supported by the current
-implementation. In practice, it means that none of the credential types provided in the configuration match any of the types UniCore is configured to process. For example, supported types might include `VerifiableCredential`, `AchievementCredential`, or `OpenBadgeCredential`.
-
-### Resolution
-
-<!-- TODO: We need a dedicated documentation page explaining Credential Configurations and link to it here. Related issue: https://github.com/impierce/ssi-agent/issues/136 -->
-
-<!-- TODO: Once issue https://github.com/impierce/ssi-agent/issues/136 is fixed this error type can probalably be removed because the credential configuration can be done during startup (from configuration) or during creating CredentialConfiguration aggregate instances through the API -->
-
-UniCore supports three primary credential models:
-
-- **Generic [W3C Verifiable Credentials Data Model v1.1](https://www.w3.org/TR/vc-data-model/)**
-- **[Open Badges 3.0](https://www.imsglobal.org/spec/ob/v3p0)**
-- **Custom W3C Verifiable Credentials**
-
-For all models, the credential type must be declared in the `credential_definition` property of your credential
-configuration (in the `config.yaml` file). Ensure that the configuration includes the base type `VerifiableCredential` along with
-any additional types required by your credential model.
-
-For example:
-
-**For W3C Verifiable Credentials:**
-
-```yaml
-credential_configurations:
-  - credential_configuration_id: my-w3c-vc-configuration-id
-    format: jwt_vc_json
-    credential_definition:
-      type:
-        - VerifiableCredential
-```
-
-**For OpenBadgeV3 Credentials:**
-
-```yaml
-credential_configurations:
-  - credential_configuration_id: my-obv3-configuration-id
-    format: jwt_vc_json
-    credential_definition:
-      type:
-        - VerifiableCredential
-        - OpenBadgeCredential
-```
-
-**For Custom W3C Verifiable Credentials:**
-
-```yaml
-credential_configurations:
-  - credential_configuration_id: my-custom-w3c-vc-configuration-id
-    format: jwt_vc_json
-    credential_definition:
-      type:
-        - VerifiableCredential
-        - MyCustomCredential
-```
+Since credential configurations and formats are not manually managed through the API, please consider opening an issue on GitHub if you believe this is an unexpected error.
 
 ## Invalid Credential Payload
 
@@ -126,7 +54,8 @@ This error occurs when the credential data inside the payload provided during cr
 
 While the `credentialSubject` is generally a JSON object that can contain arbitrary data, specific credential types may impose stricter requirements on its structure and content. For example, **OpenBadgeV3** credentials require a more defined schema (see [OpenBadgeV3 Achievement Credential Specification](https://www.imsglobal.org/spec/ob/v3p0#achievementcredential)).
 
-To resolve this error, ensure that the `credentialSubject` conforms exactly to the expected structure as defined in the credential configuration corresponding to the submitted `credentialConfigurationId`.
+To resolve this error, ensure that `credentialSubject` conforms exactly to the schema defined by the target Template
+(or by the referenced provisioned credential configuration, if you are using provisioned mode).
 
 ## Invalid Identifier Error
 
@@ -219,3 +148,102 @@ This error occurs when the `format` specified in a credential configuration is n
 ### Resolution
 
 Ensure that the `format` field in the credential configuration is set to a supported value. Supported values include: `jwt_vc_json` and `dc+sd-jwt`.
+
+## Missing Template ID
+
+This error occurs when a credential issuance request omits the `templateId` field or provides it as an empty string. Issuance requires exactly one template so the API can resolve the template state, schema, and derived credential configuration.
+
+### Resolution
+
+Set `templateId` to the identifier of an existing template.
+
+## Missing Template IDs
+
+This error occurs when an offer creation request omits the `templateIds` field, provides an empty array, or includes empty template identifiers. Offer creation requires at least one valid template identifier.
+
+### Resolution
+
+Provide a non-empty `templateIds` array and ensure every element is a non-empty template identifier.
+
+## Template Not Found
+
+This error occurs when the request references a template identifier that does not exist or refers to a template that has already been deleted. UniCore cannot issue credentials or create offers without first resolving the backing template.
+
+### Resolution
+
+- Verify that the requested template still exists.
+- Ensure the template identifier is spelled correctly.
+- If the template was deleted, create a new template or use a different published template.
+
+## Template Not Published
+
+This error occurs when a request references a template that exists but is not in the `Published` state. UniCore only allows published templates to be used for credential issuance and offer generation.
+
+### Resolution
+
+- Publish the template before using it in issuance or offers.
+- If the template is intentionally in `Draft` or `Archived`, switch to a published template instead.
+
+## Invalid Signed Credential Format
+
+This error occurs when a signed credential payload is structurally invalid for the expected signed-credential parsing flow. Typical causes include malformed JWTs, invalid base64url segments, invalid JSON in JWT segments, a missing `vc` claim for `jwt_vc_json`, or an SD-JWT with an unsupported `typ` header.
+
+### Resolution
+
+- Ensure the signed credential is a syntactically valid JWT or SD-JWT.
+- For `jwt_vc_json`, include a `vc` claim in the JWT payload.
+- For SD-JWT formats, set the issuer JWT header `typ` to `vc+sd-jwt` or `dc+sd-jwt`.
+
+## Signed Credential Format Mismatch
+
+This error occurs when the signed credential supplied in the request uses a different format than the format derived from the selected template's credential configuration. For example, supplying a `jwt_vc_json` credential for a template that resolves to `vc+sd-jwt` will trigger this error.
+
+### Resolution
+
+- Use a signed credential whose format matches the selected template's credential configuration.
+- If the wrong template was selected, retry with the template that matches the signed credential format.
+
+## Unsupported Credential Configuration Format
+
+This error occurs when UniCore derives a credential configuration from a template, but that derived configuration uses a credential format the signed-credential validation pipeline does not support.
+
+### Resolution
+
+This indicates a server-side inconsistency. Review the template and derived credential configuration, and update them to use a supported format.
+
+## Expiration Exceeds Template Limit
+
+This error occurs when the `expiresAt` value requested for a credential exceeds the expiration defined by the template. For example, requesting `never` or a later timestamp than the template allows will be rejected.
+
+### Resolution
+
+- Omit `expiresAt` to use the template default.
+- If you provide `expiresAt`, ensure it is not later than the template's allowed deadline.
+
+## Invalid Template Schema
+
+This error occurs when a template contains a `schema` value that is not itself a valid JSON Schema. In that case UniCore cannot validate incoming credential data against it.
+
+### Resolution
+
+- Fix the template schema so it is valid JSON Schema.
+- Re-publish or update the template before retrying issuance.
+
+## Credential Schema Validation Failed
+
+This error occurs when the credential data in the request does not satisfy the template's JSON Schema. UniCore validates unsigned credential payloads against the template schema before creating the credential and returns the list of schema violations in the error detail.
+
+### Resolution
+
+- Inspect the reported validation violations.
+- Update the credential payload so it satisfies the template schema.
+- When using a schema for credential-subject fields, ensure the request data under `credential.credentialSubject` matches that schema.
+
+## Template Not Eligible For Public Offer
+
+This error occurs when a template is used for a public offer but its schema contains non-constant leaf values. Public offers are only allowed for templates whose schema fully constrains leaf values with `const`, so the resulting credential content is predetermined.
+
+### Resolution
+
+- Restrict the template schema to constant leaf values only.
+- If the credential content must remain dynamic, use a regular offer flow instead of a public offer.

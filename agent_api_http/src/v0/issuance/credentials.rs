@@ -11,15 +11,23 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_library::state::LibraryState;
+use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
+use axum::Extension;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_offer::GrantType;
+use oid4vci::{
+    credential_format_profiles::CredentialFormats,
+    credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -50,12 +58,13 @@ pub(crate) async fn credential(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
+    pub template_id: String,
     pub offer_id: String,
     pub credential: Value,
     #[serde(default)]
     pub is_signed: bool,
-    pub credential_configuration_id: String,
-    pub expires_at: CredentialExpiry,
+    #[serde(default)]
+    pub expires_at: Option<CredentialExpiry>,
 }
 
 /// Create a credential
@@ -74,34 +83,82 @@ pub struct CredentialsEndpointRequest {
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(state): State<Arc<IssuanceState>>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CredentialsEndpointRequest {
+        template_id,
         offer_id,
         credential,
         is_signed,
-        credential_configuration_id,
         expires_at,
     }): Json<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let credential_id = uuid::Uuid::new_v4().to_string();
 
-    let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    // The credential configuration ID is derived from the template ID.
+    let credential_configuration_id = template_id.clone();
+
+    // Validate that template_id is not empty.
+    if template_id.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Missing Template ID")
+            .type_url(type_url("issuance#missing-template-id"))
+            .message("The `templateId` field is required and must not be empty.")
+            .finish());
+    }
+
+    // Look up the template by ID.
+    let template: Template = query_handler(&template_id, &library_state.query.template)
         .await?
-        .and_then(|server_config_view| {
-            server_config_view
-                .credential_configurations
-                .get(&credential_configuration_id)
-                .cloned()
-        })
+        .filter(|t| t.status != TemplateStatus::Deleted)
         .ok_or_else(|| {
             ApiError::builder(StatusCode::NOT_FOUND)
-                .title("No Credential Configuration Found")
-                .type_url(type_url("issuance#no-credential-configuration-found"))
-                .message(format!(
-                    "No Credential Configuration found with id: `{credential_configuration_id}`"
-                ))
+                .title("Template Not Found")
+                .type_url(type_url("issuance#template-not-found"))
+                .message(format!("No template found with id: `{template_id}`"))
                 .finish()
         })?;
+
+    if template.status != TemplateStatus::Published {
+        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Template Not Published")
+            .type_url(type_url("issuance#template-not-published"))
+            .message("Credential issuance requires the template to be Published.")
+            .finish());
+    }
+
+    // If the template has a schema, validate the credential against it.
+    // Only validate unsigned credentials (objects) - signed credentials are pre-built JWTs
+    // and cannot be validated against a template schema.
+    if !is_signed {
+        if let Some(schema) = template.schema.as_ref() {
+            // The template schema describes the shape of the credential subject data.
+            // Callers are expected to nest their subject properties under `credentialSubject`
+            // in the `credential` payload. We unwrap it here so that the schema is validated
+            // against the subject properties directly, as the schema describes.
+            let data_to_validate = credential.get("credentialSubject").unwrap_or(&credential);
+            validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
+        }
+    }
+
+    let (_, credential_configuration, authorization) =
+        query_handler(SERVER_CONFIG_ID, &issuance_state.query.server_config)
+            .await?
+            .and_then(|server_config_view| {
+                server_config_view
+                    .credential_configurations
+                    .get(&credential_configuration_id)
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("No Credential Configuration Found")
+                    .type_url(type_url("issuance#no-credential-configuration-found"))
+                    .message(format!(
+                        "No Credential Configuration found with id: `{credential_configuration_id}`"
+                    ))
+                    .finish()
+            })?;
 
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
@@ -112,6 +169,19 @@ pub(crate) async fn credentials(
                 .message("For signed credentials, the credential must be a string.")
                 .finish());
         }
+
+        let signed_credential = match credential.as_str() {
+            Some(value) => value,
+            None => {
+                return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Credential Type")
+                    .type_url(type_url("issuance#invalid-credential-type"))
+                    .message("For signed credentials, the credential must be a string.")
+                    .finish())
+            }
+        };
+
+        validate_signed_credential_format_matches_configuration(signed_credential, &credential_configuration)?;
 
         CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.clone(),
@@ -127,6 +197,17 @@ pub(crate) async fn credentials(
                 .finish());
         }
 
+        // Resolve the effective expiration: use the explicitly provided value, or fall back to the template's credential expiration.
+        // When an explicit value is provided it must not exceed the template's expiration deadline.
+        let expires_at = match expires_at {
+            Some(explicit) => {
+                let template_deadline = expiration_to_credential_expiry(&template.credential_expiration)?;
+                validate_expiry_within_template_deadline(&explicit, &template_deadline)?;
+                explicit
+            }
+            None => expiration_to_credential_expiry(&template.credential_expiration)?,
+        };
+
         CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.clone(),
             data: Data { raw: credential },
@@ -136,10 +217,10 @@ pub(crate) async fn credentials(
     };
 
     // Create an unsigned/signed credential.
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    command_handler(&credential_id, &issuance_state.command.credential, command).await?;
 
     // Create an offer if it does not exist yet.
-    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+    if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
         // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
@@ -154,37 +235,153 @@ pub(crate) async fn credentials(
 
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
-            credential_configuration_ids: vec![credential_configuration_id.clone()],
+            template_ids: vec![credential_configuration_id.clone()],
             grant_types,
             tx_code_constraints,
             delivery_options: None,
         };
 
-        command_handler(&offer_id, &state.command.offer, command).await?
+        command_handler(&offer_id, &issuance_state.command.offer, command).await?
     };
 
     let command = OfferCommand::AddCredentials {
         offer_id: offer_id.clone(),
         credential_ids: vec![credential_id.clone()],
-        credential_configuration_ids: vec![credential_configuration_id],
+        template_ids: vec![credential_configuration_id],
     };
 
     // Add the credential to the offer.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(&offer_id, &issuance_state.command.offer, command).await?;
 
     // Return the credential.
-    query_handler(&credential_id, &state.query.credential)
+    query_handler(&credential_id, &issuance_state.query.credential)
         .await?
-        .and_then(|credential_view| credential_view.data)
-        .map(|data| {
+        .and_then(|credential_view| {
+            if is_signed {
+                credential_view.signed
+            } else {
+                credential_view.data.map(|data| data.raw)
+            }
+        })
+        .map(|credential_body| {
             (
                 StatusCode::CREATED,
                 [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
-                Json(data.raw),
+                Json(credential_body),
             )
                 .into_response()
         })
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SignedCredentialFormat {
+    JwtVcJson,
+    VcSdJwt,
+    DcSdJwt,
+}
+
+impl SignedCredentialFormat {
+    fn as_str(self) -> &'static str {
+        match self {
+            SignedCredentialFormat::JwtVcJson => "jwt_vc_json",
+            SignedCredentialFormat::VcSdJwt => "vc+sd-jwt",
+            SignedCredentialFormat::DcSdJwt => "dc+sd-jwt",
+        }
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_signed_credential_format_matches_configuration(
+    signed_credential: &str,
+    credential_configuration: &CredentialConfigurationsSupportedObject,
+) -> Result<(), ApiError> {
+    let actual_format = detect_signed_credential_format(signed_credential)?;
+    let expected_format = expected_signed_credential_format(credential_configuration)?;
+
+    if actual_format == expected_format {
+        Ok(())
+    } else {
+        Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Signed Credential Format Mismatch")
+            .type_url(type_url("issuance#signed-credential-format-mismatch"))
+            .message(format!(
+                "Signed credential format `{}` does not match template credential configuration format `{}`.",
+                actual_format.as_str(),
+                expected_format.as_str()
+            ))
+            .finish())
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn expected_signed_credential_format(
+    credential_configuration: &CredentialConfigurationsSupportedObject,
+) -> Result<SignedCredentialFormat, ApiError> {
+    match &credential_configuration.credential_format {
+        CredentialFormats::JwtVcJson(_) => Ok(SignedCredentialFormat::JwtVcJson),
+        CredentialFormats::VcSdJwt(_) => Ok(SignedCredentialFormat::VcSdJwt),
+        CredentialFormats::DcSdJwt(_) => Ok(SignedCredentialFormat::DcSdJwt),
+        _ => Err(ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            .title("Unsupported Credential Configuration Format")
+            .type_url(type_url("issuance#unsupported-credential-configuration-format"))
+            .message("The template-backed credential configuration uses an unsupported credential format.")
+            .finish()),
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn detect_signed_credential_format(signed_credential: &str) -> Result<SignedCredentialFormat, ApiError> {
+    if signed_credential.contains('~') {
+        let issuer_jwt = signed_credential
+            .split('~')
+            .find(|segment| !segment.is_empty())
+            .ok_or_else(|| {
+                invalid_signed_credential_format_error("Signed SD-JWT credential is missing the issuer JWT.")
+            })?;
+
+        let header = decode_jwt_segment_json(issuer_jwt, 0)?;
+        match header.get("typ").and_then(Value::as_str) {
+            Some("vc+sd-jwt") => Ok(SignedCredentialFormat::VcSdJwt),
+            Some("dc+sd-jwt") => Ok(SignedCredentialFormat::DcSdJwt),
+            _ => Err(invalid_signed_credential_format_error(
+                "Signed SD-JWT credential must declare header typ `vc+sd-jwt` or `dc+sd-jwt`.",
+            )),
+        }
+    } else {
+        let payload = decode_jwt_segment_json(signed_credential, 1)?;
+        if payload.get("vc").is_some() {
+            Ok(SignedCredentialFormat::JwtVcJson)
+        } else {
+            Err(invalid_signed_credential_format_error(
+                "Signed JWT credential must contain a `vc` claim to match `jwt_vc_json`.",
+            ))
+        }
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn decode_jwt_segment_json(jwt: &str, segment_index: usize) -> Result<Value, ApiError> {
+    let segment = jwt
+        .split('.')
+        .nth(segment_index)
+        .ok_or_else(|| invalid_signed_credential_format_error("Signed credential is not a valid JWT."))?;
+
+    let decoded = URL_SAFE_NO_PAD
+        .decode(segment)
+        .map_err(|_| invalid_signed_credential_format_error("Signed credential contains invalid base64url data."))?;
+
+    serde_json::from_slice(&decoded).map_err(|_| {
+        invalid_signed_credential_format_error("Signed credential contains invalid JSON in its JWT segments.")
+    })
+}
+
+fn invalid_signed_credential_format_error(message: impl Into<String>) -> ApiError {
+    ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Invalid Signed Credential Format")
+        .type_url(type_url("issuance#invalid-signed-credential-format"))
+        .message(message.into())
+        .finish()
 }
 
 /// List all credentials
@@ -200,8 +397,8 @@ pub(crate) async fn credentials(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_credentials = query_handler("all_credentials", &state.query.all_credentials)
+pub(crate) async fn all_credentials(State(issuance_state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
+    let all_credentials = query_handler("all_credentials", &issuance_state.query.all_credentials)
         .await?
         .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
@@ -256,24 +453,154 @@ pub async fn patch_credential(
     }
 }
 
+/// Converts a template's `Expiration` value into a `CredentialExpiry` for the issuance pipeline.
+///
+/// - `Never` → `CredentialExpiry::Never`
+/// - `DateTime(s)` → `CredentialExpiry::Fixed(parsed datetime)`
+/// - `Duration(s)` → `CredentialExpiry::Fixed(Utc::now() + duration)`
+#[allow(clippy::result_large_err)]
+fn expiration_to_credential_expiry(expiration: &Expiration) -> Result<CredentialExpiry, ApiError> {
+    match expiration {
+        Expiration::Never => Ok(CredentialExpiry::Never),
+        Expiration::DateTime(s) => chrono::DateTime::parse_from_rfc3339(s)
+            .map(|dt| CredentialExpiry::Fixed(dt.with_timezone(&chrono::Utc)))
+            .map_err(|e| {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Invalid Template Expiration")
+                    .message(format!("Template expiration datetime `{s}` could not be parsed: {e}"))
+                    .finish()
+            }),
+        Expiration::Duration(s) => iso8601::duration(s)
+            .map_err(|_| {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Invalid Template Expiration")
+                    .message(format!("Template expiration duration `{s}` could not be parsed"))
+                    .finish()
+            })
+            .map(|d| {
+                let delta = match d {
+                    iso8601::Duration::YMDHMS {
+                        year,
+                        month,
+                        day,
+                        hour,
+                        minute,
+                        second,
+                        millisecond,
+                    } => {
+                        chrono::Duration::days(year as i64 * 365 + month as i64 * 30 + day as i64)
+                            + chrono::Duration::hours(hour as i64)
+                            + chrono::Duration::minutes(minute as i64)
+                            + chrono::Duration::seconds(second as i64)
+                            + chrono::Duration::milliseconds(millisecond as i64)
+                    }
+                    iso8601::Duration::Weeks(w) => chrono::Duration::weeks(w as i64),
+                };
+                CredentialExpiry::Fixed(chrono::Utc::now() + delta)
+            }),
+    }
+}
+
+/// Validates that an explicitly provided `expires_at` does not exceed the template's deadline.
+///
+/// - If the template deadline is `Never`, any explicit value is accepted.
+/// - If the explicit value is `Never` but the template has a fixed deadline, that is rejected.
+/// - Otherwise, the explicit datetime must be ≤ the template deadline.
+#[allow(clippy::result_large_err)]
+fn validate_expiry_within_template_deadline(
+    explicit: &CredentialExpiry,
+    deadline: &CredentialExpiry,
+) -> Result<(), ApiError> {
+    match (explicit, deadline) {
+        // Template has no deadline — anything goes.
+        (_, CredentialExpiry::Never) => Ok(()),
+        // Explicit is "never" but template enforces a deadline.
+        (CredentialExpiry::Never, CredentialExpiry::Fixed(limit)) => Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Expiration Exceeds Template Limit")
+            .type_url(type_url("issuance#expiration-exceeds-template-limit"))
+            .message(format!(
+                "The template requires an expiration date not after {}",
+                limit.to_rfc3339()
+            ))
+            .finish()),
+        // Both are fixed — compare them.
+        (CredentialExpiry::Fixed(requested), CredentialExpiry::Fixed(limit)) => {
+            if requested > limit {
+                Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Expiration Exceeds Template Limit")
+                    .type_url(type_url("issuance#expiration-exceeds-template-limit"))
+                    .message(format!(
+                        "The template requires an expiration date not after {}",
+                        limit.to_rfc3339()
+                    ))
+                    .finish())
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Validates the credential data against the template's JSON Schema.///
+/// Returns a detailed error response if validation fails, listing all schema violations.
+fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), Box<ApiError>> {
+    let validator = jsonschema::validator_for(schema).map_err(|e| {
+        Box::new(
+            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Invalid Template Schema")
+                .type_url(type_url("issuance#invalid-template-schema"))
+                .message(format!("The template's schema is not a valid JSON Schema: {e}"))
+                .finish(),
+        )
+    })?;
+
+    let errors: Vec<String> = validator
+        .iter_errors(credential)
+        .map(|e| format!("Path `{}`: {} (schema path: {})", e.instance_path(), e, e.schema_path()))
+        .collect();
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(Box::new(
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Credential Schema Validation Failed")
+                .type_url(type_url("issuance#credential-schema-validation-failed"))
+                .message(format!(
+                    "The credential does not match the template schema. Violations:\n{}",
+                    errors
+                        .iter()
+                        .enumerate()
+                        .map(|(i, e)| format!("  [{}] {}", i + 1, e))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ))
+                .finish(),
+        ))
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::tests::OFFER_ID;
-    use crate::v0::issuance::credential_issuer::token_status_list::tests::create_test_signed_credential;
-    use crate::v0::issuance::router;
+    use crate::tests::{OFFER_ID, TEMPLATE_ID};
+    use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
+    use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
     use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_library::template::aggregate::{DataModel, Display, Expiration, HolderType, Status, Visibility};
+    use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
+    use agent_store::{issuance_state, library_state};
     use axum::{
         body::{self, Body},
         http::{self, Request, StatusCode},
         Router,
     };
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use lazy_static::lazy_static;
     use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
     use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
@@ -303,22 +630,62 @@ pub mod tests {
         });
     }
 
-    /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
-    pub async fn credentials(app: &mut Router, credential_configuration_id: &str) -> String {
-        let response = app
+    /// Creates a [LibraryState] with the [CredentialConfigurationProjection] properly wired
+    /// to the given [IssuanceState], mirroring the production application setup. When a template
+    /// is created or updated through this library state, the credential configuration in the
+    /// issuance state is automatically synchronized via the projection.
+    pub async fn setup_library_state(issuance_state: &Arc<IssuanceState>) -> Arc<LibraryState> {
+        let (projection, view_handle) = CredentialConfigurationProjection::new(issuance_state.clone());
+        let lib = Arc::new(library_state(&InMemory, Default::default(), vec![Box::new(projection)]).await);
+        assert!(
+            view_handle.set(lib.query.template.clone()).is_ok(),
+            "template view already initialized"
+        );
+        lib
+    }
+
+    pub async fn create_new_template(
+        library_state: &Arc<LibraryState>,
+        status: Status,
+        credential_expiration: Option<Expiration>,
+        pre_authorized: bool,
+        data_model: DataModel,
+    ) -> String {
+        let mut library_app = crate::v0::library::router(library_state.clone());
+        let response = library_app
             .call(
                 Request::builder()
                     .method(http::Method::POST)
-                    .uri(format!("{API_VERSION}/credentials"))
+                    .uri(format!("{API_VERSION}/create-new-template"))
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "offerId": OFFER_ID,
-                            "credential": {
-                                "credentialSubject": CREDENTIAL_SUBJECT.clone(),
+                            "title": "Test Template",
+                            "display": {
+                                "name": "Verifiable Credential",
+                                "logo": {
+                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
+                                    "altText": "Impierce Logo"
+                                }
                             },
-                            "credentialConfigurationId": credential_configuration_id,
-                            "expiresAt": "never"
+                            "dataModel": data_model,
+                            "holderType": HolderType::Individual,
+                            "status": status,
+                            "visibility": Visibility::Private,
+                            "credentialExpiration": credential_expiration,
+                            "type": ["VerifiableCredential"],
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": { "type": "string" },
+                                    "first_name": { "type": "string" },
+                                    "last_name": { "type": "string" }
+                                },
+                                "required": ["first_name", "last_name"]
+                            },
+                            "holderAuthorization": {
+                                "pre_authorized": pre_authorized
+                            }
                         }))
                         .unwrap(),
                     ))
@@ -326,6 +693,226 @@ pub mod tests {
             )
             .await
             .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        body["id"].as_str().unwrap().to_string()
+    }
+
+    async fn update_template_status(library_state: &Arc<LibraryState>, template_id: &str, status: Status) {
+        let mut library_app = crate::v0::library::router(library_state.clone());
+        let response = library_app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/update-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "id": template_id,
+                            "status": status
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    async fn delete_template(library_state: &Arc<LibraryState>, template_id: &str) {
+        let mut library_app = crate::v0::library::router(library_state.clone());
+        let response = library_app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/delete-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "id": template_id
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    /// Creates a test template in the library state and returns its ID.
+    /// The template will be automatically synchronized as a credential configuration in the
+    /// issuance state if the library state was created with [setup_library_with_projection].
+    /// The `pre_authorized` parameter controls the authorization flow type for the credential configuration.
+    pub async fn create_test_template_with_auth(library_state: &Arc<LibraryState>, pre_authorized: bool) -> String {
+        let template_id = TEMPLATE_ID.to_string();
+
+        command_handler(
+            &template_id,
+            &library_state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: template_id.clone(),
+                source_template_id: None,
+                title: "Test Template".to_string(),
+                display: Box::new(Some(Display {
+                    name: "Verifiable Credential".to_string(),
+                    logo: None,
+                })),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Published,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "first_name": { "type": "string" },
+                        "last_name": { "type": "string" }
+                    },
+                    "required": ["first_name", "last_name"]
+                }))),
+                schema_properties_attributes: None,
+                holder_authorization: agent_shared::config::Authorization {
+                    pre_authorized,
+                    tx_code_constraints: None,
+                },
+            },
+        )
+        .await
+        .unwrap();
+
+        template_id
+    }
+
+    /// Creates a test template with pre-authorized credential configuration (default).
+    pub async fn create_test_template(library_state: &Arc<LibraryState>) -> String {
+        create_test_template_with_auth(library_state, true).await
+    }
+
+    pub async fn create_test_template_with_status_and_format(
+        library_state: &Arc<LibraryState>,
+        status: Status,
+        credential_expiration: Option<Expiration>,
+        format: &str,
+    ) -> String {
+        let data_model = match format {
+            "jwt_vc_json" => DataModel::W3CVcDataModelV1_1,
+            "vc+sd-jwt" => DataModel::W3CVcDataModelV2_0,
+            _ => panic!("unsupported test format: {format}"),
+        };
+        let initial_status = match status.clone() {
+            Status::Archived | Status::Deleted => Status::Draft,
+            _ => status.clone(),
+        };
+
+        let template_id =
+            create_new_template(library_state, initial_status, credential_expiration, true, data_model).await;
+
+        match status {
+            Status::Archived => update_template_status(library_state, &template_id, Status::Archived).await,
+            Status::Deleted => delete_template(library_state, &template_id).await,
+            _ => {}
+        }
+
+        template_id
+    }
+
+    fn encode_base64url_json(value: Value) -> String {
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(&value).unwrap())
+    }
+
+    /// No _valid_ signature is produced, which is sufficient for the testing purpose.
+    fn build_test_signed_jwt_vc_json() -> String {
+        let header = encode_base64url_json(json!({
+            "alg": "EdDSA",
+            "typ": "JWT"
+        }));
+        let payload = encode_base64url_json(json!({
+            "iss": "did:example:issuer",
+            "sub": "did:example:holder",
+            "vc": {
+                "@context": ["https://www.w3.org/2018/credentials/v1"],
+                "type": ["VerifiableCredential"],
+                "credentialSubject": {
+                    "id": "did:example:holder"
+                }
+            }
+        }));
+        let signature = URL_SAFE_NO_PAD.encode(b"signature");
+
+        format!("{header}.{payload}.{signature}")
+    }
+
+    pub async fn signed_credentials_with_template(
+        app: &mut Router,
+        template_id: &str,
+        signed_credential: &str,
+        expires_at: Option<Value>,
+    ) -> Response {
+        let mut request_body = json!({
+            "templateId": template_id,
+            "offerId": OFFER_ID,
+            "credential": signed_credential,
+            "isSigned": true,
+        });
+
+        if let Some(expires_at) = expires_at {
+            request_body["expiresAt"] = expires_at;
+        }
+
+        app.call(
+            Request::builder()
+                .method(http::Method::POST)
+                .uri(format!("{API_VERSION}/credentials"))
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(serde_json::to_vec(&request_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    }
+
+    pub async fn unsigned_credentials_request_with_template(app: &mut Router, template_id: &str) -> Response {
+        app.call(
+            Request::builder()
+                .method(http::Method::POST)
+                .uri(format!("{API_VERSION}/credentials"))
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "templateId": template_id,
+                        "offerId": OFFER_ID,
+                        "credential": {
+                            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
+                        },
+                        "expiresAt": "never"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    }
+
+    /// This function creates and tests a credential and returns the endpoint where this credential can be accessed.
+    pub async fn credentials(app: &mut Router) -> String {
+        credentials_with_template(app, TEMPLATE_ID).await
+    }
+
+    /// This function creates and tests a credential with a specific template ID and returns the endpoint where this credential can be accessed.
+    pub async fn credentials_with_template(app: &mut Router, template_id: &str) -> String {
+        let response = unsigned_credentials_request_with_template(app, template_id).await;
 
         assert_eq!(response.status(), StatusCode::CREATED);
         assert_eq!(response.headers().get("Content-Type").unwrap(), "application/json");
@@ -425,9 +1012,12 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
 
-        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state, &template_id).await;
         patch_credential(&mut app, credential_endpoint).await;
     }
 
@@ -438,7 +1028,325 @@ pub mod tests {
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
-        credentials(&mut app, "001").await;
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+
+        credentials_with_template(&mut app, &template_id).await;
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_requires_template_id() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let response = unsigned_credentials_request_with_template(&mut app, "").await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Missing Template ID");
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_requires_existing_template() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let response = unsigned_credentials_request_with_template(&mut app, "missing-template").await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Template Not Found");
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_requires_credential_configuration() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let template_id = create_new_template(
+            &library_state,
+            Status::Published,
+            Some(Expiration::Never),
+            true,
+            DataModel::W3CVcDataModelV1_1,
+        )
+        .await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+        let response = unsigned_credentials_request_with_template(&mut app, &template_id).await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "No Credential Configuration Found");
+    }
+
+    #[tokio::test]
+    async fn test_signed_credentials_require_published_template() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Draft,
+            Some(Expiration::Never),
+            "jwt_vc_json",
+        )
+        .await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+        let response = signed_credentials_with_template(
+            &mut app,
+            &template_id,
+            &build_test_signed_jwt_vc_json(),
+            Some(json!("never")),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Template Not Published");
+    }
+
+    #[tokio::test]
+    async fn test_unsigned_credentials_require_published_template() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let draft_template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Draft,
+            Some(Expiration::Never),
+            "jwt_vc_json",
+        )
+        .await;
+        let archived_template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Archived,
+            Some(Expiration::Never),
+            "jwt_vc_json",
+        )
+        .await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+
+        for template_id in [&draft_template_id, &archived_template_id] {
+            let response = unsigned_credentials_request_with_template(&mut app, template_id).await;
+
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["title"], "Template Not Published");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_signed_credentials_ignore_expires_at_request_override() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Published,
+            Some(Expiration::DateTime("2000-01-01T00:00:00Z".to_string())),
+            "jwt_vc_json",
+        )
+        .await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+        let signed_credential = build_test_signed_jwt_vc_json();
+        let response =
+            signed_credentials_with_template(&mut app, &template_id, &signed_credential, Some(json!("never"))).await;
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body, json!(signed_credential));
+    }
+
+    #[tokio::test]
+    async fn test_signed_credentials_must_match_template_configuration_format() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Published,
+            Some(Expiration::Never),
+            "vc+sd-jwt",
+        )
+        .await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+        let response =
+            signed_credentials_with_template(&mut app, &template_id, &build_test_signed_jwt_vc_json(), None).await;
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["title"], "Signed Credential Format Mismatch");
+    }
+
+    mod expiration_to_credential_expiry_tests {
+        use super::*;
+        use agent_library::template::aggregate::Expiration;
+
+        #[test]
+        fn never_maps_to_never() {
+            let result = expiration_to_credential_expiry(&Expiration::Never).unwrap();
+            assert!(matches!(result, CredentialExpiry::Never));
+        }
+
+        #[test]
+        fn datetime_maps_to_fixed() {
+            let result =
+                expiration_to_credential_expiry(&Expiration::DateTime("2030-06-01T00:00:00Z".to_string())).unwrap();
+            match result {
+                CredentialExpiry::Fixed(dt) => {
+                    assert_eq!(dt.to_rfc3339(), "2030-06-01T00:00:00+00:00");
+                }
+                _ => panic!("expected Fixed"),
+            }
+        }
+
+        #[test]
+        fn invalid_datetime_returns_error() {
+            let result = expiration_to_credential_expiry(&Expiration::DateTime("not-a-date".to_string()));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+
+        #[test]
+        fn duration_days_maps_to_fixed_in_the_future() {
+            let before = chrono::Utc::now();
+            let result = expiration_to_credential_expiry(&Expiration::Duration("P30D".to_string())).unwrap();
+            let after = chrono::Utc::now();
+
+            match result {
+                CredentialExpiry::Fixed(dt) => {
+                    let thirty_days = chrono::Duration::days(30);
+                    assert!(dt >= before + thirty_days);
+                    assert!(dt <= after + thirty_days);
+                }
+                _ => panic!("expected Fixed"),
+            }
+        }
+
+        #[test]
+        fn duration_weeks_maps_to_fixed_in_the_future() {
+            let before = chrono::Utc::now();
+            let result = expiration_to_credential_expiry(&Expiration::Duration("P2W".to_string())).unwrap();
+            let after = chrono::Utc::now();
+
+            match result {
+                CredentialExpiry::Fixed(dt) => {
+                    let two_weeks = chrono::Duration::weeks(2);
+                    assert!(dt >= before + two_weeks);
+                    assert!(dt <= after + two_weeks);
+                }
+                _ => panic!("expected Fixed"),
+            }
+        }
+
+        #[test]
+        fn invalid_duration_returns_error() {
+            let result = expiration_to_credential_expiry(&Expiration::Duration("not-a-duration".to_string()));
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    mod validate_expiry_within_template_deadline_tests {
+        use super::*;
+
+        fn fixed(rfc3339: &str) -> CredentialExpiry {
+            CredentialExpiry::Fixed(
+                chrono::DateTime::parse_from_rfc3339(rfc3339)
+                    .unwrap()
+                    .with_timezone(&chrono::Utc),
+            )
+        }
+
+        #[test]
+        fn never_deadline_accepts_never() {
+            let result = validate_expiry_within_template_deadline(&CredentialExpiry::Never, &CredentialExpiry::Never);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn never_deadline_accepts_fixed() {
+            let result =
+                validate_expiry_within_template_deadline(&fixed("2030-01-01T00:00:00Z"), &CredentialExpiry::Never);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn never_explicit_with_fixed_deadline_is_rejected() {
+            let result =
+                validate_expiry_within_template_deadline(&CredentialExpiry::Never, &fixed("2030-01-01T00:00:00Z"));
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+            assert!(err
+                .message()
+                .unwrap_or_default()
+                .contains("The template requires an expiration date not after"));
+        }
+
+        #[test]
+        fn fixed_within_deadline_is_accepted() {
+            let result = validate_expiry_within_template_deadline(
+                &fixed("2029-06-01T00:00:00Z"),
+                &fixed("2030-01-01T00:00:00Z"),
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn fixed_equal_to_deadline_is_accepted() {
+            let result = validate_expiry_within_template_deadline(
+                &fixed("2030-01-01T00:00:00Z"),
+                &fixed("2030-01-01T00:00:00Z"),
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn fixed_exceeding_deadline_is_rejected() {
+            let result = validate_expiry_within_template_deadline(
+                &fixed("2031-01-01T00:00:00Z"),
+                &fixed("2030-01-01T00:00:00Z"),
+            );
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+            assert!(err
+                .message()
+                .unwrap_or_default()
+                .contains("The template requires an expiration date not after 2030-01-01T00:00:00+00:00"));
+        }
     }
 }

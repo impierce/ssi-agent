@@ -53,6 +53,8 @@ pub struct Offer {
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,
     pub offer_link: Option<Url>,
+    #[serde(default)]
+    pub successful_issuances: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -98,7 +100,7 @@ impl Aggregate for Offer {
             CreateCredentialOffer {
                 offer_id,
                 grant_types,
-                credential_configuration_ids,
+                template_ids,
                 tx_code_constraints,
                 delivery_options,
             } => {
@@ -130,7 +132,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
-                    credential_configuration_ids: CredentialConfigurationIds::try_new(credential_configuration_ids)
+                    credential_configuration_ids: CredentialConfigurationIds::try_new(template_ids)
                         .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
                 }));
@@ -181,7 +183,7 @@ impl Aggregate for Offer {
             AddCredentials {
                 offer_id,
                 credential_ids,
-                credential_configuration_ids,
+                template_ids,
             } => {
                 let mut credential_offer = self
                     .credential_offer
@@ -189,12 +191,12 @@ impl Aggregate for Offer {
                     .ok_or_else(|| MissingCredentialOfferError)?;
 
                 if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
-                    // Deduplicate credential_configuration_ids to ensure uniqueness
+                    // Deduplicate template_ids to ensure uniqueness
                     let credential_configuration_id_set: HashSet<String> = credential_offer
                         .credential_configuration_ids
                         .iter()
                         .cloned()
-                        .chain(credential_configuration_ids)
+                        .chain(template_ids)
                         .collect();
 
                     credential_offer.credential_configuration_ids =
@@ -406,9 +408,13 @@ impl Aggregate for Offer {
                 self.subject_id = subject_id;
             }
             CredentialResponseCreated {
-                credential_response, ..
+                credential_response,
+                status,
+                ..
             } => {
                 self.credential_response.replace(credential_response);
+                self.status = status;
+                self.successful_issuances = self.successful_issuances.saturating_add(1);
             }
             TxCodeGenerated { tx_code, .. } => {
                 self.tx_code.replace(tx_code);
@@ -443,6 +449,7 @@ pub mod tests {
 
     // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
     // TODO: refactor test
+    #[expect(dead_code)]
     fn run_with_large_stack<F>(test: F)
     where
         F: FnOnce() + Send + 'static,
@@ -471,7 +478,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
@@ -511,7 +518,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
@@ -560,7 +567,7 @@ pub mod tests {
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
@@ -576,6 +583,10 @@ pub mod tests {
             ]);
     }
 
+    // Note: This test cannot use #[future(awt)] fixtures because rstest evaluates those fixtures
+    // outside the test function body, before entering run_with_large_stack. This would cause a stack
+    // overflow before the large stack is available. Instead, all fixture setup is done manually inside
+    // the large-stack wrapper using the test helper functions directly.
     #[rstest]
     #[serial_test::serial]
     fn test_verify_credential_response() {

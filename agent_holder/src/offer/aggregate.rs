@@ -334,14 +334,19 @@ pub mod tests {
     use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
     use agent_authorization::services::AuthorizationServices;
-    use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
+    use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
+    use agent_issuance::state::SERVER_CONFIG_ID;
+    use agent_library::template::aggregate::{
+        DataModel, Display, HolderType, Logo, Status as TemplateStatus, Visibility,
+    };
+    use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::config;
-    use agent_shared::config::config_mut;
+    use agent_shared::config::{config, config_mut, Authorization, CredentialConfiguration};
     use agent_shared::generate_random_string;
+    use agent_shared::handlers::command_handler;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -352,6 +357,8 @@ pub mod tests {
     use serde_json::json;
     use tokio::net::TcpListener;
     use tower::Service as _;
+
+    const TEMPLATE_ID: &str = "001";
 
     type OfferTestFramework = TestFramework<Offer>;
 
@@ -371,10 +378,80 @@ pub mod tests {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut credential_isser = issuance::router(issuance_state.clone());
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        // Create a template and register a credential configuration for it.
+        // (The CredentialConfigurationProjection is not wired in tests, so we do this manually.)
+        command_handler(
+            TEMPLATE_ID,
+            &library_state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: TEMPLATE_ID.to_string(),
+                source_template_id: None,
+                title: "Test Template".to_string(),
+                display: Box::new(Some(Display {
+                    name: "Verifiable Credential".to_string(),
+                    logo: Some(Logo {
+                        uri: "https://www.impierce.com/external/impierce-logo.png".to_string(),
+                        alt_text: Some("Impierce Logo".to_string()),
+                    }),
+                })),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: TemplateStatus::Published,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
+            "credential_configuration_id": TEMPLATE_ID,
+            "format": "jwt_vc_json",
+            "type": ["VerifiableCredential"],
+            "display": [
+                {
+                    "name": "Verifiable Credential",
+                    "locale": "en",
+                    "logo": {
+                        "uri": "https://www.impierce.com/external/impierce-logo.png",
+                        "alt_text": "Impierce Logo"
+                    }
+                }
+            ],
+            "authorization": { "pre_authorized": true }
+        }))
+        .unwrap();
+        command_handler(
+            SERVER_CONFIG_ID,
+            &issuance_state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration,
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut issuance_router = issuance::router((issuance_state.clone(), library_state));
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -382,7 +459,7 @@ pub mod tests {
 
         let received_offer_id = generate_random_string();
 
-        let _ = credential_isser
+        let _ = issuance_router
             .call(
                 Request::builder()
                     .method(http::Method::POST)
@@ -400,7 +477,7 @@ pub mod tests {
                                         "name": "Master of Oceanography"
                                     }
                             }},
-                            "credentialConfigurationId": "001",
+                            "templateId": TEMPLATE_ID,
                             "expiresAt": "never",
                         }))
                         .unwrap(),
@@ -409,7 +486,7 @@ pub mod tests {
             )
             .await;
 
-        let response = credential_isser
+        let response = issuance_router
             .call(
                 Request::builder()
                     .method(http::Method::POST)
@@ -418,7 +495,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": received_offer_id,
-                            "credentialConfigurationIds": ["001"],
+                            "templateIds": [TEMPLATE_ID],
                         }))
                         .unwrap(),
                     ))
@@ -432,7 +509,7 @@ pub mod tests {
         let credential_offer: CredentialOffer = String::from_utf8(body.to_vec()).unwrap().parse().unwrap();
 
         tokio::spawn(async move {
-            axum::serve(listener, credential_isser.merge(authorization_server))
+            axum::serve(listener, issuance_router.merge(authorization_server))
                 .await
                 .unwrap();
         });
@@ -448,6 +525,15 @@ pub mod tests {
             CredentialOffer::CredentialOffer(credential_offer) => credential_offer,
             _ => unreachable!(),
         }
+    }
+
+    #[fixture]
+    fn credential_configurations_supported() -> HashMap<String, CredentialConfigurationsSupportedObject> {
+        use agent_issuance::credential::aggregate::test_utils::JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION;
+        HashMap::from_iter(vec![(
+            TEMPLATE_ID.to_string(),
+            JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+        )])
     }
 
     #[rstest]

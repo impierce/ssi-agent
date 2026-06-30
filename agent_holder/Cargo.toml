@@ -36,6 +36,7 @@ agent_authorization = { path = "../agent_authorization", features = [
 ] }
 agent_holder = { path = ".", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
+agent_library = { path = "../agent_library", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }

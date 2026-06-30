@@ -30,6 +30,8 @@ hyper = { version = "1.2" }
 identity_core.workspace = true
 identity_credential.workspace = true
 identity_did.workspace = true
+iso8601.workspace = true
+jsonschema.workspace = true
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.17", default-features = false }
 oauth_tsl.workspace = true
@@ -70,6 +72,7 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [
     "test_utils",
 ] }
+verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 futures.workspace = true
 jsonwebtoken.workspace = true
