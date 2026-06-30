@@ -1,6 +1,6 @@
 use crate::services::IdentityServices;
 use chrono::{DateTime, Utc};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
@@ -85,7 +85,7 @@ impl Aggregate for Connection {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use ConnectionCommand::*;
         use ConnectionEvent::*;

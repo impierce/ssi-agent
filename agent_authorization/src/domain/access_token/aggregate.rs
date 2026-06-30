@@ -1,7 +1,7 @@
 use super::command::AccessTokenCommand;
 use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -30,7 +30,7 @@ impl Aggregate for AccessToken {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use AccessTokenCommand::*;
         use AccessTokenEvent::*;

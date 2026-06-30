@@ -2,7 +2,7 @@ use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
 use agent_shared::config::config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::{
     common::{Duration, OrderedSet, Timestamp},
     convert::{FromJson, ToJson},
@@ -47,7 +47,7 @@ impl Aggregate for Service {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use ServiceCommand::*;
         use ServiceError::*;

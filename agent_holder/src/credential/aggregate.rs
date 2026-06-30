@@ -3,7 +3,7 @@ use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
 use agent_shared::credential_status_checker::CredentialStatusChecker;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_credential::credential::Jwt;
 use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
@@ -39,7 +39,7 @@ impl Aggregate for Credential {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use CredentialCommand::*;
         use CredentialError::*;

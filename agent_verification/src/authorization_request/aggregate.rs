@@ -7,7 +7,7 @@ use crate::{
     services::VerificationServices,
 };
 use agent_shared::config::{config, get_preferred_signing_algorithm};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject as _};
 use oid4vp::token::vp_token_validator::VpTokenValidator;
@@ -40,7 +40,7 @@ impl Aggregate for AuthorizationRequest {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use AuthorizationRequestCommand::*;
         use AuthorizationRequestError::*;

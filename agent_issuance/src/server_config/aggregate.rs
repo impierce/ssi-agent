@@ -1,7 +1,7 @@
 use agent_shared::config::{config, Authorization};
 use agent_shared::UrlAppendHelpers as _;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt;
@@ -81,7 +81,7 @@ impl Aggregate for ServerConfig {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use ServerConfigCommand::*;
         use ServerConfigError::*;

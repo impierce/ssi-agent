@@ -1,7 +1,7 @@
 use super::command::AuthorizationCodeCommand;
 use super::error::AuthorizationCodeError;
 use super::event::AuthorizationCodeEvent;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{authorization_request::CodeChallengeMethod, pkce};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -32,7 +32,7 @@ impl Aggregate for AuthorizationCode {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use AuthorizationCodeCommand::*;
         use AuthorizationCodeError::*;

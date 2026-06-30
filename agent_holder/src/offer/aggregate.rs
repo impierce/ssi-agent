@@ -2,7 +2,7 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_credential::credential::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
@@ -64,7 +64,7 @@ impl Aggregate for Offer {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferError::*;

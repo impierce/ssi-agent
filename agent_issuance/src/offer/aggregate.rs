@@ -1,5 +1,5 @@
 use agent_shared::config::config;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{
@@ -89,7 +89,7 @@ impl Aggregate for Offer {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;

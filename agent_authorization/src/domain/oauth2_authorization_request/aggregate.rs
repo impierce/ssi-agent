@@ -3,7 +3,7 @@ use crate::services::OAuth2AuthorizationRequestDomainServices;
 use super::command::OAuth2AuthorizationRequestCommand;
 use super::error::OAuth2AuthorizationRequestError;
 use super::event::OAuth2AuthorizationRequestEvent;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{
     authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod, InteractionType,
 };
@@ -60,7 +60,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;
         use OAuth2AuthorizationRequestError::*;

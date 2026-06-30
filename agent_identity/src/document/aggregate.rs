@@ -4,7 +4,7 @@ use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
 use agent_shared::config::{config_mut, SupportedDidMethod};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
 use identity_iota::iota::rebased::client::{get_object_id_from_did, IdentityClient, PublishDidDocument};
@@ -91,7 +91,7 @@ impl Aggregate for Document {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use DocumentCommand::*;
         use DocumentError::*;

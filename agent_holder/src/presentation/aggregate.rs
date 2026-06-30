@@ -2,7 +2,7 @@ use super::{command::PresentationCommand, error::PresentationError, event::Prese
 use crate::services::HolderServices;
 use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algorithm};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::convert::ToJson;
 use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions};
 use jsonwebtoken::Header;
@@ -30,7 +30,7 @@ impl Aggregate for Presentation {
         &mut self,
         command: Self::Command,
         services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use PresentationCommand::*;
         use PresentationError::*;

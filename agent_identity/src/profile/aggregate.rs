@@ -1,5 +1,5 @@
 use agent_shared::config::Logo;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -40,7 +40,7 @@ impl Aggregate for Profile {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use ProfileCommand::*;
         use ProfileEvent::*;

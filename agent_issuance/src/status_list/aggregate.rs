@@ -1,7 +1,7 @@
 #[cfg(feature = "test_utils")]
 use agent_shared::config::TESTINDEX;
 use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oauth_tsl::status_list::{Bits, StatusList};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -29,7 +29,7 @@ impl Aggregate for StatusListAggregate {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use StatusListCommand::*;
         use StatusListEvent::*;

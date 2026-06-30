@@ -2,7 +2,7 @@ use crate::nonce::command::NonceCommand;
 use crate::nonce::error::NonceError;
 use crate::nonce::event::NonceEvent;
 use crate::services::IssuanceServices;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -25,7 +25,7 @@ impl Aggregate for Nonce {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use NonceCommand::*;
         use NonceEvent::*;

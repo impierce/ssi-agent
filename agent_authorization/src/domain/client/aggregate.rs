@@ -1,7 +1,7 @@
 use super::command::ClientCommand;
 use super::error::ClientError;
 use super::event::ClientEvent;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -55,7 +55,7 @@ impl Aggregate for Client {
         &mut self,
         command: Self::Command,
         _services: &Self::Services,
-        sink: &cqrs_es::event_sink::EventSink<Self>,
+        sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
         use ClientCommand::*;
         use ClientEvent::*;
