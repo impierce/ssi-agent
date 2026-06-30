@@ -12,12 +12,16 @@ pub struct AllCatalogsView {
 
 impl View<Catalog> for AllCatalogsView {
     fn update(&mut self, event: &EventEnvelope<Catalog>) {
-        self.catalogs
+        let view = self
+            .catalogs
             // Get the entry for the aggregate_id
             .entry(event.aggregate_id.clone())
             // or insert a new one if it doesn't exist
-            .or_default()
-            // update the view with the event
-            .update(event);
+            .or_default();
+        // update the view with the event
+        view.update(event);
+        if view.deleted {
+            self.catalogs.remove(&event.aggregate_id);
+        }
     }
 }

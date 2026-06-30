@@ -34,6 +34,18 @@ pub struct CatalogDto {
     pub modified_at: DateTime<Utc>,
 }
 
+impl From<CatalogView> for CatalogDto {
+    fn from(v: CatalogView) -> Self {
+        Self {
+            catalog_id: v.catalog_id,
+            display: v.display,
+            template_ids: v.template_ids,
+            visibility: v.visibility,
+            modified_at: v.modified_at,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CreateCatalogRequest {
@@ -52,7 +64,7 @@ pub struct CreateCatalogRequest {
         content = CreateCatalogRequest,
         ),
     responses(
-        (status = 201, description = "Catalog created successfully", body = CatalogView)
+        (status = 201, description = "Catalog created successfully", body = CatalogDto)
     )
     )]
 #[axum_macros::debug_handler]
@@ -81,7 +93,7 @@ pub(crate) async fn create_catalog(
             (
                 StatusCode::CREATED,
                 [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
-                Json(catalog_view),
+                Json(CatalogDto::from(catalog_view)),
             )
                 .into_response()
         })
@@ -106,7 +118,7 @@ pub struct AddTemplatesRequest {
         content = AddTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Catalog updated successfully", body = CatalogView)
+        (status = 200, description = "Catalog updated successfully", body = CatalogDto)
     )
     )]
 #[axum_macros::debug_handler]
@@ -127,7 +139,7 @@ pub(crate) async fn add_templates(
     // Return the updated catalog
     query_handler(&catalog_id, &state.query.catalog)
         .await?
-        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -149,7 +161,7 @@ pub struct RemoveTemplatesRequest {
         content = RemoveTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Template(s) removed successfully", body = CatalogView)
+        (status = 200, description = "Template(s) removed successfully", body = CatalogDto)
     )
     )]
 #[axum_macros::debug_handler]
@@ -170,7 +182,7 @@ pub(crate) async fn remove_templates(
     // Return the updated catalog
     query_handler(&catalog_id, &state.query.catalog)
         .await?
-        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -192,7 +204,7 @@ pub struct ChangeCatalogAppearanceRequest {
         content = ChangeCatalogAppearanceRequest,
         ),
     responses(
-        (status = 200, description = "Catalog appearance updated successfully", body = CatalogView)
+        (status = 200, description = "Catalog appearance updated successfully", body = CatalogDto)
     )
     )]
 #[axum_macros::debug_handler]
@@ -214,7 +226,7 @@ pub(crate) async fn update_display(
     // Return the updated catalog
     query_handler(&catalog_id, &state.query.catalog)
         .await?
-        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -235,7 +247,7 @@ pub struct MakeCatalogPublicRequest {
         content = MakeCatalogPublicRequest,
         ),
     responses(
-        (status = 200, description = "Catalog make public successfully", body = CatalogView)
+        (status = 200, description = "Catalog make public successfully", body = CatalogDto)
     )
     )]
 #[axum_macros::debug_handler]
@@ -253,7 +265,7 @@ pub(crate) async fn make_catalog_public(
     // Return the updated catalog
     query_handler(&catalog_id, &state.query.catalog)
         .await?
-        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -274,7 +286,7 @@ pub struct MakeCatalogPrivateRequest {
         content = MakeCatalogPrivateRequest,
         ),
     responses(
-        (status = 200, description = "Catalog made private successfully.", body = CatalogView)
+        (status = 200, description = "Catalog made private successfully.", body = CatalogDto)
     )
     )]
 #[axum_macros::debug_handler]
@@ -292,7 +304,7 @@ pub(crate) async fn make_catalog_private(
     // Return the updated catalog
     query_handler(&catalog_id, &state.query.catalog)
         .await?
-        .map(|catalog_view| (StatusCode::OK, Json(catalog_view)).into_response())
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 

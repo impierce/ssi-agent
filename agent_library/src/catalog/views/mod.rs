@@ -16,7 +16,6 @@ pub struct CatalogView {
     pub template_ids: Vec<String>,
     pub visibility: CatalogVisibility,
     pub modified_at: DateTime<Utc>,
-    #[serde(skip)]
     pub deleted: bool,
 }
 
