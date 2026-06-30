@@ -449,7 +449,6 @@ pub mod tests {
 
     // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
     // TODO: refactor test
-    #[expect(dead_code)]
     fn run_with_large_stack<F>(test: F)
     where
         F: FnOnce() + Send + 'static,
