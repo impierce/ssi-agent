@@ -52,7 +52,7 @@ use agent_library::template::views::all_templates::AllTemplatesView;
 use agent_shared::application_state::Command;
 use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use agent_verification::services::VerificationServices;

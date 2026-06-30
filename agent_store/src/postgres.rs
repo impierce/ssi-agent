@@ -1,5 +1,5 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, Query, View};

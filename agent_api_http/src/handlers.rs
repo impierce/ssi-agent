@@ -1,5 +1,5 @@
 use crate::error::ErrorWrapper;
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use cqrs_es::{Aggregate, View};
 use std::sync::Arc;
 

@@ -18,6 +18,7 @@ jsonwebtoken.workspace = true
 mockall = { workspace = true, optional = true }
 oid4vci.workspace = true
 oid4vc-core.workspace = true
+shared-kernel.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
 serde.workspace = true

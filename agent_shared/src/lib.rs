@@ -8,7 +8,6 @@ pub mod handlers;
 pub mod profile;
 pub mod serde_json_value_ext;
 pub mod url_utils;
-pub mod view_repository;
 
 pub use ::config::ConfigError;
 use identity_core::convert::{FromJson as _, ToJson as _};

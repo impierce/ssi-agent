@@ -16,7 +16,7 @@ use agent_shared::config::{
     config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use agent_shared::{application_state::CommandHandler, handlers::query_handler};
 use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;

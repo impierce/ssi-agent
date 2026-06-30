@@ -33,6 +33,7 @@ rand.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+shared-kernel.workspace = true
 ssi-dids = "0.1.1"
 ssi-jwk = "0.1.2"
 strum.workspace = true

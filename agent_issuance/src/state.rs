@@ -2,7 +2,7 @@ use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
 use agent_shared::handlers::{command_handler, query_handler};
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use agent_shared::UrlAppendHelpers;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;

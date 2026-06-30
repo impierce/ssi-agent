@@ -4,13 +4,13 @@ use agent_library::template::aggregate::{DataModel, PropertyAttribute, Template}
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, query_handler};
-use agent_shared::view_repository::DynViewRepository;
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
 };
+use shared_kernel::view_repository::DynViewRepository;
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock},

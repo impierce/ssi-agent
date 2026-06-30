@@ -1,6 +1,6 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::application_state::Command;
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use cqrs_es::{
     mem_store::MemStore,
     persist::{PersistenceError, ViewContext, ViewRepository},

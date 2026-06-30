@@ -1,6 +1,6 @@
 use agent_shared::application_state::CommandHandler;
 use agent_shared::handlers::{command_handler, query_handler};
-use agent_shared::view_repository::DynViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
 use std::sync::Arc;
