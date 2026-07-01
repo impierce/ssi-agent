@@ -107,7 +107,7 @@ impl Aggregate for Catalog {
                 }
 
                 // Check if all template IDs exist before proceeding
-                let missing_templates = services.missing_templates(&template_ids).await;
+                let missing_templates = services.check_all_templates_exist(&template_ids).await;
 
                 if !missing_templates.is_empty() {
                     return Err(CatalogError::TemplateNotFound(missing_templates.join(", ")));
@@ -224,7 +224,7 @@ pub mod catalog_tests {
         async fn template_exists(&self, _id: &str) -> bool {
             self.template_exists
         }
-        async fn missing_templates(&self, ids: &[String]) -> Vec<String> {
+        async fn check_all_templates_exist(&self, ids: &[String]) -> Vec<String> {
             if self.template_exists {
                 vec![]
             } else {
@@ -363,7 +363,7 @@ pub mod catalog_tests {
                 catalog_id,
                 template_ids: template_ids.clone(),
             })
-            .then_expect_error_message(&format!("Templates not found: {}", template_ids.join(", ")))
+            .then_expect_error_message(&format!("Template not found: {}", template_ids.join(", ")))
     }
 
     #[rstest]
