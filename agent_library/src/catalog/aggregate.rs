@@ -1,4 +1,4 @@
-use crate::catalog::{command::CatalogCommand, error::CatalogError, event::CatalogEvent, services::CatalogServices};
+use crate::catalog::{command::CatalogCommand::{self}, error::CatalogError, event::CatalogEvent, services::CatalogServices};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
@@ -66,7 +66,7 @@ impl Aggregate for Catalog {
                     visibility,
                 }])
             }
-            UpdateDisplay { catalog_id, display } => {
+            ChangeCatalogAppearance { catalog_id, display } => {
                 if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
@@ -75,18 +75,27 @@ impl Aggregate for Catalog {
                     return Err(CatalogError::MissingCatalogName("Catalog name cannot be empty".to_string()));
                 }
 
-                Ok(vec![CatalogDisplayUpdated {
+                Ok(vec![CatalogAppearanceChanged {
                     id: catalog_id,
                     display,
                 }])
             }
-            UpdateVisibility { catalog_id, visibility } => {
+            MakeCatalogPublic { catalog_id} => {
                 if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
-                Ok(vec![VisibilityUpdated {
+                Ok(vec![CatalogMadePublic {
                     id: catalog_id,
-                    visibility,
+                    visibility: CatalogVisibility::Public,
+                }])
+            }
+            MakeCatalogPrivate { catalog_id } => {
+                if self.deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
+                Ok(vec![CatalogMadePrivate {
+                    id: catalog_id,
+                    visibility: CatalogVisibility::Private,
                 }])
             }
             AddTemplateIds {
@@ -161,11 +170,15 @@ impl Aggregate for Catalog {
                 self.visibility = visibility;
                 self.modified_at = Utc::now();
             }
-            CatalogDisplayUpdated { id: _, display } => {
+            CatalogAppearanceChanged { id: _, display } => {
                 self.display = display;
                 self.modified_at = Utc::now();
             }
-            VisibilityUpdated { id: _, visibility } => {
+            CatalogMadePublic { id: _, visibility } => {
+                self.visibility = visibility;
+                self.modified_at = Utc::now();
+            }
+            CatalogMadePrivate { id: _, visibility } => {
                 self.visibility = visibility;
                 self.modified_at = Utc::now();
             }
@@ -254,11 +267,11 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::UpdateDisplay {
+            .when(CatalogCommand::ChangeCatalogAppearance {
                 catalog_id: catalog_id.clone(),
                 display: new_display.clone(),
             })
-            .then_expect_events(vec![CatalogEvent::CatalogDisplayUpdated {
+            .then_expect_events(vec![CatalogEvent::CatalogAppearanceChanged {
                 id: catalog_id,
                 display: new_display,
             }])
@@ -273,11 +286,10 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::UpdateVisibility {
+            .when(CatalogCommand::MakeCatalogPublic {
                 catalog_id: catalog_id.clone(),
-                visibility: CatalogVisibility::Public,
             })
-            .then_expect_events(vec![CatalogEvent::VisibilityUpdated {
+            .then_expect_events(vec![CatalogEvent::CatalogMadePublic {
                 id: catalog_id,
                 visibility: CatalogVisibility::Public,
             }])

@@ -14,8 +14,8 @@ use crate::{
     v0::library::catalog::{
         queries::{get_all_catalogs::get_all_catalogs, get_catalog_by_id::get_catalog_by_id},
         {
-            add_templates, create_catalog, delete_catalog, make_catalog_private, make_catalog_public, remove_templates,
-            update_display,
+            add_templates_to_catalog, create_catalog, delete_catalog, make_catalog_private, make_catalog_public, remove_templates_from_catalog,
+            change_catalog_appearance,
         },
     },
     v0::templates::{
@@ -38,9 +38,9 @@ pub fn router(library_state: Arc<LibraryState>) -> Router {
                 // Catalog Routes
                 .route("/create-new-catalog", post(create_catalog))
                 .route("/delete-catalog", post(delete_catalog))
-                .route("/add-templates-to-catalog", post(add_templates))
-                .route("/remove-templates-from-catalog", post(remove_templates))
-                .route("/change-catalog-appearance", post(update_display))
+                .route("/add-templates-to-catalog", post(add_templates_to_catalog))
+                .route("/remove-templates-from-catalog", post(remove_templates_from_catalog))
+                .route("/change-catalog-appearance", post(change_catalog_appearance))
                 .route("/make-catalog-public", post(make_catalog_public))
                 .route("/make-catalog-private", post(make_catalog_private))
                 .route("/get-all-catalogs", get(get_all_catalogs))

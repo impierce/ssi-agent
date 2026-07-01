@@ -9,13 +9,15 @@ pub enum CatalogCommand {
         display: CatalogDisplay,
         visibility: CatalogVisibility,
     },
-    UpdateDisplay {
+    ChangeCatalogAppearance {
         catalog_id: String,
         display: CatalogDisplay,
     },
-    UpdateVisibility {
+    MakeCatalogPublic {
         catalog_id: String,
-        visibility: CatalogVisibility,
+    },
+    MakeCatalogPrivate {
+        catalog_id: String,
     },
     AddTemplateIds {
         catalog_id: String,

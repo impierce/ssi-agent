@@ -125,7 +125,7 @@ pub struct AddTemplatesRequest {
     )
     )]
 #[axum_macros::debug_handler]
-pub(crate) async fn add_templates(
+pub(crate) async fn add_templates_to_catalog(
     State(state): State<Arc<LibraryState>>,
     Json(AddTemplatesRequest {
         catalog_id,
@@ -173,7 +173,7 @@ pub struct RemoveTemplatesRequest {
     )
     )]
 #[axum_macros::debug_handler]
-pub(crate) async fn remove_templates(
+pub(crate) async fn remove_templates_from_catalog(
     State(state): State<Arc<LibraryState>>,
     Json(RemoveTemplatesRequest {
         catalog_id,
@@ -221,7 +221,7 @@ pub struct ChangeCatalogAppearanceRequest {
     )
     )]
 #[axum_macros::debug_handler]
-pub(crate) async fn update_display(
+pub(crate) async fn change_catalog_appearance(
     State(state): State<Arc<LibraryState>>,
     Json(ChangeCatalogAppearanceRequest { catalog_id, display }): Json<ChangeCatalogAppearanceRequest>,
 ) -> Result<Response, ApiError> {
@@ -229,14 +229,10 @@ pub(crate) async fn update_display(
         .await?
         .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
-    let command = CatalogCommand::UpdateDisplay {
+    let command = CatalogCommand::ChangeCatalogAppearance {
         catalog_id: catalog_id.clone(),
         display: display.clone(),
     };
-
-    if display.name.trim().is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST));
-    }
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;
 
@@ -277,18 +273,12 @@ pub(crate) async fn make_catalog_public(
         .await?
         .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
-    let command = CatalogCommand::UpdateVisibility {
+    let command = CatalogCommand::MakeCatalogPublic {
         catalog_id: catalog_id.clone(),
-        visibility: CatalogVisibility::Public,
     };
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;
-
-    // Return the updated catalog
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    Ok(StatusCode::OK.into_response())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -321,18 +311,12 @@ pub(crate) async fn make_catalog_private(
         .await?
         .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
-    let command = CatalogCommand::UpdateVisibility {
+    let command = CatalogCommand::MakeCatalogPrivate {
         catalog_id: catalog_id.clone(),
-        visibility: CatalogVisibility::Private,
     };
 
     command_handler(&catalog_id, &state.command.catalog, command).await?;
-
-    // Return the updated catalog
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    Ok(StatusCode::OK.into_response())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]

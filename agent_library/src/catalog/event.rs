@@ -10,11 +10,15 @@ pub enum CatalogEvent {
         display: CatalogDisplay,
         visibility: CatalogVisibility,
     },
-    CatalogDisplayUpdated {
+    CatalogAppearanceChanged {
         id: String,
         display: CatalogDisplay,
     },
-    VisibilityUpdated {
+    CatalogMadePublic {
+        id: String,
+        visibility: CatalogVisibility,
+    },
+    CatalogMadePrivate {
         id: String,
         visibility: CatalogVisibility,
     },

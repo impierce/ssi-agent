@@ -35,10 +35,13 @@ impl View<Catalog> for CatalogView {
                 self.display.clone_from(display);
                 self.visibility.clone_from(visibility);
             }
-            CatalogDisplayUpdated { id: _, display } => {
+            CatalogAppearanceChanged { id: _, display } => {
                 self.display.clone_from(display);
             }
-            VisibilityUpdated { id: _, visibility } => {
+            CatalogMadePublic { id: _, visibility } => {
+                self.visibility.clone_from(visibility);
+            }
+            CatalogMadePrivate { id: _, visibility } => {
                 self.visibility.clone_from(visibility);
             }
             TemplateIdsAdded { id: _, template_ids } => {
