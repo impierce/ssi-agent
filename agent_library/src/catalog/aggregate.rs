@@ -1,4 +1,9 @@
-use crate::catalog::{command::CatalogCommand::{self}, error::CatalogError, event::CatalogEvent, services::CatalogServices};
+use crate::catalog::{
+    command::CatalogCommand::{self},
+    error::CatalogError,
+    event::CatalogEvent,
+    services::CatalogServices,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
@@ -57,7 +62,9 @@ impl Aggregate for Catalog {
                 visibility,
             } => {
                 if display.name.trim().is_empty() {
-                    return Err(CatalogError::MissingCatalogName("Catalog name cannot be empty".to_string()));
+                    return Err(CatalogError::MissingCatalogName(
+                        "Catalog name cannot be empty".to_string(),
+                    ));
                 }
 
                 Ok(vec![CatalogCreated {
@@ -72,7 +79,9 @@ impl Aggregate for Catalog {
                 }
 
                 if display.name.trim().is_empty() {
-                    return Err(CatalogError::MissingCatalogName("Catalog name cannot be empty".to_string()));
+                    return Err(CatalogError::MissingCatalogName(
+                        "Catalog name cannot be empty".to_string(),
+                    ));
                 }
 
                 Ok(vec![CatalogAppearanceChanged {
@@ -80,7 +89,7 @@ impl Aggregate for Catalog {
                     display,
                 }])
             }
-            MakeCatalogPublic { catalog_id} => {
+            MakeCatalogPublic { catalog_id } => {
                 if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
@@ -117,7 +126,7 @@ impl Aggregate for Catalog {
                     .into_iter()
                     .filter(|id| !self.template_ids.contains(id))
                     .collect();
-               
+
                 if new_template_ids.is_empty() {
                     debug!("No new template IDs to add, ignoring AddTemplateIds command");
                     return Ok(vec![]);
@@ -221,9 +230,6 @@ pub mod catalog_tests {
 
     #[async_trait]
     impl CatalogServices for MockCatalogServices {
-        async fn template_exists(&self, _id: &str) -> bool {
-            self.template_exists
-        }
         async fn check_all_templates_exist(&self, ids: &[String]) -> Vec<String> {
             if self.template_exists {
                 vec![]
