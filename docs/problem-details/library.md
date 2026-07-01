@@ -84,7 +84,7 @@ A requested template was not found.
 
 ## Missing Catalog Name
 
-This error occurs when a catalog does not have a name. Name is a required value in catalog creation. 
+This error occurs when a catalog does not have a name. Name is a required field in catalogs. 
 
 ## Catalog Not Found
 
