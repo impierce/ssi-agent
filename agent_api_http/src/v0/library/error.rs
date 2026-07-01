@@ -118,20 +118,22 @@ impl IntoApiErrorExt for TemplateError {
 impl IntoApiErrorExt for CatalogError {
     fn into_api_error(self) -> ApiError {
         match self {
-            CatalogError::TemplatesNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+            CatalogError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
+                .type_url(type_url("library#template-not-found"))
+                .message(format!("No matching template found"))
                 .source(self)
                 .finish(),
-            CatalogError::MissingField(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Missing Required Field")
+            CatalogError::MissingCatalogName(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Catalog Name Missing")
+                .type_url(type_url("library#missing-catalog-name"))
+                .message(format!("Catalog name must have a non-empty value"))
                 .source(self)
                 .finish(),
             CatalogError::CatalogNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Catalog Not Found")
-                .source(self)
-                .finish(),
-            CatalogError::DuplicateTemplate(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Duplicate Template Found")
+                .type_url(type_url("library#catalog-not-found"))
+                .message(format!("Catalog not found"))
                 .source(self)
                 .finish(),
         }

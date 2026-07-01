@@ -13,8 +13,7 @@ use utoipa::OpenApi;
 #[openapi(
     paths(create_catalog, delete_catalog, make_catalog_public, make_catalog_private, add_templates, remove_templates, update_display, get_all_catalogs, get_catalog_by_id),
     tags(
-        (name = "Library", description = "Manage your own templates, browse and import external templates."),
-        (name = "Catalogs", description = "Create and manage catalogs to organize and share your templates.")
+        (name = "Catalog", description = "Create and manage catalogs to organize and share your templates.")
     )
 )]
 pub struct CatalogsApi;

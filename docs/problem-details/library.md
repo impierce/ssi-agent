@@ -1,3 +1,5 @@
+# Templates
+
 ## Source Template Not Found
 
 This error arises when the source template data for duplication can not be fetched. This could indicate that the `sourceTemplateId` used for duplication is not associated with an existing template. It can also arise in instances where the template has been deleted.
@@ -73,3 +75,17 @@ This error occurs when `schemaPropertiesAttributes` contains duplicate keys afte
 ## Draft Template Cannot Be Public
 
 This error occurs when a template in `Draft` stage is made public.
+
+# Catalogs 
+
+## Template Not Found 
+
+A requested template was not found. 
+
+## Missing Catalog Name
+
+This error occurs when a catalog does not have a name. Name is a required value in catalog creation. 
+
+## Catalog Not Found
+
+This error occurs when a catalog could not be found. 

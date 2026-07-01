@@ -58,7 +58,7 @@ impl Aggregate for Catalog {
                 visibility,
             } => {
                 if display.name.trim().is_empty() {
-                    return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()));
+                    return Err(CatalogError::MissingCatalogName("Catalog name cannot be empty".to_string()));
                 }
 
                 Ok(vec![CatalogCreated {
@@ -73,7 +73,7 @@ impl Aggregate for Catalog {
                 }
 
                 if display.name.trim().is_empty() {
-                    return Err(CatalogError::MissingField("Catalog name cannot be empty".to_string()));
+                    return Err(CatalogError::MissingCatalogName("Catalog name cannot be empty".to_string()));
                 }
 
                 Ok(vec![CatalogDisplayUpdated {
@@ -102,21 +102,14 @@ impl Aggregate for Catalog {
                 let missing_templates = services.missing_templates(&template_ids).await;
 
                 if !missing_templates.is_empty() {
-                    return Err(CatalogError::TemplatesNotFound(missing_templates.join(", ")));
+                    return Err(CatalogError::TemplateNotFound(missing_templates.join(", ")));
                 }
 
                 let new_template_ids: Vec<String> = template_ids
                     .into_iter()
                     .filter(|id| !self.template_ids.contains(id))
                     .collect();
-
-                let unique_templates: HashSet<_> = new_template_ids.iter().cloned().collect();
-                if unique_templates.len() != new_template_ids.len() {
-                    return Err(CatalogError::DuplicateTemplate(
-                        "Duplicate template IDs found in AddTemplateIds command".to_string(),
-                    ));
-                }
-
+               
                 if new_template_ids.is_empty() {
                     debug!("No new template IDs to add, ignoring AddTemplateIds command");
                     return Ok(vec![]);
