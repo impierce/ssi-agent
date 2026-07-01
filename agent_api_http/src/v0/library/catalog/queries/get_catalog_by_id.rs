@@ -1,6 +1,6 @@
 use crate::handlers::query_handler;
-use agent_library::catalog::views::CatalogView;
 use crate::v0::library::catalog::CatalogDto;
+use agent_library::catalog::views::CatalogView;
 use agent_library::state::LibraryState;
 use axum::{
     extract::{Path, State},
@@ -30,9 +30,7 @@ pub(crate) async fn get_catalog_by_id(
 ) -> Result<Response, ApiError> {
     query_handler(&catalog_id, &state.query.catalog)
         .await?
-        .and_then(
-            |catalog_view| 
-                (!catalog_view.deleted).then_some(catalog_view))
+        .and_then(|catalog_view| (!catalog_view.deleted).then_some(catalog_view))
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

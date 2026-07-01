@@ -28,8 +28,12 @@ pub struct CommandHandlers {
 /// This type is used to define the queries that are used to query the view repositories. We make use of `dyn` here, so
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
-type Queries =
-    ViewRepositories<dyn DynViewRepository<TemplateView, Template>, dyn DynViewRepository<AllTemplatesView, Template>, dyn DynViewRepository<CatalogView, Catalog>, dyn DynViewRepository<AllCatalogsView, Catalog>>;
+type Queries = ViewRepositories<
+    dyn DynViewRepository<TemplateView, Template>,
+    dyn DynViewRepository<AllTemplatesView, Template>,
+    dyn DynViewRepository<CatalogView, Catalog>,
+    dyn DynViewRepository<AllCatalogsView, Catalog>,
+>;
 
 pub struct ViewRepositories<T1, T2, T3, T4>
 where

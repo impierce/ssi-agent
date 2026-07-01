@@ -14,8 +14,8 @@ use crate::{
     v0::library::catalog::{
         queries::{get_all_catalogs::get_all_catalogs, get_catalog_by_id::get_catalog_by_id},
         {
-            add_templates_to_catalog, create_catalog, delete_catalog, make_catalog_private, make_catalog_public, remove_templates_from_catalog,
-            change_catalog_appearance,
+            add_templates_to_catalog, change_catalog_appearance, create_catalog, delete_catalog, make_catalog_private,
+            make_catalog_public, remove_templates_from_catalog,
         },
     },
     v0::templates::{

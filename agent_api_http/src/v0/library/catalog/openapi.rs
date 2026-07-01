@@ -1,6 +1,6 @@
 use crate::v0::library::catalog::{
-    __path_add_templates_to_catalog, __path_create_catalog, __path_delete_catalog, __path_make_catalog_private,
-    __path_make_catalog_public, __path_remove_templates_from_catalog, __path_change_catalog_appearance,
+    __path_add_templates_to_catalog, __path_change_catalog_appearance, __path_create_catalog, __path_delete_catalog,
+    __path_make_catalog_private, __path_make_catalog_public, __path_remove_templates_from_catalog,
 };
 
 use crate::v0::library::catalog::queries::{
