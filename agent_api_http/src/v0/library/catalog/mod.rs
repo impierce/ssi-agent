@@ -1,10 +1,12 @@
 pub mod openapi;
 pub mod queries;
+use crate::error::IntoApiErrorExt;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
     command::CatalogCommand,
+    error::CatalogError,
     views::CatalogView,
 };
 use axum::{
@@ -128,6 +130,10 @@ pub(crate) async fn add_templates(
         template_ids,
     }): Json<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+
     let command = CatalogCommand::AddTemplateIds {
         catalog_id: catalog_id.clone(),
         template_ids,
@@ -171,6 +177,10 @@ pub(crate) async fn remove_templates(
         template_ids,
     }): Json<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+
     let command = CatalogCommand::RemoveTemplateIds {
         catalog_id: catalog_id.clone(),
         template_ids,
@@ -211,6 +221,10 @@ pub(crate) async fn update_display(
     State(state): State<Arc<LibraryState>>,
     Json(ChangeCatalogAppearanceRequest { catalog_id, display }): Json<ChangeCatalogAppearanceRequest>,
 ) -> Result<Response, ApiError> {
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+
     let command = CatalogCommand::UpdateDisplay {
         catalog_id: catalog_id.clone(),
         display: display.clone(),
@@ -254,6 +268,10 @@ pub(crate) async fn make_catalog_public(
     State(state): State<Arc<LibraryState>>,
     Json(MakeCatalogPublicRequest { catalog_id }): Json<MakeCatalogPublicRequest>,
 ) -> Result<Response, ApiError> {
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+
     let command = CatalogCommand::UpdateVisibility {
         catalog_id: catalog_id.clone(),
         visibility: CatalogVisibility::Public,
@@ -293,6 +311,10 @@ pub(crate) async fn make_catalog_private(
     State(state): State<Arc<LibraryState>>,
     Json(MakeCatalogPrivateRequest { catalog_id }): Json<MakeCatalogPrivateRequest>,
 ) -> Result<Response, ApiError> {
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+
     let command = CatalogCommand::UpdateVisibility {
         catalog_id: catalog_id.clone(),
         visibility: CatalogVisibility::Private,
@@ -329,6 +351,10 @@ pub(crate) async fn delete_catalog(
     State(state): State<Arc<LibraryState>>,
     Json(DeleteCatalogRequest { catalog_id }): Json<DeleteCatalogRequest>,
 ) -> Result<Response, ApiError> {
+    query_handler(&catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+
     let command = CatalogCommand::DeleteCatalog {
         catalog_id: catalog_id.clone(),
     };
