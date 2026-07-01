@@ -1,8 +1,9 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
-use cqrs_es::{persist::ViewRepository, Aggregate, Query, View};
+use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
+use shared_kernel::view_repository::DynViewRepository;
 use sqlx::Pool;
 use std::sync::Arc;
 
@@ -39,19 +40,17 @@ impl CqrsComponentBuilder for Postgres {
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
-        Arc<dyn ViewRepository<V, A>>,
-        Arc<dyn ViewRepository<AV, A>>,
+        Arc<dyn DynViewRepository<V, A>>,
+        Arc<dyn DynViewRepository<AV, A>>,
     )
     where
         <A as Aggregate>::Command: Send + Sync,
     {
-        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
+        let all_aggregates_name = format!("all_{}s", A::TYPE);
 
         // Initialize the postgres repositories.
-        let aggregate: Arc<PostgresViewRepository<V, A>> = Arc::new(PostgresViewRepository::<V, A>::new(
-            &A::aggregate_type(),
-            self.pool.clone(),
-        ));
+        let aggregate: Arc<PostgresViewRepository<V, A>> =
+            Arc::new(PostgresViewRepository::<V, A>::new(A::TYPE, self.pool.clone()));
         let all_aggregates: Arc<PostgresViewRepository<AV, A>> = Arc::new(PostgresViewRepository::<AV, A>::new(
             &all_aggregates_name,
             self.pool.clone(),

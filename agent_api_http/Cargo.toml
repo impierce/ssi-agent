@@ -14,6 +14,7 @@ agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 askama = "0.14"

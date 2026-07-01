@@ -7,9 +7,8 @@ use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
 use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
@@ -99,25 +98,27 @@ pub struct Credential {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[async_trait]
 impl Aggregate for Credential {
     type Command = CredentialCommand;
     type Event = CredentialEvent;
     type Error = CredentialError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "credential".to_string()
-    }
+    const TYPE: &'static str = "credential";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
                 credential_id,
                 data,
@@ -204,14 +205,14 @@ impl Aggregate for Credential {
                     }
                 };
 
-                return Ok(vec![UnsignedCredentialCreated {
+                Ok(vec![UnsignedCredentialCreated {
                     credential_id,
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
                     created_at: Some(created_at),
                     expires_at,
-                }]);
+                }])
             }
 
             CreateSignedCredential {
@@ -238,7 +239,7 @@ impl Aggregate for Credential {
                 index,
             } => {
                 if self.signed.is_some() && !overwrite {
-                    return Ok(vec![]);
+                    return Ok(());
                 }
 
                 // Create/collect claims needed for the signed (SD-)JWT
@@ -501,7 +502,13 @@ impl Aggregate for Credential {
                 credential_id,
                 credential_status,
             }]),
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

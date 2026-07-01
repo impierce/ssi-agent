@@ -1,5 +1,6 @@
 use crate::error::ErrorWrapper;
-use cqrs_es::{persist::ViewRepository, Aggregate, View};
+use cqrs_es::{Aggregate, View};
+use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 /// Wrapping the `command_handler` function from the `agent_shared` crate to handle errors.
@@ -20,7 +21,7 @@ where
 // Wrapping the `query_handler` function from the `agent_shared` crate to handle errors.
 pub async fn query_handler<A, V>(
     view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
+    state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, ErrorWrapper<A::Error>>
 where
     A: Aggregate,
