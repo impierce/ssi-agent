@@ -1,7 +1,7 @@
 use crate::template::aggregate::Template;
 use crate::template::views::TemplateView;
 use async_trait::async_trait;
-use cqrs_es::persist::ViewRepository;
+use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 #[async_trait]
@@ -10,7 +10,7 @@ pub trait CatalogServices: Send + Sync {
 }
 
 pub struct CatalogServiceImpl {
-    pub template_view_repo: Arc<dyn ViewRepository<TemplateView, Template>>,
+    pub template_view_repo: Arc<dyn DynViewRepository<TemplateView, Template>>,
 }
 
 #[async_trait]

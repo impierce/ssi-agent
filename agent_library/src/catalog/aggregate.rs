@@ -4,9 +4,8 @@ use crate::catalog::{
     event::CatalogEvent,
     services::CatalogServices,
 };
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -38,24 +37,26 @@ pub enum CatalogVisibility {
     Private,
 }
 
-#[async_trait]
 impl Aggregate for Catalog {
     type Command = CatalogCommand;
     type Event = CatalogEvent;
     type Error = CatalogError;
-    type Services = Arc<dyn CatalogServices>;
+    type Services = Arc<dyn CatalogServices + 'static>;
 
-    fn aggregate_type() -> String {
-        "catalog".to_string()
-    }
+    const TYPE: &'static str = "catalog";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        service: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use CatalogCommand::*;
         use CatalogEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateCatalog {
                 catalog_id,
                 display,
@@ -67,11 +68,11 @@ impl Aggregate for Catalog {
                     ));
                 }
 
-                Ok(vec![CatalogCreated {
+                vec![CatalogCreated {
                     id: catalog_id,
                     display,
                     visibility,
-                }])
+                }]
             }
             ChangeCatalogAppearance { catalog_id, display } => {
                 if self.deleted {
@@ -84,28 +85,28 @@ impl Aggregate for Catalog {
                     ));
                 }
 
-                Ok(vec![CatalogAppearanceChanged {
+                vec![CatalogAppearanceChanged {
                     id: catalog_id,
                     display,
-                }])
+                }]
             }
             MakeCatalogPublic { catalog_id } => {
                 if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
-                Ok(vec![CatalogMadePublic {
+                vec![CatalogMadePublic {
                     id: catalog_id,
                     visibility: CatalogVisibility::Public,
-                }])
+                }]
             }
             MakeCatalogPrivate { catalog_id } => {
                 if self.deleted {
                     return Err(CatalogError::CatalogNotFound(catalog_id));
                 }
-                Ok(vec![CatalogMadePrivate {
+                vec![CatalogMadePrivate {
                     id: catalog_id,
                     visibility: CatalogVisibility::Private,
-                }])
+                }]
             }
             AddTemplateIds {
                 catalog_id,
@@ -116,7 +117,7 @@ impl Aggregate for Catalog {
                 }
 
                 // Check if all template IDs exist before proceeding
-                let missing_templates = services.check_all_templates_exist(&template_ids).await;
+                let missing_templates = service.check_all_templates_exist(&template_ids).await;
 
                 if !missing_templates.is_empty() {
                     return Err(CatalogError::TemplateNotFound(missing_templates.join(", ")));
@@ -129,13 +130,13 @@ impl Aggregate for Catalog {
 
                 if new_template_ids.is_empty() {
                     debug!("No new template IDs to add, ignoring AddTemplateIds command");
-                    return Ok(vec![]);
+                    return Ok(());
                 }
 
-                Ok(vec![TemplateIdsAdded {
+                vec![TemplateIdsAdded {
                     id: catalog_id,
                     template_ids: new_template_ids,
-                }])
+                }]
             }
             RemoveTemplateIds {
                 catalog_id,
@@ -152,16 +153,24 @@ impl Aggregate for Catalog {
 
                 if to_remove.is_empty() {
                     debug!("No matching template IDs to remove, ignoring RemoveTemplateIds command");
-                    return Ok(vec![]);
+                    return Ok(());
                 }
 
-                Ok(vec![TemplateIdsRemoved {
+                vec![TemplateIdsRemoved {
                     id: catalog_id,
                     template_ids: to_remove,
-                }])
+                }]
             }
-            DeleteCatalog { catalog_id } => Ok(vec![CatalogDeleted { id: catalog_id }]),
+            DeleteCatalog { catalog_id } => {
+                vec![CatalogDeleted { id: catalog_id }]
+            }
+        };
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -210,6 +219,7 @@ impl Aggregate for Catalog {
 pub mod catalog_tests {
     use super::test_utils::*;
     use super::*;
+    use async_trait::async_trait;
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
     use std::sync::Arc;
