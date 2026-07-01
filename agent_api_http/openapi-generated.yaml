@@ -898,10 +898,7 @@ components:
       - template_ids
       - visibility
       - modified_at
-      - deleted
       properties:
-        deleted:
-          type: boolean
         display:
           $ref: '#/components/schemas/CatalogDisplay'
         id:

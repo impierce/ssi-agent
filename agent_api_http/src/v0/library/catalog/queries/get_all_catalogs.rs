@@ -1,4 +1,5 @@
 use crate::handlers::query_handler;
+use crate::v0::library::catalog::CatalogDto;
 use agent_library::catalog::views::CatalogView;
 use agent_library::state::LibraryState;
 use axum::{
@@ -27,10 +28,11 @@ pub(crate) async fn get_all_catalogs(State(state): State<Arc<LibraryState>>) -> 
     let filtered_catalogs = query_handler("all_catalogs", &state.query.all_catalogs)
         .await?
         .map(|all_catalogs_view| {
-            let filtered_catalogs: Vec<CatalogView> = all_catalogs_view
+            let filtered_catalogs: Vec<CatalogDto> = all_catalogs_view
                 .catalogs
                 .into_values()
                 .filter(|catalog| !catalog.deleted)
+                .map(CatalogDto::from)
                 .collect();
 
             filtered_catalogs

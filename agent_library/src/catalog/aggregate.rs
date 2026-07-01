@@ -215,23 +215,27 @@ pub mod catalog_tests {
     use std::sync::Arc;
 
     pub struct MockCatalogServices {
-        pub template_exists: bool,
+        pub all_templates_exist: bool,
     }
 
     impl MockCatalogServices {
         fn successfully_finds_templates() -> Arc<Self> {
-            Arc::new(Self { template_exists: true })
+            Arc::new(Self {
+                all_templates_exist: true,
+            })
         }
 
         fn finds_no_templates() -> Arc<Self> {
-            Arc::new(Self { template_exists: false })
+            Arc::new(Self {
+                all_templates_exist: false,
+            })
         }
     }
 
     #[async_trait]
     impl CatalogServices for MockCatalogServices {
         async fn check_all_templates_exist(&self, ids: &[String]) -> Vec<String> {
-            if self.template_exists {
+            if self.all_templates_exist {
                 vec![]
             } else {
                 ids.to_vec()
