@@ -60,6 +60,7 @@ pub struct CreateCatalogRequest {
 #[utoipa::path(
     post,
     path = "/create-new-catalog",
+    operation_id = "create_new_catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = CreateCatalogRequest,
@@ -114,6 +115,7 @@ pub struct AddTemplatesRequest {
 #[utoipa::path(
     post,
     path = "/add-templates-to-catalog",
+    operation_id = "add_templates_to_catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = AddTemplatesRequest,
@@ -161,6 +163,7 @@ pub struct RemoveTemplatesRequest {
 #[utoipa::path(
     post,
     path = "/remove-templates-from-catalog",
+    operation_id = "remove-templates-from-catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = RemoveTemplatesRequest,
@@ -208,6 +211,7 @@ pub struct ChangeCatalogAppearanceRequest {
 #[utoipa::path(
     post,
     path = "/change-catalog-appearance",
+    operation_id = "change_catalog_appearance",
     tags = ["Library", "Catalog"],
     request_body(
         content = ChangeCatalogAppearanceRequest,
@@ -255,6 +259,7 @@ pub struct MakeCatalogPublicRequest {
 #[utoipa::path(
     post,
     path = "/make-catalog-public",
+    operation_id = "make_catalog_public",
     tags = ["Library", "Catalog"],
     request_body(
         content = MakeCatalogPublicRequest,
@@ -298,6 +303,7 @@ pub struct MakeCatalogPrivateRequest {
 #[utoipa::path(
     post,
     path = "/make-catalog-private",
+    operation_id = "make_catalog_private",
     tags = ["Library", "Catalog"],
     request_body(
         content = MakeCatalogPrivateRequest,
@@ -341,6 +347,7 @@ pub struct DeleteCatalogRequest {
 #[utoipa::path(
     post,
     path = "/delete-catalog",
+    operation_id = "delete_catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = DeleteCatalogRequest,

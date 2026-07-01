@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{debug, info};
 use utoipa::ToSchema;

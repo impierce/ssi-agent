@@ -16,7 +16,7 @@ paths:
       - Catalog
       summary: Add one or more templates to a catalog
       description: Adds one or more templates to a catalog by their IDs.
-      operationId: add_templates
+      operationId: add_templates_to_catalog
       requestBody:
         content:
           application/json:
@@ -37,7 +37,7 @@ paths:
       - Catalog
       summary: Changes a catalog's display information
       description: Changes a catalog's display information such as name, description, and icon.
-      operationId: update_display
+      operationId: change_catalog_appearance
       requestBody:
         content:
           application/json:
@@ -172,7 +172,7 @@ paths:
       - Catalog
       summary: Create a new catalog
       description: Creates a new catalog with the provided display information.
-      operationId: create_catalog
+      operationId: create_new_catalog
       requestBody:
         content:
           application/json:
@@ -798,7 +798,7 @@ paths:
       - Catalog
       summary: Remove one or more templates from a catalog
       description: Removes one or more templates from a catalog by their ID.
-      operationId: remove_templates
+      operationId: remove-templates-from-catalog
       requestBody:
         content:
           application/json:
@@ -898,7 +898,10 @@ components:
       - template_ids
       - visibility
       - modified_at
+      - deleted
       properties:
+        deleted:
+          type: boolean
         display:
           $ref: '#/components/schemas/CatalogDisplay'
         id:
@@ -1977,7 +1980,7 @@ tags:
   description: Manage your own templates, browse and import external templates.
 - name: Templates
   description: Create and manage templates which provide the structure for credentials to be issued.
-- name: Catalogs
+- name: Catalog
   description: Create and manage catalogs to organize and share your templates.
 externalDocs:
   url: https://docs.impierce.com/unicore
