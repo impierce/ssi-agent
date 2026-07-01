@@ -121,19 +121,19 @@ impl IntoApiErrorExt for CatalogError {
             CatalogError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
                 .type_url(type_url("library#template-not-found"))
-                .message(format!("No matching template found"))
+                .message("No matching template found".to_string())
                 .source(self)
                 .finish(),
             CatalogError::MissingCatalogName(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Catalog Name Missing")
                 .type_url(type_url("library#missing-catalog-name"))
-                .message(format!("Catalog name must have a non-empty value"))
+                .message("Catalog name must have a non-empty value".to_string())
                 .source(self)
                 .finish(),
             CatalogError::CatalogNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Catalog Not Found")
                 .type_url(type_url("library#catalog-not-found"))
-                .message(format!("Catalog not found"))
+                .message("Catalog not found".to_string())
                 .source(self)
                 .finish(),
         }
