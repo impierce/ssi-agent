@@ -687,7 +687,7 @@ fn build_signed_w3c_credential_data(
 /// This function sets the following fields if applicable for the specific Credential Data Model:
 /// - `@context`, if not already set
 /// - `name`, if not already set
-/// - `id`, if not already set, and for OBv3/ELM set to urn based on the aggregate credential_id
+/// - `id`, set to the aggregate credential_id as a URN. This means it's non-configurable by API users. Main reason for this is our reliance on the credential id to be equal to the aggregate id for the public link flow.
 /// - `issuer.name`, reflecting the UniCore configuration
 /// - `credentialStatus`, if not already set, according to the IETF OAuth Token Status List specification in combination with the DIIP profile.
 /// - `expirationDate`, if expires_at is provided
@@ -699,6 +699,15 @@ fn build_unsigned_w3c_credential_data(
     credential_id: &str,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<serde_json::Value, CredentialError> {
+    // Set to the aggregate credential_id as a URN, because this needs to be a valid URL by spec. This means it's non-configurable by API users. Main reason for this is our reliance on the credential id to be equal to the aggregate id for the public link flow.
+    let root_id = uuid::Uuid::parse_str(credential_id)
+        .map_err(|e| BuildCredentialError(format!("Failed to parse credential_id as UUID: {}", e)))?;
+    credential_data
+        .insert_at_path(&["id"], json!(root_id.urn()))
+        .ok_or(BuildCredentialError(
+            "Failed to enter the id into the credential".to_string(),
+        ))?;
+
     let credential_name = credential_configuration
         .credential_metadata
         .as_ref()
@@ -790,19 +799,6 @@ fn build_unsigned_w3c_credential_data(
                         "Failed to enter the @context into the credential".to_string(),
                     ))?;
 
-                // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
-                let root_id = uuid::Uuid::parse_str(credential_id).map_err(|e| {
-                    BuildCredentialError(format!(
-                        "Failed to parse credential_id `{credential_id}` as UUID: {}",
-                        e
-                    ))
-                })?;
-                credential_data
-                    .insert_if_none(&["id"], json!(root_id.urn()))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the id into the credential".to_string(),
-                    ))?;
-
                 credential_data
                     .insert_at_path(&["issuer", "type"], json!("Profile"))
                     .ok_or(BuildCredentialError(
@@ -843,15 +839,6 @@ fn build_unsigned_w3c_credential_data(
                     )
                     .ok_or(BuildCredentialError(
                         "Failed to enter the @context into the credential".to_string(),
-                    ))?;
-
-                // If no root id is provided, convert the aggregate credential_id to an urn as sensible default.
-                let root_id = uuid::Uuid::parse_str(credential_id)
-                    .map_err(|e| BuildCredentialError(format!("Failed to parse credential_id as UUID: {}", e)))?;
-                credential_data
-                    .insert_if_none(&["id"], json!(root_id.urn()))
-                    .ok_or(BuildCredentialError(
-                        "Failed to enter the id into the credential".to_string(),
                     ))?;
 
                 // No fields in credentialProfiles are actually required by the ELM schema.
