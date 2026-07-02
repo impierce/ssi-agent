@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -33,7 +34,6 @@ rand.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-shared-kernel.workspace = true
 ssi-dids = "0.1.1"
 ssi-jwk = "0.1.2"
 strum.workspace = true

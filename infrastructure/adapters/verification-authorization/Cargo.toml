@@ -9,11 +9,12 @@ publish.workspace = true
 agent_authorization = { path = "../../../agent_authorization" }
 agent_shared = { path = "../../../agent_shared" }
 agent_verification = { path = "../../../agent_verification" }
+shared-kernel.workspace = true
+
 anyhow.workspace = true
 async-trait.workspace = true
 oid4vp.workspace = true
 serde_json.workspace = true
-shared-kernel.workspace = true
 
 [lints]
 workspace = true

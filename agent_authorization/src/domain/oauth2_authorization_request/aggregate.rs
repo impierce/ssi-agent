@@ -3,8 +3,7 @@ use crate::services::OAuth2AuthorizationRequestDomainServices;
 use super::command::OAuth2AuthorizationRequestCommand;
 use super::error::OAuth2AuthorizationRequestError;
 use super::event::OAuth2AuthorizationRequestEvent;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{
     authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod, InteractionType,
 };
@@ -49,25 +48,27 @@ pub struct OAuth2AuthorizationRequest {
     pub openid4vp_request: Option<serde_json::Value>,
 }
 
-#[async_trait]
 impl Aggregate for OAuth2AuthorizationRequest {
     type Command = OAuth2AuthorizationRequestCommand;
     type Event = OAuth2AuthorizationRequestEvent;
     type Error = OAuth2AuthorizationRequestError;
     type Services = OAuth2AuthorizationRequestDomainServices;
 
-    fn aggregate_type() -> String {
-        "oauth2_authorization_request".to_string()
-    }
+    const TYPE: &'static str = "oauth2_authorization_request";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;
         use OAuth2AuthorizationRequestError::*;
         use OAuth2AuthorizationRequestEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateOAuth2AuthorizationRequest {
                 oauth2_authorization_request_id,
                 pushed_authorization_request,
@@ -155,7 +156,13 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     }])
                 }
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

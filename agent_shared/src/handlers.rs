@@ -1,10 +1,8 @@
-use cqrs_es::{
-    persist::{PersistenceError, ViewRepository},
-    Aggregate, AggregateError, View,
-};
+use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use shared_kernel::authorization::{
     Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
 };
+use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
@@ -14,7 +12,7 @@ use crate::application_state::CommandHandler;
 /// Loads a specific view from the view repository without running authorization.
 pub async fn public_query_handler<A, V>(
     view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
+    state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, PersistenceError>
 where
     A: Aggregate,
@@ -45,7 +43,7 @@ pub async fn query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     actor: Option<Actor>,
     view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
+    state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, QueryHandlerError>
 where
     A: Aggregate,
@@ -137,7 +135,7 @@ mod tests {
     use super::*;
     use crate::application_state::Command;
     use async_trait::async_trait;
-    use cqrs_es::DomainEvent;
+    use cqrs_es::{event_sink::EventSink, DomainEvent};
     use serde::{Deserialize, Serialize};
     use shared_kernel::authorization::AllowAllAuthorizationChecker;
     use std::sync::Mutex;
@@ -162,27 +160,25 @@ mod tests {
     #[error("test error")]
     struct TestError;
 
-    #[async_trait]
     impl Aggregate for TestAggregate {
         type Command = String;
         type Event = TestEvent;
         type Error = TestError;
         type Services = ();
 
-        fn aggregate_type() -> String {
-            "test".to_string()
-        }
+        const TYPE: &'static str = "test";
 
         async fn handle(
-            &self,
+            &mut self,
             command: Self::Command,
             _service: &Self::Services,
-        ) -> Result<Vec<Self::Event>, Self::Error> {
+            sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
             if command == "emit" {
-                return Ok(vec![TestEvent]);
+                sink.write(TestEvent, self).await;
             }
 
-            Ok(vec![])
+            Ok(())
         }
 
         fn apply(&mut self, _event: Self::Event) {}

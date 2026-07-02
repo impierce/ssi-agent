@@ -17,10 +17,11 @@ use agent_shared::config::{
 };
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::public_query_handler};
-use cqrs_es::persist::{PersistenceError, ViewRepository};
+use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -51,24 +52,24 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<ConnectionView, Connection>,
-    dyn ViewRepository<AllConnectionsView, Connection>,
-    dyn ViewRepository<DocumentView, Document>,
-    dyn ViewRepository<AllDocumentsView, Document>,
-    dyn ViewRepository<ProfileView, Profile>,
-    dyn ViewRepository<ServiceView, Service>,
-    dyn ViewRepository<AllServicesView, Service>,
+    dyn DynViewRepository<ConnectionView, Connection>,
+    dyn DynViewRepository<AllConnectionsView, Connection>,
+    dyn DynViewRepository<DocumentView, Document>,
+    dyn DynViewRepository<AllDocumentsView, Document>,
+    dyn DynViewRepository<ProfileView, Profile>,
+    dyn DynViewRepository<ServiceView, Service>,
+    dyn DynViewRepository<AllServicesView, Service>,
 >;
 
 pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2>
 where
-    C1: ViewRepository<ConnectionView, Connection> + ?Sized,
-    C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
-    D1: ViewRepository<DocumentView, Document> + ?Sized,
-    D2: ViewRepository<AllDocumentsView, Document> + ?Sized,
-    P: ViewRepository<ProfileView, Profile> + ?Sized,
-    S1: ViewRepository<ServiceView, Service> + ?Sized,
-    S2: ViewRepository<AllServicesView, Service> + ?Sized,
+    C1: DynViewRepository<ConnectionView, Connection> + ?Sized,
+    C2: DynViewRepository<AllConnectionsView, Connection> + ?Sized,
+    D1: DynViewRepository<DocumentView, Document> + ?Sized,
+    D2: DynViewRepository<AllDocumentsView, Document> + ?Sized,
+    P: DynViewRepository<ProfileView, Profile> + ?Sized,
+    S1: DynViewRepository<ServiceView, Service> + ?Sized,
+    S2: DynViewRepository<AllServicesView, Service> + ?Sized,
 {
     pub connection: Arc<C1>,
     pub all_connections: Arc<C2>,

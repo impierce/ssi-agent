@@ -1,6 +1,7 @@
 use crate::error::ErrorWrapper;
-use cqrs_es::{persist::ViewRepository, Aggregate, View};
+use cqrs_es::{Aggregate, View};
 use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker};
+use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 static ALLOW_ALL_AUTHORIZATION_CHECKER: std::sync::OnceLock<Arc<dyn AuthorizationChecker>> = std::sync::OnceLock::new();
@@ -48,7 +49,7 @@ where
 /// Executes a query for public protocol endpoints that are authorized by protocol-specific checks.
 pub async fn public_query_handler<A, V>(
     view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
+    state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, ErrorWrapper<A::Error>>
 where
     A: Aggregate,
@@ -64,7 +65,7 @@ pub async fn query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     actor: Option<Actor>,
     view_id: &str,
-    state: &Arc<dyn ViewRepository<V, A>>,
+    state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, ErrorWrapper<A::Error>>
 where
     A: Aggregate,

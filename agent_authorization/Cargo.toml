@@ -9,6 +9,7 @@ publish.workspace = true
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -22,7 +23,6 @@ strum.workspace = true
 strum_macros.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-shared-kernel.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url.workspace = true
