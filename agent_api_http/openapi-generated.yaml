@@ -892,16 +892,14 @@ components:
           default: []
     Catalog:
       type: object
+      description: Data transfer object for Catalogs.
       required:
       - id
       - display
       - template_ids
       - visibility
       - modified_at
-      - deleted
       properties:
-        deleted:
-          type: boolean
         display:
           $ref: '#/components/schemas/CatalogDisplay'
         id:
