@@ -620,6 +620,7 @@ pub mod tests {
         // This test credential is tested after creation but before signing, therefore it misses a few last fields which are set during signing.
         // Please look at the comments in agent_issuance/src/credential/aggregate.rs `SignCredential` for more information.
         pub static ref VC_DM_1_1_CREDENTIAL: serde_json::Value = json!({
+            "id": "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
             "@context": [ "https://www.w3.org/2018/credentials/v1" ],
             "type": [ "VerifiableCredential" ],
             "name": "Verifiable Credential",
