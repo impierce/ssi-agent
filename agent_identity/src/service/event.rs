@@ -28,6 +28,26 @@ pub enum ServiceEvent {
         presentation_ids: Vec<String>,
         service: DocumentService,
     },
+    DataAccessServiceCreated {
+        service_id: String,
+        service: DocumentService,
+        is_deleted: bool,
+    },
+    DataAccessServiceDeleted {
+        service_id: String,
+        service: Option<DocumentService>,
+        is_deleted: bool,
+    },
+    PublicVerificationServiceCreated {
+        service_id: String,
+        service: DocumentService,
+        is_deleted: bool,
+    },
+    PublicVerificationServiceDeleted {
+        service_id: String,
+        service: Option<DocumentService>,
+        is_deleted: bool,
+    },
 }
 
 impl DomainEvent for ServiceEvent {

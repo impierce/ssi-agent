@@ -1,5 +1,8 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
-use crate::services::IdentityServices;
+use crate::{
+    services::IdentityServices,
+    state::{DATA_ACCESS_SERVICE_ID, PUBLIC_VERIFICATION_SERVICE_ID},
+};
 use agent_shared::config::config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
@@ -56,6 +59,73 @@ impl Aggregate for Service {
         info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
+            CreatePublicVerificationEndpointService { service_id } => {
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+
+                let endpoint_url = origin.to_string().trim_end_matches('/').to_string() + "/public/verify"; // This is the name we chose to expose the endpoint with externally to be non technical, internally we use the more distinct name Public Verification
+                let endpoint_url = endpoint_url
+                    .parse::<identity_core::common::Url>()
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+                let service_endpoint = ServiceEndpoint::from(endpoint_url);
+
+                // Create a new service.
+                let service = DocumentService::builder(Default::default())
+                    // This service is DID method-agnostic. When added to an enabled DID Document,
+                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                    .id(format!("did:place:holder#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?)
+                    .type_(PUBLIC_VERIFICATION_SERVICE_ID)
+                    .service_endpoint(service_endpoint)
+                    .build()
+                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
+
+                Ok(vec![PublicVerificationServiceCreated {
+                    service_id,
+                    service,
+                    is_deleted: false,
+                }])
+            }
+            DeletePublicVerificationEndpointService { service_id } => Ok(vec![PublicVerificationServiceDeleted {
+                service_id,
+                service: None,
+                is_deleted: true,
+            }]),
+            CreateDataAccessEndpointService { service_id } => {
+                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+
+                let endpoint_url =
+                    origin.to_string().trim_end_matches('/').to_string() + "/public/" + DATA_ACCESS_SERVICE_ID;
+                let endpoint_url = endpoint_url
+                    .parse::<identity_core::common::Url>()
+                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+                let service_endpoint = ServiceEndpoint::from(endpoint_url);
+
+                // Create a new service.
+                let service = DocumentService::builder(Default::default())
+                    // This service is DID method-agnostic. When added to an enabled DID Document,
+                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
+                    .id(format!("did:place:holder#{service_id}")
+                        .parse::<DIDUrl>()
+                        .map_err(|err| InvalidDidError(err.to_string()))?)
+                    .type_(DATA_ACCESS_SERVICE_ID)
+                    .service_endpoint(service_endpoint)
+                    .build()
+                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
+
+                Ok(vec![DataAccessServiceCreated {
+                    service_id,
+                    service,
+                    is_deleted: false,
+                }])
+            }
+            DeleteDataAccessEndpointService { service_id } => Ok(vec![DataAccessServiceDeleted {
+                service_id,
+                service: None,
+                is_deleted: true,
+            }]),
             CreateDomainLinkageService {
                 service_id,
                 verification_methods,
@@ -259,6 +329,42 @@ impl Aggregate for Service {
                 self.service_id = service_id;
                 self.presentation_ids = presentation_ids;
                 self.service.replace(service);
+            }
+            PublicVerificationServiceCreated {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service.replace(service);
+                self.is_deleted = is_deleted;
+            }
+            PublicVerificationServiceDeleted {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service = service;
+                self.is_deleted = is_deleted;
+            }
+            DataAccessServiceCreated {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service.replace(service);
+                self.is_deleted = is_deleted;
+            }
+            DataAccessServiceDeleted {
+                service_id,
+                service,
+                is_deleted,
+            } => {
+                self.service_id = service_id;
+                self.service = service;
+                self.is_deleted = is_deleted;
             }
         }
     }

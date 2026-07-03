@@ -254,6 +254,10 @@ pub struct ApplicationConfiguration {
     pub external_server_response_timeout_ms: u64,
     #[config(default, production_default = "true")]
     pub domain_linkage_enabled: bool,
+    #[config(default = "true", production_default = "true")]
+    pub data_access_endpoint_enabled: bool,
+    #[config(default = "true", production_default = "true")]
+    pub public_verification_endpoint_enabled: bool, // both /verify and /store-data-access-consent-token endpoints listen to this flag.
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
@@ -657,6 +661,8 @@ pub struct Events {
     pub received_offer: Vec<ReceivedOfferEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authorization_request: Vec<AuthorizationRequestEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub data_access_consent_token: Vec<DataAccessConsentTokenEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -793,6 +799,11 @@ pub enum AuthorizationRequestEvent {
     AuthorizationRequestObjectSigned,
     SIOPv2AuthorizationResponseVerified,
     OID4VPAuthorizationResponseVerified,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
+pub enum DataAccessConsentTokenEvent {
+    DataAccessConsentTokenStored,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -1088,6 +1099,8 @@ mod tests {
                         type: "in_memory"
                     cors_enabled: true
                     domain_linkage_enabled: true
+                    data_access_endpoint_enabled: true
+                    public_verification_endpoint_enabled: true
                     secret_manager:
                         stronghold_password: "sup3rSecr3t"
                 "#,
@@ -1129,6 +1142,8 @@ mod tests {
               },
               "external_server_response_timeout_ms": 1000,
               "domain_linkage_enabled": true,
+              "data_access_endpoint_enabled": true,
+              "public_verification_endpoint_enabled": true,
               "credential_offer_by_value_enabled": false,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
@@ -1185,6 +1200,8 @@ mod tests {
                 },
                 "cors_enabled": true,
                 "domain_linkage_enabled": true,
+                "data_access_endpoint_enabled": true,
+                "public_verification_endpoint_enabled": true,
                 "secret_manager": {
                     "stronghold_password": "<REDACTED>"
                 }
