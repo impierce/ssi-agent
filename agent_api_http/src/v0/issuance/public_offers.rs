@@ -78,6 +78,7 @@ pub struct PublicOfferStatusDto {
     pub id: String,
     pub template_id: String,
     pub amount_issued: u32,
+    #[schema(inline)]
     pub status: PublicOfferStatus,
 }
 

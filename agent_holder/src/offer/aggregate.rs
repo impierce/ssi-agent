@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = HolderOfferStatus)]
 pub enum Status {
     #[default]
     Pending,
@@ -39,6 +38,7 @@ pub struct Offer {
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_offer: Option<CredentialOfferParameters>,
+    #[schema(inline)]
     pub status: Status,
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]

@@ -21,7 +21,6 @@ use oid4vci::credential_offer::CredentialConfigurationIds;
 use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = CredentialOfferStatus)]
 pub enum Status {
     #[default]
     Created,
@@ -49,6 +48,7 @@ pub struct Offer {
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_response: Option<CredentialResponse>,
+    #[schema(inline)]
     pub status: Status,
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,

@@ -26,11 +26,7 @@ use std::{
 use strum::VariantArray;
 use url::Url;
 
-use crate::{
-    config::openapi::{credential_metadata, tx_code_constraints},
-    error::SharedError,
-    profile::ApplicationProfile,
-};
+use crate::{config::openapi::credential_metadata, error::SharedError, profile::ApplicationProfile};
 // Re-export
 pub use provisioned::load_provisioned_config;
 
@@ -557,7 +553,6 @@ pub struct CredentialConfiguration {
 pub struct Authorization {
     pub pre_authorized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(schema_with = tx_code_constraints)]
     pub tx_code_constraints: Option<TxCodeConstraints>,
 }
 
