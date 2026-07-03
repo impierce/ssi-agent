@@ -266,7 +266,7 @@ where
     E: ActorExtractor,
 {
     let actor_extractor = Arc::new(actor_extractor);
-    let app = app(application_state, actor_extractor.clone());
+    let app = app(application_state, actor_extractor);
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
@@ -276,16 +276,10 @@ where
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
+        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    let configuration_router = axum::Router::new()
-        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
-        .route_layer(axum::middleware::from_fn_with_state(
-            actor_extractor,
-            agent_api_http::require_actor::<E>,
-        ));
-
-    let app = metadata_router.merge(configuration_router).merge(app);
+    let app = metadata_router.merge(app);
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
