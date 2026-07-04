@@ -258,6 +258,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 /// Builds the full core SSI agent Router (app + metadata + probes).
 pub fn router(application_state: ApplicationState) -> axum::Router {
     router_with_actor_extractor(application_state, NoActorExtractor)
+        .merge(axum::Router::new().nest(API_VERSION, configuration_router()))
 }
 
 /// Builds the full core SSI agent Router with a custom actor extractor.
@@ -278,9 +279,7 @@ where
         .route("/info", axum::routing::get(metadata::info::info))
         .with_state(metadata_state);
 
-    let app = metadata_router
-        .merge(axum::Router::new().nest(API_VERSION, configuration_router()))
-        .merge(app);
+    let app = metadata_router.merge(app);
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
