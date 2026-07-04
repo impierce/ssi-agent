@@ -1,6 +1,6 @@
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use shared_kernel::authorization::{
-    Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
+    Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
 };
 use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
@@ -52,7 +52,7 @@ where
     let authorization_request = AuthorizationRequest {
         actor,
         operation: AuthorizationOperation::Query {
-            query_type: std::any::type_name::<V>(),
+            operation_name: std::any::type_name::<V>(),
         },
     };
 
@@ -94,8 +94,7 @@ where
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
             // TODO: Use command variant names when authorization needs finer-grained permissions.
-            command_type: std::any::type_name::<A::Command>(),
-            authorization: CommandAuthorization::ACTOR_REQUIRED,
+            operation_name: std::any::type_name::<A::Command>(),
         },
     };
 
@@ -322,8 +321,7 @@ mod tests {
                 actor: Some(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
-                    command_type: std::any::type_name::<String>(),
-                    authorization: CommandAuthorization::ACTOR_REQUIRED,
+                    operation_name: std::any::type_name::<String>(),
                 },
             }]
         );

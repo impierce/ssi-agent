@@ -43,23 +43,6 @@ impl ActorExtractor for NoActorExtractor {
     }
 }
 
-/// Describes the application operation that is being authorized.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CommandAuthorization {
-    /// Domain-defined permission marker understood by the configured checker.
-    pub permission: &'static str,
-}
-
-impl CommandAuthorization {
-    /// Default requirement for commands that only need an authenticated actor.
-    pub const ACTOR_REQUIRED: Self = Self::new("actor_required");
-
-    #[must_use]
-    pub const fn new(permission: &'static str) -> Self {
-        Self { permission }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthorizationOperation {
     /// A write-side command against an aggregate.
@@ -69,14 +52,21 @@ pub enum AuthorizationOperation {
         /// This lets authorization checkers make instance-scoped decisions, such as allowing an
         /// actor to execute a command type only for a specific credential, offer, or profile.
         aggregate_id: String,
-        /// Command type name used as the operation identifier.
-        command_type: &'static str,
-        authorization: CommandAuthorization,
+
+        /// Stable operation identifier chosen by the application context.
+        ///
+        /// This is intentionally not a permission, role, scope, or attribute. The shared
+        /// kernel only reports what operation is being attempted; product code decides how that
+        /// operation maps to authorization policy.
+        operation_name: &'static str,
     },
     /// A read-side query.
     Query {
-        /// Query type name used as the operation identifier.
-        query_type: &'static str,
+        /// Stable operation identifier chosen by the application context.
+        ///
+        /// This gives authorization checkers a neutral key for read policies without requiring
+        /// the shared kernel to know product-specific permissions or access attributes.
+        operation_name: &'static str,
     },
 }
 

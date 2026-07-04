@@ -5,7 +5,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::authorization::{
     Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, AuthorizationOperation,
-    AuthorizationRequest, CommandAuthorization,
+    AuthorizationRequest,
 };
 
 /// Defines the domain-specific types and handlers for a bounded context.
@@ -38,8 +38,21 @@ pub trait ApplicationContext: Send + Sync + 'static {
     /// Execute a read-side query, returning the projected view.
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError>;
 
-    fn command_authorization(&self, _command: &Self::Command) -> CommandAuthorization {
-        CommandAuthorization::ACTOR_REQUIRED
+    /// Returns the stable authorization operation name for a command.
+    ///
+    /// The default is the command type name, which is enough for contexts with one operation per
+    /// command type. Contexts with enum commands should override this to return variant-level names
+    /// so downstream authorization can distinguish operations such as create, update, and delete.
+    fn command_operation_name(&self, _command: &Self::Command) -> &'static str {
+        std::any::type_name::<Self::Command>()
+    }
+
+    /// Returns the stable authorization operation name for a query.
+    ///
+    /// The default is the query type name. Contexts with enum queries should override this to return
+    /// variant-level names when different query variants need different authorization policies.
+    fn query_operation_name(&self, _query: &Self::Query) -> &'static str {
+        std::any::type_name::<Self::Query>()
     }
 }
 
@@ -186,9 +199,7 @@ async fn process_command<AC: ApplicationContext>(
         actor: msg.actor.clone(),
         operation: AuthorizationOperation::Command {
             aggregate_id: msg.aggregate_id.clone(),
-            // TODO: Use command variant names when authorization needs finer-grained permissions.
-            command_type: std::any::type_name::<AC::Command>(),
-            authorization: context.command_authorization(&msg.command),
+            operation_name: context.command_operation_name(&msg.command),
         },
     };
     if let Err(error) = authorization_checker
@@ -225,7 +236,7 @@ async fn process_query<AC: ApplicationContext>(
     let authorization_request = AuthorizationRequest {
         actor: msg.actor.clone(),
         operation: AuthorizationOperation::Query {
-            query_type: std::any::type_name::<AC::Query>(),
+            operation_name: context.query_operation_name(&msg.query),
         },
     };
     if let Err(error) = authorization_checker
@@ -554,8 +565,7 @@ mod tests {
                 actor: Some(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
-                    command_type: std::any::type_name::<String>(),
-                    authorization: CommandAuthorization::ACTOR_REQUIRED,
+                    operation_name: std::any::type_name::<String>(),
                 },
             }]
         );
@@ -584,7 +594,7 @@ mod tests {
             &[AuthorizationRequest {
                 actor: Some(actor),
                 operation: AuthorizationOperation::Query {
-                    query_type: std::any::type_name::<String>(),
+                    operation_name: std::any::type_name::<String>(),
                 },
             }]
         );
