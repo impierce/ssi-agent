@@ -2,7 +2,7 @@ mod metadata;
 mod probes;
 
 pub use agent_api_http::metrics::metrics;
-use agent_api_http::{app, metrics::track_metrics, ApplicationState};
+use agent_api_http::{app, metrics::track_metrics, ApplicationState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
@@ -276,10 +276,11 @@ where
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
-        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
-    let app = metadata_router.merge(app);
+    let app = metadata_router
+        .merge(axum::Router::new().nest(API_VERSION, configuration_router()))
+        .merge(app);
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
@@ -290,6 +291,11 @@ where
     }
 
     app
+}
+
+/// Builds the application configuration router without the API version prefix.
+pub fn configuration_router() -> axum::Router {
+    axum::Router::new().route("/configuration", axum::routing::get(metadata::config::configuration))
 }
 
 async fn serve(app: axum::Router) -> io::Result<()> {
