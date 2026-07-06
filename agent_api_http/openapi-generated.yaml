@@ -324,7 +324,9 @@ paths:
             schema:
               $ref: '#/components/schemas/DeleteCatalogRequest'
         required: true
-      responses: {}
+      responses:
+        '204':
+          description: Catalog deleted
   /v0/delete-public-offer:
     post:
       tags:

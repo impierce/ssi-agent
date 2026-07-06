@@ -336,6 +336,8 @@ pub struct DeleteCatalogRequest {
     request_body(
         content = DeleteCatalogRequest,
         ),
+    responses(
+        (status = 204, description = "Catalog deleted"))
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_catalog(
