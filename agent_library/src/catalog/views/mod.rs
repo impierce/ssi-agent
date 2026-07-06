@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize, ToSchema)]
-#[schema(as = Catalog)]
 pub struct CatalogView {
     #[serde(rename = "id")]
     pub catalog_id: String,
