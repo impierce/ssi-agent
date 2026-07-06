@@ -63,6 +63,12 @@ impl CqrsComponentBuilder for InMemory {
         &self,
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
+        // `MemStore` keeps events as live, already-deserialized `EventEnvelope`s in memory and
+        // never round-trips them through a serialized representation, so `EventUpcaster`s (which
+        // operate on the serialized JSON payload) have nothing to act on here. The parameter is
+        // accepted for API symmetry with the other backends and intentionally unused; upcaster
+        // behavior is instead exercised via shared-kernel's in-memory *persisted* repository tests.
+        _upcasters: Vec<Box<dyn cqrs_es::persist::EventUpcaster>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
         Arc<dyn DynViewRepository<V, A>>,

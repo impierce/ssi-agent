@@ -1,5 +1,6 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
+use cqrs_es::persist::EventUpcaster;
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
@@ -10,11 +11,11 @@ impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
 where
     A: Aggregate,
 {
-    async fn new(client: Client, services: A::Services) -> Self {
+    async fn new(client: Client, services: A::Services, upcasters: Vec<Box<dyn EventUpcaster>>) -> Self {
         let repo = MongoEventRepository::new(client)
             .await
             .expect("Failed to create MongoEventRepository");
-        let store = PersistedEventStore::new_event_store(repo);
+        let store = PersistedEventStore::new_event_store(repo).with_upcasters(upcasters);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
         }
@@ -41,6 +42,7 @@ impl CqrsComponentBuilder for MongoDB {
         &self,
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
+        upcasters: Vec<Box<dyn EventUpcaster>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
         Arc<dyn DynViewRepository<V, A>>,
@@ -59,7 +61,7 @@ impl CqrsComponentBuilder for MongoDB {
 
         (
             Arc::new(
-                AggregateHandler::new(self.client.clone(), services)
+                AggregateHandler::new(self.client.clone(), services, upcasters)
                     .await
                     .with_parameters(
                         aggregate.clone(),

@@ -1,7 +1,7 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
-use cqrs_es::persist::PersistedEventStore;
-use cqrs_es::{Aggregate, Query, View};
+use cqrs_es::persist::{EventUpcaster, PersistedEventStore};
+use cqrs_es::{Aggregate, CqrsFramework, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
 use shared_kernel::view_repository::DynViewRepository;
 use sqlx::Pool;
@@ -11,9 +11,13 @@ impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
 where
     A: Aggregate,
 {
-    fn new(pool: Pool<sqlx::Postgres>, services: A::Services) -> Self {
+    fn new(pool: Pool<sqlx::Postgres>, services: A::Services, upcasters: Vec<Box<dyn EventUpcaster>>) -> Self {
+        // Mirrors `postgres_es::postgres_cqrs`, but threads through the per-aggregate
+        // `upcasters` which that convenience function does not accept.
+        let repo = PostgresEventRepository::new(pool);
+        let store = PersistedEventStore::new_event_store(repo).with_upcasters(upcasters);
         Self {
-            cqrs: postgres_es::postgres_cqrs(pool, vec![], services),
+            cqrs: CqrsFramework::new(store, vec![], services),
         }
     }
 }
@@ -38,6 +42,7 @@ impl CqrsComponentBuilder for Postgres {
         &self,
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
+        upcasters: Vec<Box<dyn EventUpcaster>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
         Arc<dyn DynViewRepository<V, A>>,
@@ -57,12 +62,14 @@ impl CqrsComponentBuilder for Postgres {
         ));
 
         (
-            Arc::new(AggregateHandler::new(self.pool.clone(), services).with_parameters(
-                aggregate.clone(),
-                all_aggregates.clone(),
-                event_publishers,
-                &all_aggregates_name,
-            )),
+            Arc::new(
+                AggregateHandler::new(self.pool.clone(), services, upcasters).with_parameters(
+                    aggregate.clone(),
+                    all_aggregates.clone(),
+                    event_publishers,
+                    &all_aggregates_name,
+                ),
+            ),
             aggregate,
             all_aggregates,
         )

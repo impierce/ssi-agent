@@ -7683,8 +7683,11 @@ name = "mongodb"
 version = "0.1.0"
 dependencies = [
  "mongo-es",
+ "serde",
+ "serde_json",
  "shared-kernel",
  "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]

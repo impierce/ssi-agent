@@ -35,7 +35,16 @@ Purely additive, backward-compatible changes do **not** require a version bump:
 2. Bump the `event_version()` return value for that event enum, e.g. `"1"` → `"2"`.
 3. Write a hand-implemented `cqrs_es::persist::EventUpcaster` that transforms the *old* serialized payload into the *new* one, and bumps the serialized event's `event_version` to match. Register it in that aggregate's `upcasters()` function, exported next to the event enum in its `event.rs` file.
 
-UniCore does **not** use `cqrs_es`'s built-in `SemanticVersionEventUpcaster` — that type parses versions as semver (`major.minor.patch`), which does not match our plain-integer versioning. Upcasters are instead implemented directly against the `EventUpcaster` trait:
+Upcasters can be written in either of two ways:
+
+- **`cqrs_es`'s built-in `SemanticVersionEventUpcaster`** works with plain-integer versions: its
+  version parser treats a missing minor/patch as `0`, so `"1"` parses as `1.0.0` and `"2"` as
+  `2.0.0`, and the "applies when the upcaster's version supersedes the stored one" rule reduces
+  to plain integer comparison. `SemanticVersionEventUpcaster::new("EventType", "2", transform_fn)`
+  upcasts every stored `EventType` with version `< 2` and stamps it `"2"`. Prefer this for simple
+  payload transforms.
+- **A hand-implemented `EventUpcaster`** for anything the helper can't express (conditional
+  matching, renaming the event type itself, non-JSON-map payload surgery):
 
 ```rust
 pub trait EventUpcaster: Send + Sync {

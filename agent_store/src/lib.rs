@@ -172,6 +172,7 @@ pub trait CqrsComponentBuilder {
         &self,
         identity_services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
+        upcasters: Vec<Box<dyn cqrs_es::persist::EventUpcaster>>,
     ) -> impl std::future::Future<Output = CqrsComponents<A, V, AV>> + Send
     where
         <A as Aggregate>::Command: Send + Sync;
@@ -194,16 +195,29 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<ConnectionView, Connection, AllConnectionsView>(
             services.clone(),
             connection_event_publishers,
+            agent_identity::connection::event::upcasters(),
         )
         .await;
     let (document_command_handler, document, all_documents) = builder
-        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
+        .commands_and_queries::<Document, Document, AllDocumentsView>(
+            services.clone(),
+            document_event_publishers,
+            agent_identity::document::event::upcasters(),
+        )
         .await;
     let (profile_command_handler, profile, _all_profiles) = builder
-        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![])
+        .commands_and_queries::<Profile, Profile, Profile>(
+            services.clone(),
+            vec![],
+            agent_identity::profile::event::upcasters(),
+        )
         .await;
     let (service_command_handler, service, all_services) = builder
-        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
+        .commands_and_queries::<Service, Service, AllServicesView>(
+            services.clone(),
+            service_event_publishers,
+            agent_identity::service::event::upcasters(),
+        )
         .await;
 
     IdentityState {
@@ -242,7 +256,11 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
     }
 
     let (template_command_handler, template, all_templates) = builder
-        .commands_and_queries::<Template, Template, AllTemplatesView>((), queries)
+        .commands_and_queries::<Template, Template, AllTemplatesView>(
+            (),
+            queries,
+            agent_library::template::event::upcasters(),
+        )
         .await;
 
     LibraryState {
@@ -276,10 +294,15 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
             (),
             authorization_code_event_publishers,
+            agent_authorization::domain::authorization_code::event::upcasters(),
         )
         .await;
     let (client_command_handler, client, _all_clients) = builder
-        .commands_and_queries::<ClientView, Client, AllClientsView>((), client_event_publishers)
+        .commands_and_queries::<ClientView, Client, AllClientsView>(
+            (),
+            client_event_publishers,
+            agent_authorization::domain::client::event::upcasters(),
+        )
         .await;
     let (
         oauth2_authorization_request_command_handler,
@@ -289,10 +312,18 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         OAuth2AuthorizationRequestView,
         OAuth2AuthorizationRequest,
         AllOAuth2AuthorizationRequestsView,
-    >(oauth2_authorization_request_domain_services, oauth2_authorization_request_event_publishers)
+    >(
+        oauth2_authorization_request_domain_services,
+        oauth2_authorization_request_event_publishers,
+        agent_authorization::domain::oauth2_authorization_request::event::upcasters(),
+    )
     .await;
     let (token_command_handler, access_token, _all_access_tokens) = builder
-        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), token_event_publishers)
+        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>(
+            (),
+            token_event_publishers,
+            agent_authorization::domain::access_token::event::upcasters(),
+        )
         .await;
 
     AuthorizationState {
@@ -333,30 +364,42 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
             services.clone(),
             credential_event_publishers,
+            agent_issuance::credential::event::upcasters(),
         )
         .await;
     let (offer_command_handler, offer, all_offers) = builder
-        .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), offer_event_publishers)
+        .commands_and_queries::<OfferView, Offer, AllOffersView>(
+            services.clone(),
+            offer_event_publishers,
+            agent_issuance::offer::event::upcasters(),
+        )
         .await;
     let (public_offer_command_handler, public_offer, all_public_offers) = builder
         .commands_and_queries::<PublicOfferView, PublicOffer, AllPublicOffersView>(
             services.clone(),
             public_offer_event_publishers,
+            agent_issuance::public_offer::event::upcasters(),
         )
         .await;
     let (server_config_command_handler, server_config, _all_server_configs) = builder
         .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
             services.clone(),
             server_config_event_publishers,
+            agent_issuance::server_config::event::upcasters(),
         )
         .await;
     let (nonce_command_handler, nonce, _) = builder
-        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), nonce_event_publishers)
+        .commands_and_queries::<NonceView, Nonce, NonceView>(
+            services.clone(),
+            nonce_event_publishers,
+            agent_issuance::nonce::event::upcasters(),
+        )
         .await;
     let (status_list_command_handler, status_list, all_status_lists) = builder
         .commands_and_queries::<StatusListView, StatusListAggregate, AllStatusListsView>(
             services.clone(),
             status_list_event_publishers,
+            agent_issuance::status_list::event::upcasters(),
         )
         .await;
 
@@ -401,6 +444,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
             services.clone(),
             authorization_request_event_publishers,
+            agent_verification::authorization_request::event::upcasters(),
         )
         .await;
 
@@ -433,6 +477,7 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
             services.clone(),
             holder_credential_publisher,
+            agent_holder::credential::event::upcasters(),
         )
         .await;
 
@@ -440,6 +485,7 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
             services.clone(),
             presentation_event_publishers,
+            agent_holder::presentation::event::upcasters(),
         )
         .await;
 
@@ -447,6 +493,7 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
             services.clone(),
             received_offer_event_publishers,
+            agent_holder::offer::event::upcasters(),
         )
         .await;
 

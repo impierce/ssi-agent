@@ -11,5 +11,10 @@ shared-kernel.workspace = true
 mongo-es.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
 [lints]
 workspace = true
