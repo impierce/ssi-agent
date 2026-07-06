@@ -1,6 +1,7 @@
 pub mod openapi;
 pub mod queries;
 use crate::error::IntoApiErrorExt;
+use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
@@ -72,6 +73,7 @@ pub struct CreateCatalogRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn create_catalog(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(CreateCatalogRequest { display, visibility }): Json<CreateCatalogRequest>,
 ) -> Result<Response, ApiError> {
     let catalog_id = uuid::Uuid::new_v4().to_string();
@@ -86,20 +88,32 @@ pub(crate) async fn create_catalog(
         visibility,
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
 
     // Return the created catalog
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
-                Json(CatalogDto::from(catalog_view)),
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
+            Json(CatalogDto::from(catalog_view)),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -127,27 +141,45 @@ pub struct AddTemplatesRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn add_templates_to_catalog(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(AddTemplatesRequest {
         catalog_id,
         template_ids,
     }): Json<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::AddTemplateIds {
         catalog_id: catalog_id.clone(),
         template_ids,
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
 
     // Return the updated catalog
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -175,27 +207,45 @@ pub struct RemoveTemplatesRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn remove_templates_from_catalog(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(RemoveTemplatesRequest {
         catalog_id,
         template_ids,
     }): Json<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::RemoveTemplateIds {
         catalog_id: catalog_id.clone(),
         template_ids,
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
 
     // Return the updated catalog
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -223,24 +273,42 @@ pub struct ChangeCatalogAppearanceRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn change_catalog_appearance(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(ChangeCatalogAppearanceRequest { catalog_id, display }): Json<ChangeCatalogAppearanceRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::ChangeCatalogAppearance {
         catalog_id: catalog_id.clone(),
         display: display.clone(),
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
 
     // Return the updated catalog
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -267,17 +335,30 @@ pub struct MakeCatalogPublicRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn make_catalog_public(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(MakeCatalogPublicRequest { catalog_id }): Json<MakeCatalogPublicRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::MakeCatalogPublic {
         catalog_id: catalog_id.clone(),
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -305,17 +386,30 @@ pub struct MakeCatalogPrivateRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn make_catalog_private(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(MakeCatalogPrivateRequest { catalog_id }): Json<MakeCatalogPrivateRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::MakeCatalogPrivate {
         catalog_id: catalog_id.clone(),
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -342,16 +436,29 @@ pub struct DeleteCatalogRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_catalog(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(DeleteCatalogRequest { catalog_id }): Json<DeleteCatalogRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::DeleteCatalog {
         catalog_id: catalog_id.clone(),
     };
 
-    command_handler(&catalog_id, &state.command.catalog, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.command.catalog,
+        command,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }

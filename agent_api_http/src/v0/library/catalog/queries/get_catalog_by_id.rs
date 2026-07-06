@@ -1,3 +1,4 @@
+use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
 use crate::v0::library::catalog::CatalogDto;
 use agent_library::state::LibraryState;
@@ -25,9 +26,15 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn get_catalog_by_id(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Path(catalog_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&catalog_id, &state.query.catalog)
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
         .await?
         .and_then(|catalog_view| (!catalog_view.deleted).then_some(catalog_view))
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
