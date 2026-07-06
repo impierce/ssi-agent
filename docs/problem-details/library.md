@@ -78,7 +78,7 @@ This error occurs when a template in `Draft` stage is made public.
 
 # Catalogs 
 
-## Template Not Found 
+## Catalog Template Not Found 
 
 A requested template was not found. 
 

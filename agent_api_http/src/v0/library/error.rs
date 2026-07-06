@@ -120,7 +120,7 @@ impl IntoApiErrorExt for CatalogError {
         match self {
             CatalogError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
-                .type_url(type_url("library#template-not-found"))
+                .type_url(type_url("library#catalog-template-not-found"))
                 .message("No matching template found".to_string())
                 .source(self)
                 .finish(),
