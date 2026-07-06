@@ -35,8 +35,8 @@ pub(crate) async fn get_catalog_by_id(
         &catalog_id,
         &state.query.catalog,
     )
-        .await?
-        .and_then(|catalog_view| (!catalog_view.deleted).then_some(catalog_view))
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    .await?
+    .and_then(|catalog_view| (!catalog_view.deleted).then_some(catalog_view))
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
