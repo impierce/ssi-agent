@@ -4,6 +4,10 @@ use cqrs_es::{Aggregate, AggregateError, CqrsFramework, EventStore, Query};
 use std::{collections::HashMap, future::Future, sync::Arc};
 use tracing::{debug, error, info};
 
+// Re-exported so store backends can implement `CommandHandlerFactory::create_handler`
+// without depending on `cqrs_es` directly for the upcaster type.
+pub use cqrs_es::persist::EventUpcaster;
+
 /// Trait for executing commands on a specific aggregate type.
 ///
 /// Implementors receive the aggregate ID, the command, and arbitrary metadata
@@ -88,11 +92,16 @@ pub trait CommandHandlerFactory: Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Create a new [`CommandHandler`] for aggregate `A`, wiring in the given
-    /// domain services and event-driven queries.
+    /// domain services, event-driven queries, and event upcasters.
+    ///
+    /// `upcasters` are applied (in order) to events loaded from the store, allowing
+    /// older, persisted event shapes to be transformed into the current shape before
+    /// deserialization. Pass an empty `Vec` if no upcasters are needed yet.
     fn create_handler<A>(
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,
+        upcasters: Vec<Box<dyn EventUpcaster>>,
     ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
     where
         A: Aggregate + 'static,

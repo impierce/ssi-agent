@@ -1,5 +1,5 @@
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
-use shared_kernel::command_handler::{CommandHandler, CommandHandlerFactory};
+use shared_kernel::command_handler::{CommandHandler, CommandHandlerFactory, EventUpcaster};
 use shared_kernel::cqrs_es::View;
 use shared_kernel::cqrs_es::{persist::PersistedEventStore, Aggregate, CqrsFramework, Query};
 use shared_kernel::view_repository::{BoxedViewRepository, ViewRepositoryFactory};
@@ -41,6 +41,7 @@ impl CommandHandlerFactory for MongoDBStore {
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,
+        upcasters: Vec<Box<dyn EventUpcaster>>,
     ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
     where
         A: Aggregate + 'static,
@@ -52,7 +53,7 @@ impl CommandHandlerFactory for MongoDBStore {
             let repo = MongoEventRepository::new(client)
                 .await
                 .map_err(|e| MongoDBAggregateError(e.to_string()))?;
-            let store = PersistedEventStore::new_event_store(repo);
+            let store = PersistedEventStore::new_event_store(repo).with_upcasters(upcasters);
 
             Ok(Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>)
         }
