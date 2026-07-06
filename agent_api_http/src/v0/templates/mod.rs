@@ -1,4 +1,5 @@
 use crate::error::IntoApiErrorExt;
+use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
@@ -34,6 +35,7 @@ pub struct TemplateDto {
     pub holder_type: HolderType,
     pub modified_at: Option<String>,
     pub tags: Option<Vec<String>>,
+    #[schema(inline)]
     pub status: Status,
     pub visibility: Visibility,
     pub credential_expiration: Expiration,
@@ -74,6 +76,7 @@ pub struct CreateNewTemplateRequestBody {
     pub data_model: DataModel,
     pub holder_type: HolderType,
     pub tags: Option<Vec<String>>,
+    #[schema(inline)]
     pub status: Status,
     pub visibility: Visibility,
     pub credential_expiration: Option<Expiration>,
@@ -111,6 +114,7 @@ pub struct CreateNewTemplateRequestBody {
 #[axum_macros::debug_handler]
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(CreateNewTemplateRequestBody {
         title,
         display,
@@ -148,24 +152,36 @@ pub(crate) async fn create_template(
         holder_authorization,
     };
 
-    command_handler(&template_id, &state.command.template, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &state.command.template,
+        command,
+    )
+    .await?;
 
     // Return the template.
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .map(|template_view| {
-            (
-                StatusCode::CREATED,
-                [(
-                    header::LOCATION,
-                    &format!("{API_VERSION}/get-template-by-id/{template_id}"),
-                )],
-                Json(TemplateDto::from(template_view)),
-            )
-                .into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .map(|template_view| {
+        (
+            StatusCode::CREATED,
+            [(
+                header::LOCATION,
+                &format!("{API_VERSION}/get-template-by-id/{template_id}"),
+            )],
+            Json(TemplateDto::from(template_view)),
+        )
+            .into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -193,14 +209,20 @@ pub struct DuplicateTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(DuplicateTemplateEndpointRequest { source_template_id }): Json<DuplicateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
-    let original_template = query_handler(&source_template_id, &state.query.template)
-        .await?
-        .filter(|template| template.status != Status::Deleted)
-        .ok_or_else(|| TemplateError::SourceTemplateNotFound(source_template_id.clone()).into_api_error())?;
+    let original_template = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &source_template_id,
+        &state.query.template,
+    )
+    .await?
+    .filter(|template| template.status != Status::Deleted)
+    .ok_or_else(|| TemplateError::SourceTemplateNotFound(source_template_id.clone()).into_api_error())?;
 
     let command = TemplateCommand::CreateNewTemplate {
         template_id: new_template_id.clone(),
@@ -220,12 +242,24 @@ pub(crate) async fn duplicate_template(
         holder_authorization: original_template.holder_authorization,
     };
 
-    command_handler(&new_template_id, &state.command.template, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &new_template_id,
+        &state.command.template,
+        command,
+    )
+    .await?;
 
     // Return the duplicated template.
-    let new_template = query_handler(&new_template_id, &state.query.template)
-        .await?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let new_template = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &new_template_id,
+        &state.query.template,
+    )
+    .await?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok((
         StatusCode::CREATED,
@@ -246,6 +280,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub tags: Option<Vec<String>>,
+    #[schema(inline)]
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
     pub credential_expiration: Option<Expiration>,
@@ -271,6 +306,7 @@ pub struct UpdateTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(UpdateTemplateEndpointRequest {
         template_id,
         title,
@@ -290,17 +326,29 @@ pub(crate) async fn update_template(
         return Err(TemplateError::TemplateIdMissing.into_api_error());
     }
 
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .filter(|t| t.status != Status::Deleted)
-        .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .filter(|t| t.status != Status::Deleted)
+    .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
 
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
             template_id: template_id.clone(),
             title,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(display) = display {
@@ -308,7 +356,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             display,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(tags) = tags {
@@ -316,7 +371,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             tags,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(status) = status {
@@ -324,7 +386,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             status,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(visibility) = visibility {
@@ -332,7 +401,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             visibility,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(credential_expiration) = credential_expiration {
@@ -340,7 +416,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             credential_expiration,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(description) = description {
@@ -348,7 +431,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             description,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(r#type) = r#type {
@@ -356,7 +446,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             r#type,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(schema) = schema {
@@ -364,7 +461,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             schema,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(schema_properties_attributes) = schema_properties_attributes {
@@ -375,7 +479,14 @@ pub(crate) async fn update_template(
                 .map(|(k, v)| (k, v.strip_non_removable()))
                 .collect(),
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     if let Some(holder_authorization) = holder_authorization {
@@ -383,7 +494,14 @@ pub(crate) async fn update_template(
             template_id: template_id.clone(),
             holder_authorization,
         };
-        command_handler(&template_id, &state.command.template, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &template_id,
+            &state.command.template,
+            command,
+        )
+        .await?;
     }
 
     Ok(StatusCode::NO_CONTENT.into_response())
@@ -402,26 +520,34 @@ pub(crate) async fn update_template(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Result<Response, ApiError> {
-    let filtered_templates = query_handler("all_templates", &state.query.all_templates)
-        .await?
-        .map(|all_templates_view| {
-            let mut filtered_templates: Vec<TemplateDto> = all_templates_view
-                .templates
-                .into_values()
-                .filter(|template| {
-                    template.status != Status::Deleted
-                    // TODO: Apply filtering logic based on request parameters
-                })
-                .map(TemplateDto::from)
-                .collect();
+pub(crate) async fn get_templates(
+    State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let filtered_templates = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_templates",
+        &state.query.all_templates,
+    )
+    .await?
+    .map(|all_templates_view| {
+        let mut filtered_templates: Vec<TemplateDto> = all_templates_view
+            .templates
+            .into_values()
+            .filter(|template| {
+                template.status != Status::Deleted
+                // TODO: Apply filtering logic based on request parameters
+            })
+            .map(TemplateDto::from)
+            .collect();
 
-            // Sort by most recently modified first (RFC 3339 strings are lexicographically comparable).
-            filtered_templates.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        // Sort by most recently modified first (RFC 3339 strings are lexicographically comparable).
+        filtered_templates.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
 
-            filtered_templates
-        })
-        .unwrap_or_default();
+        filtered_templates
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(filtered_templates)).into_response())
 }
@@ -441,19 +567,25 @@ pub(crate) async fn get_templates(State(state): State<Arc<LibraryState>>) -> Res
 #[axum_macros::debug_handler]
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .and_then(|template_view| {
-            if template_view.status == Status::Deleted {
-                None
-            } else {
-                Some(template_view)
-            }
-        })
-        .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .and_then(|template_view| {
+        if template_view.status == Status::Deleted {
+            None
+        } else {
+            Some(template_view)
+        }
+    })
+    .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -478,28 +610,42 @@ pub struct DeleteTemplateEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,
+    RequestActor(actor): RequestActor,
     Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
         return Err(TemplateError::TemplateIdMissing.into_api_error());
     }
 
-    query_handler(&template_id, &state.query.template)
-        .await?
-        .filter(|t| t.status != Status::Deleted)
-        .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &state.query.template,
+    )
+    .await?
+    .filter(|t| t.status != Status::Deleted)
+    .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
 
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
     };
 
-    command_handler(&template_id, &state.command.template, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &state.command.template,
+        command,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
     use agent_store::{in_memory::InMemory, library_state};
     use axum::{body::to_bytes, response::IntoResponse};
     use serde_json::json;
@@ -645,6 +791,7 @@ mod tests {
 
         let response = duplicate_template(
             State(state),
+            RequestActor(None),
             Json(DuplicateTemplateEndpointRequest {
                 source_template_id: "source-template".to_string(),
             }),
@@ -680,6 +827,7 @@ mod tests {
 
         let response = duplicate_template(
             State(state),
+            RequestActor(None),
             Json(DuplicateTemplateEndpointRequest {
                 source_template_id: "deleted-source".to_string(),
             }),
@@ -702,6 +850,7 @@ mod tests {
 
         let response = create_template(
             State(state),
+            RequestActor(None),
             Json(CreateNewTemplateRequestBody {
                 title: "Created Template".to_string(),
                 display: None,
@@ -737,6 +886,7 @@ mod tests {
 
         let response = update_template(
             State(state),
+            RequestActor(None),
             Json(UpdateTemplateEndpointRequest {
                 template_id: String::new(),
                 title: Some("Updated title".to_string()),
@@ -781,6 +931,7 @@ mod tests {
 
         let response = update_template(
             State(state),
+            RequestActor(None),
             Json(UpdateTemplateEndpointRequest {
                 template_id: "deleted-template".to_string(),
                 title: Some("Updated title".to_string()),
@@ -815,6 +966,7 @@ mod tests {
 
         let response = update_template(
             State(state.clone()),
+            RequestActor(None),
             Json(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: None,
@@ -865,7 +1017,7 @@ mod tests {
         .await
         .unwrap();
 
-        let response = get_templates(State(state)).await.unwrap();
+        let response = get_templates(State(state), RequestActor(None)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -887,6 +1039,7 @@ mod tests {
 
         let response = delete_template(
             State(state.clone()),
+            RequestActor(None),
             Json(DeleteTemplateEndpointRequest {
                 template_id: "template-to-delete".to_string(),
             }),
@@ -896,7 +1049,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        let response = get_template(State(state), Path("template-to-delete".to_string()))
+        let response = get_template(State(state), RequestActor(None), Path("template-to-delete".to_string()))
             .await
             .unwrap_err()
             .into_response();

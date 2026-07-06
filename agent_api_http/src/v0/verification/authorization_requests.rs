@@ -1,3 +1,4 @@
+use crate::extractors::RequestActor;
 use crate::{
     handlers::{command_handler, query_handler},
     API_VERSION,
@@ -19,17 +20,22 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn all_authorization_requests(
     State(state): State<Arc<VerificationState>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let all_authorization_requests =
-        query_handler("all_authorization_requests", &state.query.all_authorization_requests)
-            .await?
-            .map(|all_authorization_requests_view| {
-                all_authorization_requests_view
-                    .authorization_requests
-                    .into_values()
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+    let all_authorization_requests = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_authorization_requests",
+        &state.query.all_authorization_requests,
+    )
+    .await?
+    .map(|all_authorization_requests_view| {
+        all_authorization_requests_view
+            .authorization_requests
+            .into_values()
+            .collect::<Vec<_>>()
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_authorization_requests)).into_response())
 }
@@ -37,12 +43,18 @@ pub(crate) async fn all_authorization_requests(
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
+    RequestActor(actor): RequestActor,
     Path(authorization_request_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&authorization_request_id, &state.query.authorization_request)
-        .await?
-        .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &authorization_request_id,
+        &state.query.authorization_request,
+    )
+    .await?
+    .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -54,6 +66,7 @@ pub struct AuthorizationRequestsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<Arc<VerificationState>>,
+    RequestActor(actor): RequestActor,
     Json(AuthorizationRequestsEndpointRequest { state, dcql_query }): Json<AuthorizationRequestsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
@@ -67,10 +80,19 @@ pub(crate) async fn authorization_requests(
     };
 
     // Create the authorization request.
-    command_handler(&state, &verification_state.command.authorization_request, command).await?;
+    command_handler(
+        verification_state.authorization_checker.clone(),
+        actor.clone(),
+        &state,
+        &verification_state.command.authorization_request,
+        command,
+    )
+    .await?;
 
     // Sign the authorization request object.
     command_handler(
+        verification_state.authorization_checker.clone(),
+        actor.clone(),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
@@ -78,24 +100,29 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Return the authorization_request.
-    query_handler(&state, &verification_state.query.authorization_request)
-        .await?
-        .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
-        .map(|form_url_encoded_authorization_request| {
-            (
-                StatusCode::CREATED,
-                [
-                    (
-                        header::LOCATION,
-                        format!("{API_VERSION}/authorization_requests/{state}").as_str(),
-                    ),
-                    (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
-                ],
-                form_url_encoded_authorization_request,
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        verification_state.authorization_checker.clone(),
+        actor.clone(),
+        &state,
+        &verification_state.query.authorization_request,
+    )
+    .await?
+    .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
+    .map(|form_url_encoded_authorization_request| {
+        (
+            StatusCode::CREATED,
+            [
+                (
+                    header::LOCATION,
+                    format!("{API_VERSION}/authorization_requests/{state}").as_str(),
+                ),
+                (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+            ],
+            form_url_encoded_authorization_request,
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]

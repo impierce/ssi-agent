@@ -3,7 +3,7 @@ use crate::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::template::aggregate::{DataModel, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, public_query_handler};
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
@@ -54,7 +54,7 @@ impl CredentialConfigurationProjection {
             warn!("Template view not yet initialized; skipping credential configuration sync for `{template_id}`");
             return;
         };
-        match query_handler(template_id, view).await {
+        match public_query_handler(template_id, view).await {
             Ok(Some(template)) => {
                 if template.status != Status::Published {
                     self.remove_credential_configuration(template_id).await;
@@ -65,8 +65,14 @@ impl CredentialConfigurationProjection {
                     credential_configuration,
                     provisioned: false,
                 };
-                if let Err(e) =
-                    command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
+                if let Err(e) = command_handler(
+                    self.issuance_state.authorization_checker.clone(),
+                    None,
+                    SERVER_CONFIG_ID,
+                    &self.issuance_state.command.server_config,
+                    command,
+                )
+                .await
                 {
                     warn!("Failed to update credential configuration for template `{template_id}`: {e}");
                 }
@@ -86,7 +92,15 @@ impl CredentialConfigurationProjection {
             credential_configuration_id: template_id.to_string(),
             provisioned: false,
         };
-        if let Err(e) = command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await {
+        if let Err(e) = command_handler(
+            self.issuance_state.authorization_checker.clone(),
+            None,
+            SERVER_CONFIG_ID,
+            &self.issuance_state.command.server_config,
+            command,
+        )
+        .await
+        {
             warn!("Failed to remove credential configuration for template `{template_id}`: {e}");
         }
     }
@@ -315,8 +329,14 @@ impl Query<Template> for CredentialConfigurationProjection {
                         credential_configuration,
                         provisioned: false,
                     };
-                    if let Err(e) =
-                        command_handler(SERVER_CONFIG_ID, &self.issuance_state.command.server_config, command).await
+                    if let Err(e) = command_handler(
+                        self.issuance_state.authorization_checker.clone(),
+                        None,
+                        SERVER_CONFIG_ID,
+                        &self.issuance_state.command.server_config,
+                        command,
+                    )
+                    .await
                     {
                         warn!("Failed to update credential configuration for template `{template_id}`: {e}");
                     }

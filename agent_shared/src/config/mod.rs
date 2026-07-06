@@ -26,11 +26,7 @@ use std::{
 use strum::VariantArray;
 use url::Url;
 
-use crate::{
-    config::openapi::{credential_metadata, tx_code_constraints},
-    error::SharedError,
-    profile::ApplicationProfile,
-};
+use crate::{config::openapi::credential_metadata, error::SharedError, profile::ApplicationProfile};
 // Re-export
 pub use provisioned::load_provisioned_config;
 
@@ -108,6 +104,9 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Config)]
 pub struct ApplicationConfiguration {
+    #[config(default)]
+    #[serde(default, skip_serializing_if = "DevConfig::is_empty")]
+    pub dev: DevConfig,
     #[config(default)]
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
@@ -337,6 +336,12 @@ pub struct ApplicationConfiguration {
 }
 
 impl ApplicationConfiguration {
+    fn apply_profile(&mut self, application_profile: &ApplicationProfile) {
+        if let ApplicationProfile::Production = application_profile {
+            self.dev = DevConfig::default();
+        }
+    }
+
     /// Validates whether the configuration is suitable for development (enforce restrictions).
     pub fn validate_development(&self) -> Result<(), SharedError> {
         if self.event_store.type_ == EventStoreType::InMemory {
@@ -456,6 +461,18 @@ impl ApplicationConfiguration {
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct DevConfig {
+    #[serde(serialize_with = "redact")]
+    pub api_key: Option<String>,
+}
+
+impl DevConfig {
+    fn is_empty(&self) -> bool {
+        self.api_key.is_none()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     #[default]
@@ -557,7 +574,6 @@ pub struct CredentialConfiguration {
 pub struct Authorization {
     pub pre_authorized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(schema_with = tx_code_constraints)]
     pub tx_code_constraints: Option<TxCodeConstraints>,
 }
 
@@ -1189,6 +1205,73 @@ mod tests {
                     "stronghold_password": "<REDACTED>"
                 }
             })
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_development_config_loads_static_api_key() {
+        let provisioned_config = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                    dev:
+                        api_key: "local-development-key"
+                "#,
+                config::FileFormat::Yaml,
+            ))
+            .build()
+            .unwrap();
+
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+        assert_eq!(config.dev.api_key.as_deref(), Some("local-development-key"));
+        assert_eq!(
+            serde_json::to_value(&config.dev).unwrap(),
+            json!({"api_key": "<REDACTED>"})
+        );
+        assert_eq!(
+            config.get_provisioned_config(),
+            json!({
+                "dev": {
+                    "api_key": "<REDACTED>"
+                }
+            })
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_production_config_ignores_static_development_api_key() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__DEV__API_KEY", Some("local-development-key")),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::File::from_str(
+                        r#"
+                            dev:
+                                api_key: "yaml-development-key"
+                            application_url: "http://localhost"
+                            event_store:
+                                type: "postgres"
+                                connection_string: "postgresql://:test:"
+                            display:
+                                - name: "UniCore"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
+
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+
+                assert!(config.dev.api_key.is_none());
+                assert!(config.get_provisioned_config().get("dev").is_none());
+            },
         );
     }
 

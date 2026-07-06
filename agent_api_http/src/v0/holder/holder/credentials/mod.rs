@@ -1,3 +1,4 @@
+use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
@@ -27,11 +28,19 @@ use std::sync::Arc;
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
-    let all_credentials = query_handler("all_holder_credentials", &state.query.all_holder_credentials)
-        .await?
-        .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn credentials(
+    State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let all_credentials = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_holder_credentials",
+        &state.query.all_holder_credentials,
+    )
+    .await?
+    .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
@@ -45,6 +54,7 @@ pub struct HolderCredentialsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
     Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
@@ -55,13 +65,25 @@ pub(crate) async fn post_credentials(
         credential,
     };
 
-    command_handler(&holder_credential_id, &state.command.credential, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &holder_credential_id,
+        &state.command.credential,
+        command,
+    )
+    .await?;
 
-    query_handler(&holder_credential_id, &state.query.holder_credential)
-        .await?
-        .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &holder_credential_id,
+        &state.query.holder_credential,
+    )
+    .await?
+    .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// Get credential by ID
@@ -80,10 +102,16 @@ pub(crate) async fn post_credentials(
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
     Path(holder_credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&holder_credential_id, &state.query.holder_credential)
-        .await?
-        .map(|holder_credential_view| (StatusCode::OK, Json(holder_credential_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &holder_credential_id,
+        &state.query.holder_credential,
+    )
+    .await?
+    .map(|holder_credential_view| (StatusCode::OK, Json(holder_credential_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

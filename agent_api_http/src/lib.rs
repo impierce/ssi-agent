@@ -2,6 +2,7 @@ pub mod public;
 pub mod v0;
 
 pub mod error;
+pub mod extractors;
 pub mod handlers;
 pub mod metrics;
 pub mod utils;
@@ -15,14 +16,15 @@ use agent_shared::config::config;
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, Bytes},
-    extract::{MatchedPath, Request},
-    middleware,
-    middleware::Next,
+    extract::{MatchedPath, Request, State},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     Router,
 };
+use http::HeaderMap;
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
+use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
 use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -42,7 +44,13 @@ pub struct ApplicationState {
     pub verification_state: Option<Arc<VerificationState>>,
 }
 
-pub fn app(
+/// Build the top-level API router.
+///
+/// This merges the routers for each bounded context that has state available,
+/// installs actor extraction middleware, and attaches request tracing/logging.
+/// When the configured application URL includes a non-root base path, the
+/// router is nested under that path.
+pub fn app<E>(
     ApplicationState {
         identity_state,
         library_state,
@@ -51,7 +59,11 @@ pub fn app(
         holder_state,
         verification_state,
     }: ApplicationState,
-) -> Router {
+    actor_extractor: Arc<E>,
+) -> Router
+where
+    E: ActorExtractor,
+{
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
@@ -73,6 +85,7 @@ pub fn app(
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
         .merge(public::router())
+        .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
         // Trace layers
         .layer(
             ServiceBuilder::new()
@@ -146,15 +159,85 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
     Ok(Request::from_parts(parts, Body::from(bytes)))
 }
 
+/// Adapter that lets the actor extractor read values from HTTP headers.
+struct HttpActorInput<'a> {
+    headers: &'a HeaderMap,
+}
+
+impl<'a> HttpActorInput<'a> {
+    /// Create a header-backed actor input used by the actor extractor.
+    fn from_headers(headers: &'a HeaderMap) -> Self {
+        Self { headers }
+    }
+}
+
+impl ToActor for HttpActorInput<'_> {
+    /// Raw HTTP credentials are not stable actor identifiers.
+    ///
+    /// Actor extractors should read credentials with [`ToActor::auth_value`] and map them to a
+    /// non-sensitive subject before returning an [`Actor`].
+    fn to_actor(&self) -> Option<Actor> {
+        None
+    }
+
+    /// Read the header identified by `key` as a UTF-8 string slice.
+    fn auth_value(&self, key: &str) -> Option<&str> {
+        self.headers.get(key).and_then(|value| value.to_str().ok())
+    }
+}
+
+/// Extract an optional actor from the request headers and store it in the request extensions when present.
+pub async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+
+    if let Some(actor) = actor_extractor.extract_actor(&input).await {
+        request.extensions_mut().insert(actor);
+    }
+
+    next.run(request).await
+}
+
+/// Require a valid actor in the request headers, returning `401 Unauthorized` when none is present.
+///
+/// When an actor is found, it is inserted into the request extensions before the request is forwarded to the next handler.
+pub async fn require_actor<E>(
+    State(actor_extractor): State<Arc<E>>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode>
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+
+    if let Some(actor) = actor_extractor.extract_actor(&input).await {
+        request.extensions_mut().insert(actor);
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    Ok(next.run(request).await)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::extractors::RequestActor;
     use agent_shared::config::config;
+    use axum::{body::Body, routing::get};
+    use http::header::AUTHORIZATION;
+    use http::Request;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
+    use shared_kernel::authorization::NoActorExtractor;
     use std::collections::HashMap;
+    use tower::ServiceExt;
 
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
     pub const TEMPLATE_ID: &str = "001";
@@ -218,5 +301,116 @@ mod tests {
             })]),
             ..Default::default()
         };
+    }
+
+    #[derive(Clone)]
+    struct MappingActorExtractor;
+
+    #[async_trait::async_trait]
+    impl ActorExtractor for MappingActorExtractor {
+        async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input
+                .bearer_token()
+                .filter(|token| *token == "valid-token")
+                .map(|_| Actor {
+                    subject: "user@example.test".to_string(),
+                })
+        }
+    }
+
+    #[derive(Clone)]
+    struct CustomHeaderActorExtractor;
+
+    #[async_trait::async_trait]
+    impl ActorExtractor for CustomHeaderActorExtractor {
+        async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input
+                .auth_value("x-custom-actor-token")
+                .filter(|token| *token == "valid-token")
+                .map(|_| Actor {
+                    subject: "custom@example.test".to_string(),
+                })
+        }
+    }
+
+    async fn actor_subject(RequestActor(actor): RequestActor) -> String {
+        actor
+            .map(|actor| actor.subject)
+            .unwrap_or_else(|| "anonymous".to_string())
+    }
+
+    #[tokio::test]
+    async fn actor_extraction_middleware_stores_mapped_actor_in_request_extensions() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(MappingActorExtractor),
+                extract_actor::<MappingActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(AUTHORIZATION, "Bearer valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"user@example.test");
+    }
+
+    #[tokio::test]
+    async fn actor_extractor_can_read_custom_auth_values() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(CustomHeaderActorExtractor),
+                extract_actor::<CustomHeaderActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("x-custom-actor-token", "valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"custom@example.test");
+    }
+
+    #[tokio::test]
+    async fn no_actor_extractor_stores_anonymous_actor_extension() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(NoActorExtractor),
+                extract_actor::<NoActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(AUTHORIZATION, "Bearer valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"anonymous");
     }
 }

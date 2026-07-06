@@ -51,7 +51,6 @@ pub struct IotaMetadata {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
-#[schema(as = DocumentStatus)]
 pub enum Status {
     SignAndValidate,
     // TODO: Make a distinction between enabling both signing AND validation and just validation.
@@ -73,6 +72,7 @@ pub struct Document {
     pub with_fixed_algorithm: Option<Algorithm>,
     // Applicable only for DID methods that are based on the IOTA ledger.
     pub iota_metadata: Option<IotaMetadata>,
+    #[schema(inline)]
     pub status: Status,
 }
 

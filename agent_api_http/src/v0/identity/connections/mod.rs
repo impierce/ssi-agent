@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
@@ -44,6 +45,7 @@ pub struct AddConnectionEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(AddConnectionEndpointRequest { url }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
@@ -54,21 +56,33 @@ pub(crate) async fn post_connection(
         url,
     };
 
-    command_handler(&connection_id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &connection_id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
 
     // Return the connection.
-    query_handler(&connection_id, &state.query.connection)
-        .await?
-        .map(|connection_view| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-                Json(connection_view),
-            )
-                .into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &connection_id,
+        &state.query.connection,
+    )
+    .await?
+    .map(|connection_view| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
+            Json(connection_view),
+        )
+            .into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -99,26 +113,32 @@ pub struct GetConnectionsEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    let filtered_connections = query_handler("all_connections", &state.query.all_connections)
-        .await?
-        .map(|all_connections_view| {
-            let filtered_connections: Vec<_> = all_connections_view
-                .connections
-                .into_values()
-                .filter(|connection| {
-                    display
-                        .as_ref()
-                        .map_or(true, |display| connection.display.as_ref() == Some(display))
-                        && url.as_ref().map_or(true, |url| *url == connection.url)
-                        && did.as_ref().map_or(true, |did| connection.dids.contains(did))
-                })
-                .collect();
+    let filtered_connections = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_connections",
+        &state.query.all_connections,
+    )
+    .await?
+    .map(|all_connections_view| {
+        let filtered_connections: Vec<_> = all_connections_view
+            .connections
+            .into_values()
+            .filter(|connection| {
+                display
+                    .as_ref()
+                    .map_or(true, |display| connection.display.as_ref() == Some(display))
+                    && url.as_ref().map_or(true, |url| *url == connection.url)
+                    && did.as_ref().map_or(true, |did| connection.dids.contains(did))
+            })
+            .collect();
 
-            filtered_connections
-        })
-        .unwrap_or_default();
+        filtered_connections
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(filtered_connections)).into_response())
 }
@@ -138,13 +158,19 @@ pub(crate) async fn get_connections(
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&id, &state.query.connection)
-        .await?
-        .filter(|view| !view.deleted)
-        .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.query.connection,
+    )
+    .await?
+    .filter(|view| !view.deleted)
+    .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -168,12 +194,20 @@ pub struct SyncConnectionRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(SyncConnectionRequest { id }): Json<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -197,12 +231,20 @@ pub struct AcceptConnectionChangesRequest {
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(AcceptConnectionChangesRequest { id }): Json<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -226,12 +268,20 @@ pub struct RemoveConnectionRequest {
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(RemoveConnectionRequest { id }): Json<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 

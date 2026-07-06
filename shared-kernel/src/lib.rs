@@ -3,12 +3,14 @@
 //! Provides infrastructure used by all bounded contexts:
 //!
 //! - [`application_service`] — Actor-style service that serialises command/query processing.
+//! - [`authorization`] — Shared authorization primitives for application command/query execution.
 //! - [`command_handler`] — Traits and helpers for dispatching commands to aggregates.
 //! - [`custom_queries`] — Reusable CQRS query types such as [`custom_queries::ListAllQuery`].
 //! - [`view_repository`] — Dyn-compatible view repository wrappers and factory trait.
 //! - [`service_registry`] — Type-keyed service registry and channel-based service handles.
 
 pub mod application_service;
+pub mod authorization;
 pub mod command_handler;
 pub mod custom_queries;
 pub mod service_registry;

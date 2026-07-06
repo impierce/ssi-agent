@@ -1,4 +1,4 @@
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler};
 use oid4vci::{
     InteractionType, InteractiveAuthorizationRequest, InteractiveAuthorizationResponse, InteractiveAuthorizationStatus,
 };
@@ -64,7 +64,7 @@ impl InteractiveAuthorizationService {
         // registered in the Authorization Server). Therefore, as of now we can only validate the request for known
         // Clients. See: https://github.com/openid/OpenID4VCI/issues/94
         if authorization_request.client_id == UNIME_CLIENT_ID {
-            let client = query_handler(&authorization_request.client_id, &state.query.client)
+            let client = public_query_handler(&authorization_request.client_id, &state.query.client)
                 .await
                 .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?
                 .ok_or(InteractiveAuthorizationError::InvalidClientIdError)?;
@@ -107,7 +107,7 @@ impl InteractiveAuthorizationService {
             interaction_type: Some(InteractionType::OpenId4VpPresentation),
         };
 
-        command_handler(
+        public_command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,
@@ -115,7 +115,7 @@ impl InteractiveAuthorizationService {
         .await
         .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 
-        let oauth2_authorization_request_view = query_handler(
+        let oauth2_authorization_request_view = public_query_handler(
             &oauth2_authorization_request_id,
             &state.query.oauth2_authorization_request,
         )
@@ -158,7 +158,7 @@ impl InteractiveAuthorizationService {
                 .ok_or(InteractiveAuthorizationError::MissingOpenId4VPResponseError)?,
         };
 
-        command_handler(
+        public_command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,
@@ -167,7 +167,7 @@ impl InteractiveAuthorizationService {
         .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 
         // Get the OAuth2 authorization request that has been pushed via the `/auth/par` endpoint.
-        let oauth2_authorization_request = query_handler(
+        let oauth2_authorization_request = public_query_handler(
             &oauth2_authorization_request_id,
             &state.query.oauth2_authorization_request,
         )
@@ -193,7 +193,7 @@ impl InteractiveAuthorizationService {
             expires_in,
         };
 
-        command_handler(&authorization_code_id, &state.command.authorization_code, command)
+        public_command_handler(&authorization_code_id, &state.command.authorization_code, command)
             .await
             .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 

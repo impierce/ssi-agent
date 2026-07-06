@@ -1,4 +1,5 @@
 use crate::error::type_url;
+use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
@@ -47,12 +48,18 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Path(credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&credential_id, &state.query.credential)
-        .await?
-        .map(|credential_view| (StatusCode::OK, Json(credential_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &credential_id,
+        &state.query.credential,
+    )
+    .await?
+    .map(|credential_view| (StatusCode::OK, Json(credential_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -83,7 +90,8 @@ pub struct CredentialsEndpointRequest {
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credentials(
-    State(issuance_state): State<Arc<IssuanceState>>,
+    State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CredentialsEndpointRequest {
         template_id,
@@ -108,16 +116,21 @@ pub(crate) async fn credentials(
     }
 
     // Look up the template by ID.
-    let template: Template = query_handler(&template_id, &library_state.query.template)
-        .await?
-        .filter(|t| t.status != TemplateStatus::Deleted)
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not Found")
-                .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{template_id}`"))
-                .finish()
-        })?;
+    let template: Template = query_handler(
+        library_state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &library_state.query.template,
+    )
+    .await?
+    .filter(|t| t.status != TemplateStatus::Deleted)
+    .ok_or_else(|| {
+        ApiError::builder(StatusCode::NOT_FOUND)
+            .title("Template Not Found")
+            .type_url(type_url("issuance#template-not-found"))
+            .message(format!("No template found with id: `{template_id}`"))
+            .finish()
+    })?;
 
     if template.status != TemplateStatus::Published {
         return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
@@ -141,24 +154,28 @@ pub(crate) async fn credentials(
         }
     }
 
-    let (_, credential_configuration, authorization) =
-        query_handler(SERVER_CONFIG_ID, &issuance_state.query.server_config)
-            .await?
-            .and_then(|server_config_view| {
-                server_config_view
-                    .credential_configurations
-                    .get(&credential_configuration_id)
-                    .cloned()
-            })
-            .ok_or_else(|| {
-                ApiError::builder(StatusCode::NOT_FOUND)
-                    .title("No Credential Configuration Found")
-                    .type_url(type_url("issuance#no-credential-configuration-found"))
-                    .message(format!(
-                        "No Credential Configuration found with id: `{credential_configuration_id}`"
-                    ))
-                    .finish()
-            })?;
+    let (_, credential_configuration, authorization) = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        SERVER_CONFIG_ID,
+        &state.query.server_config,
+    )
+    .await?
+    .and_then(|server_config_view| {
+        server_config_view
+            .credential_configurations
+            .get(&credential_configuration_id)
+            .cloned()
+    })
+    .ok_or_else(|| {
+        ApiError::builder(StatusCode::NOT_FOUND)
+            .title("No Credential Configuration Found")
+            .type_url(type_url("issuance#no-credential-configuration-found"))
+            .message(format!(
+                "No Credential Configuration found with id: `{credential_configuration_id}`"
+            ))
+            .finish()
+    })?;
 
     let command = if is_signed {
         // For a signed credential, ensure that the credential is a string.
@@ -217,10 +234,25 @@ pub(crate) async fn credentials(
     };
 
     // Create an unsigned/signed credential.
-    command_handler(&credential_id, &issuance_state.command.credential, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &credential_id,
+        &state.command.credential,
+        command,
+    )
+    .await?;
 
     // Create an offer if it does not exist yet.
-    if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
+    if query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .is_none()
+    {
         // Extract the tx_code_constraints from the credential configuration if available.
         let tx_code_constraints = authorization
             .pre_authorized
@@ -241,7 +273,14 @@ pub(crate) async fn credentials(
             delivery_options: None,
         };
 
-        command_handler(&offer_id, &issuance_state.command.offer, command).await?
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &offer_id,
+            &state.command.offer,
+            command,
+        )
+        .await?
     };
 
     let command = OfferCommand::AddCredentials {
@@ -251,27 +290,39 @@ pub(crate) async fn credentials(
     };
 
     // Add the credential to the offer.
-    command_handler(&offer_id, &issuance_state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     // Return the credential.
-    query_handler(&credential_id, &issuance_state.query.credential)
-        .await?
-        .and_then(|credential_view| {
-            if is_signed {
-                credential_view.signed
-            } else {
-                credential_view.data.map(|data| data.raw)
-            }
-        })
-        .map(|credential_body| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
-                Json(credential_body),
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &credential_id,
+        &state.query.credential,
+    )
+    .await?
+    .and_then(|credential_view| {
+        if is_signed {
+            credential_view.signed
+        } else {
+            credential_view.data.map(|data| data.raw)
+        }
+    })
+    .map(|credential_body| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/credentials/{credential_id}"))],
+            Json(credential_body),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -397,11 +448,19 @@ fn invalid_signed_credential_format_error(message: impl Into<String>) -> ApiErro
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credentials(State(issuance_state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_credentials = query_handler("all_credentials", &issuance_state.query.all_credentials)
-        .await?
-        .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn all_credentials(
+    State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let all_credentials = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_credentials",
+        &state.query.all_credentials,
+    )
+    .await?
+    .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
@@ -415,12 +474,20 @@ pub struct PatchCredentialEndpointRequest {
 /// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Path(credential_id): Path<String>,
     Json(PatchCredentialEndpointRequest {
         credential_status: status,
     }): Json<PatchCredentialEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    if let Some(credential) = query_handler(&credential_id, &state.query.credential).await? {
+    if let Some(credential) = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &credential_id,
+        &state.query.credential,
+    )
+    .await?
+    {
         let credential_status = CredentialStatus {
             index: credential.credential_status.index,
             status,
@@ -432,7 +499,14 @@ pub async fn patch_credential(
             credential_status: credential_status.clone(),
         };
 
-        command_handler(&credential_id, &state.command.credential, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &credential_id,
+            &state.command.credential,
+            command,
+        )
+        .await?;
 
         let command = StatusListCommand::UpdateIndex {
             index: credential_status.index,
@@ -445,7 +519,14 @@ pub async fn patch_credential(
             .next_back()
             .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
 
-        command_handler(status_list_id, &state.command.status_list, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            status_list_id,
+            &state.command.status_list,
+            command,
+        )
+        .await?;
 
         Ok(StatusCode::NO_CONTENT.into_response())
     } else {
@@ -620,6 +701,7 @@ pub mod tests {
         // This test credential is tested after creation but before signing, therefore it misses a few last fields which are set during signing.
         // Please look at the comments in agent_issuance/src/credential/aggregate.rs `SignCredential` for more information.
         pub static ref VC_DM_1_1_CREDENTIAL: serde_json::Value = json!({
+            "id": "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
             "@context": [ "https://www.w3.org/2018/credentials/v1" ],
             "type": [ "VerifiableCredential" ],
             "name": "Verifiable Credential",
@@ -754,6 +836,8 @@ pub mod tests {
         let template_id = TEMPLATE_ID.to_string();
 
         command_handler(
+            library_state.authorization_checker.clone(),
+            None,
             &template_id,
             &library_state.command.template,
             TemplateCommand::CreateNewTemplate {

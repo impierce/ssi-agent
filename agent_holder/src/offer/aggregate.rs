@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = HolderOfferStatus)]
 pub enum Status {
     #[default]
     Pending,
@@ -39,6 +38,7 @@ pub struct Offer {
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_offer: Option<CredentialOfferParameters>,
+    #[schema(inline)]
     pub status: Status,
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
@@ -344,7 +344,7 @@ pub mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::config::{config, config_mut, Authorization, CredentialConfiguration};
     use agent_shared::generate_random_string;
-    use agent_shared::handlers::command_handler;
+    use agent_shared::handlers::public_command_handler as command_handler;
     use agent_store::in_memory::InMemory;
     use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{

@@ -1,4 +1,4 @@
-use crate::handlers::command_handler;
+use crate::handlers::public_command_handler;
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -33,7 +33,7 @@ pub(crate) async fn redirect(
     let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
     // Verify the authorization response.
-    command_handler(
+    public_command_handler(
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,

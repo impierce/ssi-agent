@@ -27,6 +27,7 @@ did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993"
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
+shared-kernel.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

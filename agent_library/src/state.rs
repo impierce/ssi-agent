@@ -1,4 +1,5 @@
 use agent_shared::application_state::CommandHandler;
+use shared_kernel::authorization::AuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -14,6 +15,7 @@ use crate::catalog::{
 
 #[derive(Clone)]
 pub struct LibraryState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }

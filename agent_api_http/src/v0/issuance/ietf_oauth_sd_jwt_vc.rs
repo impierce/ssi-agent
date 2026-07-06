@@ -1,4 +1,4 @@
-use crate::{handlers::query_handler, v0::issuance::error::PublicError};
+use crate::{handlers::public_query_handler, v0::issuance::error::PublicError};
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use axum::{
     extract::{Path, State},
@@ -25,7 +25,7 @@ pub(crate) async fn type_metadata(
         .ok_or(PublicError::NotFoundError)?;
 
     // Check if the credential configuration IDs are valid.
-    let credential_configuration = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
+    let credential_configuration = public_query_handler(SERVER_CONFIG_ID, &state.query.server_config)
         .await?
         .and_then(|server_config_view| {
             server_config_view
