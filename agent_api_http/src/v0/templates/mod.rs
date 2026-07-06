@@ -35,6 +35,7 @@ pub struct TemplateDto {
     pub holder_type: HolderType,
     pub modified_at: Option<String>,
     pub tags: Option<Vec<String>>,
+    #[schema(inline)]
     pub status: Status,
     pub visibility: Visibility,
     pub credential_expiration: Expiration,
@@ -75,6 +76,7 @@ pub struct CreateNewTemplateRequestBody {
     pub data_model: DataModel,
     pub holder_type: HolderType,
     pub tags: Option<Vec<String>>,
+    #[schema(inline)]
     pub status: Status,
     pub visibility: Visibility,
     pub credential_expiration: Option<Expiration>,
@@ -278,6 +280,7 @@ pub struct UpdateTemplateEndpointRequest {
     pub title: Option<String>,
     pub display: Option<Display>,
     pub tags: Option<Vec<String>>,
+    #[schema(inline)]
     pub status: Option<Status>,
     pub visibility: Option<Visibility>,
     pub credential_expiration: Option<Expiration>,

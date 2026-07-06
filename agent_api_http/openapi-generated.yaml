@@ -797,7 +797,12 @@ components:
             type: string
         status:
           oneOf:
-          - $ref: '#/components/schemas/TemplateStatus'
+          - type: string
+            enum:
+            - draft
+            - published
+            - archived
+            - deleted
           default: draft
         tags:
           type:
@@ -937,19 +942,16 @@ components:
           - 'null'
         signed: {}
         status:
-          $ref: '#/components/schemas/IssuanceStatus'
+          type: string
+          enum:
+          - Pending
+          - Issued
     CredentialExpiry:
       oneOf:
       - type: string
         format: date-time
       - type: 'null'
         default: null
-    CredentialOfferStatus:
-      type: string
-      enum:
-      - Created
-      - Pending
-      - Issued
     CredentialStatus:
       type: object
       required:
@@ -1070,17 +1072,15 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/IotaMetadata'
         status:
-          $ref: '#/components/schemas/DocumentStatus'
+          type: string
+          enum:
+          - SignAndValidate
+          - Disabled
         with_fixed_algorithm:
           type: string
           enum:
           - ES256
           - EdDSA
-    DocumentStatus:
-      type: string
-      enum:
-      - SignAndValidate
-      - Disabled
     DomainLinkageValidation:
       type: object
       required:
@@ -1169,26 +1169,9 @@ components:
         pre_authorized:
           type: boolean
         tx_code_constraints:
-          type: object
-          properties:
-            description:
-              type: string
-              description: The length of the string must not exceed 300 characters.
-            input_mode:
-              type: string
-              enum:
-              - numeric
-              - text
-            length:
-              type: integer
-              description: Allows a pin-length of 0-255.
-    HolderOfferStatus:
-      type: string
-      enum:
-      - Pending
-      - Accepted
-      - CredentialsReceived
-      - Rejected
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TxCodeConstraints'
     HolderType:
       type: string
       enum:
@@ -1229,11 +1212,6 @@ components:
         wallet_address:
           type: string
           example: '0x1234567890'
-    IssuanceStatus:
-      type: string
-      enum:
-      - Pending
-      - Issued
     LinkedVpValidation:
       type: object
     Logo:
@@ -1307,7 +1285,11 @@ components:
         pre_authorized_code:
           type: string
         status:
-          $ref: '#/components/schemas/CredentialOfferStatus'
+          type: string
+          enum:
+          - Created
+          - Pending
+          - Issued
         subject_id:
           type:
           - string
@@ -1352,7 +1334,12 @@ components:
         id:
           type: string
         status:
-          $ref: '#/components/schemas/HolderOfferStatus'
+          type: string
+          enum:
+          - Pending
+          - Accepted
+          - CredentialsReceived
+          - Rejected
         token_response:
           type:
           - object
@@ -1426,11 +1413,6 @@ components:
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
-    PublicOfferStatus:
-      type: string
-      enum:
-      - Active
-      - Inactive
     PublicOfferStatusDto:
       type: object
       required:
@@ -1446,7 +1428,10 @@ components:
         id:
           type: string
         status:
-          $ref: '#/components/schemas/PublicOfferStatus'
+          type: string
+          enum:
+          - Active
+          - Inactive
         templateId:
           type: string
     RemoveConnectionRequest:
@@ -1551,7 +1536,12 @@ components:
           propertyNames:
             type: string
         status:
-          $ref: '#/components/schemas/TemplateStatus'
+          type: string
+          enum:
+          - draft
+          - published
+          - archived
+          - deleted
         tags:
           type:
           - array
@@ -1566,13 +1556,33 @@ components:
             type: string
         visibility:
           $ref: '#/components/schemas/Visibility'
-    TemplateStatus:
-      type: string
-      enum:
-      - draft
-      - published
-      - archived
-      - deleted
+    TxCodeConstraints:
+      type: object
+      properties:
+        description:
+          type: string
+          description: The length of the description must not exceed 300 characters.
+          examples:
+          - Please provide the one-time code you received via email.
+          maxLength: 300
+        input_mode:
+          oneOf:
+          - type: 'null'
+          - type: string
+            enum:
+            - numeric
+            - text
+          default: numeric
+        length:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The length of the PIN must be between 0 and 255 characters.
+          examples:
+          - $serde_json::private::Number: '6'
+          maximum: 255
+          minimum: 0
     UpdateTemplateEndpointRequest:
       type: object
       properties:
@@ -1612,7 +1622,12 @@ components:
         status:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/TemplateStatus'
+          - type: string
+            enum:
+            - draft
+            - published
+            - archived
+            - deleted
           default: null
         tags:
           type:
