@@ -1,7 +1,8 @@
 use agent_shared::application_state::CommandHandler;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, public_query_handler};
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
+use shared_kernel::authorization::AuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -26,6 +27,7 @@ pub const UNIME_REDIRECT_URI: &str = "unime://callback";
 
 #[derive(Clone)]
 pub struct AuthorizationState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub signer: Arc<dyn Sign>,
@@ -85,7 +87,7 @@ pub async fn initialize(state: &AuthorizationState) -> anyhow::Result<()> {
 
 /// Initialize the default client (UniMe) in the authorization state.
 async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
-    if let Some(client) = query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
+    if let Some(client) = public_query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
         debug!("UniMe client already exists: {:?}", client);
         Ok(())
     } else {
@@ -109,7 +111,14 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             require_pushed_authorization_request: true,
         };
 
-        command_handler(UNIME_CLIENT_ID, &state.command.client, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            UNIME_CLIENT_ID,
+            &state.command.client,
+            command,
+        )
+        .await?;
 
         Ok(())
     }

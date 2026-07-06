@@ -7,7 +7,7 @@ use agent_library::template::command::TemplateCommand;
 use agent_library::template::event::{Expiration, HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
 use agent_shared::config::Authorization;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
 use agent_store::in_memory::InMemory;
 use agent_store::{issuance_state, library_state};
 use cqrs_es::{EventEnvelope, Query};

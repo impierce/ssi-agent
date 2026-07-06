@@ -1,10 +1,11 @@
 use agent_secret_manager::subject::Subject;
 use agent_shared::application_state::CommandHandler;
 use agent_shared::config::{config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{command_handler, public_query_handler};
 use agent_shared::UrlAppendHelpers;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
+use shared_kernel::authorization::AuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -28,6 +29,7 @@ use crate::status_list::views::StatusListView;
 
 #[derive(Clone)]
 pub struct IssuanceState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
@@ -142,20 +144,34 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
 
     let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
-    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(server_config_view) => {
             info!("Update Issuer URL in server metadata");
 
             let command = ServerConfigCommand::UpdateIssuerUrl {
                 url: public_url.clone(),
             };
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                None,
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
 
             if display != server_config_view.credential_issuer_metadata.display {
                 debug!("The server metadata display does not match the configured display.");
 
                 let command = ServerConfigCommand::UpdateIssuerDisplay { display };
-                command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    None,
+                    SERVER_CONFIG_ID,
+                    &state.command.server_config,
+                    command,
+                )
+                .await?;
             }
         }
         None => {
@@ -205,7 +221,14 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                 signing_algorithms_supported,
             };
 
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                None,
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
         }
     }
 
@@ -213,7 +236,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
 }
 
 pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyhow::Result<()> {
-    if let Some(server_config_view) = query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    if let Some(server_config_view) = public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         let mut cryptographic_binding_methods_supported: Vec<_> = get_all_enabled_did_methods()
             .into_iter()
             .map(|did_method| did_method.to_string())
@@ -226,7 +249,14 @@ pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyh
                 cryptographic_binding_methods_supported,
             };
 
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                None,
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
         } else {
             debug!("Cryptographic binding methods are already up to date.");
         }
@@ -236,7 +266,7 @@ pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyh
 }
 
 pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<()> {
-    if let Some(server_config_view) = query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    if let Some(server_config_view) = public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
         if server_config_view.signing_algorithms_supported != signing_algorithms_supported {
@@ -244,7 +274,14 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
                 signing_algorithms_supported,
             };
 
-            command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                None,
+                SERVER_CONFIG_ID,
+                &state.command.server_config,
+                command,
+            )
+            .await?;
         } else {
             debug!("Signing algorithms are already up to date.");
         }

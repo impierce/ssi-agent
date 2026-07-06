@@ -50,7 +50,7 @@ pub mod tests {
     use agent_issuance::public_offer::command::PublicOfferCommand;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use agent_shared::handlers::command_handler;
+    use agent_shared::handlers::public_command_handler as command_handler;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,

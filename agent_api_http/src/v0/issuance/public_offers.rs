@@ -1,5 +1,6 @@
 use crate::error::IntoApiErrorExt;
-use crate::handlers::{command_handler, query_handler};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, public_query_handler, query_handler};
 use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::public_offer::error::PublicOfferError;
@@ -137,16 +138,31 @@ impl From<&PublicOffer> for PublicOfferStatusDto {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_public_offers(State(issuance_state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_offers = query_handler("all_public_offers", &issuance_state.query.all_public_offers)
-        .await?
-        .unwrap_or_default();
+pub(crate) async fn all_public_offers(
+    State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let all_offers = query_handler(
+        issuance_state.authorization_checker.clone(),
+        actor.clone(),
+        "all_public_offers",
+        &issuance_state.query.all_public_offers,
+    )
+    .await?
+    .unwrap_or_default();
 
     let mut offers = Vec::with_capacity(all_offers.offers.len());
 
     for public_offer in all_offers.offers.values() {
         let mut dto = PublicOfferStatusDto::from(public_offer);
-        if let Some(offer_view) = query_handler(&public_offer.id, &issuance_state.query.offer).await? {
+        if let Some(offer_view) = query_handler(
+            issuance_state.authorization_checker.clone(),
+            actor.clone(),
+            &public_offer.id,
+            &issuance_state.query.offer,
+        )
+        .await?
+        {
             dto.amount_issued = offer_view.successful_issuances;
         }
         offers.push(dto);
@@ -170,17 +186,31 @@ pub(crate) async fn all_public_offers(State(issuance_state): State<Arc<IssuanceS
 #[axum_macros::debug_handler]
 pub(crate) async fn create_public_offer(
     State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
-    if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
+    if query_handler(
+        issuance_state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &issuance_state.query.offer,
+    )
+    .await?
+    .is_none()
+    {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
 
-    let template = query_handler(&template_id, &library_state.query.template)
-        .await
-        .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
-        .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
+    let template = query_handler(
+        library_state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        &library_state.query.template,
+    )
+    .await
+    .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
+    .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     // Only non-deleted templates can be offered publicly
     if template.status == Status::Deleted {
@@ -196,7 +226,14 @@ pub(crate) async fn create_public_offer(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::CREATED).into_response())
 }
@@ -215,6 +252,7 @@ pub(crate) async fn create_public_offer(
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_offline(
     State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
@@ -222,7 +260,14 @@ pub(crate) async fn take_public_offer_offline(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -241,6 +286,7 @@ pub(crate) async fn take_public_offer_offline(
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_online(
     State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
@@ -248,7 +294,14 @@ pub(crate) async fn take_public_offer_online(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -267,6 +320,7 @@ pub(crate) async fn take_public_offer_online(
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_public_offer(
     State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
@@ -274,7 +328,14 @@ pub(crate) async fn delete_public_offer(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -283,7 +344,7 @@ pub(crate) async fn delete_public_offer(
 pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_id: &str) -> Result<bool, ApiError> {
     let aggregate_id = public_offer_aggregate_id(offer_id);
 
-    match query_handler(&aggregate_id, &state.query.public_offer).await? {
+    match public_query_handler(&aggregate_id, &state.query.public_offer).await? {
         Some(offer) => Ok(offer.active && !offer.deleted),
         // If there is no public-offer record, treat it as a normal offer.
         None => Ok(true),
@@ -292,7 +353,7 @@ pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_i
 
 #[cfg(test)]
 mod tests {
-    use crate::handlers::command_handler;
+    use crate::handlers::public_command_handler;
     use crate::tests::TEMPLATE_ID;
     use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::router;
@@ -357,7 +418,7 @@ mod tests {
             schema,
         };
 
-        command_handler(template_id, &library_state.command.template, command)
+        public_command_handler(template_id, &library_state.command.template, command)
             .await
             .unwrap();
     }

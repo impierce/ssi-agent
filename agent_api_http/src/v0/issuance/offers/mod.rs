@@ -1,5 +1,6 @@
 pub mod send;
 
+use crate::extractors::RequestActor;
 use crate::{
     error::type_url,
     handlers::{command_handler, query_handler},
@@ -36,6 +37,7 @@ pub struct OffersEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
     Json(OffersEndpointRequest {
         offer_id,
@@ -55,16 +57,21 @@ pub(crate) async fn offers(
     let mut templates = Vec::with_capacity(template_ids.len());
 
     for template_id in &template_ids {
-        let template: Template = query_handler(template_id, &library_state.query.template)
-            .await?
-            .filter(|t| t.status != TemplateStatus::Deleted)
-            .ok_or_else(|| {
-                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                    .title("Template Not Found")
-                    .type_url(type_url("issuance#template-not-found"))
-                    .message(format!("No template found with id: `{template_id}`"))
-                    .finish()
-            })?;
+        let template: Template = query_handler(
+            library_state.authorization_checker.clone(),
+            actor.clone(),
+            template_id,
+            &library_state.query.template,
+        )
+        .await?
+        .filter(|t| t.status != TemplateStatus::Deleted)
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Template Not Found")
+                .type_url(type_url("issuance#template-not-found"))
+                .message(format!("No template found with id: `{template_id}`"))
+                .finish()
+        })?;
 
         // Template must be in "Published" status
         if template.status != TemplateStatus::Published {
@@ -96,7 +103,16 @@ pub(crate) async fn offers(
         GrantType::AuthorizationCode
     }];
 
-    if query_handler(&offer_id, &state.query.offer).await?.is_none() {
+    // Create an offer if it does not exist yet.
+    if query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .is_none()
+    {
         let command = OfferCommand::CreateCredentialOffer {
             offer_id: offer_id.clone(),
             template_ids,
@@ -105,22 +121,34 @@ pub(crate) async fn offers(
             delivery_options,
         };
 
-        command_handler(&offer_id, &state.command.offer, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &offer_id,
+            &state.command.offer,
+            command,
+        )
+        .await?;
     }
 
-    query_handler(&offer_id, &state.query.offer)
-        .await?
-        .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
-        .map(|form_url_encoded_credential_offer| {
-            (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
-                form_url_encoded_credential_offer,
-            )
-                .into_response()
-        })
-        // Unreachable error
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .and_then(|offer_view| offer_view.form_url_encoded_credential_offer)
+    .map(|form_url_encoded_credential_offer| {
+        (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/x-www-form-urlencoded")],
+            form_url_encoded_credential_offer,
+        )
+            .into_response()
+    })
+    // Unreachable error
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// Get all offers
@@ -136,11 +164,19 @@ pub(crate) async fn offers(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let all_offers = query_handler("all_offers", &state.query.all_offers)
-        .await?
-        .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn all_offers(
+    State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let all_offers = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_offers",
+        &state.query.all_offers,
+    )
+    .await?
+    .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_offers)).into_response())
 }
@@ -161,12 +197,18 @@ pub(crate) async fn all_offers(State(state): State<Arc<IssuanceState>>) -> Resul
 #[axum_macros::debug_handler]
 pub(crate) async fn offer(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Path(offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&offer_id, &state.query.offer)
-        .await?
-        .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.query.offer,
+    )
+    .await?
+    .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]

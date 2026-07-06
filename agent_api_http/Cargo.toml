@@ -75,6 +75,7 @@ agent_verification = { path = "../agent_verification", features = [
 ] }
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
+async-trait.workspace = true
 futures.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true

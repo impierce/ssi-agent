@@ -2,7 +2,7 @@ mod metadata;
 mod probes;
 
 pub use agent_api_http::metrics::metrics;
-use agent_api_http::{app, metrics::track_metrics, ApplicationState};
+use agent_api_http::{app, metrics::track_metrics, ApplicationState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
@@ -16,6 +16,7 @@ use agent_shared::config::{config, EventStoreType};
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
 use agent_verification::services::VerificationServices;
 use probes::liveness::healthz;
+use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::io;
 use tower_http::cors::CorsLayer;
@@ -256,7 +257,17 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
 /// Builds the full core SSI agent Router (app + metadata + probes).
 pub fn router(application_state: ApplicationState) -> axum::Router {
-    let app = app(application_state);
+    router_with_actor_extractor(application_state, NoActorExtractor)
+        .merge(axum::Router::new().nest(API_VERSION, configuration_router()))
+}
+
+/// Builds the full core SSI agent Router with a custom actor extractor.
+pub fn router_with_actor_extractor<E>(application_state: ApplicationState, actor_extractor: E) -> axum::Router
+where
+    E: ActorExtractor,
+{
+    let actor_extractor = Arc::new(actor_extractor);
+    let app = app(application_state, actor_extractor);
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
@@ -266,7 +277,6 @@ pub fn router(application_state: ApplicationState) -> axum::Router {
     let metadata_router = axum::Router::new()
         .route("/version", axum::routing::get(metadata::version::version))
         .route("/info", axum::routing::get(metadata::info::info))
-        .route("/v0/configuration", axum::routing::get(metadata::config::configuration))
         .with_state(metadata_state);
 
     let app = metadata_router.merge(app);
@@ -280,6 +290,11 @@ pub fn router(application_state: ApplicationState) -> axum::Router {
     }
 
     app
+}
+
+/// Builds the application configuration router without the API version prefix.
+pub fn configuration_router() -> axum::Router {
+    axum::Router::new().route("/configuration", axum::routing::get(metadata::config::configuration))
 }
 
 async fn serve(app: axum::Router) -> io::Result<()> {
