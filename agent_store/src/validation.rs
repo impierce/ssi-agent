@@ -1,66 +1,13 @@
-use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
-use shared_kernel::command_handler::{CommandHandler, CommandHandlerFactory, EventUpcaster};
-use shared_kernel::cqrs_es::View;
-use shared_kernel::cqrs_es::{
-    persist::{PersistedEventRepository, PersistedEventStore, PersistenceError, ReplayStream},
-    Aggregate, CqrsFramework, Query,
-};
-use shared_kernel::view_repository::{BoxedViewRepository, ViewRepositoryFactory};
-use std::future::Future;
-use std::sync::Arc;
-
-pub struct MongoDBStore {
-    client: Client,
-}
-
-impl MongoDBStore {
-    pub async fn new(connection_string: &str) -> Self {
-        let client = default_mongo_client(connection_string).await;
-        Self { client }
-    }
-    // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
-
-    /// Validates that every persisted event for aggregate `A` can be streamed, upcasted (using
-    /// `upcasters`), and deserialized into `A::Event` — i.e. that a full replay of the read side
-    /// would succeed with the current code and upcaster configuration.
-    ///
-    /// This is intended to be run once at startup as a readiness check: it surfaces
-    /// upcaster/schema mismatches immediately (before serving traffic), rather than only when a
-    /// specific aggregate happens to be loaded later on and its events fail to deserialize.
-    ///
-    /// Returns the number of events that were successfully validated.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EventValidationError`] if the event repository can't be reached, or if any
-    /// persisted event fails to upcast and deserialize into `A::Event`.
-    pub async fn validate_events<A>(&self, upcasters: Vec<Box<dyn EventUpcaster>>) -> Result<u64, EventValidationError>
-    where
-        A: Aggregate,
-    {
-        let repo = MongoEventRepository::new(self.client.clone())
-            .await
-            .map_err(|e| EventValidationError {
-                aggregate_type: A::TYPE,
-                validated_count: 0,
-                source: PersistenceError::ConnectionError(Box::new(e)),
-            })?;
-
-        let stream = repo
-            .stream_all_events::<A>()
-            .await
-            .map_err(|source| EventValidationError {
-                aggregate_type: A::TYPE,
-                validated_count: 0,
-                source,
-            })?;
-
-        validate_event_stream::<A>(stream, &upcasters).await
-    }
-}
+use cqrs_es::persist::{EventUpcaster, PersistenceError, ReplayStream};
+use cqrs_es::Aggregate;
 
 /// Error produced when replaying (streaming + upcasting + deserializing) the persisted events of
-/// an aggregate type fails during [`MongoDBStore::validate_events`].
+/// an aggregate type fails during startup replay validation (see [`crate::CqrsComponentBuilder::validate_events`]
+/// and [`crate::validate_all_events`]).
+///
+/// This is intentionally *not* fatal to the running process: the application is expected to log
+/// this loudly, mark itself not-ready (so `/readyz` returns `503`), and keep serving traffic so an
+/// orchestrator can hold back the old revision instead of losing the entire deployment.
 #[derive(Debug, thiserror::Error)]
 #[error(
     "event replay validation failed for aggregate type `{aggregate_type}` after successfully \
@@ -70,7 +17,7 @@ pub struct EventValidationError {
     /// The aggregate type (`Aggregate::TYPE`) being validated.
     pub aggregate_type: &'static str,
     /// The number of events that were successfully streamed, upcasted, and deserialized before
-    /// the failure occurred.
+    /// the failure occurred (across the whole validation sweep, not just this aggregate type).
     pub validated_count: u64,
     /// The underlying persistence error (e.g. a deserialization failure caused by a missing
     /// upcaster).
@@ -81,10 +28,11 @@ pub struct EventValidationError {
 /// Drains `stream`, applying `upcasters` and deserializing each event into `A::Event`, counting
 /// the number of events successfully validated.
 ///
-/// This is the testable core of [`MongoDBStore::validate_events`]: it operates on any
-/// [`ReplayStream`], so tests can feed it a stream of hand-crafted [`SerializedEvent`]s (via
-/// [`ReplayStream::new`] and its accompanying `ReplayFeed`) without a live `MongoDB` instance.
-async fn validate_event_stream<A>(
+/// This is the testable core of the per-backend `CqrsComponentBuilder::validate_events`
+/// implementations: it operates on any [`ReplayStream`], so tests can feed it a stream of
+/// hand-crafted `SerializedEvent`s (via `ReplayStream::new` and its accompanying `ReplayFeed`)
+/// without a live database.
+pub async fn validate_event_stream<A>(
     mut stream: ReplayStream,
     upcasters: &[Box<dyn EventUpcaster>],
 ) -> Result<u64, EventValidationError>
@@ -103,58 +51,16 @@ where
     Ok(validated_count)
 }
 
-impl ViewRepositoryFactory for MongoDBStore {
-    fn create_view_repository<V, A>(&self, name: &str) -> BoxedViewRepository<V, A>
-    where
-        V: View<A> + Clone + 'static,
-        A: Aggregate + 'static,
-    {
-        BoxedViewRepository::new(Box::new(MongoViewRepository::new(name, self.client.clone())))
-    }
-}
-
-// TODO: re-expose `mongodb::error::Result` through `mongo_es` and use it as the error type here instead of defining a
-// new one.
-#[derive(Debug, thiserror::Error)]
-#[error("MongoDB aggregate error: {0}")]
-pub struct MongoDBAggregateError(String);
-
-impl CommandHandlerFactory for MongoDBStore {
-    type Error = MongoDBAggregateError;
-
-    fn create_handler<A>(
-        &self,
-        services: A::Services,
-        queries: Vec<Box<dyn Query<A>>>,
-        upcasters: Vec<Box<dyn EventUpcaster>>,
-    ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
-    where
-        A: Aggregate + 'static,
-        <A as Aggregate>::Command: Send,
-    {
-        let client = self.client.clone();
-
-        async move {
-            let repo = MongoEventRepository::new(client)
-                .await
-                .map_err(|e| MongoDBAggregateError(e.to_string()))?;
-            let store = PersistedEventStore::new_event_store(repo).with_upcasters(upcasters);
-
-            Ok(Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cqrs_es::event_sink::EventSink;
+    use cqrs_es::persist::{SemanticVersionEventUpcaster, SerializedEvent};
+    use cqrs_es::DomainEvent;
     use serde::{Deserialize, Serialize};
     use serde_json::json;
-    use shared_kernel::cqrs_es::event_sink::EventSink;
-    use shared_kernel::cqrs_es::persist::{EventUpcaster, SemanticVersionEventUpcaster, SerializedEvent};
-    use shared_kernel::cqrs_es::DomainEvent;
 
-    // ── Minimal aggregate/event used to exercise `validate_event_stream` without a live MongoDB ──
+    // ── Minimal aggregate/event used to exercise `validate_event_stream` without a live database ──
 
     #[derive(Debug, Default, Serialize, Deserialize)]
     struct TestAggregate;
@@ -240,8 +146,8 @@ mod tests {
         ))
     }
 
-    /// Builds a `ReplayStream` pre-loaded with `events`, mirroring how `MongoEventRepository`
-    /// produces one internally, but without touching `MongoDB`.
+    /// Builds a `ReplayStream` pre-loaded with `events`, mirroring how a `PersistedEventRepository`
+    /// produces one internally, but without touching a live database.
     async fn stream_of(events: Vec<SerializedEvent>) -> ReplayStream {
         let (mut feed, stream) = ReplayStream::new(events.len().max(1));
         for event in events {

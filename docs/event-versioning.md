@@ -41,8 +41,9 @@ Upcasters can be written in either of two ways:
   version parser treats a missing minor/patch as `0`, so `"1"` parses as `1.0.0` and `"2"` as
   `2.0.0`, and the "applies when the upcaster's version supersedes the stored one" rule reduces
   to plain integer comparison. `SemanticVersionEventUpcaster::new("EventType", "2", transform_fn)`
-  upcasts every stored `EventType` with version `< 2` and stamps it `"2"`. Prefer this for simple
-  payload transforms.
+  upcasts every stored `EventType` with version `< 2` and stamps it `"2.0.0"` (the `Display` of
+  the parsed version — harmless, since versions are only ever compared after parsing). Prefer this
+  for simple payload transforms.
 - **A hand-implemented `EventUpcaster`** for anything the helper can't express (conditional
   matching, renaming the event type itself, non-JSON-map payload surgery):
 

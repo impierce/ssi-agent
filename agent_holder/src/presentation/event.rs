@@ -47,9 +47,11 @@ mod wire_format_tests {
             serde_json::from_value(serialized).expect("serialized event should deserialize");
         assert_eq!(round_tripped, event, "round-trip through JSON changed the event");
 
-        let from_golden: PresentationEvent =
-            serde_json::from_value(golden).expect("golden fixture should deserialize");
-        assert_eq!(from_golden, event, "golden fixture no longer deserializes into the expected event");
+        let from_golden: PresentationEvent = serde_json::from_value(golden).expect("golden fixture should deserialize");
+        assert_eq!(
+            from_golden, event,
+            "golden fixture no longer deserializes into the expected event"
+        );
     }
 
     #[test]

@@ -68,11 +68,15 @@ mod wire_format_tests {
         let serialized = serde_json::to_value(&event).expect("event should serialize");
         assert_eq!(serialized, golden, "serialized event drifted from the golden fixture");
 
-        let round_tripped: OfferEvent = serde_json::from_value(serialized).expect("serialized event should deserialize");
+        let round_tripped: OfferEvent =
+            serde_json::from_value(serialized).expect("serialized event should deserialize");
         assert_eq!(round_tripped, event, "round-trip through JSON changed the event");
 
         let from_golden: OfferEvent = serde_json::from_value(golden).expect("golden fixture should deserialize");
-        assert_eq!(from_golden, event, "golden fixture no longer deserializes into the expected event");
+        assert_eq!(
+            from_golden, event,
+            "golden fixture no longer deserializes into the expected event"
+        );
     }
 
     fn fixed_url() -> reqwest::Url {

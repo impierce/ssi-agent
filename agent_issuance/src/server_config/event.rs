@@ -83,9 +83,11 @@ mod wire_format_tests {
             serde_json::from_value(serialized).expect("serialized event should deserialize");
         assert_eq!(round_tripped, event, "round-trip through JSON changed the event");
 
-        let from_golden: ServerConfigEvent =
-            serde_json::from_value(golden).expect("golden fixture should deserialize");
-        assert_eq!(from_golden, event, "golden fixture no longer deserializes into the expected event");
+        let from_golden: ServerConfigEvent = serde_json::from_value(golden).expect("golden fixture should deserialize");
+        assert_eq!(
+            from_golden, event,
+            "golden fixture no longer deserializes into the expected event"
+        );
     }
 
     fn fixed_url() -> url::Url {
@@ -130,8 +132,8 @@ mod wire_format_tests {
         })
     }
 
-    fn fixed_credential_configurations() -> HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>
-    {
+    fn fixed_credential_configurations(
+    ) -> HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)> {
         use crate::credential::aggregate::test_utils::JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION;
         HashMap::from_iter(vec![(
             "001".to_string(),

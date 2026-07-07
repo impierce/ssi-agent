@@ -1,6 +1,7 @@
+use crate::validation::{validate_event_stream, EventValidationError};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
-use cqrs_es::persist::EventUpcaster;
+use cqrs_es::persist::{EventUpcaster, PersistedEventRepository, PersistenceError};
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
@@ -73,5 +74,29 @@ impl CqrsComponentBuilder for MongoDB {
             aggregate,
             all_aggregates,
         )
+    }
+
+    async fn validate_events<A: Aggregate + 'static>(
+        &self,
+        upcasters: Vec<Box<dyn EventUpcaster>>,
+    ) -> Result<u64, EventValidationError> {
+        let repo = MongoEventRepository::new(self.client.clone())
+            .await
+            .map_err(|e| EventValidationError {
+                aggregate_type: A::TYPE,
+                validated_count: 0,
+                source: PersistenceError::ConnectionError(Box::new(e)),
+            })?;
+
+        let stream = repo
+            .stream_all_events::<A>()
+            .await
+            .map_err(|source| EventValidationError {
+                aggregate_type: A::TYPE,
+                validated_count: 0,
+                source,
+            })?;
+
+        validate_event_stream::<A>(stream, &upcasters).await
     }
 }

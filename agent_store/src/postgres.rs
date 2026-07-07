@@ -1,6 +1,7 @@
+use crate::validation::{validate_event_stream, EventValidationError};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
-use cqrs_es::persist::{EventUpcaster, PersistedEventStore};
+use cqrs_es::persist::{EventUpcaster, PersistedEventRepository, PersistedEventStore};
 use cqrs_es::{Aggregate, CqrsFramework, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
 use shared_kernel::view_repository::DynViewRepository;
@@ -73,5 +74,23 @@ impl CqrsComponentBuilder for Postgres {
             aggregate,
             all_aggregates,
         )
+    }
+
+    async fn validate_events<A: Aggregate + 'static>(
+        &self,
+        upcasters: Vec<Box<dyn EventUpcaster>>,
+    ) -> Result<u64, EventValidationError> {
+        let repo = PostgresEventRepository::new(self.pool.clone());
+
+        let stream = repo
+            .stream_all_events::<A>()
+            .await
+            .map_err(|source| EventValidationError {
+                aggregate_type: A::TYPE,
+                validated_count: 0,
+                source,
+            })?;
+
+        validate_event_stream::<A>(stream, &upcasters).await
     }
 }

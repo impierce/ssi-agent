@@ -255,6 +255,13 @@ pub struct ApplicationConfiguration {
     pub domain_linkage_enabled: bool,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
+    /// When enabled (the default), on startup the application streams, upcasts, and deserializes
+    /// every persisted event for every aggregate before serving traffic, to catch upcaster/schema
+    /// mismatches immediately rather than only when a specific aggregate is later loaded. Exposed
+    /// so it can be disabled (e.g. `UNICORE__EVENT_REPLAY_VALIDATION=false`) if this startup pass
+    /// becomes too slow for a given deployment.
+    #[config(default = "true")]
+    pub event_replay_validation: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
     #[config(default = "
@@ -1146,6 +1153,7 @@ mod tests {
               "external_server_response_timeout_ms": 1000,
               "domain_linkage_enabled": true,
               "credential_offer_by_value_enabled": false,
+              "event_replay_validation": true,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
                 "stronghold_password": "<REDACTED>",

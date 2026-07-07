@@ -90,7 +90,9 @@ mod event_tests {
                 country: Some("DE".to_string()),
                 source: Source::Runtime,
             },
-            ProfileEvent::SourceUpdated { source: Source::Default },
+            ProfileEvent::SourceUpdated {
+                source: Source::Default,
+            },
         ]
     }
 

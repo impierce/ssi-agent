@@ -31,3 +31,8 @@ shared-kernel.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+cqrs-es.workspace = true
+tower.workspace = true

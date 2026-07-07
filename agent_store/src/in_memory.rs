@@ -1,8 +1,9 @@
+use crate::validation::EventValidationError;
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::application_state::Command;
 use cqrs_es::{
     mem_store::MemStore,
-    persist::{PersistenceError, ViewContext, ViewRepository},
+    persist::{EventUpcaster, PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
 use shared_kernel::view_repository::DynViewRepository;
@@ -93,5 +94,15 @@ impl CqrsComponentBuilder for InMemory {
             aggregate,
             all_aggregates,
         )
+    }
+
+    // `MemStore` keeps events as live, already-deserialized `EventEnvelope`s in memory and never
+    // round-trips them through a serialized representation, so there is nothing persisted to
+    // stream, upcast, or deserialize here. Always reports success with zero events validated.
+    async fn validate_events<A: Aggregate + 'static>(
+        &self,
+        _upcasters: Vec<Box<dyn EventUpcaster>>,
+    ) -> Result<u64, EventValidationError> {
+        Ok(0)
     }
 }

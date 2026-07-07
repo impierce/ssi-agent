@@ -1,8 +1,8 @@
 use crate::command_handler::{CommandHandler, CommandHandlerFactory, EventUpcaster};
 use crate::view_repository::{BoxedViewRepository, ViewRepositoryFactory};
 use cqrs_es::persist::{
-    PersistedEventRepository, PersistedEventStore, PersistenceError, ReplayStream, SerializedEvent,
-    SerializedSnapshot, ViewContext, ViewRepository as CoreViewRepository,
+    PersistedEventRepository, PersistedEventStore, PersistenceError, ReplayStream, SerializedEvent, SerializedSnapshot,
+    ViewContext, ViewRepository as CoreViewRepository,
 };
 use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
@@ -41,8 +41,7 @@ impl CommandHandlerFactory for InMemoryStore {
         // Unlike `cqrs_es::mem_store::MemStore`, `InMemoryEventRepository` actually
         // (de)serializes events through `SerializedEvent`, so registered `EventUpcaster`s
         // run exactly as they would against a real backing store.
-        let store = PersistedEventStore::new_event_store(InMemoryEventRepository::default())
-            .with_upcasters(upcasters);
+        let store = PersistedEventStore::new_event_store(InMemoryEventRepository::default()).with_upcasters(upcasters);
 
         Ok(Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>)
     }
@@ -59,17 +58,8 @@ pub struct InMemoryEventRepository {
 }
 
 impl PersistedEventRepository for InMemoryEventRepository {
-    async fn get_events<A: Aggregate>(
-        &self,
-        aggregate_id: &str,
-    ) -> Result<Vec<SerializedEvent>, PersistenceError> {
-        Ok(self
-            .events
-            .read()
-            .await
-            .get(aggregate_id)
-            .cloned()
-            .unwrap_or_default())
+    async fn get_events<A: Aggregate>(&self, aggregate_id: &str) -> Result<Vec<SerializedEvent>, PersistenceError> {
+        Ok(self.events.read().await.get(aggregate_id).cloned().unwrap_or_default())
     }
 
     async fn get_last_events<A: Aggregate>(
@@ -111,10 +101,7 @@ impl PersistedEventRepository for InMemoryEventRepository {
         Ok(())
     }
 
-    async fn stream_events<A: Aggregate>(
-        &self,
-        aggregate_id: &str,
-    ) -> Result<ReplayStream, PersistenceError> {
+    async fn stream_events<A: Aggregate>(&self, aggregate_id: &str) -> Result<ReplayStream, PersistenceError> {
         let events = self.get_events::<A>(aggregate_id).await?;
         let (mut feed, stream) = ReplayStream::new(events.len().max(1));
         for event in events {

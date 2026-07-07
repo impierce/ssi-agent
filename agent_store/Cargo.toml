@@ -25,4 +25,9 @@ sqlx = { version = "0.8", features = [
     "runtime-tokio-rustls",
     "json",
 ] }
+thiserror.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
+shared-kernel = { workspace = true, features = ["test-utils"] }

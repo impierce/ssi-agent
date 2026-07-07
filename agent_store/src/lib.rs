@@ -67,6 +67,9 @@ use std::sync::Arc;
 pub mod in_memory;
 pub mod mongodb;
 pub mod postgres;
+pub mod validation;
+
+pub use validation::EventValidationError;
 
 /// A generic command handler for a specific aggregate.
 ///
@@ -176,6 +179,25 @@ pub trait CqrsComponentBuilder {
     ) -> impl std::future::Future<Output = CqrsComponents<A, V, AV>> + Send
     where
         <A as Aggregate>::Command: Send + Sync;
+
+    /// Validates that every persisted event for aggregate `A` can be streamed, upcasted (using
+    /// `upcasters`), and deserialized into `A::Event` -- i.e. that a full replay of the read side
+    /// would succeed with the current code and upcaster configuration.
+    ///
+    /// This is intended to be run once at startup as a readiness check: it surfaces
+    /// upcaster/schema mismatches immediately (before serving traffic), rather than only when a
+    /// specific aggregate happens to be loaded later on and its events fail to deserialize.
+    ///
+    /// Returns the number of events that were successfully validated.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EventValidationError`] if the event repository can't be reached, or if any
+    /// persisted event fails to upcast and deserialize into `A::Event`.
+    fn validate_events<A: Aggregate + 'static>(
+        &self,
+        upcasters: Vec<Box<dyn cqrs_es::persist::EventUpcaster>>,
+    ) -> impl std::future::Future<Output = Result<u64, EventValidationError>> + Send;
 }
 
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
@@ -513,6 +535,93 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
             all_received_offers,
         },
     }
+}
+
+/// Validates that every persisted event for *every* aggregate managed by `agent_store` can be
+/// streamed, upcasted, and deserialized with the current code -- i.e. that a full startup replay
+/// would succeed.
+///
+/// This mirrors, for every aggregate, the same `(aggregate, upcasters)` pairs that the `*_state`
+/// functions above pass to `commands_and_queries`. The first aggregate that fails validation short
+/// circuits the sweep; on success, the total number of events validated across all aggregates is
+/// returned.
+pub async fn validate_all_events<CCB: CqrsComponentBuilder>(builder: &CCB) -> Result<u64, EventValidationError> {
+    let mut total = 0u64;
+
+    async fn validate<CCB: CqrsComponentBuilder, A: Aggregate + 'static>(
+        builder: &CCB,
+        total: &mut u64,
+        upcasters: Vec<Box<dyn cqrs_es::persist::EventUpcaster>>,
+    ) -> Result<(), EventValidationError> {
+        let count = builder
+            .validate_events::<A>(upcasters)
+            .await
+            .map_err(|error| EventValidationError {
+                aggregate_type: error.aggregate_type,
+                validated_count: *total + error.validated_count,
+                source: error.source,
+            })?;
+        *total += count;
+        Ok(())
+    }
+
+    // agent_identity
+    validate::<CCB, Connection>(builder, &mut total, agent_identity::connection::event::upcasters()).await?;
+    validate::<CCB, Document>(builder, &mut total, agent_identity::document::event::upcasters()).await?;
+    validate::<CCB, Profile>(builder, &mut total, agent_identity::profile::event::upcasters()).await?;
+    validate::<CCB, Service>(builder, &mut total, agent_identity::service::event::upcasters()).await?;
+
+    // agent_library
+    validate::<CCB, Template>(builder, &mut total, agent_library::template::event::upcasters()).await?;
+
+    // agent_authorization
+    validate::<CCB, AuthorizationCode>(
+        builder,
+        &mut total,
+        agent_authorization::domain::authorization_code::event::upcasters(),
+    )
+    .await?;
+    validate::<CCB, Client>(
+        builder,
+        &mut total,
+        agent_authorization::domain::client::event::upcasters(),
+    )
+    .await?;
+    validate::<CCB, OAuth2AuthorizationRequest>(
+        builder,
+        &mut total,
+        agent_authorization::domain::oauth2_authorization_request::event::upcasters(),
+    )
+    .await?;
+    validate::<CCB, AccessToken>(
+        builder,
+        &mut total,
+        agent_authorization::domain::access_token::event::upcasters(),
+    )
+    .await?;
+
+    // agent_issuance
+    validate::<CCB, Credential>(builder, &mut total, agent_issuance::credential::event::upcasters()).await?;
+    validate::<CCB, Offer>(builder, &mut total, agent_issuance::offer::event::upcasters()).await?;
+    validate::<CCB, PublicOffer>(builder, &mut total, agent_issuance::public_offer::event::upcasters()).await?;
+    validate::<CCB, ServerConfig>(builder, &mut total, agent_issuance::server_config::event::upcasters()).await?;
+    validate::<CCB, Nonce>(builder, &mut total, agent_issuance::nonce::event::upcasters()).await?;
+    validate::<CCB, StatusListAggregate>(builder, &mut total, agent_issuance::status_list::event::upcasters()).await?;
+
+    // agent_verification
+    validate::<CCB, AuthorizationRequest>(
+        builder,
+        &mut total,
+        agent_verification::authorization_request::event::upcasters(),
+    )
+    .await?;
+
+    // agent_holder
+    validate::<CCB, HolderCredential>(builder, &mut total, agent_holder::credential::event::upcasters()).await?;
+    validate::<CCB, Presentation>(builder, &mut total, agent_holder::presentation::event::upcasters()).await?;
+    validate::<CCB, ReceivedOffer>(builder, &mut total, agent_holder::offer::event::upcasters()).await?;
+
+    Ok(total)
 }
 
 pub type ConnectionEventPublisher = Box<dyn Query<Connection>>;
