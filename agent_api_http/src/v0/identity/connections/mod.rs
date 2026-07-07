@@ -290,7 +290,10 @@ pub(crate) async fn remove_connection(
 pub fn parse_url(input: &str) -> Result<Url, ApiError> {
     let input = input.trim();
     let with_scheme = match input.strip_prefix("http://") {
+        #[cfg(not(feature = "allow-localhost"))]
         Some(rest) => format!("https://{rest}"),
+        #[cfg(feature = "allow-localhost")]
+        Some(_rest) => input.to_string(),
         None if input.starts_with("https://") => input.to_string(),
         None => format!("https://{input}"),
     };
@@ -301,16 +304,19 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
             .finish()
     })?;
 
-    let host = url.host_str().ok_or_else(|| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .message("Url missing host".to_string())
-            .finish()
-    })?;
+    #[cfg(not(feature = "allow-localhost"))]
+    {
+        let host = url.host_str().ok_or_else(|| {
+            ApiError::builder(StatusCode::BAD_REQUEST)
+                .message("Url missing host".to_string())
+                .finish()
+        })?;
 
-    if !host.contains('.') {
-        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
-            .finish());
+        if !host.contains('.') {
+            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
+                .finish());
+        }
     }
 
     Ok(url)

@@ -68,6 +68,17 @@ impl IdentityServices {
     }
 
     pub async fn fetch_linked_dids(&self, url: &Url) -> Result<(Vec<DIDUrl>, bool), ConnectionError> {
+        // TODO: This essentially disables domain linkage fetching because HTTPS is strictly
+        // required by `DomainLinkageConfiguration::from_json_value`. When running locally
+        // with HTTP, the fetch fails and we gracefully default to no linked DIDs.
+        // See ADR 0002 for more context and the future plan to use `rcgen`.
+        #[cfg(feature = "allow-localhost")]
+        let config = match self.fetch_domain_linkage_configuration(url).await {
+            Ok(config) => config,
+            Err(_) => return Ok((vec![], false)),
+        };
+
+        #[cfg(not(feature = "allow-localhost"))]
         let config = self.fetch_domain_linkage_configuration(url).await?;
         let linked_dids: Vec<DIDUrl> = config
             .linked_dids()
