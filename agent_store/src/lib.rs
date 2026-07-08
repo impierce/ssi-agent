@@ -333,9 +333,19 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     services: Arc<agent_issuance::services::IssuanceServices>,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> agent_issuance::state::IssuanceState {
+    issuance_state_with_credential_queries(builder, services, event_publishers, vec![]).await
+}
+
+/// Builds the issuance state with additional custom queries attached to the `Credential` aggregate.
+pub async fn issuance_state_with_credential_queries<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<agent_issuance::services::IssuanceServices>,
+    event_publishers: Vec<Box<dyn EventPublisher>>,
+    credential_queries: Vec<Box<dyn Query<Credential>>>,
+) -> agent_issuance::state::IssuanceState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
-        credential_event_publishers,
+        credential_event_publishers: mut credential_queries_all,
         offer_event_publishers,
         public_offer_event_publishers,
         server_config_event_publishers,
@@ -344,10 +354,14 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
+    for query in credential_queries {
+        credential_queries_all.push(query);
+    }
+
     let (credential_command_handler, credential, all_credentials) = builder
         .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
             services.clone(),
-            credential_event_publishers,
+            credential_queries_all,
         )
         .await;
     let (offer_command_handler, offer, all_offers) = builder

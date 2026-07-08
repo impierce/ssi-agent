@@ -1,5 +1,7 @@
+pub mod credential_metrics;
 mod metadata;
 mod probes;
+pub mod telemetry;
 
 pub use agent_api_http::metrics::metrics;
 use agent_api_http::{app, metrics::track_metrics, ApplicationState, API_VERSION};
@@ -32,6 +34,19 @@ pub use agent_library::state::LibraryState;
 pub use agent_verification::state::VerificationState;
 
 pub async fn run() -> io::Result<()> {
+    // Initialize the tracing subscriber before anything else so that all subsequent log output is captured. Reading
+    // the log format triggers the configuration to be loaded first.
+    let log_format = config().log_format.clone();
+    let _telemetry_guard = telemetry::init_telemetry(&log_format);
+
+    info!("Configuration loaded successfully");
+
+    // Install the Prometheus recorder before building the application state so that metrics recorded during
+    // startup (such as the seeded credential count) are captured.
+    if config().metrics.enabled {
+        agent_api_http::metrics::recorder_handle();
+    }
+
     let subject = Arc::new(Subject::new().await);
     let state = state(subject).await?;
 
@@ -83,14 +98,25 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
     let event_store_type = config().event_store.type_.clone();
 
+    // Counts credentials (excluding deleted ones) based on the `Credential` events and exposes the count as a
+    // gauge to both the Prometheus `/metrics` endpoint and the OpenTelemetry meter provider.
+    let credential_count_projection = credential_metrics::CredentialCountProjection::default();
+
     // TODO: Refactor this to reduce code duplication.
     let (identity_state, library_state, authorization_state, issuance_state, holder_state, verification_state) =
         match event_store_type {
             EventStoreType::Postgres => {
                 let builder = Postgres::new().await;
 
-                let issuance_state =
-                    Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
+                let issuance_state = Arc::new(
+                    agent_store::issuance_state_with_credential_queries(
+                        &builder,
+                        issuance_services,
+                        issuance_event_publishers,
+                        vec![Box::new(credential_count_projection.clone())],
+                    )
+                    .await,
+                );
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
@@ -137,8 +163,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
 
-                let issuance_state =
-                    Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
+                let issuance_state = Arc::new(
+                    agent_store::issuance_state_with_credential_queries(
+                        &builder,
+                        issuance_services,
+                        issuance_event_publishers,
+                        vec![Box::new(credential_count_projection.clone())],
+                    )
+                    .await,
+                );
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
@@ -184,7 +217,13 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
             EventStoreType::InMemory => {
                 let issuance_state = Arc::new(
-                    agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await,
+                    agent_store::issuance_state_with_credential_queries(
+                        &InMemory,
+                        issuance_services,
+                        issuance_event_publishers,
+                        vec![Box::new(credential_count_projection.clone())],
+                    )
+                    .await,
                 );
 
                 let (credential_configuration_projection, template_view_handle) =
@@ -244,6 +283,11 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         .unwrap();
     agent_identity::state::initialize(&identity_state).await.unwrap();
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+    // Seed the credential count metric from the persisted credentials before new events arrive.
+    credential_count_projection
+        .seed(&issuance_state.query.all_credentials)
+        .await;
 
     Ok(ApplicationState {
         identity_state: Some(identity_state),

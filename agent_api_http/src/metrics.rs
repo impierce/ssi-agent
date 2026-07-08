@@ -6,11 +6,25 @@ use axum::{
     Router,
 };
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{future::ready, time::Instant};
+use std::{
+    future::ready,
+    sync::OnceLock,
+    time::Instant,
+};
+
+static RECORDER_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
+
+/// Returns the global Prometheus recorder handle, installing the recorder on first use.
+///
+/// Call this early during startup so that metrics recorded before the `/metrics` server is up (such as gauges
+/// seeded from persisted state) are captured by the recorder instead of being dropped.
+pub fn recorder_handle() -> PrometheusHandle {
+    RECORDER_HANDLE.get_or_init(setup_metrics_recorder).clone()
+}
 
 /// Source: https://github.com/tokio-rs/axum/blob/9ec85d69703a9065a1098bb43bd93113695d5ade/examples/prometheus-metrics/src/main.rs
 pub fn metrics() -> Router {
-    let recorder_handle = setup_metrics_recorder();
+    let recorder_handle = recorder_handle();
     Router::new().route("/metrics", get(move || ready(recorder_handle.render())))
 }
 
