@@ -32,8 +32,11 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Test
+      - name: Test (Default features)
         run: cargo test --workspace
+
+      - name: Test (All features)
+        run: cargo test --workspace --all-features
 
       - name: Generated files are unchanged
         run: git diff --exit-code

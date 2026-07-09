@@ -216,7 +216,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_fetch_linked_dids_empty() {
+    #[cfg(not(feature = "allow-localhost"))]
+    async fn test_fetch_linked_dids_empty_fails() {
         let mock_server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -235,5 +236,35 @@ mod tests {
         let result = services.fetch_linked_dids(&issuer_url).await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "allow-localhost")]
+    // DISCLAIMER: The DID Configuration specification strictly requires a non-empty `linked_dids` array.
+    // This test asserts that the parser's validation error is intentionally swallowed, returning an
+    // empty list instead. This is a deliberate bypass to prevent local HTTP testing from failing
+    // due to domain linkage requirements. See ADR 0002 for the full context.
+    async fn test_fetch_linked_dids_empty_succeeds_with_fallback() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": []
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let subject = Arc::new(Subject::new().await);
+        let services = IdentityServices::new(subject);
+
+        let issuer_url: Url = mock_server.uri().parse().unwrap();
+        let result = services.fetch_linked_dids(&issuer_url).await;
+
+        // When allow-localhost is on, the error is swallowed and fallback is returned.
+        let (dids, valid) = result.unwrap();
+        assert_eq!(dids.len(), 0);
+        assert!(!valid);
     }
 }
