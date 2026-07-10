@@ -130,9 +130,9 @@ pub(crate) async fn get_connections(
             .filter(|connection| {
                 display
                     .as_ref()
-                    .map_or(true, |display| connection.display.as_ref() == Some(display))
-                    && url.as_ref().map_or(true, |url| *url == connection.url)
-                    && did.as_ref().map_or(true, |did| connection.dids.contains(did))
+                    .is_none_or(|display| connection.display.as_ref() == Some(display))
+                    && url.as_ref().is_none_or(|url| *url == connection.url)
+                    && did.as_ref().is_none_or(|did| connection.dids.contains(did))
             })
             .collect();
 
