@@ -46,6 +46,10 @@ use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
     public_offer::aggregate::PublicOffer, server_config::aggregate::ServerConfig,
 };
+use agent_library::catalog::aggregate::Catalog;
+use agent_library::catalog::services::{CatalogServiceImpl, CatalogServices};
+use agent_library::catalog::views::view_all_catalogs::AllCatalogsView;
+use agent_library::catalog::views::CatalogView;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
@@ -59,6 +63,7 @@ use agent_verification::state::VerificationState;
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
 use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
+use shared_kernel::authorization::AllowAllAuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -206,6 +211,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         .await;
 
     IdentityState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_identity::state::CommandHandlers {
             connection: connection_command_handler,
             document: document_command_handler,
@@ -243,13 +249,25 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<Template, Template, AllTemplatesView>((), queries)
         .await;
 
+    let catalog_services: Arc<dyn CatalogServices> = Arc::new(CatalogServiceImpl {
+        template_view_repo: template.clone(),
+    });
+
+    let (catalog_command_handler, catalog, all_catalogs) = builder
+        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![])
+        .await;
+
     LibraryState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_library::state::CommandHandlers {
             template: template_command_handler,
+            catalog: catalog_command_handler,
         },
         query: agent_library::state::ViewRepositories {
             template,
             all_templates,
+            catalog,
+            all_catalogs,
         },
     }
 }
@@ -293,6 +311,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         .await;
 
     AuthorizationState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_authorization::state::CommandHandlers {
             authorization_code: authorization_code_command_handler,
             client: client_command_handler,
@@ -357,6 +376,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         .await;
 
     agent_issuance::state::IssuanceState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_issuance::state::CommandHandlers {
             credential: credential_command_handler,
             offer: offer_command_handler,
@@ -400,6 +420,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
         .await;
 
     VerificationState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_verification::state::CommandHandlers {
             authorization_request: authorization_request_command_handler,
         },
@@ -445,6 +466,7 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
         .await;
 
     HolderState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_holder::state::CommandHandlers {
             credential: holder_credential_command_handler,
             presentation: presentation_command_handler,

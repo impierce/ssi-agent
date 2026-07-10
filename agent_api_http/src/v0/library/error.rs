@@ -1,4 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
+use agent_library::catalog::error::CatalogError;
 use agent_library::template::error::TemplateError;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -114,6 +115,30 @@ impl IntoApiErrorExt for TemplateError {
     }
 }
 
+impl IntoApiErrorExt for CatalogError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            CatalogError::TemplateNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("library#catalog-template-not-found"))
+                .message("No matching template found".to_string())
+                .source(self)
+                .finish(),
+            CatalogError::MissingCatalogName(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Catalog Name Missing")
+                .type_url(type_url("library#missing-catalog-name"))
+                .message("Catalog name must have a non-empty value".to_string())
+                .source(self)
+                .finish(),
+            CatalogError::CatalogNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Catalog Not Found")
+                .type_url(type_url("library#catalog-not-found"))
+                .message("Catalog not found".to_string())
+                .source(self)
+                .finish(),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

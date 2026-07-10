@@ -93,6 +93,8 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         };
 
         command_handler(
+            self.verification_state.authorization_checker.clone(),
+            None,
             &authorization_request_id,
             &self.verification_state.command.authorization_request,
             command,
@@ -100,6 +102,8 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         .await?;
 
         let mut authorization_request = query_handler(
+            self.verification_state.authorization_checker.clone(),
+            None,
             &authorization_request_id,
             &self.verification_state.query.authorization_request,
         )
@@ -131,6 +135,8 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
         command_handler(
+            self.verification_state.authorization_checker.clone(),
+            None,
             &authorization_request_id,
             &self.verification_state.command.authorization_request,
             command,

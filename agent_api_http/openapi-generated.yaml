@@ -9,6 +9,48 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
+  /v0/add-templates-to-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Add one or more templates to a catalog
+      description: Adds one or more templates to a catalog by their IDs.
+      operationId: add_templates_to_catalog
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTemplatesRequest'
+        required: true
+      responses:
+        '200':
+          description: Catalog updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+  /v0/change-catalog-appearance:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Changes a catalog's display information
+      description: Changes a catalog's display information such as name, description, and icon.
+      operationId: change_catalog_appearance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeCatalogAppearanceRequest'
+        required: true
+      responses:
+        '200':
+          description: Catalog appearance updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/connections:
     get:
       tags:
@@ -123,6 +165,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/create-new-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Create a new catalog
+      description: Creates a new catalog with the provided display information.
+      operationId: create_new_catalog
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogRequest'
+        required: true
+      responses:
+        '201':
+          description: Catalog created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/create-new-template:
     post:
       tags:
@@ -247,6 +310,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+  /v0/delete-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Delete a catalog
+      description: Deletes a catalog.
+      operationId: delete_catalog
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteCatalogRequest'
+        required: true
+      responses:
+        '204':
+          description: Catalog deleted
   /v0/delete-public-offer:
     post:
       tags:
@@ -357,6 +437,23 @@ paths:
                 $ref: '#/components/schemas/Template'
         '422':
           description: Source Template Not Found
+  /v0/get-all-catalogs:
+    get:
+      tags:
+      - Library
+      - Catalog
+      summary: List all Catalogs
+      description: List all available Catalogs.
+      operationId: get_all_catalogs
+      responses:
+        '200':
+          description: All catalogs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Catalog'
   /v0/get-all-public-offers:
     get:
       tags:
@@ -372,6 +469,27 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PublicOfferStatusDto'
+  /v0/get-catalog-by-id/{catalog_id}:
+    get:
+      tags:
+      - Library
+      - Catalog
+      summary: Get catalog by ID
+      description: Retrieve a specific catalog by its ID.
+      operationId: get_catalog_by_id
+      parameters:
+      - name: catalog_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Catalog retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -513,6 +631,68 @@ paths:
                 $ref: '#/components/schemas/OfferView'
         '404':
           description: Offer not found
+  /v0/holder/presentations:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: List all credential presentations
+      description: Retrieves all credential presentations held by your organisation.
+      operationId: get_all_holder_presentations
+      responses:
+        '200':
+          description: All presentations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PresentationView'
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Create a new credential presentation
+      description: Creates and signs a new credential presentation containing the given credentials held by your organisation.
+      operationId: create_holder_presentation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationsEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Presentation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresentationView'
+        '404':
+          description: Credential not found
+  /v0/holder/presentations/{presentation_id}:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get credential presentation by ID
+      description: Retrieves a single credential presentation held by your organisation by its ID.
+      operationId: get_holder_presentation_by_id
+      parameters:
+      - name: presentation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Presentation retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresentationView'
+        '404':
+          description: Presentation not found
   /v0/list-all-templates:
     get:
       tags:
@@ -530,6 +710,48 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Template'
+  /v0/make-catalog-private:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Make catalog private
+      description: Updates a catalog's visibility to private. If not otherwise specified, the default visibility is private.
+      operationId: make_catalog_private
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeCatalogPrivateRequest'
+        required: true
+      responses:
+        '200':
+          description: Catalog made private successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+  /v0/make-catalog-public:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Make catalog public
+      description: Updates a catalog's visibility to public.
+      operationId: make_catalog_public
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MakeCatalogPublicRequest'
+        required: true
+      responses:
+        '200':
+          description: Catalog make public successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/offers:
     get:
       tags:
@@ -633,6 +855,27 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+  /v0/remove-templates-from-catalog:
+    post:
+      tags:
+      - Library
+      - Catalog
+      summary: Remove one or more templates from a catalog
+      description: Removes one or more templates from a catalog by their ID.
+      operationId: remove-templates-from-catalog
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveTemplatesRequest'
+        required: true
+      responses:
+        '200':
+          description: Template(s) removed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
   /v0/take-public-offer-offline:
     post:
       tags:
@@ -700,6 +943,72 @@ components:
       properties:
         url:
           type: string
+    AddTemplatesRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        templateIds:
+          type: array
+          items:
+            type: string
+          default: []
+    Catalog:
+      type: object
+      description: Data transfer object for Catalogs.
+      required:
+      - id
+      - display
+      - template_ids
+      - visibility
+      - modified_at
+      properties:
+        display:
+          $ref: '#/components/schemas/CatalogDisplay'
+        id:
+          type: string
+        modified_at:
+          type: string
+          format: date-time
+        template_ids:
+          type: array
+          items:
+            type: string
+        visibility:
+          $ref: '#/components/schemas/CatalogVisibility'
+    CatalogDisplay:
+      type: object
+      required:
+      - name
+      - description
+      properties:
+        description:
+          type: string
+        icon:
+          type:
+          - string
+          - 'null'
+        name:
+          type: string
+    CatalogVisibility:
+      type: string
+      enum:
+      - Public
+      - Private
+    ChangeCatalogAppearanceRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        display:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogDisplay'
+          default:
+            name: ''
+            description: ''
+            icon: null
     Connection:
       type: object
       required:
@@ -754,6 +1063,20 @@ components:
           type:
           - string
           - 'null'
+    CreateCatalogRequest:
+      type: object
+      properties:
+        display:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogDisplay'
+          default:
+            name: ''
+            description: ''
+            icon: null
+        visibility:
+          oneOf:
+          - $ref: '#/components/schemas/CatalogVisibility'
+          default: Private
     CreateNewTemplateRequestBody:
       type: object
       properties:
@@ -797,7 +1120,12 @@ components:
             type: string
         status:
           oneOf:
-          - $ref: '#/components/schemas/TemplateStatus'
+          - type: string
+            enum:
+            - draft
+            - published
+            - archived
+            - deleted
           default: draft
         tags:
           type:
@@ -937,19 +1265,16 @@ components:
           - 'null'
         signed: {}
         status:
-          $ref: '#/components/schemas/IssuanceStatus'
+          type: string
+          enum:
+          - Pending
+          - Issued
     CredentialExpiry:
       oneOf:
       - type: string
         format: date-time
       - type: 'null'
         default: null
-    CredentialOfferStatus:
-      type: string
-      enum:
-      - Created
-      - Pending
-      - Issued
     CredentialStatus:
       type: object
       required:
@@ -1019,6 +1344,12 @@ components:
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
       - european_learning_model_v3-3
+    DeleteCatalogRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
     DeletePublicOfferRequest:
       type: object
       required:
@@ -1070,17 +1401,15 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/IotaMetadata'
         status:
-          $ref: '#/components/schemas/DocumentStatus'
+          type: string
+          enum:
+          - SignAndValidate
+          - Disabled
         with_fixed_algorithm:
           type: string
           enum:
           - ES256
           - EdDSA
-    DocumentStatus:
-      type: string
-      enum:
-      - SignAndValidate
-      - Disabled
     DomainLinkageValidation:
       type: object
       required:
@@ -1169,26 +1498,9 @@ components:
         pre_authorized:
           type: boolean
         tx_code_constraints:
-          type: object
-          properties:
-            description:
-              type: string
-              description: The length of the string must not exceed 300 characters.
-            input_mode:
-              type: string
-              enum:
-              - numeric
-              - text
-            length:
-              type: integer
-              description: Allows a pin-length of 0-255.
-    HolderOfferStatus:
-      type: string
-      enum:
-      - Pending
-      - Accepted
-      - CredentialsReceived
-      - Rejected
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TxCodeConstraints'
     HolderType:
       type: string
       enum:
@@ -1229,11 +1541,6 @@ components:
         wallet_address:
           type: string
           example: '0x1234567890'
-    IssuanceStatus:
-      type: string
-      enum:
-      - Pending
-      - Issued
     LinkedVpValidation:
       type: object
     Logo:
@@ -1260,6 +1567,18 @@ components:
           - string
           - 'null'
           format: uri
+    MakeCatalogPrivateRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+    MakeCatalogPublicRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
     Offer:
       type: object
       required:
@@ -1307,7 +1626,11 @@ components:
         pre_authorized_code:
           type: string
         status:
-          $ref: '#/components/schemas/CredentialOfferStatus'
+          type: string
+          enum:
+          - Created
+          - Pending
+          - Issued
         subject_id:
           type:
           - string
@@ -1352,7 +1675,12 @@ components:
         id:
           type: string
         status:
-          $ref: '#/components/schemas/HolderOfferStatus'
+          type: string
+          enum:
+          - Pending
+          - Accepted
+          - CredentialsReceived
+          - Rejected
         token_response:
           type:
           - object
@@ -1389,6 +1717,26 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+    PresentationView:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        signed:
+          type:
+          - string
+          - 'null'
+    PresentationsEndpointRequest:
+      type: object
+      required:
+      - credentialIds
+      properties:
+        credentialIds:
+          type: array
+          items:
+            type: string
     Profile:
       type: object
       required:
@@ -1426,11 +1774,6 @@ components:
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
-    PublicOfferStatus:
-      type: string
-      enum:
-      - Active
-      - Inactive
     PublicOfferStatusDto:
       type: object
       required:
@@ -1446,7 +1789,10 @@ components:
         id:
           type: string
         status:
-          $ref: '#/components/schemas/PublicOfferStatus'
+          type: string
+          enum:
+          - Active
+          - Inactive
         templateId:
           type: string
     RemoveConnectionRequest:
@@ -1456,6 +1802,17 @@ components:
       properties:
         id:
           type: string
+    RemoveTemplatesRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        templateIds:
+          type: array
+          items:
+            type: string
+          default: []
     Source:
       type: string
       enum:
@@ -1551,7 +1908,12 @@ components:
           propertyNames:
             type: string
         status:
-          $ref: '#/components/schemas/TemplateStatus'
+          type: string
+          enum:
+          - draft
+          - published
+          - archived
+          - deleted
         tags:
           type:
           - array
@@ -1566,13 +1928,33 @@ components:
             type: string
         visibility:
           $ref: '#/components/schemas/Visibility'
-    TemplateStatus:
-      type: string
-      enum:
-      - draft
-      - published
-      - archived
-      - deleted
+    TxCodeConstraints:
+      type: object
+      properties:
+        description:
+          type: string
+          description: The length of the description must not exceed 300 characters.
+          examples:
+          - Please provide the one-time code you received via email.
+          maxLength: 300
+        input_mode:
+          oneOf:
+          - type: 'null'
+          - type: string
+            enum:
+            - numeric
+            - text
+          default: numeric
+        length:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          description: The length of the PIN must be between 0 and 255 characters.
+          examples:
+          - $serde_json::private::Number: '6'
+          maximum: 255
+          minimum: 0
     UpdateTemplateEndpointRequest:
       type: object
       properties:
@@ -1612,7 +1994,12 @@ components:
         status:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/TemplateStatus'
+          - type: string
+            enum:
+            - draft
+            - published
+            - archived
+            - deleted
           default: null
         tags:
           type:
@@ -1690,6 +2077,8 @@ tags:
   description: Manage your own templates, browse and import external templates.
 - name: Templates
   description: Create and manage templates which provide the structure for credentials to be issued.
+- name: Catalog
+  description: Create and manage catalogs to organize and share your templates.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation

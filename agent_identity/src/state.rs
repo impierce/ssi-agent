@@ -16,10 +16,11 @@ use agent_shared::config::{
     config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
 };
 use agent_shared::handlers::command_handler;
-use agent_shared::{application_state::CommandHandler, handlers::query_handler};
+use agent_shared::{application_state::CommandHandler, handlers::public_query_handler};
 use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
+use shared_kernel::authorization::AuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,6 +34,7 @@ pub const PROFILE_ID: &str = "PROFILE-001";
 
 #[derive(Clone)]
 pub struct IdentityState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }
@@ -120,7 +122,7 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 // updates, rather than reading from a shared, mutable global state.
 /// Queries the profile and updates the application state with the profile information.
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
-    match query_handler(PROFILE_ID, &state.query.profile).await? {
+    match public_query_handler(PROFILE_ID, &state.query.profile).await? {
         Some(Profile {
             display_name,
             logo,
@@ -173,7 +175,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     };
 
     if let Some(config_display) = first {
-        match query_handler(PROFILE_ID, &state.query.profile).await? {
+        match public_query_handler(PROFILE_ID, &state.query.profile).await? {
             // If the profile exists, we check if it needs to be updated based on the config.
             // We only update the Profile if the config source is:
             // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
@@ -194,7 +196,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if config_display.logo != persisted_logo {
@@ -203,7 +212,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if config_display.description != persisted_description {
@@ -212,7 +228,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if config_display.country != persisted_country {
@@ -221,14 +244,28 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 let command = ProfileCommand::UpdateSource {
                     source: config_display_source,
                 };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    None,
+                    PROFILE_ID,
+                    &state.command.profile,
+                    command,
+                )
+                .await?;
             }
             Some(_profile) => {
                 info!("Display is already configured, no action needed.");
@@ -246,11 +283,18 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                     country: config_display.country.clone(),
                 };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    None,
+                    PROFILE_ID,
+                    &state.command.profile,
+                    command,
+                )
+                .await?;
             }
         };
     } else {
-        match query_handler(PROFILE_ID, &state.query.profile).await? {
+        match public_query_handler(PROFILE_ID, &state.query.profile).await? {
             Some(Profile {
                 display_name: persisted_display_name,
                 logo: persisted_logo,
@@ -264,7 +308,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if persisted_logo.is_some() {
@@ -273,7 +324,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if persisted_country.is_some() {
@@ -282,7 +340,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
             }
             _ => {
@@ -295,7 +360,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                     source: config_display_source,
                 };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    None,
+                    PROFILE_ID,
+                    &state.command.profile,
+                    command,
+                )
+                .await?;
             }
         };
     }
@@ -367,14 +439,28 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 
         // If a Document command was generated, then execute the command and update the Document's Public Keys.
         if let Some((document_id, command)) = document_id_and_command {
-            command_handler(&document_id, &state.command.document, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                None,
+                &document_id,
+                &state.command.document,
+                command,
+            )
+            .await?;
 
             if enabled {
                 let command = DocumentCommand::UpdatePublicKeys {
                     public_key_jwks: vec![],
                 };
 
-                command_handler(&document_id, &state.command.document, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    None,
+                    &document_id,
+                    &state.command.document,
+                    command,
+                )
+                .await?;
             }
         }
     }
@@ -468,11 +554,18 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             verification_methods,
         };
 
-        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            DOMAIN_LINKAGE_SERVICE_ID,
+            &state.command.service,
+            command,
+        )
+        .await?;
 
         info!("Created Linked Domain service");
 
-        match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
+        match public_query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
             Ok(Some(Service {
                 service: Some(service), ..
             })) => {
@@ -485,7 +578,14 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
                         service: Box::new(service.clone()),
                     };
 
-                    command_handler(document_id, &state.command.document, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        None,
+                        document_id,
+                        &state.command.document,
+                        command,
+                    )
+                    .await?;
                 }
             }
             _ => anyhow::bail!("Failed to retrieve Linked Domains service"),
@@ -496,7 +596,14 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
             service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
         };
 
-        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            None,
+            DOMAIN_LINKAGE_SERVICE_ID,
+            &state.command.service,
+            command,
+        )
+        .await?;
 
         info!("Disabled Domain Linkage service");
     }
@@ -519,7 +626,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
 
     if let Some(Service {
         service: Some(service), ..
-    }) = query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
+    }) = public_query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
     {
         info!("Found Linked Verifiable Presentations service: {service}");
 
@@ -530,7 +637,14 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
                 service: Box::new(service.clone()),
             };
 
-            command_handler(document_id, &state.command.document, command).await?;
+            command_handler(
+                state.authorization_checker.clone(),
+                None,
+                document_id,
+                &state.command.document,
+                command,
+            )
+            .await?;
         }
     }
 
@@ -559,7 +673,14 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
         // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
-        let _ = command_handler(document_id, &state.command.document, DocumentCommand::PublishDocument).await;
+        let _ = command_handler(
+            state.authorization_checker.clone(),
+            None,
+            document_id,
+            &state.command.document,
+            DocumentCommand::PublishDocument,
+        )
+        .await;
     }
 
     Ok(())
@@ -575,7 +696,7 @@ pub async fn query_all_documents(
     state: &IdentityState,
     query: impl Fn(&(String, Document)) -> bool,
 ) -> anyhow::Result<HashMap<String, Document>> {
-    match query_handler("all_documents", &state.query.all_documents).await? {
+    match public_query_handler("all_documents", &state.query.all_documents).await? {
         Some(AllDocumentsView { documents }) => Ok(documents.into_iter().filter(query).collect()),
         None => Ok(Default::default()),
     }

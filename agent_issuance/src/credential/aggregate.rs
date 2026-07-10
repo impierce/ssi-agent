@@ -33,7 +33,6 @@ use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = IssuanceStatus)]
 pub enum Status {
     #[default]
     Pending,
@@ -88,6 +87,7 @@ pub struct Credential {
     #[schema(schema_with = credential_configurations_supported)]
     pub credential_configuration: CredentialConfigurationsSupportedObject,
     pub signed: Option<serde_json::Value>,
+    #[schema(inline)]
     pub status: Status,
     #[schema(schema_with = holder_notifications)]
     pub holder_notifications: Vec<NotificationRequest>,

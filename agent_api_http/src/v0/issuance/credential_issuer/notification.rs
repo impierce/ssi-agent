@@ -1,4 +1,4 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{public_command_handler, public_query_handler};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
@@ -30,7 +30,7 @@ pub async fn notification(
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
+    let credentials = match public_query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
         _ => return Err(internal_server_error()),
     };
@@ -53,7 +53,7 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    public_command_handler(&credential_id, &state.command.credential, command).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }

@@ -1,4 +1,3 @@
-use crate::handlers::query_handler;
 use agent_issuance::{
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -13,9 +12,11 @@ use http_api_problem::ApiError;
 use serde_json::json;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+
 #[axum_macros::debug_handler]
 pub(crate) async fn openid_credential_issuer(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(ServerConfigView {
             mut credential_issuer_metadata,
             ..

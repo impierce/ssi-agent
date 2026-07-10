@@ -1,3 +1,4 @@
+use crate::extractors::RequestActor;
 use crate::handlers::command_handler;
 use agent_issuance::{offer::aggregate::DeliveryMethod, offer::command::OfferCommand, state::IssuanceState};
 use axum::{
@@ -33,6 +34,7 @@ pub struct EmailOfferEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn individual_offer(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(EmailOfferEndpointRequest {
         offer_id,
         recipient_email,
@@ -44,7 +46,14 @@ pub(crate) async fn individual_offer(
     };
 
     // Send the Credential Offer to the recipient's email.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::OK.into_response())
 }
@@ -71,6 +80,7 @@ pub struct TargetUrlOfferEndpointRequest {
 #[axum_macros::debug_handler]
 pub(crate) async fn organization_offer(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(TargetUrlOfferEndpointRequest { offer_id, target_url }): Json<TargetUrlOfferEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::SendCredentialOffer {
@@ -79,7 +89,14 @@ pub(crate) async fn organization_offer(
     };
 
     // Send the offer to the organizational url.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     Ok(StatusCode::OK.into_response())
 }

@@ -1,9 +1,8 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    handlers::{command_handler, query_handler},
-    v0::issuance::error::internal_server_error,
-    v0::issuance::error::PublicError,
+    handlers::{public_command_handler, public_query_handler},
+    v0::issuance::error::{internal_server_error, PublicError},
 };
 use agent_issuance::{
     application::{
@@ -54,7 +53,7 @@ pub(crate) async fn credential(
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
-        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+        match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
             Some(ServerConfigView {
                 credential_issuer_metadata,
                 authorization_server_metadata,
@@ -78,7 +77,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    public_command_handler(&offer_id, &state.command.offer, command).await?;
 
     let timeout = config().external_server_response_timeout_ms;
     let start_time = Instant::now();
@@ -86,7 +85,7 @@ pub(crate) async fn credential(
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
     let (credential_ids, subject_id) = loop {
-        match query_handler(&offer_id, &state.query.offer).await? {
+        match public_query_handler(&offer_id, &state.query.offer).await? {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Some(OfferView { credential_ids, .. }) if credential_ids.is_empty() => {
                 if start_time.elapsed().as_millis() <= timeout as u128 {
@@ -109,7 +108,7 @@ pub(crate) async fn credential(
         }
     };
 
-    let all_status_lists = query_handler("all_status_lists", &state.query.all_status_lists)
+    let all_status_lists = public_query_handler("all_status_lists", &state.query.all_status_lists)
         .await?
         .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
@@ -131,7 +130,7 @@ pub(crate) async fn credential(
             let id = TEST_STATUS_LIST_ID.to_string();
 
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            command_handler(&id, &state.command.status_list, command).await?;
+            public_command_handler(&id, &state.command.status_list, command).await?;
 
             id
         }
@@ -144,9 +143,9 @@ pub(crate) async fn credential(
             status: StatusType::VALID,
         };
 
-        command_handler(&status_list_id, &state.command.status_list, command).await?;
+        public_command_handler(&status_list_id, &state.command.status_list, command).await?;
 
-        let status_list = query_handler(&status_list_id, &state.query.status_list)
+        let status_list = public_query_handler(&status_list_id, &state.query.status_list)
             .await?
             .ok_or(PublicError::InternalServerError)?;
 
@@ -163,9 +162,9 @@ pub(crate) async fn credential(
                 .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
         };
 
-        command_handler(&credential_id, &state.command.credential, command).await?;
+        public_command_handler(&credential_id, &state.command.credential, command).await?;
 
-        let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
+        let signed_credential = match public_query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
                 signed: Some(signed_credential),
                 notification_id,
@@ -183,10 +182,10 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    public_command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
-    query_handler(&offer_id, &state.query.offer)
+    public_query_handler(&offer_id, &state.query.offer)
         .await?
         .and_then(|offer_view| offer_view.credential_response)
         .map(|credential_response| (StatusCode::OK, Json(credential_response)).into_response())
@@ -339,9 +338,15 @@ pub mod tests {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            None,
+            TEST_NONCE,
+            &issuance_state.command.nonce,
+            command,
+        )
+        .await
+        .unwrap();
 
         let response = issuance_app
             .oneshot(
@@ -443,9 +448,15 @@ pub mod tests {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            None,
+            TEST_NONCE,
+            &issuance_state.command.nonce,
+            command,
+        )
+        .await
+        .unwrap();
 
         let mut issuance_app = router((issuance_state.clone(), library_state));
 

@@ -1,4 +1,3 @@
-use crate::handlers::query_handler;
 use agent_verification::state::VerificationState;
 use axum::{
     extract::{Path, State},
@@ -9,6 +8,8 @@ use http_api_problem::ApiError;
 use hyper::header;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
 /// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved.
 /// As described here: https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-
@@ -17,7 +18,7 @@ pub(crate) async fn request(
     State(verification_state): State<Arc<VerificationState>>,
     Path(request_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&request_id, &verification_state.query.authorization_request)
+    public_query_handler(&request_id, &verification_state.query.authorization_request)
         .await?
         .and_then(|authorization_request_view| authorization_request_view.signed_authorization_request_object)
         .map(|signed_authorization_request_object| {
