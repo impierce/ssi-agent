@@ -62,6 +62,14 @@ ignore = [
     # configurations, so CRL parsing code is never reached in this application.
     "RUSTSEC-2026-0104",
 
+    # RUSTSEC-2026-0194: quick-xml 0.39.4 — Quadratic run time in duplicate-attribute check
+    # Same crate and dependency chain as RUSTSEC-2026-0195 below: quick-xml is only pulled in
+    # through object_store inside the IOTA SDK. The ssi-agent never parses XML; the vulnerable
+    # attribute iteration only runs when object_store parses S3/Azure-style XML API responses,
+    # and no object-storage backend is configured or reachable from application code.
+    # TODO: revisit once the IOTA SDK upgrades quick-xml to >= 0.41.0.
+    "RUSTSEC-2026-0194",
+
     # RUSTSEC-2026-0195: quick-xml 0.39.4 — Unbounded namespace-declaration allocation in NsReader
     # The vulnerable quick-xml code is pulled in through object_store inside the IOTA SDK
     # dependency chain. This workspace does not use object_store or any XML/object-storage
