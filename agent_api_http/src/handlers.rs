@@ -1,6 +1,6 @@
 use crate::error::ErrorWrapper;
 use cqrs_es::{Aggregate, View};
-use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker};
+use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker, Caller};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -18,7 +18,9 @@ where
     A: Aggregate,
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
-    agent_shared::handlers::command_handler(authorization_checker, actor, aggregate_id, state, command)
+    let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
+
+    agent_shared::handlers::command_handler(authorization_checker, caller, aggregate_id, state, command)
         .await
         .map_err(ErrorWrapper::CommandHandlerError)
 }
@@ -37,7 +39,7 @@ where
         ALLOW_ALL_AUTHORIZATION_CHECKER
             .get_or_init(|| Arc::new(AllowAllAuthorizationChecker))
             .clone(),
-        None,
+        Caller::Anonymous,
         aggregate_id,
         state,
         command,
@@ -71,7 +73,9 @@ where
     A: Aggregate,
     V: View<A>,
 {
-    agent_shared::handlers::query_handler(authorization_checker, actor, view_id, state)
+    let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
+
+    agent_shared::handlers::query_handler(authorization_checker, caller, view_id, state)
         .await
         .map_err(ErrorWrapper::QueryHandlerError)
 }

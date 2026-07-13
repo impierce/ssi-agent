@@ -4,8 +4,8 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 use crate::authorization::{
-    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, AuthorizationOperation,
-    AuthorizationRequest,
+    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, AuthorizationOperation,
+    AuthorizationRequest, Caller,
 };
 
 /// Defines the domain-specific types and handlers for a bounded context.
@@ -60,8 +60,8 @@ pub trait ApplicationContext: Send + Sync + 'static {
 ///
 /// Sent from a presentation-layer handle to the [`ApplicationService`] over an `mpsc` channel.
 pub struct CommandEnvelope<AC: ApplicationContext> {
-    /// The actor of the command.
-    pub actor: Option<Actor>,
+    /// The caller of the command.
+    pub caller: Caller,
     /// The target aggregate ID.
     pub aggregate_id: String,
     /// The domain command to execute.
@@ -74,8 +74,8 @@ pub struct CommandEnvelope<AC: ApplicationContext> {
 ///
 /// Sent from a presentation-layer handle to the [`ApplicationService`] over an `mpsc` channel.
 pub struct QueryEnvelope<AC: ApplicationContext> {
-    /// The actor of the query.
-    pub actor: Option<Actor>,
+    /// The caller of the query.
+    pub caller: Caller,
     /// The domain query to execute.
     pub query: AC::Query,
     /// One-shot channel for sending back the result.
@@ -121,7 +121,7 @@ where
 ///
 /// // Send a command from the presentation layer:
 /// let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-/// command_tx.send(CommandEnvelope { actor: None, aggregate_id: "aggregate-id".into(), command: my_cmd, reply: reply_tx }).await?;
+/// command_tx.send(CommandEnvelope { caller: Caller::Anonymous, aggregate_id: "aggregate-id".into(), command: my_cmd, reply: reply_tx }).await?;
 /// let result = reply_rx.await?;
 /// ```
 pub struct ApplicationService<AC: ApplicationContext> {
@@ -196,7 +196,7 @@ async fn process_command<AC: ApplicationContext>(
     debug!(aggregate_id = %msg.aggregate_id, "Processing command");
 
     let authorization_request = AuthorizationRequest {
-        actor: msg.actor.clone(),
+        caller: msg.caller.clone(),
         operation: AuthorizationOperation::Command {
             aggregate_id: msg.aggregate_id.clone(),
             operation_name: context.command_operation_name(&msg.command),
@@ -234,7 +234,7 @@ async fn process_query<AC: ApplicationContext>(
     debug!("Processing query");
 
     let authorization_request = AuthorizationRequest {
-        actor: msg.actor.clone(),
+        caller: msg.caller.clone(),
         operation: AuthorizationOperation::Query {
             operation_name: context.query_operation_name(&msg.query),
         },
@@ -265,6 +265,7 @@ async fn process_query<AC: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+    use crate::authorization::Actor;
     use crate::service_registry::{ServiceError, ServiceHandle};
 
     use super::*;
@@ -398,7 +399,7 @@ mod tests {
         service_handle
             .command_tx
             .send(CommandEnvelope {
-                actor: None,
+                caller: Caller::Anonymous,
                 aggregate_id: "aggregate-id".into(),
                 command: "create".into(),
                 reply: reply_tx,
@@ -418,7 +419,7 @@ mod tests {
         service_handle
             .query_tx
             .send(QueryEnvelope {
-                actor: None,
+                caller: Caller::Anonymous,
                 query: "my-query".into(),
                 reply: reply_tx,
             })
@@ -437,7 +438,7 @@ mod tests {
         service_handle
             .command_tx
             .send(CommandEnvelope {
-                actor: None,
+                caller: Caller::Anonymous,
                 aggregate_id: "aggregate-id".into(),
                 command: "bad-command".into(),
                 reply: reply_tx,
@@ -458,7 +459,7 @@ mod tests {
         service_handle
             .query_tx
             .send(QueryEnvelope {
-                actor: None,
+                caller: Caller::Anonymous,
                 query: "bad-query".into(),
                 reply: reply_tx,
             })
@@ -475,7 +476,7 @@ mod tests {
         let service_handle = spawn_service_with_authorization(FailingContext, Arc::new(DenyAllAuthorizationChecker));
 
         let result = service_handle
-            .dispatch_command("aggregate-id".into(), "create".into())
+            .dispatch_command(Caller::Anonymous, "aggregate-id".into(), "create".into())
             .await;
 
         assert!(matches!(
@@ -488,7 +489,9 @@ mod tests {
     async fn denied_query_returns_forbidden_before_context_error() {
         let service_handle = spawn_service_with_authorization(FailingContext, Arc::new(DenyAllAuthorizationChecker));
 
-        let result = service_handle.dispatch_query("my-query".into()).await;
+        let result = service_handle
+            .dispatch_query(Caller::Anonymous, "my-query".into())
+            .await;
 
         assert!(matches!(
             result,
@@ -505,7 +508,7 @@ mod tests {
             &EchoContext,
             &AllowAllAuthorizationChecker,
             CommandEnvelope {
-                actor: None,
+                caller: Caller::Anonymous,
                 aggregate_id: "aggregate-id".into(),
                 command: "create".into(),
                 reply: reply_tx,
@@ -523,7 +526,7 @@ mod tests {
             &EchoContext,
             &AllowAllAuthorizationChecker,
             QueryEnvelope {
-                actor: None,
+                caller: Caller::Anonymous,
                 query: "my-query".into(),
                 reply: reply_tx,
             },
@@ -542,7 +545,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn command_authorization_request_contains_actor_and_operation() {
+    async fn command_authorization_request_contains_caller_and_operation() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let service_handle = spawn_service_with_authorization(
             EchoContext,
@@ -555,14 +558,14 @@ mod tests {
             subject: "user@example.test".to_string(),
         };
         let result = service_handle
-            .dispatch_command_as(Some(actor.clone()), "aggregate-id".into(), "create".into())
+            .dispatch_command(Caller::Actor(actor.clone()), "aggregate-id".into(), "create".into())
             .await;
 
         assert_eq!(result.ok(), Some("aggregate-id".to_string()));
         assert_eq!(
             requests.lock().unwrap().as_slice(),
             &[AuthorizationRequest {
-                actor: Some(actor),
+                caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     operation_name: std::any::type_name::<String>(),
@@ -572,7 +575,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn query_authorization_request_contains_actor_and_operation() {
+    async fn query_authorization_request_contains_caller_and_operation() {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let service_handle = spawn_service_with_authorization(
             EchoContext,
@@ -585,14 +588,14 @@ mod tests {
             subject: "user@example.test".to_string(),
         };
         let result = service_handle
-            .dispatch_query_as(Some(actor.clone()), "my-query".into())
+            .dispatch_query(Caller::Actor(actor.clone()), "my-query".into())
             .await;
 
         assert_eq!(result.ok(), Some(TestView("my-view".into())));
         assert_eq!(
             requests.lock().unwrap().as_slice(),
             &[AuthorizationRequest {
-                actor: Some(actor),
+                caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Query {
                     operation_name: std::any::type_name::<String>(),
                 },

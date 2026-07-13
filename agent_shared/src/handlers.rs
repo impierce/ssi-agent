@@ -1,6 +1,6 @@
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use shared_kernel::authorization::{
-    Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
+    AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller,
 };
 use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
@@ -41,7 +41,7 @@ pub enum QueryHandlerError {
 /// The `query_handler` function is used to query the view repository after authorization.
 pub async fn query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
-    actor: Option<Actor>,
+    caller: Caller,
     view_id: &str,
     state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, QueryHandlerError>
@@ -50,7 +50,7 @@ where
     V: View<A>,
 {
     let authorization_request = AuthorizationRequest {
-        actor,
+        caller,
         operation: AuthorizationOperation::Query {
             operation_name: std::any::type_name::<V>(),
         },
@@ -80,7 +80,7 @@ where
 /// The `command_handler` function is used to execute a command on an aggregate.
 pub async fn command_handler<A>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
-    actor: Option<Actor>,
+    caller: Caller,
     aggregate_id: &str,
     state: &CommandHandler<A>,
     command: A::Command,
@@ -90,7 +90,7 @@ where
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
 {
     let authorization_request = AuthorizationRequest {
-        actor,
+        caller,
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
             // TODO: Use command variant names when authorization needs finer-grained permissions.
@@ -136,7 +136,7 @@ mod tests {
     use async_trait::async_trait;
     use cqrs_es::{event_sink::EventSink, DomainEvent};
     use serde::{Deserialize, Serialize};
-    use shared_kernel::authorization::AllowAllAuthorizationChecker;
+    use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, Caller};
     use std::sync::Mutex;
 
     #[derive(Default, Debug, Serialize, Deserialize)]
@@ -242,7 +242,7 @@ mod tests {
 
         command_handler(
             authorization_checker,
-            None,
+            Caller::Anonymous,
             "aggregate-id",
             &handler_ref,
             "emit".to_string(),
@@ -264,7 +264,7 @@ mod tests {
 
         let result = command_handler(
             Arc::new(DenyAllAuthorizationChecker),
-            None,
+            Caller::Anonymous,
             "aggregate-id",
             &state,
             "emit".to_string(),
@@ -284,7 +284,7 @@ mod tests {
 
         let _ = command_handler(
             Arc::new(DenyAllAuthorizationChecker),
-            None,
+            Caller::Anonymous,
             "aggregate-id",
             &state,
             "emit".to_string(),
@@ -307,7 +307,7 @@ mod tests {
             Arc::new(CapturingAuthorizationChecker {
                 requests: Arc::clone(&requests),
             }),
-            Some(actor.clone()),
+            Caller::Actor(actor.clone()),
             "aggregate-id",
             &state,
             "emit".to_string(),
@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(
             requests.lock().unwrap().as_slice(),
             &[AuthorizationRequest {
-                actor: Some(actor),
+                caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     operation_name: std::any::type_name::<String>(),

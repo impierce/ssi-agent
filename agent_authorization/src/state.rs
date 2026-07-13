@@ -2,7 +2,7 @@ use agent_shared::application_state::CommandHandler;
 use agent_shared::handlers::{command_handler, public_query_handler};
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, Caller};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -113,7 +113,7 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             UNIME_CLIENT_ID,
             &state.command.client,
             command,

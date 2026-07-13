@@ -1,6 +1,19 @@
 use async_trait::async_trait;
 
-/// Identifies the caller on whose behalf an application operation is executed.
+/// Identifies the provenance on whose behalf an operation is dispatched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Caller {
+    /// An external caller for whom no authenticated actor was established.
+    Anonymous,
+
+    /// An authenticated external actor.
+    Actor(Actor),
+
+    /// Trusted application code dispatching on its own behalf.
+    Internal,
+}
+
+/// Identifies an authenticated external actor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Actor {
     /// Stable subject identifier for the caller.
@@ -28,11 +41,11 @@ pub trait ToActor: Sync {
 /// Extracts an [`Actor`] from an input object.
 #[async_trait]
 pub trait ActorExtractor: Send + Sync + 'static {
-    /// Returns the actor that should be attached to the application operation.
+    /// Returns the authenticated actor represented by the input, if one can be established.
     async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor>;
 }
 
-/// Actor extractor used when no actor context should be attached.
+/// Actor extractor used when inputs cannot establish an authenticated actor.
 #[derive(Clone)]
 pub struct NoActorExtractor;
 
@@ -73,8 +86,8 @@ pub enum AuthorizationOperation {
 /// Complete authorization input for an application command or query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorizationRequest {
-    /// Caller context for the operation, if available.
-    pub actor: Option<Actor>,
+    /// Provenance of the operation's caller.
+    pub caller: Caller,
     /// Operation being authorized.
     pub operation: AuthorizationOperation,
 }

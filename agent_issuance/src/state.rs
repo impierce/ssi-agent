@@ -5,7 +5,7 @@ use agent_shared::handlers::{command_handler, public_query_handler};
 use agent_shared::UrlAppendHelpers;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, Caller};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -153,7 +153,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
             };
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                Caller::Internal,
                 SERVER_CONFIG_ID,
                 &state.command.server_config,
                 command,
@@ -166,7 +166,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                 let command = ServerConfigCommand::UpdateIssuerDisplay { display };
                 command_handler(
                     state.authorization_checker.clone(),
-                    None,
+                    Caller::Internal,
                     SERVER_CONFIG_ID,
                     &state.command.server_config,
                     command,
@@ -223,7 +223,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
 
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                Caller::Internal,
                 SERVER_CONFIG_ID,
                 &state.command.server_config,
                 command,
@@ -251,7 +251,7 @@ pub async fn update_cryptographic_binding_methods(state: &IssuanceState) -> anyh
 
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                Caller::Internal,
                 SERVER_CONFIG_ID,
                 &state.command.server_config,
                 command,
@@ -276,7 +276,7 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
 
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                Caller::Internal,
                 SERVER_CONFIG_ID,
                 &state.command.server_config,
                 command,
