@@ -30,7 +30,11 @@ metrics = "0.24"
 oid4vci.workspace = true
 opentelemetry = "0.31"
 opentelemetry-appender-tracing = "0.31"
-opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+opentelemetry-otlp = { version = "0.31", features = [
+    "grpc-tonic",
+    "http-proto",
+    "reqwest-blocking-client",
+] }
 opentelemetry_sdk = "0.31"
 serde.workspace = true
 serde_json.workspace = true
