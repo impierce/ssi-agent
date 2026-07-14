@@ -32,8 +32,8 @@ pub use agent_library::state::LibraryState;
 pub use agent_verification::state::VerificationState;
 
 pub async fn run() -> io::Result<()> {
-    // Initialize the tracing subscriber before anything else so that all subsequent log output is captured. Reading
-    // the log format triggers the configuration to be loaded first.
+    // Initialize the tracing subscriber before anything else so that all subsequent log output is captured.
+    // Reading the log format triggers the configuration to be loaded first.
     let log_format = config().log_format.clone();
     let _telemetry_guard = telemetry::init_telemetry(&log_format);
 

@@ -1,11 +1,11 @@
 # Metrics
 
-UniCore publishes all metrics via **OpenTelemetry** (OTLP push). There is no scrape endpoint: a Prometheus `/metrics` endpoint existed in earlier versions and has been fully replaced by the OpenTelemetry export.
+UniCore publishes all metrics via **OpenTelemetry** (OTLP push). There is no scrape endpoint (such as `/metrics` used by Prometheus).
 
 ## Activating the export
 
 OpenTelemetry export (traces, logs **and metrics**) is activated purely by the standard
-[OTLP exporter environment variables](https://opentelemetry.io/docs/specs/otel/protocol/exporter/) — there is no UniCore configuration key for it:
+[OTLP exporter environment variables](https://opentelemetry.io/docs/specs/otel/protocol/exporter/). There are no specific `UNICORE__` configuration keys for it.
 
 ```sh
 # Activates export of all three signals via OTLP (gRPC by default):
@@ -28,15 +28,15 @@ The wiring lives in `agent_application/src/telemetry.rs` (`init_telemetry`), whi
 
 ## Published metrics
 
-| Metric | Type | Source |
-| --- | --- | --- |
+| Metric                                                                                                        | Type      | Source                                              |
+| ------------------------------------------------------------------------------------------------------------- | --------- | --------------------------------------------------- |
 | `http.server.request.duration` (attributes: `http.request.method`, `http.route`, `http.response.status_code`) | histogram | `agent_api_http::metrics::track_metrics` middleware |
 
 The HTTP histogram follows the [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration); the request count per route/method/status is derived from the histogram's count.
 
 ## Cardinality: what makes a good metric
 
-Every distinct **combination of attribute values** on an instrument creates its own time series: it is aggregated separately in memory, exported on every push, and stored and indexed by the backend forever. The total number of combinations (the *cardinality*) is the product of the value counts of all attributes — it grows multiplicatively, and it is the primary driver of both metrics cost and query complexity. A histogram multiplies this further: each series carries one counter **per bucket**.
+Every distinct **combination of attribute values** on an instrument creates its own time series: it is aggregated separately in memory, exported on every push, and stored and indexed by the backend forever. The total number of combinations (the _cardinality_) is the product of the value counts of all attributes — it grows multiplicatively, and it is the primary driver of both metrics cost and query complexity. A histogram multiplies this further: each series carries one counter **per bucket**.
 
 A good metric therefore has a **small, bounded, and predictable** set of attribute values, known roughly at design time:
 
@@ -46,8 +46,8 @@ A good metric therefore has a **small, bounded, and predictable** set of attribu
 Rules of thumb:
 
 - **Estimate the product before adding an attribute.** `method × route × status` for the HTTP histogram is on the order of a few hundred series — fine. Adding a per-tenant ID with 10,000 tenants turns it into millions.
-- **Attributes are for grouping, not for lookup.** If you would ever filter a metric down to a *single* entity ("what happened to credential X?"), that question belongs to a **trace or log**, which carry per-request context for free — not to a metric. Metrics answer aggregate questions ("how many? how fast? how often?").
-- **Use `http.route`, never the raw path.** The `track_metrics` middleware records the matched route pattern (`/v0/credentials/{credential_id}`) instead of the concrete URL precisely to keep the value set bounded. Follow the same principle for any attribute: record the *category*, not the *instance*.
+- **Attributes are for grouping, not for lookup.** If you would ever filter a metric down to a _single_ entity ("what happened to credential X?"), that question belongs to a **trace or log**, which carry per-request context for free — not to a metric. Metrics answer aggregate questions ("how many? how fast? how often?").
+- **Use `http.route`, never the raw path.** The `track_metrics` middleware records the matched route pattern (`/v0/credentials/{credential_id}`) instead of the concrete URL precisely to keep the value set bounded. Follow the same principle for any attribute: record the _category_, not the _instance_.
 - **Map open-ended inputs to a closed set.** Bucket error details into a small `error.type`, cap enums coming from external input to known values plus `"other"`.
 - **The SDK will defend itself, at the cost of your data.** The OpenTelemetry SDK caps the number of series per instrument (cardinality limit, default 2000); once exceeded, additional combinations are folded into a single series with the `otel.metric.overflow` attribute — your metric silently stops being attributable. Treat hitting that limit as a bug in the metric's design, not something to raise the limit for.
 

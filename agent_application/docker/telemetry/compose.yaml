@@ -8,11 +8,5 @@ services:
       - "4317:4317"
       - "4318:4318"
       - "3000:3000"
-    environment:
-      # Keep dashboards/data across restarts; comment out (and remove the volume) for a fully ephemeral stack.
-      - GF_PATHS_DATA=/data/grafana
-    volumes:
-      - lgtm-data:/data
-
-volumes:
-  lgtm-data:
+    tmpfs:
+      - /data
