@@ -92,3 +92,4 @@ wiremock.workspace = true
 
 [features]
 test_utils = []
+allow-localhost = ["agent_identity/allow-localhost"]

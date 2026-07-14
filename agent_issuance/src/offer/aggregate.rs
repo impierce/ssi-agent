@@ -260,8 +260,8 @@ impl Aggregate for Offer {
 
                         // TODO: Remove this client-side logic.
                         let offer_link = config()
-                            .application_url
-                            .join(&format!("offer/{}", offer_id))
+                            .public_url
+                            .join(&format!("public/offers/{}", offer_id))
                             .expect("Failed to construct offer link URL");
 
                         Ok(vec![CredentialOfferEmailSent {

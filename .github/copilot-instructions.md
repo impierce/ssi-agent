@@ -4,7 +4,7 @@
 
 **ssi-agent** is a Self-Sovereign Identity (SSI) agent implementing OpenID4VCI (issuance) and OpenID4VP (verification) protocols. It's a Rust Tokio-based service that manages identity credentials, digital wallets, and credential verification flows.
 
-- **Language**: Rust 1.76.0+ (enforced in Cargo.toml `rust-version`)
+- **Language**: Rust 1.94.0+ (enforced in Cargo.toml `rust-version`)
 - **Build System**: Cargo workspace with 18 crates
 - **HTTP Framework**: Axum 0.8 with Tokio async runtime
 - **Persistence**: PostgreSQL with CQRS-ES event sourcing pattern
@@ -18,12 +18,12 @@ All commands run from repository root. **Always use `cargo` commands; do not use
 ### Bootstrap (one-time setup)
 
 ```bash
-# Install Rust 1.76.0+ (use dtolnay/rust-toolchain@stable for CI version)
+# Install Rust 1.94.0+ (use dtolnay/rust-toolchain@stable for CI version)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup component add rustfmt clippy
 
 # Verify installation
-cargo --version  # Should show 1.76.0+
+cargo --version  # Should show 1.94.0+
 ```
 
 ### Build

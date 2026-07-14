@@ -74,3 +74,4 @@ wiremock.workspace = true
 
 [features]
 test_utils = ["dep:futures", "dep:rstest"]
+allow-localhost = []

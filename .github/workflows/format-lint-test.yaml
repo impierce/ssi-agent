@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt, clippy
 
@@ -32,8 +32,11 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Test
+      - name: Test (Default features)
         run: cargo test --workspace
+
+      - name: Test (allow-localhost)
+        run: cargo test -p agent_api_http -p agent_identity --features allow-localhost allow_localhost_tests
 
       - name: Generated files are unchanged
         run: git diff --exit-code
