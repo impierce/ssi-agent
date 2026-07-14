@@ -52,6 +52,7 @@ where
     let authorization_request = AuthorizationRequest {
         caller,
         operation: AuthorizationOperation::Query {
+            resource_id: None,
             operation_name: std::any::type_name::<V>(),
         },
     };
@@ -93,6 +94,7 @@ where
         caller,
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
+            resource_id: None,
             // TODO: Use command variant names when authorization needs finer-grained permissions.
             operation_name: std::any::type_name::<A::Command>(),
         },
@@ -321,6 +323,7 @@ mod tests {
                 caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
+                    resource_id: None,
                     operation_name: std::any::type_name::<String>(),
                 },
             }]

@@ -66,6 +66,11 @@ pub enum AuthorizationOperation {
         /// actor to execute a command type only for a specific credential, offer, or profile.
         aggregate_id: String,
 
+        /// Product resource targeted by the command, when distinct or derivable.
+        ///
+        /// The shared kernel treats this as an opaque identifier.
+        resource_id: Option<String>,
+
         /// Stable operation identifier chosen by the application context.
         ///
         /// This is intentionally not a permission, role, scope, or attribute. The shared
@@ -75,6 +80,11 @@ pub enum AuthorizationOperation {
     },
     /// A read-side query.
     Query {
+        /// Product resource targeted by the query, when one exists.
+        ///
+        /// List and aggregate queries commonly have no resource identity.
+        resource_id: Option<String>,
+
         /// Stable operation identifier chosen by the application context.
         ///
         /// This gives authorization checkers a neutral key for read policies without requiring

@@ -38,6 +38,16 @@ pub trait ApplicationContext: Send + Sync + 'static {
     /// Execute a read-side query, returning the projected view.
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError>;
 
+    /// Returns the resource targeted by a command, when one can be derived.
+    fn command_resource_id(&self, _command: &Self::Command) -> Option<String> {
+        None
+    }
+
+    /// Returns the resource targeted by a query, when one can be derived.
+    fn query_resource_id(&self, _query: &Self::Query) -> Option<String> {
+        None
+    }
+
     /// Returns the stable authorization operation name for a command.
     ///
     /// The default is the command type name, which is enough for contexts with one operation per
@@ -199,6 +209,7 @@ async fn process_command<AC: ApplicationContext>(
         caller: msg.caller.clone(),
         operation: AuthorizationOperation::Command {
             aggregate_id: msg.aggregate_id.clone(),
+            resource_id: context.command_resource_id(&msg.command),
             operation_name: context.command_operation_name(&msg.command),
         },
     };
@@ -236,6 +247,7 @@ async fn process_query<AC: ApplicationContext>(
     let authorization_request = AuthorizationRequest {
         caller: msg.caller.clone(),
         operation: AuthorizationOperation::Query {
+            resource_id: context.query_resource_id(&msg.query),
             operation_name: context.query_operation_name(&msg.query),
         },
     };
@@ -319,6 +331,14 @@ mod tests {
         async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError> {
             let view = query.replace("query", "view");
             Ok(TestView(view))
+        }
+
+        fn command_resource_id(&self, command: &Self::Command) -> Option<String> {
+            Some(command.clone())
+        }
+
+        fn query_resource_id(&self, query: &Self::Query) -> Option<String> {
+            Some(query.clone())
         }
     }
 
@@ -568,6 +588,7 @@ mod tests {
                 caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
+                    resource_id: Some("create".to_string()),
                     operation_name: std::any::type_name::<String>(),
                 },
             }]
@@ -597,6 +618,7 @@ mod tests {
             &[AuthorizationRequest {
                 caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Query {
+                    resource_id: Some("my-query".to_string()),
                     operation_name: std::any::type_name::<String>(),
                 },
             }]
