@@ -20,12 +20,11 @@ pub const CREDENTIALS_COUNT_METRIC: &str = "credentials_count";
 const ALL_CREDENTIALS_VIEW_ID: &str = "all_credentials";
 
 /// Counts credentials based on the `Credential` events, excluding credentials that the holder has reported as
-/// deleted (OID4VCI `credential_deleted` notification).
+/// deleted (OID4VCI `credential_deleted` notification), and records the count as a gauge to both metrics
+/// pipelines.
 ///
-/// The count is recorded as a gauge for both the Prometheus `/metrics` endpoint and the global OpenTelemetry
-/// meter provider. Attach this projection to the `Credential` aggregate via
-/// `agent_store::issuance_state_with_credential_queries` and call [`Self::seed`] afterwards to initialize the
-/// count from the persisted `all_credentials` view.
+/// This projection is the blueprint for event-derived metrics; see `docs/metrics/README.md` for how to attach
+/// and seed such a projection.
 #[derive(Clone, Default)]
 pub struct CredentialCountProjection {
     state: Arc<Mutex<CredentialCountState>>,

@@ -28,4 +28,5 @@ These markdown files are used as input for generating the official documentation
 - **[Template Model](./template-model.md)** - Current template structure, reasoning, and data-model-specific behavior
 - **[Architecture Decision Records](./adr/)** - Why certain design choices were made
 - **[Deployment](./deployment/)** - Production deployment guides
+- **[Metrics](./metrics/README.md)** - How to collect and export application metrics
 - **[Problem Details](./problem-details/)** - Troubleshooting and error handling

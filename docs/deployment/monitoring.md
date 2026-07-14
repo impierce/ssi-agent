@@ -22,6 +22,8 @@ Although the `/version` and `/info` endpoints do not contain sensitive data, the
 
 :::
 
-<!-- ## Metrics
+## Metrics
 
-- `/metrics`: Exposes Prometheus metrics for monitoring and alerting -->
+- `/metrics`: Exposes Prometheus metrics for monitoring and alerting (served on a separate port, default `9090`)
+
+See [Metrics](../metrics/README.md) for the available metrics, the OpenTelemetry pipeline, and how to add new metrics.
