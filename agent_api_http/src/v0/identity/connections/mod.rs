@@ -335,14 +335,7 @@ pub mod tests {
         assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
     }
 
-    #[test]
-    #[cfg(feature = "allow-localhost")]
-    fn test_parsing_with_http_prefix_preserves_http() {
-        let input_string = "http://a-via-lactea.example.com/";
-        let parsed = parse_url(input_string).unwrap();
 
-        assert_eq!(parsed, Url::parse("http://a-via-lactea.example.com/").unwrap());
-    }
 
     #[test]
     fn test_parsing_with_no_prefix() {
@@ -375,11 +368,23 @@ pub mod tests {
         assert!(parse_url(input_string).is_err());
     }
 
-    #[test]
     #[cfg(feature = "allow-localhost")]
-    fn invalid_input_no_tld_succeeds() {
-        let input_string = "localhost:8080";
-        let parsed = parse_url(input_string).unwrap();
-        assert_eq!(parsed, Url::parse("https://localhost:8080/").unwrap());
+    pub mod allow_localhost_tests {
+        use super::*;
+
+        #[test]
+        fn test_parsing_with_http_prefix_preserves_http() {
+            let input_string = "http://a-via-lactea.example.com/";
+            let parsed = parse_url(input_string).unwrap();
+
+            assert_eq!(parsed, Url::parse("http://a-via-lactea.example.com/").unwrap());
+        }
+
+        #[test]
+        fn invalid_input_no_tld_succeeds() {
+            let input_string = "localhost:8080";
+            let parsed = parse_url(input_string).unwrap();
+            assert_eq!(parsed, Url::parse("https://localhost:8080/").unwrap());
+        }
     }
 }

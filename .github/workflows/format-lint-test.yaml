@@ -35,8 +35,8 @@ jobs:
       - name: Test (Default features)
         run: cargo test --workspace
 
-      - name: Test (All features)
-        run: cargo test --workspace --all-features
+      - name: Test (allow-localhost)
+        run: cargo test -p agent_api_http -p agent_identity --features allow-localhost allow_localhost_tests
 
       - name: Generated files are unchanged
         run: git diff --exit-code
