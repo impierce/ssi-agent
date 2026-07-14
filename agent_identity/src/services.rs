@@ -71,7 +71,8 @@ impl IdentityServices {
         // TODO: This essentially disables domain linkage fetching because HTTPS is strictly
         // required by `DomainLinkageConfiguration::from_json_value`. When running locally
         // with HTTP, the fetch fails and we gracefully default to no linked DIDs.
-        // See ADR 0002 for more context and the future plan to use `rcgen`.
+        // See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md` for more context and the future plan
+        // to use `rcgen`.
         #[cfg(feature = "allow-localhost")]
         let config = match self.fetch_domain_linkage_configuration(url).await {
             Ok(config) => config,
@@ -246,7 +247,8 @@ mod tests {
         // DISCLAIMER: The DID Configuration specification strictly requires a non-empty `linked_dids` array.
         // This test asserts that the parser's validation error is intentionally swallowed, returning an
         // empty list instead. This is a deliberate bypass to prevent local HTTP testing from failing
-        // due to domain linkage requirements. See ADR 0002 for the full context.
+        // due to domain linkage requirements. See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`
+        // for the full context.
         async fn test_fetch_linked_dids_empty_succeeds_with_fallback() {
             let mock_server = MockServer::start().await;
 

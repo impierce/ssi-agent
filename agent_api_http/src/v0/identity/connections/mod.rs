@@ -295,6 +295,8 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
         #[cfg(feature = "allow-localhost")]
         Some(_rest) => input.to_string(),
         None if input.starts_with("https://") => input.to_string(),
+        #[cfg(feature = "allow-localhost")]
+        None if input.starts_with("localhost") => format!("http://{input}"),
         None => format!("https://{input}"),
     };
 
@@ -334,8 +336,6 @@ pub mod tests {
 
         assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
     }
-
-
 
     #[test]
     fn test_parsing_with_no_prefix() {
@@ -381,10 +381,10 @@ pub mod tests {
         }
 
         #[test]
-        fn invalid_input_no_tld_succeeds() {
+        fn test_parsing_localhost_defaults_to_http() {
             let input_string = "localhost:8080";
             let parsed = parse_url(input_string).unwrap();
-            assert_eq!(parsed, Url::parse("https://localhost:8080/").unwrap());
+            assert_eq!(parsed, Url::parse("http://localhost:8080/").unwrap());
         }
     }
 }
