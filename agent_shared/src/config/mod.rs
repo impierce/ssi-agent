@@ -60,9 +60,19 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
             // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
             .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
 
+        // We use TestWriter to ensure that `cargo test` can capture the logs.
+        // In a normal `cargo run` scenario, this falls back to standard stdout.
         match application_configuration.log_format {
-            LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-            LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
+            LogFormat::Json => tracing_subscriber
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_writer(tracing_subscriber::fmt::TestWriter::new()),
+                )
+                .init(),
+            LogFormat::Text => tracing_subscriber
+                .with(tracing_subscriber::fmt::layer().with_writer(tracing_subscriber::fmt::TestWriter::new()))
+                .init(),
         }
 
         info!("Configuration loaded successfully");
