@@ -33,12 +33,11 @@ identity_credential.workspace = true
 identity_did.workspace = true
 iso8601.workspace = true
 jsonschema.workspace = true
-metrics = "0.24"
-metrics-exporter-prometheus = { version = "0.17", default-features = false }
 oauth_tsl.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
+opentelemetry.workspace = true
 rand.workspace = true
 sd-jwt.workspace = true
 serde.workspace = true

@@ -3,7 +3,6 @@ mod metadata;
 mod probes;
 pub mod telemetry;
 
-pub use agent_api_http::metrics::metrics;
 use agent_api_http::{app, metrics::track_metrics, ApplicationState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
@@ -40,12 +39,6 @@ pub async fn run() -> io::Result<()> {
     let _telemetry_guard = telemetry::init_telemetry(&log_format);
 
     info!("Configuration loaded successfully");
-
-    // Install the Prometheus recorder before building the application state so that metrics recorded during
-    // startup (such as the seeded credential count) are captured.
-    if config().metrics.enabled {
-        agent_api_http::metrics::recorder_handle();
-    }
 
     let subject = Arc::new(Subject::new().await);
     let state = state(subject).await?;
@@ -327,13 +320,10 @@ where
 
     // Add probes routes
     let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
-    let mut app = probes_router.merge(app);
+    let app = probes_router.merge(app);
 
-    if config().metrics.enabled {
-        app = app.route_layer(axum::middleware::from_fn(track_metrics));
-    }
-
-    app
+    // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
+    app.route_layer(axum::middleware::from_fn(track_metrics))
 }
 
 /// Builds the application configuration router without the API version prefix.
@@ -344,14 +334,7 @@ pub fn configuration_router() -> axum::Router {
 async fn serve(app: axum::Router) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
 
-    let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
-
-    if config().metrics.enabled {
-        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
-        let _ = tokio::join!(app_handle, metrics_handle);
-    } else {
-        let _ = app_handle.await;
-    }
+    start_server("HTTP API".to_string(), app, port).await;
 
     Ok(())
 }

@@ -26,9 +26,8 @@ axum.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
 did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
-metrics = "0.24"
 oid4vci.workspace = true
-opentelemetry = "0.31"
+opentelemetry.workspace = true
 opentelemetry-appender-tracing = "0.31"
 opentelemetry-otlp = { version = "0.31", features = [
     "grpc-tonic",

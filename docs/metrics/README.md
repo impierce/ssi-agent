@@ -1,36 +1,17 @@
 # Metrics
 
-UniCore publishes metrics through **two independent pipelines**:
+UniCore publishes all metrics via **OpenTelemetry** (OTLP push). There is no scrape endpoint: a Prometheus `/metrics` endpoint existed in earlier versions and has been fully replaced by the OpenTelemetry export.
 
-| Pipeline | Transport | Activation | Consumers |
-| --- | --- | --- | --- |
-| **Prometheus** | Pull: scrape the `/metrics` endpoint (separate port, default `9090`) | `metrics.enabled` configuration (default: `true`) | Prometheus, Grafana Agent, any scraper |
-| **OpenTelemetry** | Push: OTLP/gRPC to a collector | Presence of an `OTEL_EXPORTER_OTLP_*` endpoint environment variable | OTel Collector, Grafana, Datadog, ... |
-
-The two pipelines are wired independently — a metric only shows up in both if it is recorded to both (see [Adding a new metric](#adding-a-new-metric)).
-
-## The Prometheus `/metrics` endpoint
-
-- Served on its **own port** (default `9090`), configured via the `metrics` section (`UNICORE__METRICS__ENABLED`, `UNICORE__METRICS__PORT`). It is enabled by default and **not affected by any `OTEL_*` environment variable**.
-- Backed by the [`metrics`](https://docs.rs/metrics) crate facade with the [`metrics-exporter-prometheus`](https://docs.rs/metrics-exporter-prometheus) recorder. The recorder is a process-wide singleton installed once at startup (`agent_api_http::metrics::recorder_handle()`), *before* the application state is built, so values recorded during startup (e.g. gauges seeded from persisted state) are not dropped.
-- Everything recorded through the `metrics::` macros anywhere in the workspace ends up here automatically.
-
-Currently published metrics:
-
-| Metric | Type | Source |
-| --- | --- | --- |
-| `http_requests_total{method,path,status}` | counter | `agent_api_http::metrics::track_metrics` middleware |
-| `http_requests_duration_seconds{method,path,status}` | histogram | `agent_api_http::metrics::track_metrics` middleware |
-| `credentials_count` | gauge | `agent_application::credential_metrics::CredentialCountProjection` |
-
-## The OpenTelemetry pipeline
+## Activating the export
 
 OpenTelemetry export (traces, logs **and metrics**) is activated purely by the standard
 [OTLP exporter environment variables](https://opentelemetry.io/docs/specs/otel/protocol/exporter/) — there is no UniCore configuration key for it:
 
 ```sh
-# Activates export of all three signals via OTLP/gRPC:
+# Activates export of all three signals via OTLP (gRPC by default):
 OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
+# Optional; defaults to "grpc", set to "http/protobuf" for OTLP over HTTP:
+OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
 # Optional; defaults to "unicore":
 OTEL_SERVICE_NAME="unicore"
 # Disable individual signals when the collector does not support them
@@ -41,93 +22,82 @@ OTEL_METRICS_EXPORTER=none
 OTEL_SDK_DISABLED=true
 ```
 
-If **none** of the `OTEL_EXPORTER_OTLP_*` endpoint variables is set, no OpenTelemetry
-provider is installed: the global meter provider stays a no-op, nothing is buffered or
-exported, and console logging behaves exactly as before. The Prometheus `/metrics`
-endpoint keeps working regardless.
+If **none** of the `OTEL_EXPORTER_OTLP_*` endpoint variables is set, no OpenTelemetry provider is installed: the global meter provider stays a no-op, nothing is buffered or exported, and console logging behaves exactly as before.
 
-The wiring lives in `agent_application/src/telemetry.rs` (`init_telemetry`), which is
-called first thing in `agent_application::run()`. When active, metrics recorded through
-the **global OpenTelemetry meter provider** are pushed periodically to the collector by
-the `SdkMeterProvider`.
+The wiring lives in `agent_application/src/telemetry.rs` (`init_telemetry`), which is called first thing in `agent_application::run()`. When active, metrics recorded through the **global OpenTelemetry meter provider** are pushed periodically to the collector by the `SdkMeterProvider`.
 
-## Adding a new metric
+## Published metrics
 
-There are two recording APIs, one per pipeline. Decide where the metric should be
-visible and record accordingly (or to both, as `CredentialCountProjection` does).
+| Metric | Type | Source |
+| --- | --- | --- |
+| `http.server.request.duration` (attributes: `http.request.method`, `http.route`, `http.response.status_code`) | histogram | `agent_api_http::metrics::track_metrics` middleware |
+| `credentials_count` | gauge | `agent_application::credential_metrics::CredentialCountProjection` |
 
-### 1. Publish on `/metrics` (Prometheus)
+The HTTP histogram follows the [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration); the request count per route/method/status is derived from the histogram's count.
 
-Use the [`metrics`](https://docs.rs/metrics) macros anywhere in the code — no
-registration step is needed, the first record creates the metric:
+## Cardinality: what makes a good metric
 
-```rust
-metrics::counter!("offers_created_total").increment(1);
-metrics::gauge!("credentials_count").set(count as f64);
-metrics::histogram!("signing_duration_seconds").record(elapsed);
-```
+Every distinct **combination of attribute values** on an instrument creates its own time series: it is aggregated separately in memory, exported on every push, and stored and indexed by the backend forever. The total number of combinations (the *cardinality*) is the product of the value counts of all attributes — it grows multiplicatively, and it is the primary driver of both metrics cost and query complexity. A histogram multiplies this further: each series carries one counter **per bucket**.
 
-Notes:
+A good metric therefore has a **small, bounded, and predictable** set of attribute values, known roughly at design time:
 
-- Labels are passed as `&[("key", value)]`, see `track_metrics` in
-  `agent_api_http/src/metrics.rs` for an example.
-- Histograms are rendered as Prometheus summaries unless explicit buckets are configured
-  for the metric name in `setup_metrics_recorder()`
-  (`agent_api_http/src/metrics.rs`) — add a `set_buckets_for_metric` matcher there if
-  your metric needs proper histogram buckets.
-- Metrics recorded before the recorder is installed are silently dropped. The recorder
-  is installed early in `run()`; if you add a new binary or entrypoint, call
-  `agent_api_http::metrics::recorder_handle()` before recording anything.
+- ✅ `http.request.method` (~9 values), `http.response.status_code` (~60, in practice ~10), `http.route` (bounded by the number of routes), `credential_format` (a handful of enum variants).
+- ❌ Anything identifier-like or unbounded: credential/offer/aggregate IDs, UUIDs, DIDs, subject or holder identifiers, session/correlation IDs, raw URL paths or query strings, timestamps, free-text error messages, anything derived from user input.
 
-### 2. Publish via OpenTelemetry (OTLP)
+Rules of thumb:
 
-Create an instrument from the **global** meter provider and record to it:
+- **Estimate the product before adding an attribute.** `method × route × status` for the HTTP histogram is on the order of a few hundred series — fine. Adding a per-tenant ID with 10,000 tenants turns it into millions.
+- **Attributes are for grouping, not for lookup.** If you would ever filter a metric down to a *single* entity ("what happened to credential X?"), that question belongs to a **trace or log**, which carry per-request context for free — not to a metric. Metrics answer aggregate questions ("how many? how fast? how often?").
+- **Use `http.route`, never the raw path.** The `track_metrics` middleware records the matched route pattern (`/v0/credentials/{credential_id}`) instead of the concrete URL precisely to keep the value set bounded. Follow the same principle for any attribute: record the *category*, not the *instance*.
+- **Map open-ended inputs to a closed set.** Bucket error details into a small `error.type`, cap enums coming from external input to known values plus `"other"`.
+- **The SDK will defend itself, at the cost of your data.** The OpenTelemetry SDK caps the number of series per instrument (cardinality limit, default 2000); once exceeded, additional combinations are folded into a single series with the `otel.metric.overflow` attribute — your metric silently stops being attributable. Treat hitting that limit as a bug in the metric's design, not something to raise the limit for.
+
+## Adding a new metric: step by step
+
+### 1. Create an instrument from the global meter
+
+Always resolve the meter through `opentelemetry::global::meter(...)`. This decouples the recording site from the initialization: when OpenTelemetry is not activated, the global provider is a no-op and recording is essentially free. There is no separate registration step — building the instrument defines the metric.
 
 ```rust
-opentelemetry::global::meter("unicore")
-    .u64_gauge("credentials_count")
-    .with_description("The number of credentials, excluding those reported as deleted by the holder.")
-    .build()
-    .record(count, &[]);
+use opentelemetry::KeyValue;
+
+let counter = opentelemetry::global::meter("unicore")
+    .u64_counter("offers_created")
+    .with_description("The number of credential offers created.")
+    .build();
 ```
 
-Notes:
+Available instrument kinds on the meter: `u64_counter`, `f64_histogram`, `u64_gauge`, `i64_up_down_counter`, and their observable (callback-based) variants.
 
-- Always resolve the meter through `opentelemetry::global` — when OpenTelemetry is not
-  activated this is a no-op provider and recording is essentially free.
-- The instrument name defines the metric name at the collector; keep it identical to the
-  Prometheus name so dashboards can correlate the two pipelines.
-- Recording is synchronous and in-memory; the periodic exporter pushes the current state
-  to the collector in the background.
+Naming: use lowercase dot-separated names and check the [semantic conventions](https://opentelemetry.io/docs/specs/semconv/) first — if a convention exists for what you are measuring (as it does for HTTP), use its metric name, unit, and attribute names so that off-the-shelf dashboards work.
+
+### 2. Record values
+
+```rust
+counter.add(1, &[KeyValue::new("credential_format", "sd_jwt")]);
+```
+
+- Recording is synchronous and in-memory; the periodic exporter pushes the aggregated state to the collector in the background.
+- Keep the attribute value set small and bounded — see [Cardinality](#cardinality-what-makes-a-good-metric) before adding any attribute.
+- For histograms, set explicit buckets with `.with_boundaries(...)` where the defaults do not fit — see `agent_api_http/src/metrics.rs`.
+- If the same instrument is recorded on a hot path, build it once and cache it (e.g. in a `OnceLock`, as `track_metrics` does) instead of rebuilding it on every call. Make sure the first access happens **after** startup so the cached instrument is bound to the real meter provider, not the no-op default.
 
 ### 3. Metrics derived from domain events (projections)
 
-For metrics that are computed from the event stream (like `credentials_count`),
-implement a [`cqrs_es::Query`](https://docs.rs/cqrs-es) for the aggregate and record the
-metric in `dispatch`. Use `CredentialCountProjection`
-(`agent_application/src/credential_metrics.rs`) as the blueprint:
+For metrics that are computed from the event stream (like `credentials_count`), implement a [`cqrs_es::Query`](https://docs.rs/cqrs-es) for the aggregate and record the metric in `dispatch`. Use `CredentialCountProjection` (`agent_application/src/credential_metrics.rs`) as the blueprint:
 
-1. **Implement `Query<Aggregate>`**: fold the incoming `EventEnvelope`s into whatever
-   state the metric needs, then record the new value to one or both pipelines.
-2. **Attach the projection** to the aggregate when the state is built. For the
-   `Credential` aggregate this is
-   `agent_store::issuance_state_with_credential_queries(...)`, called in
-   `agent_application/src/lib.rs` — note it must be attached in **all three**
-   `EventStoreType` match arms (Postgres, MongoDB, InMemory).
-3. **Seed from persisted state**: a projection only sees events dispatched while the
-   process is running. If the metric must reflect pre-existing data, load a persisted
-   view (e.g. the `all_credentials` list view) after the state is built and initialize
-   the metric from it — see `CredentialCountProjection::seed`.
+1. **Implement `Query<Aggregate>`**: fold the incoming `EventEnvelope`s into whatever state the metric needs, then record the new value.
+2. **Attach the projection** to the aggregate when the state is built. For the `Credential` aggregate this is `agent_store::issuance_state_with_credential_queries(...)`, called in `agent_application/src/lib.rs` — note it must be attached in **all three** `EventStoreType` match arms (Postgres, MongoDB, InMemory).
+3. **Seed from persisted state**: a projection only sees events dispatched while the process is running. If the metric must reflect pre-existing data, load a persisted view (e.g. the `all_credentials` list view) after the state is built and initialize the metric from it — see `CredentialCountProjection::seed`.
 
-## Verifying locally
+### 4. Verify locally
+
+Spin up the local all-in-one OTel stack (OTel Collector, Tempo, Loki, Prometheus, and a Grafana UI behind one OTLP endpoint) from [`agent_application/docker/telemetry/compose.yaml`](../../agent_application/docker/telemetry/compose.yaml):
 
 ```sh
-# Prometheus endpoint (no env vars needed; enabled by default on port 9090):
-curl -s localhost:9090/metrics
+docker compose -f agent_application/docker/telemetry/compose.yaml up -d
 
-# OTLP export against a local collector/Jaeger:
 OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" cargo run
 ```
 
-For a full local OTel stack covering all three signals (Tempo, Loki, Prometheus behind one
-OTLP endpoint, with a Grafana UI), see [`dev/telemetry/compose.yaml`](../../dev/telemetry/compose.yaml).
+Then exercise the code path that records your metric and check it in Grafana (default `http://localhost:3001`) under **Explore → Prometheus**.

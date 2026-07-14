@@ -6,10 +6,11 @@ use agent_issuance::credential::{
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use oid4vci::notification_request::NotificationEvent;
+use opentelemetry::metrics::Gauge;
 use shared_kernel::view_repository::DynViewRepository;
 use std::{
     collections::HashSet,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use tracing::warn;
 
@@ -20,8 +21,7 @@ pub const CREDENTIALS_COUNT_METRIC: &str = "credentials_count";
 const ALL_CREDENTIALS_VIEW_ID: &str = "all_credentials";
 
 /// Counts credentials based on the `Credential` events, excluding credentials that the holder has reported as
-/// deleted (OID4VCI `credential_deleted` notification), and records the count as a gauge to both metrics
-/// pipelines.
+/// deleted (OID4VCI `credential_deleted` notification), and records the count as an OpenTelemetry gauge.
 ///
 /// This projection is the blueprint for event-derived metrics; see `docs/metrics/README.md` for how to attach
 /// and seed such a projection.
@@ -74,20 +74,23 @@ impl CredentialCountProjection {
         self.state.lock().unwrap().live.len()
     }
 
-    /// Records the current count to the Prometheus recorder and the OpenTelemetry meter provider.
+    /// Records the current count to the OpenTelemetry meter provider.
     ///
-    /// The meter is resolved on every call so that recording always uses the globally registered meter
-    /// provider, regardless of initialization order (a no-op provider when OpenTelemetry is not enabled).
+    /// The gauge is created lazily on the first record so that it is bound to the globally registered meter
+    /// provider (a no-op provider when OpenTelemetry is not enabled): the projection is seeded after
+    /// `init_telemetry`, and instruments created before the provider is registered would stay no-op forever.
     fn record(&self) {
-        #[allow(clippy::cast_precision_loss)]
+        static GAUGE: OnceLock<Gauge<u64>> = OnceLock::new();
+
         let count = self.state.lock().unwrap().live.len() as u64;
 
-        metrics::gauge!(CREDENTIALS_COUNT_METRIC).set(count as f64);
-
-        opentelemetry::global::meter("unicore")
-            .u64_gauge(CREDENTIALS_COUNT_METRIC)
-            .with_description("The number of credentials, excluding those reported as deleted by the holder.")
-            .build()
+        GAUGE
+            .get_or_init(|| {
+                opentelemetry::global::meter("unicore")
+                    .u64_gauge(CREDENTIALS_COUNT_METRIC)
+                    .with_description("The number of credentials, excluding those reported as deleted by the holder.")
+                    .build()
+            })
             .record(count, &[]);
     }
 }

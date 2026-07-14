@@ -54,15 +54,12 @@ services:
       - mongodb
     ports:
       - 3033:3033
-      - 9091:9091
     environment:
       UNICORE__PROFILE: development
       UNICORE__APPLICATION_URL: ${UNICORE__APPLICATION_URL}
       UNICORE__EVENT_STORE__TYPE: mongodb
       UNICORE__EVENT_STORE__CONNECTION_STRING: mongodb://mongodb:27017/ssi-agent?directConnection=true&retryWrites=false&replicaSet=rs0
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "secure_password"
-      UNICORE__METRICS__ENABLED: true
-      UNICORE__METRICS__PORT: 9091
 ```
 
 :::info

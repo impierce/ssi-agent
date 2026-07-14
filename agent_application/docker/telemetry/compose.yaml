@@ -6,7 +6,7 @@
 #
 # Usage:
 #
-#   docker compose -f dev/telemetry/compose.yaml up -d
+#   docker compose -f agent_application/docker/telemetry/compose.yaml up -d
 #
 #   # Run UniCore against it (activates export of all three signals):
 #   OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" cargo run
@@ -15,7 +15,7 @@
 #   # Traces:  Explore -> Tempo    | Logs: Explore -> Loki    | Metrics: Explore -> Prometheus
 #
 # Host ports are overridable in case 4317/4318 are already taken (e.g. by a
-# standalone Jaeger): OTLP_GRPC_PORT=14317 docker compose -f dev/telemetry/compose.yaml up -d
+# standalone Jaeger): OTLP_GRPC_PORT=14317 docker compose -f agent_application/docker/telemetry/compose.yaml up -d
 
 name: opentelemetry
 
@@ -28,7 +28,7 @@ services:
       - "${OTLP_GRPC_PORT:-4317}:4317"
       # OTLP HTTP
       - "${OTLP_HTTP_PORT:-4318}:4318"
-      # Grafana UI (3000 is left free for the `monitoring` profile in agent_application/docker/compose.yaml)
+      # Grafana UI
       - "${GRAFANA_PORT:-3001}:3000"
     environment:
       # Keep dashboards/data across restarts; comment out (and remove the volume) for a fully ephemeral stack.

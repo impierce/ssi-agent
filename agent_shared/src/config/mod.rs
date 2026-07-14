@@ -178,14 +178,6 @@ pub struct ApplicationConfiguration {
     pub cors_enabled: bool,
     #[config(
         default,
-        development_default = "Metrics {
-            enabled: false,
-            port: 9090
-        }"
-    )]
-    pub metrics: Metrics,
-    #[config(
-        default,
         development_default = "HashMap::from(
             [
                 (
@@ -793,22 +785,6 @@ pub enum AuthorizationRequestEvent {
     OID4VPAuthorizationResponseVerified,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
-#[serde(default)]
-pub struct Metrics {
-    pub enabled: bool,
-    pub port: u16,
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            port: 9090,
-        }
-    }
-}
-
 /// All DID methods supported by UniCore
 /// ```
 /// use agent_shared::config::SupportedDidMethod;
@@ -1112,10 +1088,6 @@ mod tests {
               "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
-              "metrics": {
-                "enabled": false,
-                "port": 9090
-              },
               "did_methods": {
                 "did:jwk": {
                   "enabled": true,

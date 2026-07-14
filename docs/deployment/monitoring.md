@@ -24,6 +24,6 @@ Although the `/version` and `/info` endpoints do not contain sensitive data, the
 
 ## Metrics
 
-- `/metrics`: Exposes Prometheus metrics for monitoring and alerting (served on a separate port, default `9090`)
+Metrics are exported via **OpenTelemetry** (OTLP push), activated by setting the standard `OTEL_EXPORTER_OTLP_*` environment variables. There is no metrics endpoint to scrape — a Prometheus `/metrics` endpoint existed in earlier versions and has been replaced by the OpenTelemetry export.
 
-See [Metrics](../metrics/README.md) for the available metrics, the OpenTelemetry pipeline, and how to add new metrics.
+See [Metrics](../metrics/README.md) for the available metrics, how to activate the export, and how to add new metrics.
