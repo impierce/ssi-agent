@@ -302,11 +302,20 @@ async fn serve(app: axum::Router) -> io::Result<()> {
 
     let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
 
-    if config().metrics.enabled {
-        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
-        let _ = tokio::join!(app_handle, metrics_handle);
-    } else {
-        let _ = app_handle.await;
+    let servers = async {
+        if config().metrics.enabled {
+            let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
+            let _ = tokio::join!(app_handle, metrics_handle);
+        } else {
+            let _ = app_handle.await;
+        }
+    };
+
+    tokio::select! {
+        _ = servers => {},
+        _ = shutdown_signal() => {
+            info!("Shutdown signal received, exiting immediately.");
+        }
     }
 
     Ok(())
@@ -331,4 +340,27 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
     };
 
     axum::serve(listener, router).await.unwrap();
+}
+
+/// Resolves when the process receives a termination signal: `SIGTERM` (sent by Kubernetes /
+/// `docker stop`) or `SIGINT` (Ctrl-C). Because the agent runs as PID 1 in the container, the
+/// kernel applies no default signal disposition, so we must handle these explicitly or the
+/// process would ignore `SIGTERM` and only die once the orchestrator escalates to `SIGKILL`.
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = signal::ctrl_c() => {},
+        _ = terminate => {},
+    }
 }
