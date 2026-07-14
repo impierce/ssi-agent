@@ -1,22 +1,3 @@
-# Local OpenTelemetry test stack — traces, logs, and metrics via OTLP.
-#
-# Uses the Grafana LGTM all-in-one image: an OpenTelemetry Collector in front of
-# Tempo (traces), Loki (logs), and Prometheus (metrics), with a pre-provisioned
-# Grafana UI. See https://github.com/grafana/docker-otel-lgtm
-#
-# Usage:
-#
-#   docker compose -f agent_application/docker/telemetry/compose.yaml up -d
-#
-#   # Run UniCore against it (activates export of all three signals):
-#   OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317" cargo run
-#
-#   # Grafana: http://localhost:3001 (anonymous admin access, no login required)
-#   # Traces:  Explore -> Tempo    | Logs: Explore -> Loki    | Metrics: Explore -> Prometheus
-#
-# Host ports are overridable in case 4317/4318 are already taken (e.g. by a
-# standalone Jaeger): OTLP_GRPC_PORT=14317 docker compose -f agent_application/docker/telemetry/compose.yaml up -d
-
 name: opentelemetry
 
 services:
@@ -24,12 +5,9 @@ services:
     image: grafana/otel-lgtm
     container_name: otel-lgtm
     ports:
-      # OTLP gRPC (what UniCore's exporters use)
-      - "${OTLP_GRPC_PORT:-4317}:4317"
-      # OTLP HTTP
-      - "${OTLP_HTTP_PORT:-4318}:4318"
-      # Grafana UI
-      - "${GRAFANA_PORT:-3001}:3000"
+      - "4317:4317"
+      - "4318:4318"
+      - "3000:3000"
     environment:
       # Keep dashboards/data across restarts; comment out (and remove the volume) for a fully ephemeral stack.
       - GF_PATHS_DATA=/data/grafana
