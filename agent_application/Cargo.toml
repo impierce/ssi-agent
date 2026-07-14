@@ -21,12 +21,9 @@ agent_verification = { path = "../agent_verification" }
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 anyhow.workspace = true
-async-trait.workspace = true
 axum.workspace = true
 chrono.workspace = true
-cqrs-es.workspace = true
 did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
-oid4vci.workspace = true
 opentelemetry.workspace = true
 opentelemetry-appender-tracing = "0.31"
 opentelemetry-otlp = { version = "0.31", features = [

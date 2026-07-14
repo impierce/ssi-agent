@@ -31,7 +31,6 @@ The wiring lives in `agent_application/src/telemetry.rs` (`init_telemetry`), whi
 | Metric | Type | Source |
 | --- | --- | --- |
 | `http.server.request.duration` (attributes: `http.request.method`, `http.route`, `http.response.status_code`) | histogram | `agent_api_http::metrics::track_metrics` middleware |
-| `credentials_count` | gauge | `agent_application::credential_metrics::CredentialCountProjection` |
 
 The HTTP histogram follows the [OpenTelemetry semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/#metric-httpserverrequestduration); the request count per route/method/status is derived from the histogram's count.
 
@@ -82,15 +81,7 @@ counter.add(1, &[KeyValue::new("credential_format", "sd_jwt")]);
 - For histograms, set explicit buckets with `.with_boundaries(...)` where the defaults do not fit — see `agent_api_http/src/metrics.rs`.
 - If the same instrument is recorded on a hot path, build it once and cache it (e.g. in a `OnceLock`, as `track_metrics` does) instead of rebuilding it on every call. Make sure the first access happens **after** startup so the cached instrument is bound to the real meter provider, not the no-op default.
 
-### 3. Metrics derived from domain events (projections)
-
-For metrics that are computed from the event stream (like `credentials_count`), implement a [`cqrs_es::Query`](https://docs.rs/cqrs-es) for the aggregate and record the metric in `dispatch`. Use `CredentialCountProjection` (`agent_application/src/credential_metrics.rs`) as the blueprint:
-
-1. **Implement `Query<Aggregate>`**: fold the incoming `EventEnvelope`s into whatever state the metric needs, then record the new value.
-2. **Attach the projection** to the aggregate when the state is built. For the `Credential` aggregate this is `agent_store::issuance_state_with_credential_queries(...)`, called in `agent_application/src/lib.rs` — note it must be attached in **all three** `EventStoreType` match arms (Postgres, MongoDB, InMemory).
-3. **Seed from persisted state**: a projection only sees events dispatched while the process is running. If the metric must reflect pre-existing data, load a persisted view (e.g. the `all_credentials` list view) after the state is built and initialize the metric from it — see `CredentialCountProjection::seed`.
-
-### 4. Verify locally
+### 3. Verify locally
 
 Spin up the local all-in-one OTel stack (OTel Collector, Tempo, Loki, Prometheus, and a Grafana UI behind one OTLP endpoint) from [`agent_application/docker/telemetry/compose.yaml`](../../agent_application/docker/telemetry/compose.yaml):
 
