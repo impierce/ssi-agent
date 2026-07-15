@@ -1,7 +1,7 @@
 mod metadata;
 mod probes;
+pub mod telemetry;
 
-pub use agent_api_http::metrics::metrics;
 use agent_api_http::{app, metrics::track_metrics, ApplicationState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
@@ -41,6 +41,13 @@ pub use agent_library::state::LibraryState;
 pub use agent_verification::state::VerificationState;
 
 pub async fn run() -> io::Result<()> {
+    // Initialize the tracing subscriber before anything else so that all subsequent log output is captured.
+    // Reading the log format triggers the configuration to be loaded first.
+    let log_format = config().log_format.clone();
+    let _telemetry_guard = telemetry::init_telemetry(&log_format);
+
+    info!("Configuration loaded successfully");
+
     let subject = Arc::new(Subject::new().await);
     let state = state(subject).await?;
 
@@ -300,13 +307,10 @@ where
     let probes_router = axum::Router::new()
         .route("/healthz", axum::routing::get(healthz))
         .route("/readyz", axum::routing::get(readyz));
-    let mut app = probes_router.merge(app);
+    let app = probes_router.merge(app);
 
-    if config().metrics.enabled {
-        app = app.route_layer(axum::middleware::from_fn(track_metrics));
-    }
-
-    app
+    // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
+    app.route_layer(axum::middleware::from_fn(track_metrics))
 }
 
 /// Builds the application configuration router without the API version prefix.
@@ -342,14 +346,7 @@ fn verify_persisted_events(result: Result<EventVerificationReport, EventVerifica
 async fn serve(app: axum::Router) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
 
-    let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
-
-    if config().metrics.enabled {
-        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
-        let _ = tokio::join!(app_handle, metrics_handle);
-    } else {
-        let _ = app_handle.await;
-    }
+    start_server("HTTP API".to_string(), app, port).await;
 
     Ok(())
 }
