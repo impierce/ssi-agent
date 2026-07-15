@@ -13,14 +13,23 @@ use agent_issuance::{
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
-use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
+use agent_store::{
+    event_verification::{EventVerificationError, EventVerificationReport},
+    in_memory::InMemory,
+    mongodb::MongoDB,
+    postgres::Postgres,
+    EventPublisher,
+};
 use agent_verification::services::VerificationServices;
-use probes::liveness::healthz;
+use probes::{
+    liveness::healthz,
+    readiness::{mark_ready, readyz},
+};
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::io;
 use tower_http::cors::CorsLayer;
-use tracing::info;
+use tracing::{error, info};
 use verification_authorization::VerificationAuthorizationAdapter;
 
 // Re-export states
@@ -96,6 +105,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             EventStoreType::Postgres => {
                 let builder = Postgres::new().await;
 
+                verify_persisted_events(builder.verify_events().await);
+
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
@@ -144,6 +155,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
 
+                verify_persisted_events(builder.verify_events().await);
+
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
 
@@ -190,6 +203,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 )
             }
             EventStoreType::InMemory => {
+                mark_ready();
+
                 let issuance_state = Arc::new(
                     agent_store::issuance_state(&InMemory, issuance_services, issuance_event_publishers).await,
                 );
@@ -289,7 +304,9 @@ where
     let app = metadata_router.merge(app);
 
     // Add probes routes
-    let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
+    let probes_router = axum::Router::new()
+        .route("/healthz", axum::routing::get(healthz))
+        .route("/readyz", axum::routing::get(readyz));
     let app = probes_router.merge(app);
 
     // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
@@ -299,6 +316,31 @@ where
 /// Builds the application configuration router without the API version prefix.
 pub fn configuration_router() -> axum::Router {
     axum::Router::new().route("/configuration", axum::routing::get(metadata::config::configuration))
+}
+
+fn verify_persisted_events(result: Result<EventVerificationReport, EventVerificationError>) {
+    match result {
+        Ok(report) if report.is_compatible() => {
+            info!(checked = report.checked, "Persisted event verification succeeded");
+            mark_ready();
+        }
+        Ok(report) => {
+            for event in report.incompatible {
+                error!(
+                    aggregate_type = %event.aggregate_type,
+                    aggregate_id = %event.aggregate_id,
+                    sequence = event.sequence,
+                    event_type = %event.event_type,
+                    event_version = %event.event_version,
+                    reason = %event.reason,
+                    "Incompatible persisted event"
+                );
+            }
+        }
+        Err(error) => {
+            error!(%error, "Failed to verify persisted events");
+        }
+    }
 }
 
 async fn serve(app: axum::Router) -> io::Result<()> {
