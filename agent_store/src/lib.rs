@@ -68,6 +68,7 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod event_verification;
 pub mod in_memory;
 pub mod mongodb;
 pub mod postgres;
