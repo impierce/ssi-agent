@@ -1870,6 +1870,7 @@ components:
       - title
       - dataModel
       - holderType
+      - credentialFormat
       - status
       - visibility
       - credentialExpiration
@@ -1878,6 +1879,10 @@ components:
       properties:
         credentialExpiration:
           $ref: '#/components/schemas/Expiration'
+        credentialFormat:
+          type: string
+          description: The credential format (e.g. `jwt_vc_json`, `vc+sd-jwt`), derived from `holderType` and `dataModel`.
+          example: vc+sd-jwt
         dataModel:
           $ref: '#/components/schemas/DataModel'
         description:

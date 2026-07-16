@@ -1,6 +1,6 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
-use agent_library::template::aggregate::{DataModel, PropertyAttribute, Template};
+use agent_library::template::aggregate::{derive_credential_format, DataModel, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -114,13 +114,10 @@ impl CredentialConfigurationProjection {
 ///
 /// The `credential_definition.type` array prefers the template's explicit `type` values.
 /// Narrow fallbacks are only used when the template does not yet provide any type values.
+///
+/// B2B (organization) credentials do not support SD-JWT yet, so organizational templates always
+/// use the `jwt_vc_json` format.
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
-    let format = match template.data_model {
-        DataModel::W3CVcDataModelV1_1 => "jwt_vc_json",
-        _ => "vc+sd-jwt",
-    }
-    .to_string();
-
     let type_ = if template.r#type.is_empty() {
         match template.data_model {
             DataModel::W3CVcDataModelV1_1 | DataModel::W3CVcDataModelV2_0 => {
@@ -166,6 +163,8 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
                 text_color: None,
             }])
         });
+
+    let format = template.credential_format.clone();
 
     let claims = if format == "vc+sd-jwt" {
         build_claims_from_schema(template, Some("credentialSubject."))
@@ -299,6 +298,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     title,
                     display,
                     data_model,
+                    holder_type,
                     r#type,
                     status,
                     schema,
@@ -316,6 +316,8 @@ impl Query<Template> for CredentialConfigurationProjection {
                         title: title.clone(),
                         display: *display.clone(),
                         data_model: data_model.clone(),
+                        holder_type: holder_type.clone(),
+                        credential_format: derive_credential_format(holder_type, data_model),
                         r#type: r#type.clone(),
                         status: status.clone(),
                         schema: schema.clone(),
@@ -381,6 +383,15 @@ mod tests {
     use super::*;
     use agent_library::template::aggregate::{DataModel, Display};
 
+    fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
+        let mut template = template.clone();
+        if template.credential_format.is_empty() {
+            template.credential_format = derive_credential_format(&template.holder_type, &template.data_model);
+        }
+
+        super::credential_configuration_from_template(&template)
+    }
+
     #[test]
     fn test_v1_data_model_produces_jwt_vc_json_format() {
         let template = Template {
@@ -403,6 +414,33 @@ mod tests {
         };
         let config = credential_configuration_from_template(&template);
         assert_eq!(config.format, "vc+sd-jwt");
+    }
+
+    #[test]
+    fn test_organization_holder_type_forces_jwt_vc_json_format() {
+        use agent_library::template::aggregate::HolderType;
+
+        // Even with a V2 data model (which would otherwise be vc+sd-jwt), organizational
+        // (B2B) templates must use jwt_vc_json because SD-JWT is not yet supported for them.
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let template = Template {
+            template_id: "org-template".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Organization,
+            schema: Box::new(Some(schema)),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "jwt_vc_json");
+        // jwt_vc_json does not carry SD-JWT claim metadata.
+        assert!(config.credential_metadata.claims.is_none());
     }
 
     #[test]
