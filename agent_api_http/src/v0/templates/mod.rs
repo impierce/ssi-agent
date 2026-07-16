@@ -790,26 +790,32 @@ mod tests {
     }
 
     #[test]
-    fn template_dto_exposes_derived_format() {
-        // Individual + V2 data model → vc+sd-jwt.
+    fn template_dto_exposes_stored_credential_format() {
         let individual = TemplateDto::from(Template {
             template_id: "t-individual".to_string(),
             data_model: DataModel::W3CVcDataModelV2_0,
             holder_type: HolderType::Individual,
+            credential_format: "vc+sd-jwt".to_string(),
             r#type: vec!["VerifiableCredential".to_string()],
             ..Default::default()
         });
-        assert_eq!(serde_json::to_value(individual).unwrap()["format"], "vc+sd-jwt");
+        assert_eq!(
+            serde_json::to_value(individual).unwrap()["credentialFormat"],
+            "vc+sd-jwt"
+        );
 
-        // Organization → always jwt_vc_json, even on a V2 data model (B2B has no SD-JWT support yet).
         let organization = TemplateDto::from(Template {
             template_id: "t-organization".to_string(),
             data_model: DataModel::W3CVcDataModelV2_0,
             holder_type: HolderType::Organization,
+            credential_format: "jwt_vc_json".to_string(),
             r#type: vec!["VerifiableCredential".to_string()],
             ..Default::default()
         });
-        assert_eq!(serde_json::to_value(organization).unwrap()["format"], "jwt_vc_json");
+        assert_eq!(
+            serde_json::to_value(organization).unwrap()["credentialFormat"],
+            "jwt_vc_json"
+        );
     }
 
     #[tokio::test]
