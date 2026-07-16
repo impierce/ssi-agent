@@ -1,6 +1,6 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
-use agent_library::template::aggregate::{DataModel, PropertyAttribute, Template};
+use agent_library::template::aggregate::{DataModel, HolderType, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -117,6 +117,7 @@ impl CredentialConfigurationProjection {
 fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
     let format = match template.data_model {
         DataModel::W3CVcDataModelV1_1 => "jwt_vc_json",
+        _ if template.holder_type == HolderType::Organization => "jwt_vc_json",
         _ => "vc+sd-jwt",
     }
     .to_string();
