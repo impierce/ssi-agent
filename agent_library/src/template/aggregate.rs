@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use agent_shared::config::Authorization;
 use cqrs_es::{event_sink::EventSink, Aggregate};
+use oid4vci::credential_format_profiles::CredentialFormats;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use tracing::{debug, info};
@@ -133,6 +134,7 @@ pub struct Template {
     pub display: Option<Display>,
     pub data_model: DataModel,
     pub holder_type: HolderType,
+    pub credential_format: String,
     pub modified_at: Option<String>,
     pub tags: Option<Vec<String>>,
     pub status: Status,
@@ -144,6 +146,29 @@ pub struct Template {
     pub schema: Box<Option<serde_json::Value>>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     pub holder_authorization: Authorization,
+}
+
+/// Derives the credential format identifier (e.g. `"jwt_vc_json"`, `"vc+sd-jwt"`) from a template's
+/// `holder_type` and `data_model`. Computed once when the template is created and then stored on the
+/// template as a static value.
+///
+/// B2B (organization) credentials do not support SD-JWT yet, so organizational templates always use
+/// `jwt_vc_json` regardless of their data model.
+pub fn derive_credential_format(holder_type: &HolderType, data_model: &DataModel) -> String {
+    let format: CredentialFormats = match holder_type {
+        HolderType::Organization => CredentialFormats::JwtVcJson(()),
+        HolderType::Individual => match data_model {
+            DataModel::W3CVcDataModelV1_1 => CredentialFormats::JwtVcJson(()),
+            _ => CredentialFormats::VcSdJwt(()),
+        },
+    };
+
+    // `CredentialFormats` serializes as `{ "format": "<id>" }`; take the tag value as provided so
+    // additional formats such as `dc+sd-jwt` surface as-is once the derivation returns them.
+    serde_json::to_value(&format)
+        .ok()
+        .and_then(|value| value.get("format").and_then(|id| id.as_str()).map(str::to_string))
+        .unwrap_or_default()
 }
 
 impl Aggregate for Template {
@@ -589,6 +614,7 @@ impl Aggregate for Template {
                 self.source_template_id = source_template_id;
                 self.title = title;
                 self.display = *display;
+                self.credential_format = derive_credential_format(&holder_type, &data_model);
                 self.data_model = data_model;
                 self.holder_type = holder_type;
                 self.modified_at.replace(modified_at);

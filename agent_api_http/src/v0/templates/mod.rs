@@ -33,6 +33,9 @@ pub struct TemplateDto {
     pub display: Option<Display>,
     pub data_model: DataModel,
     pub holder_type: HolderType,
+    /// The credential format (e.g. `jwt_vc_json`, `vc+sd-jwt`), derived from `holderType` and `dataModel`.
+    #[schema(example = "vc+sd-jwt")]
+    pub credential_format: String,
     pub modified_at: Option<String>,
     pub tags: Option<Vec<String>>,
     #[schema(inline)]
@@ -54,6 +57,7 @@ impl From<Template> for TemplateDto {
             display: value.display,
             data_model: value.data_model,
             holder_type: value.holder_type,
+            credential_format: value.credential_format,
             modified_at: value.modified_at,
             tags: value.tags,
             status: value.status,
@@ -767,6 +771,7 @@ mod tests {
             display: None,
             data_model: DataModel::W3CVcDataModelV1_1,
             holder_type: HolderType::Individual,
+            credential_format: "vc+sd-jwt".to_string(),
             modified_at: Some("2024-01-01T00:00:00Z".to_string()),
             tags: None,
             status: Status::Draft,
@@ -782,6 +787,29 @@ mod tests {
         let serialized = serde_json::to_value(dto).unwrap();
 
         assert!(serialized.get("sourceTemplateId").is_none());
+    }
+
+    #[test]
+    fn template_dto_exposes_derived_format() {
+        // Individual + V2 data model → vc+sd-jwt.
+        let individual = TemplateDto::from(Template {
+            template_id: "t-individual".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            r#type: vec!["VerifiableCredential".to_string()],
+            ..Default::default()
+        });
+        assert_eq!(serde_json::to_value(individual).unwrap()["format"], "vc+sd-jwt");
+
+        // Organization → always jwt_vc_json, even on a V2 data model (B2B has no SD-JWT support yet).
+        let organization = TemplateDto::from(Template {
+            template_id: "t-organization".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Organization,
+            r#type: vec!["VerifiableCredential".to_string()],
+            ..Default::default()
+        });
+        assert_eq!(serde_json::to_value(organization).unwrap()["format"], "jwt_vc_json");
     }
 
     #[tokio::test]
