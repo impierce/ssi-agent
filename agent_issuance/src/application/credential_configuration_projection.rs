@@ -297,15 +297,21 @@ impl Query<Template> for CredentialConfigurationProjection {
                 // On creation we have the full template state in the event itself.
                 TemplateCreated {
                     template_id,
+                    source_template_id,
                     title,
                     display,
                     data_model,
-                    r#type,
+                    holder_type,
+                    modified_at,
+                    tags,
                     status,
+                    visibility,
+                    credential_expiration,
+                    description,
+                    r#type,
                     schema,
                     schema_properties_attributes,
                     holder_authorization,
-                    ..
                 } => {
                     // Only published templates have a credential configuration.
                     if *status != Status::Published {
@@ -314,15 +320,21 @@ impl Query<Template> for CredentialConfigurationProjection {
 
                     let template = Template {
                         template_id: template_id.clone(),
+                        source_template_id: source_template_id.clone(),
                         title: title.clone(),
                         display: *display.clone(),
                         data_model: data_model.clone(),
-                        r#type: r#type.clone(),
+                        holder_type: holder_type.clone(),
+                        modified_at: Some(modified_at.clone()),
+                        tags: tags.clone(),
                         status: status.clone(),
+                        visibility: visibility.clone(),
+                        credential_expiration: credential_expiration.clone(),
+                        description: description.clone(),
+                        r#type: r#type.clone(),
                         schema: schema.clone(),
                         schema_properties_attributes: schema_properties_attributes.clone(),
                         holder_authorization: holder_authorization.clone(),
-                        ..Default::default()
                     };
 
                     let credential_configuration = credential_configuration_from_template(&template);
