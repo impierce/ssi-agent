@@ -164,9 +164,11 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
             }])
         });
 
-    let claims = if template.credential_format == "vc+sd-jwt" {
+    let format = template.credential_format.clone();
+
+    let claims = if format == "vc+sd-jwt" {
         build_claims_from_schema(template, Some("credentialSubject."))
-    } else if template.credential_format == "dc+sd-jwt" {
+    } else if format == "dc+sd-jwt" {
         build_claims_from_schema(template, None)
     } else {
         None
@@ -174,7 +176,7 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
 
     CredentialConfiguration {
         credential_configuration_id: template.template_id.clone(),
-        format: template.credential_format.clone(),
+        format,
         type_,
         credential_metadata: CredentialMetadata { display, claims },
         authorization: template.holder_authorization.clone(),
@@ -380,6 +382,15 @@ impl Query<Template> for CredentialConfigurationProjection {
 mod tests {
     use super::*;
     use agent_library::template::aggregate::{DataModel, Display};
+
+    fn credential_configuration_from_template(template: &Template) -> CredentialConfiguration {
+        let mut template = template.clone();
+        if template.credential_format.is_empty() {
+            template.credential_format = derive_credential_format(&template.holder_type, &template.data_model);
+        }
+
+        super::credential_configuration_from_template(&template)
+    }
 
     #[test]
     fn test_v1_data_model_produces_jwt_vc_json_format() {

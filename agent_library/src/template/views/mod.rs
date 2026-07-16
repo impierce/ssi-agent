@@ -1,7 +1,7 @@
 pub mod all_templates;
 
 use super::event::TemplateEvent;
-use crate::template::aggregate::{Status, Template};
+use crate::template::aggregate::{derive_credential_format, Status, Template};
 use cqrs_es::{EventEnvelope, View};
 
 pub type TemplateView = Template;
@@ -35,6 +35,7 @@ impl View<Template> for Template {
                 self.display.clone_from(display);
                 self.data_model = data_model.clone();
                 self.holder_type = holder_type.clone();
+                self.credential_format = derive_credential_format(holder_type, data_model);
                 self.modified_at.replace(modified_at.clone());
                 self.tags = tags.clone();
                 self.status.clone_from(status);
