@@ -1,17 +1,49 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
-use axum::{http::StatusCode, response::IntoResponse};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 
-static READY: AtomicBool = AtomicBool::new(false);
-
-pub fn mark_ready() {
-    READY.store(true, Ordering::Release);
+#[derive(Clone, Default)]
+pub struct ReadinessState {
+    ready: Arc<AtomicBool>,
 }
 
-pub async fn readyz() -> impl IntoResponse {
-    if READY.load(Ordering::Acquire) {
+impl ReadinessState {
+    pub fn mark_ready(&self) {
+        self.ready.store(true, Ordering::Release);
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Acquire)
+    }
+}
+
+pub async fn readyz(State(readiness): State<ReadinessState>) -> impl IntoResponse {
+    if readiness.is_ready() {
         StatusCode::OK
     } else {
         StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn readiness_probe_reflects_shared_state() {
+        let readiness = ReadinessState::default();
+        let clone = readiness.clone();
+
+        assert_eq!(
+            readyz(State(clone.clone())).await.into_response().status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+
+        readiness.mark_ready();
+
+        assert_eq!(readyz(State(clone)).await.into_response().status(), StatusCode::OK);
     }
 }
