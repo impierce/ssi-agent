@@ -13,6 +13,7 @@ use agent_issuance::{
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
+pub use agent_store::event_verification::{core_event_verifiers, EventVerifier};
 use agent_store::{
     event_verification::{EventVerificationError, EventVerificationReport},
     in_memory::InMemory,
@@ -51,6 +52,13 @@ impl ApplicationState {
         verify_persisted_events(self.event_verification.verify_events().await, &self.readiness);
     }
 
+    pub async fn verify_persisted_events_with(&self, verifiers: &[EventVerifier]) {
+        verify_persisted_events(
+            self.event_verification.verify_events_with(verifiers).await,
+            &self.readiness,
+        );
+    }
+
     pub fn mark_ready(&self) {
         self.readiness.mark_ready();
     }
@@ -64,9 +72,16 @@ pub enum EventVerification {
 
 impl EventVerification {
     pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
+        self.verify_events_with(core_event_verifiers()).await
+    }
+
+    pub async fn verify_events_with(
+        &self,
+        verifiers: &[EventVerifier],
+    ) -> Result<EventVerificationReport, EventVerificationError> {
         match self {
-            Self::Postgres(store) => store.verify_events().await,
-            Self::MongoDb(store) => store.verify_events().await,
+            Self::Postgres(store) => store.verify_events_with(verifiers).await,
+            Self::MongoDb(store) => store.verify_events_with(verifiers).await,
             Self::InMemory => Ok(EventVerificationReport::default()),
         }
     }
