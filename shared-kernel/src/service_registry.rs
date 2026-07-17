@@ -155,9 +155,10 @@ where
 mod tests {
     use super::*;
     use crate::application_service::{ApplicationContext, ApplicationService};
-    use crate::authorization::Actor;
+    use crate::authorization::{Actor, AllowAllAuthorizationChecker};
     use async_trait::async_trait;
     use std::fmt;
+    use std::sync::Arc;
     use tokio::sync::mpsc;
 
     // ── Fixture types ──────────────────────────────────────────────
@@ -237,7 +238,13 @@ mod tests {
     async fn dispatch_command_returns_result() {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(EchoContext, command_rx, query_rx);
+        let service = ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
 
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
@@ -252,7 +259,13 @@ mod tests {
     async fn dispatch_query_returns_view() {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(EchoContext, command_rx, query_rx);
+        let service = ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
 
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
@@ -387,7 +400,13 @@ mod tests {
     async fn service_handle_can_be_registered_and_retrieved() {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(EchoContext, command_rx, query_rx);
+        let service = ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
 
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);

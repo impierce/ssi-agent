@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 use crate::authorization::{
-    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, AuthorizationOperation,
+    AuthorizationCheckerFor, AuthorizationConfigurationError, AuthorizationError, AuthorizationOperation,
     AuthorizationRequest, Caller,
 };
 
@@ -123,10 +123,10 @@ where
 /// use tokio::sync::mpsc;
 /// use shared_kernel::application_service::{ApplicationService, CommandEnvelope, QueryEnvelope};
 ///
-/// let (command_tx, query_tx) = mpsc::channel::<CommandEnvelope<MyContext>>(32);
+/// let (command_tx, command_rx) = mpsc::channel::<CommandEnvelope<MyContext>>(32);
 /// let (query_tx, query_rx) = mpsc::channel::<QueryEnvelope<MyContext>>(32);
 ///
-/// let service = ApplicationService::new(my_context, query_tx, query_rx);
+/// let service = ApplicationService::new(my_context, command_rx, query_rx, authorization_checker)?;
 /// tokio::spawn(service.start());
 ///
 /// // Send a command from the presentation layer:
@@ -136,32 +136,32 @@ where
 /// ```
 pub struct ApplicationService<AC: ApplicationContext> {
     context: Arc<AC>,
-    authorization_checker: Arc<dyn AuthorizationChecker>,
+    authorization_checker: Arc<dyn AuthorizationCheckerFor<AC>>,
     command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
     query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
 }
 
 impl<AC: ApplicationContext> ApplicationService<AC> {
+    /// Creates an application service after validating its authorization configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the authorization checker is not completely configured for this
+    /// application context.
     pub fn new(
         context: AC,
         command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
         query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
-    ) -> Self {
-        Self::new_with_authorization(context, command_rx, query_rx, Arc::new(AllowAllAuthorizationChecker))
-    }
+        authorization_checker: Arc<dyn AuthorizationCheckerFor<AC>>,
+    ) -> Result<Self, AuthorizationConfigurationError> {
+        authorization_checker.validate_context()?;
 
-    pub fn new_with_authorization(
-        context: AC,
-        command_rx: mpsc::Receiver<CommandEnvelope<AC>>,
-        query_rx: mpsc::Receiver<QueryEnvelope<AC>>,
-        authorization_checker: Arc<dyn AuthorizationChecker>,
-    ) -> Self {
-        Self {
+        Ok(Self {
             context: Arc::new(context),
             authorization_checker,
             command_rx,
             query_rx,
-        }
+        })
     }
 
     /// Run the message loop, processing commands and queries until all senders are dropped.
@@ -200,7 +200,7 @@ impl<AC: ApplicationContext> ApplicationService<AC> {
 
 async fn process_command<AC: ApplicationContext>(
     context: &AC,
-    authorization_checker: &dyn AuthorizationChecker,
+    authorization_checker: &dyn AuthorizationCheckerFor<AC>,
     msg: CommandEnvelope<AC>,
 ) {
     debug!(aggregate_id = %msg.aggregate_id, "Processing command");
@@ -239,7 +239,7 @@ async fn process_command<AC: ApplicationContext>(
 
 async fn process_query<AC: ApplicationContext>(
     context: &AC,
-    authorization_checker: &dyn AuthorizationChecker,
+    authorization_checker: &dyn AuthorizationCheckerFor<AC>,
     msg: QueryEnvelope<AC>,
 ) {
     debug!("Processing query");
@@ -277,7 +277,7 @@ async fn process_query<AC: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
-    use crate::authorization::Actor;
+    use crate::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker};
     use crate::service_registry::{ServiceError, ServiceHandle};
 
     use super::*;
@@ -375,6 +375,12 @@ mod tests {
         }
     }
 
+    impl<Context> AuthorizationCheckerFor<Context> for DenyAllAuthorizationChecker {
+        fn validate_context(&self) -> Result<(), AuthorizationConfigurationError> {
+            Ok(())
+        }
+    }
+
     struct CapturingAuthorizationChecker {
         requests: Arc<Mutex<Vec<AuthorizationRequest>>>,
     }
@@ -387,24 +393,40 @@ mod tests {
         }
     }
 
+    impl<Context> AuthorizationCheckerFor<Context> for CapturingAuthorizationChecker {
+        fn validate_context(&self) -> Result<(), AuthorizationConfigurationError> {
+            Ok(())
+        }
+    }
+
+    struct InvalidAuthorizationChecker;
+
+    #[async_trait]
+    impl AuthorizationChecker for InvalidAuthorizationChecker {
+        async fn is_authorized(&self, _request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            Ok(())
+        }
+    }
+
+    impl AuthorizationCheckerFor<EchoContext> for InvalidAuthorizationChecker {
+        fn validate_context(&self) -> Result<(), AuthorizationConfigurationError> {
+            Err(AuthorizationConfigurationError::new(
+                "missing EchoContext authorization",
+            ))
+        }
+    }
+
     // ── Helper ─────────────────────────────────────────────────────
 
     /// Spawn the service and return the sender halves for commands and queries.
-    fn spawn_service<AC: ApplicationContext>(context: AC) -> ServiceHandle<AC> {
-        let (command_tx, command_rx) = mpsc::channel(16);
-        let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(context, command_rx, query_rx);
-        tokio::spawn(service.start());
-        ServiceHandle::new(command_tx, query_tx)
-    }
-
-    fn spawn_service_with_authorization<AC: ApplicationContext>(
+    fn spawn_service<AC: ApplicationContext>(
         context: AC,
-        authorization_checker: Arc<dyn AuthorizationChecker>,
+        authorization_checker: Arc<dyn AuthorizationCheckerFor<AC>>,
     ) -> ServiceHandle<AC> {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new_with_authorization(context, command_rx, query_rx, authorization_checker);
+        let service = ApplicationService::new(context, command_rx, query_rx, authorization_checker)
+            .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
         ServiceHandle::new(command_tx, query_tx)
     }
@@ -413,7 +435,7 @@ mod tests {
 
     #[tokio::test]
     async fn command_returns_aggregate_id() {
-        let service_handle = spawn_service(EchoContext);
+        let service_handle = spawn_service(EchoContext, Arc::new(AllowAllAuthorizationChecker));
 
         let (reply_tx, reply_rx) = oneshot::channel();
         service_handle
@@ -433,7 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn query_returns_view() {
-        let service_handle = spawn_service(EchoContext);
+        let service_handle = spawn_service(EchoContext, Arc::new(AllowAllAuthorizationChecker));
 
         let (reply_tx, reply_rx) = oneshot::channel();
         service_handle
@@ -452,7 +474,7 @@ mod tests {
 
     #[tokio::test]
     async fn command_error_is_propagated() {
-        let service_handle = spawn_service(FailingContext);
+        let service_handle = spawn_service(FailingContext, Arc::new(AllowAllAuthorizationChecker));
 
         let (reply_tx, reply_rx) = oneshot::channel();
         service_handle
@@ -473,7 +495,7 @@ mod tests {
 
     #[tokio::test]
     async fn query_error_is_propagated() {
-        let service_handle = spawn_service(FailingContext);
+        let service_handle = spawn_service(FailingContext, Arc::new(AllowAllAuthorizationChecker));
 
         let (reply_tx, reply_rx) = oneshot::channel();
         service_handle
@@ -493,7 +515,7 @@ mod tests {
 
     #[tokio::test]
     async fn denied_command_returns_forbidden_before_context_error() {
-        let service_handle = spawn_service_with_authorization(FailingContext, Arc::new(DenyAllAuthorizationChecker));
+        let service_handle = spawn_service(FailingContext, Arc::new(DenyAllAuthorizationChecker));
 
         let result = service_handle
             .dispatch_command(Caller::Anonymous, "aggregate-id".into(), "create".into())
@@ -507,7 +529,7 @@ mod tests {
 
     #[tokio::test]
     async fn denied_query_returns_forbidden_before_context_error() {
-        let service_handle = spawn_service_with_authorization(FailingContext, Arc::new(DenyAllAuthorizationChecker));
+        let service_handle = spawn_service(FailingContext, Arc::new(DenyAllAuthorizationChecker));
 
         let result = service_handle
             .dispatch_query(Caller::Anonymous, "my-query".into())
@@ -561,13 +583,36 @@ mod tests {
         drop(command_tx);
         drop(query_tx);
 
-        ApplicationService::new(EchoContext, command_rx, query_rx).start().await;
+        ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid")
+        .start()
+        .await;
+    }
+
+    #[test]
+    fn service_rejects_invalid_authorization_configuration() {
+        let (_command_tx, command_rx) = mpsc::channel(16);
+        let (_query_tx, query_rx) = mpsc::channel(16);
+
+        let result = ApplicationService::new(EchoContext, command_rx, query_rx, Arc::new(InvalidAuthorizationChecker));
+
+        assert!(matches!(
+            result,
+            Err(error)
+                if error.to_string()
+                    == "Invalid authorization configuration: missing EchoContext authorization"
+        ));
     }
 
     #[tokio::test]
     async fn command_authorization_request_contains_caller_and_operation() {
         let requests = Arc::new(Mutex::new(Vec::new()));
-        let service_handle = spawn_service_with_authorization(
+        let service_handle = spawn_service(
             EchoContext,
             Arc::new(CapturingAuthorizationChecker {
                 requests: Arc::clone(&requests),
@@ -598,7 +643,7 @@ mod tests {
     #[tokio::test]
     async fn query_authorization_request_contains_caller_and_operation() {
         let requests = Arc::new(Mutex::new(Vec::new()));
-        let service_handle = spawn_service_with_authorization(
+        let service_handle = spawn_service(
             EchoContext,
             Arc::new(CapturingAuthorizationChecker {
                 requests: Arc::clone(&requests),

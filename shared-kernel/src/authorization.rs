@@ -118,12 +118,44 @@ pub trait AuthorizationChecker: Send + Sync {
     async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError>;
 }
 
+/// Error returned when an authorization checker is not configured for an application context.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Invalid authorization configuration: {message}")]
+pub struct AuthorizationConfigurationError {
+    message: String,
+}
+
+impl AuthorizationConfigurationError {
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+/// An authorization checker whose configuration can be validated for `Context`.
+pub trait AuthorizationCheckerFor<Context>: AuthorizationChecker {
+    /// Validates that the checker is completely configured for `Context`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when required authorization configuration is missing or inconsistent.
+    fn validate_context(&self) -> Result<(), AuthorizationConfigurationError>;
+}
+
 /// Authorization checker that permits every request.
 pub struct AllowAllAuthorizationChecker;
 
 #[async_trait]
 impl AuthorizationChecker for AllowAllAuthorizationChecker {
     async fn is_authorized(&self, _request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+        Ok(())
+    }
+}
+
+impl<Context> AuthorizationCheckerFor<Context> for AllowAllAuthorizationChecker {
+    fn validate_context(&self) -> Result<(), AuthorizationConfigurationError> {
         Ok(())
     }
 }
