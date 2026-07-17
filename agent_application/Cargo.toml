@@ -24,6 +24,14 @@ anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
 did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
+opentelemetry.workspace = true
+opentelemetry-appender-tracing = "0.31"
+opentelemetry-otlp = { version = "0.31", features = [
+    "grpc-tonic",
+    "http-proto",
+    "reqwest-blocking-client",
+] }
+opentelemetry_sdk = "0.31"
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
@@ -31,3 +39,5 @@ shared-kernel.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
+tracing-opentelemetry = "0.32"
+tracing-subscriber.workspace = true

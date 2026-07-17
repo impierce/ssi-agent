@@ -1,5 +1,6 @@
 mod metadata;
 mod probes;
+pub mod telemetry;
 
 pub use agent_api_http::metrics::metrics;
 use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
@@ -88,6 +89,13 @@ impl EventVerification {
 }
 
 pub async fn run() -> io::Result<()> {
+    // Initialize the tracing subscriber before anything else so that all subsequent log output is captured.
+    // Reading the log format triggers the configuration to be loaded first.
+    let log_format = config().log_format.clone();
+    let _telemetry_guard = telemetry::init_telemetry(&log_format);
+
+    info!("Configuration loaded successfully");
+
     let subject = Arc::new(Subject::new().await);
     let state = state(subject).await?;
     state.verify_persisted_events().await;
@@ -360,13 +368,10 @@ where
         .route("/healthz", axum::routing::get(healthz))
         .route("/readyz", axum::routing::get(readyz))
         .with_state(readiness);
-    let mut app = probes_router.merge(app);
+    let app = probes_router.merge(app);
 
-    if config().metrics.enabled {
-        app = app.route_layer(axum::middleware::from_fn(track_metrics));
-    }
-
-    app
+    // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
+    app.route_layer(axum::middleware::from_fn(track_metrics))
 }
 
 /// Builds the application configuration router without the API version prefix.
@@ -405,14 +410,7 @@ fn verify_persisted_events(
 async fn serve(app: axum::Router) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
 
-    let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
-
-    if config().metrics.enabled {
-        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
-        let _ = tokio::join!(app_handle, metrics_handle);
-    } else {
-        let _ = app_handle.await;
-    }
+    start_server("HTTP API".to_string(), app, port).await;
 
     Ok(())
 }
