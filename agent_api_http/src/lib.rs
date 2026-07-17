@@ -35,7 +35,7 @@ pub const API_VERSION: &str = "/v0";
 pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]
-pub struct ApplicationState {
+pub struct ApiState {
     pub identity_state: Option<Arc<IdentityState>>,
     pub library_state: Option<Arc<LibraryState>>,
     pub authorization_state: Option<Arc<AuthorizationState>>,
@@ -51,14 +51,14 @@ pub struct ApplicationState {
 /// When the configured application URL includes a non-root base path, the
 /// router is nested under that path.
 pub fn app<E>(
-    ApplicationState {
+    ApiState {
         identity_state,
         library_state,
         authorization_state,
         issuance_state,
         holder_state,
         verification_state,
-    }: ApplicationState,
+    }: ApiState,
     actor_extractor: Arc<E>,
 ) -> Router
 where
