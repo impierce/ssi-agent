@@ -1,4 +1,4 @@
-use crate::event_verification::{self, EventVerificationError, EventVerificationReport, RawStoredEvent};
+use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
@@ -39,7 +39,18 @@ impl MongoDB {
     // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
 
     pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
-        Ok(event_verification::verify_events(self.load_raw_events().await?))
+        self.verify_events_with(event_verification::core_event_verifiers())
+            .await
+    }
+
+    pub async fn verify_events_with(
+        &self,
+        verifiers: &[EventVerifier],
+    ) -> Result<EventVerificationReport, EventVerificationError> {
+        Ok(event_verification::verify_events_with(
+            self.load_raw_events().await?,
+            verifiers,
+        ))
     }
 
     async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {

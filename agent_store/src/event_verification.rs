@@ -1,33 +1,22 @@
 use agent_authorization::domain::{
-    access_token::{aggregate::AccessToken, event::AccessTokenEvent},
-    authorization_code::{aggregate::AuthorizationCode, event::AuthorizationCodeEvent},
-    client::{aggregate::Client, event::ClientEvent},
-    oauth2_authorization_request::{aggregate::OAuth2AuthorizationRequest, event::OAuth2AuthorizationRequestEvent},
+    access_token::aggregate::AccessToken, authorization_code::aggregate::AuthorizationCode, client::aggregate::Client,
+    oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest,
 };
 use agent_holder::{
-    credential::{aggregate::Credential as HolderCredential, event::CredentialEvent as HolderCredentialEvent},
-    offer::{aggregate::Offer as ReceivedOffer, event::OfferEvent as ReceivedOfferEvent},
-    presentation::{aggregate::Presentation, event::PresentationEvent},
+    credential::aggregate::Credential as HolderCredential, offer::aggregate::Offer as ReceivedOffer,
+    presentation::aggregate::Presentation,
 };
 use agent_identity::{
-    connection::{aggregate::Connection, event::ConnectionEvent},
-    document::{aggregate::Document, event::DocumentEvent},
-    profile::{aggregate::Profile, event::ProfileEvent},
-    service::{aggregate::Service, event::ServiceEvent},
+    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
+    service::aggregate::Service,
 };
 use agent_issuance::{
-    credential::{aggregate::Credential as IssuanceCredential, event::CredentialEvent as IssuanceCredentialEvent},
-    nonce::{aggregate::Nonce, event::NonceEvent},
-    offer::{aggregate::Offer as IssuanceOffer, event::OfferEvent as IssuanceOfferEvent},
-    public_offer::{aggregate::PublicOffer, event::PublicOfferEvent},
-    server_config::{aggregate::ServerConfig, event::ServerConfigEvent},
-    status_list::{aggregate::StatusListAggregate, event::StatusListEvent},
+    credential::aggregate::Credential as IssuanceCredential, nonce::aggregate::Nonce,
+    offer::aggregate::Offer as IssuanceOffer, public_offer::aggregate::PublicOffer,
+    server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
-use agent_library::{
-    catalog::{aggregate::Catalog, event::CatalogEvent},
-    template::{aggregate::Template, event::TemplateEvent},
-};
-use agent_verification::authorization_request::{aggregate::AuthorizationRequest, event::AuthorizationRequestEvent};
+use agent_library::{catalog::aggregate::Catalog, template::aggregate::Template};
+use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use cqrs_es::{Aggregate, DomainEvent};
 use serde::de::DeserializeOwned;
 
@@ -75,27 +64,60 @@ pub enum EventVerificationError {
     MongoDbDocument(#[from] mongodb::bson::de::Error),
 }
 
-type VerifyPayload = fn(&RawStoredEvent) -> Result<(), String>;
+pub type VerifyPayload = fn(&RawStoredEvent) -> Result<(), String>;
 
-struct EventVerifier {
+#[derive(Clone, Copy)]
+pub struct EventVerifier {
     aggregate_type: &'static str,
     verify: VerifyPayload,
 }
 
+impl EventVerifier {
+    pub const fn new(aggregate_type: &'static str, verify: VerifyPayload) -> Self {
+        Self { aggregate_type, verify }
+    }
+
+    pub fn for_aggregate<A>() -> Self
+    where
+        A: Aggregate,
+        A::Event: DeserializeOwned,
+    {
+        Self {
+            aggregate_type: A::TYPE,
+            verify: verify_aggregate_event::<A::Event>,
+        }
+    }
+
+    pub fn aggregate_type(&self) -> &'static str {
+        self.aggregate_type
+    }
+
+    fn verify(&self, event: &RawStoredEvent) -> Result<(), String> {
+        (self.verify)(event)
+    }
+}
+
 pub fn verify_events(events: impl IntoIterator<Item = RawStoredEvent>) -> EventVerificationReport {
+    verify_events_with(events, core_event_verifiers())
+}
+
+pub fn verify_events_with(
+    events: impl IntoIterator<Item = RawStoredEvent>,
+    verifiers: &[EventVerifier],
+) -> EventVerificationReport {
     let mut report = EventVerificationReport::default();
 
     for event in events {
         report.checked += 1;
 
-        let Some(verifier) = event_verifier_for(&event.aggregate_type) else {
+        let Some(verifier) = event_verifier_for(verifiers, &event.aggregate_type) else {
             report
                 .incompatible
                 .push(incompatible_event(event, "unknown aggregate type"));
             continue;
         };
 
-        if let Err(reason) = (verifier.verify)(&event) {
+        if let Err(reason) = verifier.verify(&event) {
             report.incompatible.push(incompatible_event(event, reason));
         }
     }
@@ -103,8 +125,8 @@ pub fn verify_events(events: impl IntoIterator<Item = RawStoredEvent>) -> EventV
     report
 }
 
-fn event_verifier_for(aggregate_type: &str) -> Option<&'static EventVerifier> {
-    event_verifiers()
+fn event_verifier_for<'a>(verifiers: &'a [EventVerifier], aggregate_type: &str) -> Option<&'a EventVerifier> {
+    verifiers
         .iter()
         .find(|verifier| verifier.aggregate_type == aggregate_type)
 }
@@ -145,87 +167,140 @@ where
     Ok(())
 }
 
-fn event_verifiers() -> &'static [EventVerifier] {
-    &[
-        EventVerifier {
-            aggregate_type: AccessToken::TYPE,
-            verify: verify_aggregate_event::<AccessTokenEvent>,
-        },
-        EventVerifier {
-            aggregate_type: AuthorizationCode::TYPE,
-            verify: verify_aggregate_event::<AuthorizationCodeEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Client::TYPE,
-            verify: verify_aggregate_event::<ClientEvent>,
-        },
-        EventVerifier {
-            aggregate_type: OAuth2AuthorizationRequest::TYPE,
-            verify: verify_aggregate_event::<OAuth2AuthorizationRequestEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Connection::TYPE,
-            verify: verify_aggregate_event::<ConnectionEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Document::TYPE,
-            verify: verify_aggregate_event::<DocumentEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Profile::TYPE,
-            verify: verify_aggregate_event::<ProfileEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Service::TYPE,
-            verify: verify_aggregate_event::<ServiceEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Template::TYPE,
-            verify: verify_aggregate_event::<TemplateEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Catalog::TYPE,
-            verify: verify_aggregate_event::<CatalogEvent>,
-        },
-        EventVerifier {
-            aggregate_type: ServerConfig::TYPE,
-            verify: verify_aggregate_event::<ServerConfigEvent>,
-        },
-        EventVerifier {
-            aggregate_type: IssuanceCredential::TYPE,
-            verify: verify_aggregate_event::<IssuanceCredentialEvent>,
-        },
-        EventVerifier {
-            aggregate_type: IssuanceOffer::TYPE,
-            verify: verify_aggregate_event::<IssuanceOfferEvent>,
-        },
-        EventVerifier {
-            aggregate_type: PublicOffer::TYPE,
-            verify: verify_aggregate_event::<PublicOfferEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Nonce::TYPE,
-            verify: verify_aggregate_event::<NonceEvent>,
-        },
-        EventVerifier {
-            aggregate_type: StatusListAggregate::TYPE,
-            verify: verify_aggregate_event::<StatusListEvent>,
-        },
-        EventVerifier {
-            aggregate_type: HolderCredential::TYPE,
-            verify: verify_aggregate_event::<HolderCredentialEvent>,
-        },
-        EventVerifier {
-            aggregate_type: Presentation::TYPE,
-            verify: verify_aggregate_event::<PresentationEvent>,
-        },
-        EventVerifier {
-            aggregate_type: ReceivedOffer::TYPE,
-            verify: verify_aggregate_event::<ReceivedOfferEvent>,
-        },
-        EventVerifier {
-            aggregate_type: AuthorizationRequest::TYPE,
-            verify: verify_aggregate_event::<AuthorizationRequestEvent>,
-        },
-    ]
+macro_rules! event_verifier {
+    ($aggregate:ty) => {
+        EventVerifier::new(
+            <$aggregate as Aggregate>::TYPE,
+            verify_aggregate_event::<<$aggregate as Aggregate>::Event>,
+        )
+    };
+}
+
+static CORE_EVENT_VERIFIERS: &[EventVerifier] = &[
+    event_verifier!(AccessToken),
+    event_verifier!(AuthorizationCode),
+    event_verifier!(Client),
+    event_verifier!(OAuth2AuthorizationRequest),
+    event_verifier!(Connection),
+    event_verifier!(Document),
+    event_verifier!(Profile),
+    event_verifier!(Service),
+    event_verifier!(Template),
+    event_verifier!(Catalog),
+    event_verifier!(ServerConfig),
+    event_verifier!(IssuanceCredential),
+    event_verifier!(IssuanceOffer),
+    event_verifier!(PublicOffer),
+    event_verifier!(Nonce),
+    event_verifier!(StatusListAggregate),
+    event_verifier!(HolderCredential),
+    event_verifier!(Presentation),
+    event_verifier!(ReceivedOffer),
+    event_verifier!(AuthorizationRequest),
+];
+
+pub fn core_event_verifiers() -> &'static [EventVerifier] {
+    CORE_EVENT_VERIFIERS
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{convert::Infallible, error::Error, fmt};
+
+    use cqrs_es::event_sink::EventSink;
+    use serde::{Deserialize, Serialize};
+
+    use super::*;
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    enum TestEvent {
+        Created { id: String },
+    }
+
+    impl DomainEvent for TestEvent {
+        fn event_type(&self) -> String {
+            "created".to_string()
+        }
+
+        fn event_version(&self) -> String {
+            "1".to_string()
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestError;
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "test error")
+        }
+    }
+
+    impl Error for TestError {}
+
+    #[derive(Default, Deserialize, Serialize)]
+    struct TestAggregate;
+
+    impl Aggregate for TestAggregate {
+        const TYPE: &'static str = "test";
+
+        type Command = Infallible;
+        type Event = TestEvent;
+        type Error = TestError;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            command: Self::Command,
+            _service: &Self::Services,
+            _sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            match command {}
+        }
+
+        fn apply(&mut self, _event: Self::Event) {}
+    }
+
+    fn raw_event(aggregate_type: &str, payload: serde_json::Value) -> RawStoredEvent {
+        RawStoredEvent {
+            aggregate_type: aggregate_type.to_string(),
+            aggregate_id: "aggregate-id".to_string(),
+            sequence: 1,
+            event_type: "created".to_string(),
+            event_version: "1".to_string(),
+            payload,
+        }
+    }
+
+    #[test]
+    fn core_verification_reports_unknown_external_aggregate() {
+        let report = verify_events([raw_event("test", serde_json::json!({ "Created": { "id": "id" } }))]);
+
+        assert_eq!(report.checked, 1);
+        assert_eq!(report.incompatible.len(), 1);
+        assert_eq!(report.incompatible[0].reason, "unknown aggregate type");
+    }
+
+    #[test]
+    fn custom_verifier_accepts_external_aggregate() {
+        let report = verify_events_with(
+            [raw_event("test", serde_json::json!({ "Created": { "id": "id" } }))],
+            &[EventVerifier::for_aggregate::<TestAggregate>()],
+        );
+
+        assert_eq!(report.checked, 1);
+        assert!(report.is_compatible());
+    }
+
+    #[test]
+    fn custom_verifier_reports_bad_payload() {
+        let report = verify_events_with(
+            [raw_event("test", serde_json::json!({ "Created": {} }))],
+            &[EventVerifier::for_aggregate::<TestAggregate>()],
+        );
+
+        assert_eq!(report.checked, 1);
+        assert_eq!(report.incompatible.len(), 1);
+        assert!(report.incompatible[0].reason.contains("missing field"));
+    }
 }
