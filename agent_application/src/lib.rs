@@ -2,7 +2,6 @@ mod metadata;
 mod probes;
 pub mod telemetry;
 
-pub use agent_api_http::metrics::metrics;
 use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
