@@ -2333,3 +2333,35 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
         })
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [/address]")
 }
+
+#[rstest]
+fn property_attribute_type_survives_serde_round_trip() {
+    // The `country` field type is not recoverable from standard JSON Schema keywords, so the
+    // frontend persists it out-of-band in `schemaPropertiesAttributes[*].type`. Verify it is
+    // serialized under the `type` key and deserializes back unchanged.
+    let expected = PropertyAttribute {
+        selectively_disclosable: false,
+        non_removable: false,
+        r#type: Some(FormFieldType::Country),
+    };
+
+    let json = serde_json::to_value(&expected).unwrap();
+    assert_eq!(json["type"], serde_json::json!("country"));
+    // An absent `type` must not be emitted, and `non_removable` is not affected.
+    assert_eq!(json.get("nonRemovable"), Some(&serde_json::json!(false)));
+
+    let actual: PropertyAttribute = serde_json::from_value(json).unwrap();
+    assert_eq!(actual, expected);
+
+    // Omitting `type` on the wire deserializes to `None` (backward compatible).
+    let without_type: PropertyAttribute =
+        serde_json::from_value(serde_json::json!({ "selectivelyDisclosable": true })).unwrap();
+    assert_eq!(without_type.r#type, None);
+    assert!(serde_json::to_value(&without_type).unwrap().get("type").is_none());
+
+    // An unrecognized field type is rejected (constrained enum).
+    let should_error = serde_json::from_value::<PropertyAttribute>(
+        serde_json::json!({ "selectivelyDisclosable": false, "type": "not-a-real-type" }),
+    );
+    assert!(should_error.is_err());
+}
