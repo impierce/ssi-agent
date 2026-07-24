@@ -1,8 +1,11 @@
+use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
+use mongodb::bson::{self, doc, Document};
+use mongodb::options::FindOptions;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -34,6 +37,66 @@ impl MongoDB {
         Self { client }
     }
     // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
+
+    pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
+        self.verify_events_with(event_verification::core_event_verifiers())
+            .await
+    }
+
+    pub async fn verify_events_with(
+        &self,
+        verifiers: &[EventVerifier],
+    ) -> Result<EventVerificationReport, EventVerificationError> {
+        Ok(event_verification::verify_events_with(
+            self.load_raw_events().await?,
+            verifiers,
+        ))
+    }
+
+    async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {
+        #[derive(serde::Deserialize)]
+        struct RawStoredEventDocument {
+            aggregate_type: String,
+            aggregate_id: String,
+            sequence: i64,
+            event_type: String,
+            event_version: String,
+            payload: serde_json::Value,
+        }
+
+        impl From<RawStoredEventDocument> for RawStoredEvent {
+            fn from(event: RawStoredEventDocument) -> Self {
+                Self {
+                    aggregate_type: event.aggregate_type,
+                    aggregate_id: event.aggregate_id,
+                    sequence: event.sequence,
+                    event_type: event.event_type,
+                    event_version: event.event_version,
+                    payload: event.payload,
+                }
+            }
+        }
+
+        let Some(database) = self.client.default_database() else {
+            return Err(EventVerificationError::MissingMongoDefaultDatabase);
+        };
+
+        let collection = database.collection::<Document>("events");
+        let options = FindOptions::builder()
+            .sort(doc! { "aggregate_type": 1, "aggregate_id": 1, "sequence": 1 })
+            .build();
+
+        let mut cursor = collection.find(doc! {}).with_options(options).await?;
+        let mut events = Vec::new();
+
+        while cursor.advance().await? {
+            let document = cursor.deserialize_current()?;
+            let event: RawStoredEventDocument = bson::from_document(document)?;
+            events.push(event.into());
+        }
+
+        Ok(events)
+    }
 }
 
 impl CqrsComponentBuilder for MongoDB {

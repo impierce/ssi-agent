@@ -1,10 +1,11 @@
+use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
 use shared_kernel::view_repository::DynViewRepository;
-use sqlx::Pool;
+use sqlx::{Pool, Row};
 use std::sync::Arc;
 
 impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
@@ -31,6 +32,43 @@ impl Postgres {
         Self { pool }
     }
     // TODO: Run [Pool::close] during graceful shutdown to close all open connections.
+
+    pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
+        self.verify_events_with(event_verification::core_event_verifiers())
+            .await
+    }
+
+    pub async fn verify_events_with(
+        &self,
+        verifiers: &[EventVerifier],
+    ) -> Result<EventVerificationReport, EventVerificationError> {
+        Ok(event_verification::verify_events_with(
+            self.load_raw_events().await?,
+            verifiers,
+        ))
+    }
+
+    pub async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {
+        let rows = sqlx::query(
+            "SELECT aggregate_type, aggregate_id, sequence, event_type, event_version, payload
+          FROM events
+          ORDER BY aggregate_type, aggregate_id, sequence",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| RawStoredEvent {
+                aggregate_type: row.get("aggregate_type"),
+                aggregate_id: row.get("aggregate_id"),
+                sequence: row.get("sequence"),
+                event_type: row.get("event_type"),
+                event_version: row.get("event_version"),
+                payload: row.get("payload"),
+            })
+            .collect())
+    }
 }
 
 impl CqrsComponentBuilder for Postgres {
