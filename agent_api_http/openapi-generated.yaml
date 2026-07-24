@@ -1475,6 +1475,10 @@ components:
           value:
             type: string
             description: Absolute datetime in ISO 8601 format, e.g. `"2026-12-31T23:59:59Z"`.
+    FormFieldType:
+      type: string
+      enum:
+      - country
     GetConnectionsEndpointRequest:
       type: object
       properties:
@@ -1774,6 +1778,13 @@ components:
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
+        type:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/FormFieldType'
+            description: |-
+              Allows the caller to store additional type information not supported by standard JSON Schema keywords.
+              This can be used by frontends to preserve field type information for visualizations.
     PublicOfferStatusDto:
       type: object
       required:

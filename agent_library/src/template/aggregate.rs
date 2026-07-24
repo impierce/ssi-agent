@@ -87,6 +87,13 @@ impl Default for Expiration {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum FormFieldType {
+    Country,
+}
+
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
@@ -97,6 +104,10 @@ pub struct PropertyAttribute {
     /// Defaults to `false`.
     #[serde(default)]
     pub non_removable: bool,
+    /// Allows the caller to store additional type information not supported by standard JSON Schema keywords.
+    /// This can be used by frontends to preserve field type information for visualizations.
+    #[serde(default)]
+    pub r#type: Option<FormFieldType>,
 }
 
 impl PropertyAttribute {
@@ -105,6 +116,7 @@ impl PropertyAttribute {
         Self {
             selectively_disclosable,
             non_removable,
+            r#type: None,
         }
     }
 
@@ -256,6 +268,7 @@ impl Aggregate for Template {
                             let attr = attrs.entry(key).or_insert(PropertyAttribute {
                                 selectively_disclosable: false,
                                 non_removable: false,
+                                r#type: None,
                             });
                             attr.non_removable = is_required;
                         }
@@ -1094,6 +1107,7 @@ pub mod test_utils {
             PropertyAttribute {
                 selectively_disclosable: true,
                 non_removable: false,
+                r#type: None,
             },
         );
         Some(config)
