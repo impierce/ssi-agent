@@ -330,11 +330,8 @@ fn validate_signed_credential_format_matches_configuration(
     signed_credential: &str,
     credential_configuration: &CredentialConfigurationsSupportedObject,
 ) -> Result<(), ApiError> {
-    let actual_format = detect_signed_credential_format(signed_credential).ok_or(ApiError::builder(StatusCode::BAD_REQUEST)
-        .title("Invalid Signed Credential Format")
-        .type_url(type_url("issuance#invalid-signed-credential-format"))
-        .message("Signed credential format could not be detected. Ensure the signed credential is a valid JWT or SD-JWT.")
-        .finish())?;
+    let actual_format = detect_signed_credential_format(signed_credential)
+        .map_err(|e| invalid_signed_credential_format_error(e.to_string()))?;
     let expected_format = expected_signed_credential_format(credential_configuration)?;
 
     if actual_format == expected_format {
@@ -366,6 +363,14 @@ fn expected_signed_credential_format(
             .message("The template-backed credential configuration uses an unsupported credential format.")
             .finish()),
     }
+}
+
+fn invalid_signed_credential_format_error(message: impl Into<String>) -> ApiError {
+    ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Invalid Signed Credential Format")
+        .type_url(type_url("issuance#invalid-signed-credential-format"))
+        .message(message.into())
+        .finish()
 }
 
 /// List all credentials

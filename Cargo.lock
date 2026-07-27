@@ -470,6 +470,7 @@ dependencies = [
  "agent_macros",
  "agent_secret_manager",
  "agent_shared",
+ "anyhow",
  "async-trait",
  "base64 0.22.1",
  "chrono",
