@@ -761,6 +761,7 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
 
@@ -795,6 +796,7 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
 
@@ -836,6 +838,7 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -877,6 +880,7 @@ async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
 
@@ -915,6 +919,7 @@ async fn test_update_field_attributes_with_no_schema(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
 
@@ -960,6 +965,7 @@ async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
 
@@ -1005,6 +1011,7 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1012,6 +1019,7 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+            skills: Vec::new(),
         },
     );
 
@@ -1058,6 +1066,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1065,6 +1074,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -1081,6 +1091,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -1140,6 +1151,7 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -1208,6 +1220,7 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1215,6 +1228,7 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -1289,6 +1303,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1296,6 +1311,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1303,6 +1319,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1310,6 +1327,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -1339,6 +1357,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1346,6 +1365,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1353,6 +1373,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
 
@@ -1481,6 +1502,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1488,6 +1510,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1495,6 +1518,9 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            
+        skills: Vec::new(),
+            
         },
     );
 
@@ -1587,6 +1613,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1594,6 +1621,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1601,6 +1629,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
 
@@ -1681,6 +1710,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
 
@@ -1691,6 +1721,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false, // User tries to change this
+        skills: Vec::new(),
         },
     );
 
@@ -1700,6 +1731,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: true, // System preserves non_removable
+        skills: Vec::new(),
         },
     );
 
@@ -1813,6 +1845,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1820,6 +1853,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1827,6 +1861,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+        skills: Vec::new(),
         },
     );
 
@@ -1920,6 +1955,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             PropertyAttribute {
                 selectively_disclosable: false,
                 non_removable: required_paths.contains(&key.to_string()),
+            skills: Vec::new(),
             },
         );
     }
@@ -2027,6 +2063,8 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             PropertyAttribute {
                 selectively_disclosable: false,
                 non_removable: required_paths.contains(&key.to_string()),
+            skills: Vec::new(),
+
             },
         );
     }
@@ -2186,6 +2224,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -2193,6 +2232,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 
@@ -2271,6 +2311,7 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+        skills: Vec::new(),
         },
     );
 

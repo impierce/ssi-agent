@@ -1413,6 +1413,10 @@ components:
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
     PublicOfferStatusDto:
       type: object
       required:
@@ -1441,6 +1445,38 @@ components:
       properties:
         id:
           type: string
+    ResultKind:
+      type: string
+      enum:
+      - skill
+      - occupation
+    Skill:
+      type: object
+      required:
+      - public_uri
+      - id
+      - ecosystem
+      - description
+      - label
+      - alternative_labels
+      - result_kind
+      properties:
+        alternative_labels:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        ecosystem:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        public_uri:
+          type: string
+        result_kind:
+          $ref: '#/components/schemas/ResultKind'
     Source:
       type: string
       enum:

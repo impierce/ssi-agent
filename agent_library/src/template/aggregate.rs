@@ -88,6 +88,23 @@ impl Default for Expiration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct Skill {
+    pub public_uri: String,
+    pub id: String,
+    pub ecosystem: String,
+    pub description: String,
+    pub label: String,
+    pub alternative_labels: Vec<String>,
+    pub result_kind: ResultKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub enum ResultKind {
+    Skill,
+    Occupation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     pub selectively_disclosable: bool,
@@ -97,14 +114,17 @@ pub struct PropertyAttribute {
     /// Defaults to `false`.
     #[serde(default)]
     pub non_removable: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<Skill>
 }
 
 impl PropertyAttribute {
     /// Creates a new `PropertyAttribute`.
-    pub fn new(selectively_disclosable: bool, non_removable: bool) -> Self {
+    pub fn new(selectively_disclosable: bool, non_removable: bool, skills: Vec<Skill>) -> Self {
         Self {
             selectively_disclosable,
             non_removable,
+            skills
         }
     }
 
@@ -256,6 +276,7 @@ impl Aggregate for Template {
                             let attr = attrs.entry(key).or_insert(PropertyAttribute {
                                 selectively_disclosable: false,
                                 non_removable: false,
+                                skills: Vec::new(),
                             });
                             attr.non_removable = is_required;
                         }
@@ -1094,6 +1115,7 @@ pub mod test_utils {
             PropertyAttribute {
                 selectively_disclosable: true,
                 non_removable: false,
+                skills: Vec::new(),
             },
         );
         Some(config)
