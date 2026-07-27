@@ -91,9 +91,27 @@ impl Default for Expiration {
 #[serde(rename_all = "kebab-case")]
 pub enum FormFieldType {
     Country,
+    Skill,
 }
 
 #[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct Skill {
+    pub public_uri: String,
+    pub id: String,
+    pub ecosystem: String,
+    pub description: String,
+    pub label: String,
+    pub alternative_labels: Vec<String>,
+    pub result_kind: ResultKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub enum ResultKind {
+    Skill,
+    Occupation,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
@@ -108,15 +126,18 @@ pub struct PropertyAttribute {
     /// This can be used by frontends to preserve field type information for visualizations.
     #[serde(default)]
     pub r#type: Option<FormFieldType>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<Skill>,
 }
 
 impl PropertyAttribute {
     /// Creates a new `PropertyAttribute`.
-    pub fn new(selectively_disclosable: bool, non_removable: bool) -> Self {
+    pub fn new(selectively_disclosable: bool, non_removable: bool, skills: Vec<Skill>) -> Self {
         Self {
             selectively_disclosable,
             non_removable,
             r#type: None,
+            skills,
         }
     }
 
@@ -269,6 +290,7 @@ impl Aggregate for Template {
                                 selectively_disclosable: false,
                                 non_removable: false,
                                 r#type: None,
+                                skills: Vec::new(),
                             });
                             attr.non_removable = is_required;
                         }
@@ -1108,6 +1130,7 @@ pub mod test_utils {
                 selectively_disclosable: true,
                 non_removable: false,
                 r#type: None,
+                skills: Vec::new(),
             },
         );
         Some(config)

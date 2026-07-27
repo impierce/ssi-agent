@@ -1479,6 +1479,7 @@ components:
       type: string
       enum:
       - country
+      - skill
     GetConnectionsEndpointRequest:
       type: object
       properties:
@@ -1778,6 +1779,10 @@ components:
             Defaults to `false`.
         selectivelyDisclosable:
           type: boolean
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
         type:
           oneOf:
           - type: 'null'
@@ -1824,6 +1829,38 @@ components:
           items:
             type: string
           default: []
+    ResultKind:
+      type: string
+      enum:
+      - Skill
+      - Occupation
+    Skill:
+      type: object
+      required:
+      - public_uri
+      - id
+      - ecosystem
+      - description
+      - label
+      - alternative_labels
+      - result_kind
+      properties:
+        alternative_labels:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        ecosystem:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        public_uri:
+          type: string
+        result_kind:
+          $ref: '#/components/schemas/ResultKind'
     Source:
       type: string
       enum:
