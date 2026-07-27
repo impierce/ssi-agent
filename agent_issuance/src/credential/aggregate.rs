@@ -272,12 +272,13 @@ impl Aggregate for Credential {
                 }));
 
                 // The sensible default for the jti is equal to the credential root `id` field
-                let jti: Option<Url> = self
+                let jti: Url = self
                     .data
                     .as_ref()
                     .and_then(|data| data.raw.get("id"))
                     .and_then(|id| id.as_str())
-                    .and_then(|id| Url::parse(id).ok());
+                    .and_then(|id| Url::parse(id).ok())
+                    .ok_or(InvalidCredentialDataError)?;
 
                 let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
 
@@ -319,11 +320,7 @@ impl Aggregate for Credential {
                             vc_jwt_builder
                         };
 
-                        let vc_jwt_builder = if let Some(id) = jti {
-                            vc_jwt_builder.jti(id.to_string())
-                        } else {
-                            vc_jwt_builder
-                        };
+                        let vc_jwt_builder = vc_jwt_builder.jti(jti.to_string());
 
                         let vc_jwt_built = vc_jwt_builder
                             .verifiable_credential(credential_data)
@@ -385,8 +382,11 @@ impl Aggregate for Credential {
                         }
 
                         // By default set all custom claims to concealable.
-                        let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
+                        let mut sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
                             .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
+
+                        // This claim shouldnt be concealed but the SdJwtVcBuilder is very limited in adding keys which arent its own subset of standard JWT claims.
+                        sd_jwt_vc_claims.insert("jti".to_string(), json!(jti.to_string()));
 
                         let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
 
@@ -429,6 +429,7 @@ impl Aggregate for Credential {
                             .header("typ", "vc+sd-jwt")
                             .header("kid", kid)
                             .insert_claim("status", status_claim)
+                            .and_then(|builder| builder.insert_claim("jti", jti.to_string()))
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?;
 
                         // This sets the `cnf` claim

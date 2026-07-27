@@ -14,13 +14,13 @@ use agent_issuance::{
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
+use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
 use axum::Extension;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
@@ -325,29 +325,16 @@ pub(crate) async fn credentials(
     .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SignedCredentialFormat {
-    JwtVcJson,
-    VcSdJwt,
-    DcSdJwt,
-}
-
-impl SignedCredentialFormat {
-    fn as_str(self) -> &'static str {
-        match self {
-            SignedCredentialFormat::JwtVcJson => "jwt_vc_json",
-            SignedCredentialFormat::VcSdJwt => "vc+sd-jwt",
-            SignedCredentialFormat::DcSdJwt => "dc+sd-jwt",
-        }
-    }
-}
-
 #[allow(clippy::result_large_err)]
 fn validate_signed_credential_format_matches_configuration(
     signed_credential: &str,
     credential_configuration: &CredentialConfigurationsSupportedObject,
 ) -> Result<(), ApiError> {
-    let actual_format = detect_signed_credential_format(signed_credential)?;
+    let actual_format = detect_signed_credential_format(signed_credential).ok_or(ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Invalid Signed Credential Format")
+        .type_url(type_url("issuance#invalid-signed-credential-format"))
+        .message("Signed credential format could not be detected. Ensure the signed credential is a valid JWT or SD-JWT.")
+        .finish())?;
     let expected_format = expected_signed_credential_format(credential_configuration)?;
 
     if actual_format == expected_format {
@@ -379,60 +366,6 @@ fn expected_signed_credential_format(
             .message("The template-backed credential configuration uses an unsupported credential format.")
             .finish()),
     }
-}
-
-#[allow(clippy::result_large_err)]
-fn detect_signed_credential_format(signed_credential: &str) -> Result<SignedCredentialFormat, ApiError> {
-    if signed_credential.contains('~') {
-        let issuer_jwt = signed_credential
-            .split('~')
-            .find(|segment| !segment.is_empty())
-            .ok_or_else(|| {
-                invalid_signed_credential_format_error("Signed SD-JWT credential is missing the issuer JWT.")
-            })?;
-
-        let header = decode_jwt_segment_json(issuer_jwt, 0)?;
-        match header.get("typ").and_then(Value::as_str) {
-            Some("vc+sd-jwt") => Ok(SignedCredentialFormat::VcSdJwt),
-            Some("dc+sd-jwt") => Ok(SignedCredentialFormat::DcSdJwt),
-            _ => Err(invalid_signed_credential_format_error(
-                "Signed SD-JWT credential must declare header typ `vc+sd-jwt` or `dc+sd-jwt`.",
-            )),
-        }
-    } else {
-        let payload = decode_jwt_segment_json(signed_credential, 1)?;
-        if payload.get("vc").is_some() {
-            Ok(SignedCredentialFormat::JwtVcJson)
-        } else {
-            Err(invalid_signed_credential_format_error(
-                "Signed JWT credential must contain a `vc` claim to match `jwt_vc_json`.",
-            ))
-        }
-    }
-}
-
-#[allow(clippy::result_large_err)]
-fn decode_jwt_segment_json(jwt: &str, segment_index: usize) -> Result<Value, ApiError> {
-    let segment = jwt
-        .split('.')
-        .nth(segment_index)
-        .ok_or_else(|| invalid_signed_credential_format_error("Signed credential is not a valid JWT."))?;
-
-    let decoded = URL_SAFE_NO_PAD
-        .decode(segment)
-        .map_err(|_| invalid_signed_credential_format_error("Signed credential contains invalid base64url data."))?;
-
-    serde_json::from_slice(&decoded).map_err(|_| {
-        invalid_signed_credential_format_error("Signed credential contains invalid JSON in its JWT segments.")
-    })
-}
-
-fn invalid_signed_credential_format_error(message: impl Into<String>) -> ApiError {
-    ApiError::builder(StatusCode::BAD_REQUEST)
-        .title("Invalid Signed Credential Format")
-        .type_url(type_url("issuance#invalid-signed-credential-format"))
-        .message(message.into())
-        .finish()
 }
 
 /// List all credentials
