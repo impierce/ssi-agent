@@ -1448,8 +1448,8 @@ components:
     ResultKind:
       type: string
       enum:
-      - skill
-      - occupation
+      - Skill
+      - Occupation
     Skill:
       type: object
       required:
