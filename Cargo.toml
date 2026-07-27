@@ -36,13 +36,13 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "b557172" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "b557172", features = [
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "be4e047", features = [
     "utoipa",
 ] }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "b557172" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "b557172" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "b557172" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
 
 shared-kernel = { path = "shared-kernel" }
 
