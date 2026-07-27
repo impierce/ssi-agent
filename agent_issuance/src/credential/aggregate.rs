@@ -359,15 +359,12 @@ impl Aggregate for Credential {
                             .await
                             .ok_or(KeyIdError)?;
 
-                        // Set the jti claim before the builder, since the builder has no dedicated method to set the jti claim.
-                        // However, don't include it in the credential_data since that will entirely be made concealable. (plus its cleaner when credential_data stays immutable across the whole function)
+                        // Inject `jti` into a payload copy before building, as `SdJwtVcBuilder` lacks a `jti()` method
+                        // and `credential_data` must stay immutable & non-concealable.
                         let mut credential_data_with_jti = credential_data.clone();
-                        match credential_data_with_jti
+                        credential_data_with_jti
                             .insert_at_path(&["jti"], serde_json::Value::String(jti.to_string()))
-                        {
-                            Some(_) => {}
-                            None => return Err(BuildCredentialError("Failed to set jti claim".to_string())),
-                        }
+                            .ok_or(BuildCredentialError("Failed to set jti claim".to_string()))?;
 
                         let mut builder = SdJwtVcBuilder::new(&credential_data_with_jti)
                             .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
