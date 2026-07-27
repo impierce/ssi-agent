@@ -5,6 +5,7 @@ use crate::credential::event::CredentialEvent;
 use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
+use agent_secret_manager::subject::Subject;
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
 use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use chrono::{DateTime, Utc};
@@ -351,64 +352,17 @@ impl Aggregate for Credential {
                         .ok())
                     }
                     CredentialFormats::DcSdJwt(_) => {
-                        // Get the kid for the header of the DcSdJwt
-                        let issuer = &services.issuer;
-                        let algorithm = get_preferred_signing_algorithm();
-                        let kid = issuer
-                            .key_id(&get_preferred_did_method().to_string(), algorithm)
-                            .await
-                            .ok_or(KeyIdError)?;
-
-                        // Inject `jti` into a payload copy before building, as `SdJwtVcBuilder` lacks a `jti()` method
-                        // and `credential_data` must stay immutable & non-concealable.
-                        let mut credential_data_with_jti = credential_data.clone();
-                        credential_data_with_jti
-                            .insert_at_path(&["jti"], serde_json::Value::String(jti.to_string()))
-                            .ok_or(BuildCredentialError("Failed to set jti claim".to_string()))?;
-
-                        let mut builder = SdJwtVcBuilder::new(&credential_data_with_jti)
-                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
-                            .header("typ", "dc+sd-jwt")
-                            .header("kid", kid);
-
-                        // Set the JWT claims
-                        builder = builder.iss(iss);
-                        builder = builder.iat(iat);
-                        builder = builder.nbf(iat);
-                        builder = builder.status(status_claim);
-
-                        if let Some(expiration_date) = self.expires_at {
-                            builder = builder.exp(
-                                Timestamp::parse(&expiration_date.to_rfc3339()).expect("Could not parse issuance_date"),
-                            );
-                        }
-
-                        // This sets the `cnf` claim
-                        if let Some(holder_kid) = holder_kid {
-                            builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
-                        }
-
-                        // By default set all custom claims to concealable.
-                        let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
-                            .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
-
-                        let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
-
-                        for path in paths {
-                            builder = builder.make_concealable(&format!("/{}", path)).map_err(|e| {
-                                BuildCredentialError(format!(
-                                    "Failed to make claim at path `/{}` concealable: {}",
-                                    path, e
-                                ))
-                            })?;
-                        }
-
-                        let sd_jwt_credential = builder
-                            .finish(&**issuer, algorithm.as_str())
-                            .await
-                            .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
-
-                        serde_json::json!(sd_jwt_credential.to_string())
+                        sign_dc_sd_jwt(
+                            &services.issuer,
+                            credential_data,
+                            jti,
+                            iss,
+                            iat,
+                            status_claim,
+                            self.expires_at.clone(),
+                            holder_kid,
+                        )
+                        .await?
                     }
                     CredentialFormats::VcSdJwt(_) => {
                         let credential_data = build_signed_w3c_credential_data(
@@ -923,6 +877,71 @@ fn build_unsigned_w3c_credential_data(
     ))
 }
 
+/// Signs an IETF Digital Credentials SD-JWT (DC SD-JWT) credential.
+async fn sign_dc_sd_jwt(
+    issuer: &Arc<Subject>,
+    credential_data: serde_json::Value,
+    jti: Url,
+    iss: identity_core::common::Url,
+    iat: Timestamp,
+    status_claim: identity_credential::sd_jwt_vc::Status,
+    expires_at: Option<DateTime<Utc>>,
+    holder_kid: Option<String>,
+) -> Result<serde_json::Value, CredentialError> {
+    // Get the kid for the header of the DcSdJwt
+    let algorithm = get_preferred_signing_algorithm();
+    let kid = issuer
+        .key_id(&get_preferred_did_method().to_string(), algorithm)
+        .await
+        .ok_or(KeyIdError)?;
+
+    // Inject `jti` into a payload copy before building, as `SdJwtVcBuilder` lacks a `jti()` method
+    // and `credential_data` must stay immutable & non-concealable.
+    let mut credential_data_with_jti = credential_data.clone();
+    credential_data_with_jti
+        .insert_at_path(&["jti"], serde_json::Value::String(jti.to_string()))
+        .ok_or(BuildCredentialError("Failed to set jti claim".to_string()))?;
+
+    let mut builder = SdJwtVcBuilder::new(&credential_data_with_jti)
+        .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
+        .header("typ", "dc+sd-jwt")
+        .header("kid", kid);
+
+    // Set the JWT claims
+    builder = builder.iss(iss);
+    builder = builder.iat(iat);
+    builder = builder.nbf(iat);
+    builder = builder.status(status_claim);
+
+    if let Some(expiration_date) = expires_at {
+        builder = builder.exp(Timestamp::parse(&expiration_date.to_rfc3339()).expect("Could not parse issuance_date"));
+    }
+
+    // This sets the `cnf` claim
+    if let Some(holder_kid) = holder_kid {
+        builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+    }
+
+    // By default set all custom claims to concealable.
+    let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
+        .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
+
+    let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
+
+    for path in paths {
+        builder = builder.make_concealable(&format!("/{}", path)).map_err(|e| {
+            BuildCredentialError(format!("Failed to make claim at path `/{}` concealable: {}", path, e))
+        })?;
+    }
+
+    let sd_jwt_credential = builder
+        .finish(&**issuer, algorithm.as_str())
+        .await
+        .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
+
+    Ok(serde_json::json!(sd_jwt_credential.to_string()))
+}
+
 /// Helper to filter schema errors for fields which are set during signing (SignCredential),
 /// and therefore not present during the validation in the CreateUnsignedCredential step.
 fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
@@ -959,6 +978,8 @@ pub mod credential_tests {
     use agent_shared::config::TESTINDEX;
     use jsonwebtoken::Algorithm;
 
+    use identity_core::common::{Timestamp, Url};
+    use identity_credential::sd_jwt_vc::SdJwtVc;
     use rstest::rstest;
     use serde_json::json;
 
@@ -1125,113 +1146,6 @@ pub mod credential_tests {
             }])
     }
 
-    /// Verifies that for a `dc+sd-jwt` credential the `jti` claim ends up as a plain
-    /// root claim in the JWT payload and is NOT included in any of the SD-JWT
-    /// disclosures (i.e. it is not concealable).
-    #[rstest]
-    #[serial_test::serial]
-    async fn dc_sd_jwt_jti_is_root_claim_and_not_concealable(
-        #[future(awt)] holder: Arc<dyn Subject>,
-        credential_id: String,
-        created_at: DateTime<Utc>,
-    ) {
-        use agent_shared::config::TEST_STATUS_LIST_ID;
-        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-
-        let expected_jti = format!("urn:uuid:{}", credential_id);
-
-        // The DC SD-JWT unsigned credential is flat and has no `id`. Add one so that `jti` can be derived from it during signing.
-        // NOTE: normally no id needs to be added manually, it is simply equal (with the urn scheme added to make it a valid URL) to the new aggregate id
-        // assigned to this new unsigned credential. However, since we are testing the `jti` claim here, we need to ensure that the `id` is set to a
-        // known value so that we can assert that the `jti` claim is set correctly.
-        let mut unsigned_credential = UNSIGNED_DC_SD_JWT_CREDENTIAL.clone();
-        unsigned_credential["id"] = json!(expected_jti);
-
-        // Apply the UnsignedCredentialCreated event directly, then handle SignCredential
-        // via a raw EventSink so we can inspect the produced signed credential without
-        // relying on exact-equality assertions (SD-JWT salts are non-deterministic).
-        let mut aggregate = Credential::default();
-        aggregate.apply(CredentialEvent::UnsignedCredentialCreated {
-            credential_id: credential_id.clone(),
-            data: Data {
-                raw: unsigned_credential,
-            },
-            credential_configuration: Box::new(DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone()),
-            notification_id: None,
-            created_at: Some(created_at),
-            expires_at: None,
-        });
-
-        let sink = EventSink::default();
-        aggregate
-            .handle(
-                CredentialCommand::SignCredential {
-                    credential_id: credential_id.clone(),
-                    subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
-                    overwrite: false,
-                    proofs: None,
-                    status_list_id: TEST_STATUS_LIST_ID.to_string(),
-                    index: TESTINDEX,
-                },
-                &IssuanceServices::default().await,
-                &sink,
-            )
-            .await
-            .expect("SignCredential should succeed for DC SD-JWT");
-        let events = sink.collect().await;
-
-        let signed_credential = events
-            .iter()
-            .find_map(|event| match event {
-                CredentialEvent::CredentialSigned { signed_credential, .. } => Some(signed_credential.clone()),
-                _ => None,
-            })
-            .expect("expected a CredentialSigned event");
-        let signed_credential = signed_credential
-            .as_str()
-            .expect("signed_credential should be a JSON string")
-            .to_string();
-
-        // SD-JWT serialization: `<JWT>~<disclosure1>~<disclosure2>~...~[KB-JWT]`
-        let mut parts = signed_credential.split('~');
-        let jwt = parts.next().expect("SD-JWT should contain a JWT part");
-        let disclosures: Vec<&str> = parts.filter(|part| !part.is_empty()).collect();
-
-        // 1) `jti` MUST be present as a plaintext root claim in the JWT payload.
-        let jwt_segments: Vec<&str> = jwt.split('.').collect();
-        assert_eq!(jwt_segments.len(), 3, "JWT should have 3 segments");
-        let payload_bytes = URL_SAFE_NO_PAD
-            .decode(jwt_segments[1])
-            .expect("JWT payload should be valid base64url");
-        let payload: serde_json::Value =
-            serde_json::from_slice(&payload_bytes).expect("JWT payload should be valid JSON");
-
-        assert_eq!(
-            payload.get("jti").and_then(|v| v.as_str()),
-            Some(expected_jti.as_str()),
-            "`jti` should be present at the root of the JWT payload with the expected value"
-        );
-
-        // 2) No disclosure should reveal `jti` — i.e. `jti` must NOT be concealable.
-        for disclosure in disclosures {
-            let decoded = URL_SAFE_NO_PAD
-                .decode(disclosure)
-                .expect("disclosure should be valid base64url");
-            let claim: serde_json::Value =
-                serde_json::from_slice(&decoded).expect("disclosure should decode to a JSON array");
-            // Object-property disclosures have the shape `[salt, claim_name, claim_value]`.
-            let claim_name = claim
-                .as_array()
-                .and_then(|arr| arr.get(1))
-                .and_then(|name| name.as_str());
-            assert_ne!(
-                claim_name,
-                Some("jti"),
-                "`jti` should not appear as a concealable claim in any disclosure",
-            );
-        }
-    }
-
     pub mod expiry_tests {
         use super::*;
 
@@ -1243,6 +1157,39 @@ pub mod credential_tests {
             let serialized = serde_json::to_value(&CredentialExpiry::Never).unwrap();
             assert_eq!(serialized, serde_json::json!("never"));
         }
+    }
+
+    // Ensures the `jti` claim is present and un-concealed in the signed DC SD-JWT.
+    #[tokio::test]
+    async fn test_sign_dc_sd_jwt_jti_not_concealed() {
+        let issuer = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
+        let credential_data = serde_json::json!({
+            "vct": "http://localhost:3033/vct/U0QtSldU/0",
+            "first_name": "Ferris",
+            "last_name": "Rustacean"
+        });
+        let jti = url::Url::parse("urn:uuid:123e4567-e89b-12d3-a456-426614174000").unwrap();
+        let iss = Url::parse("https://example.com/issuer").unwrap();
+        let iat = Timestamp::now_utc();
+        let status_claim = identity_credential::sd_jwt_vc::Status(StatusMechanism::Custom(serde_json::json!({})));
+
+        let result = sign_dc_sd_jwt(
+            &issuer,
+            credential_data,
+            jti.clone(),
+            iss,
+            iat,
+            status_claim,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let sd_jwt_str = result.as_str().expect("Expected JSON string output");
+        let parsed_vc = SdJwtVc::parse(sd_jwt_str).expect("Failed to parse string into SdJwtVc");
+
+        assert_eq!(parsed_vc.claims()["jti"], json!(jti.to_string()));
     }
 }
 
