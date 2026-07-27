@@ -1585,6 +1585,131 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
 
 #[rstest]
 #[serial_test::serial]
+async fn test_create_open_badges_template_allows_profile_object_on_subject_root(template_id: String) {
+    // `AchievementSubject` declares `additionalProperties: true`, so UniCore permits a `profile`
+    // object on the subject root carrying the recipient's OB 3.0 `Profile` fields.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "familyName": { "type": "string" },
+                    "email": { "type": "string" },
+                    "dateOfBirth": { "type": "string", "format": "date" }
+                }
+            },
+            "achievement": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "criteria": {
+                        "type": "object",
+                        "properties": {
+                            "narrative": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let mut expected_attrs = HashMap::new();
+    for required_leaf in ["/achievement/name", "/achievement/description", "/achievement/criteria/narrative"] {
+        expected_attrs.insert(
+            required_leaf.to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+                r#type: None,
+            },
+        );
+    }
+    for profile_leaf in ["/profile/givenName", "/profile/familyName", "/profile/email", "/profile/dateOfBirth"] {
+        expected_attrs.insert(
+            profile_leaf.to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: false,
+                r#type: None,
+            },
+        );
+    }
+
+    let expected_schema = serde_json::json!({
+        "type": "object",
+        "required": ["achievement"],
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "familyName": { "type": "string" },
+                    "email": { "type": "string" },
+                    "dateOfBirth": { "type": "string", "format": "date" }
+                }
+            },
+            "achievement": {
+                "type": "object",
+                "required": ["criteria", "description", "name"],
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "criteria": {
+                        "type": "object",
+                        "required": ["narrative"],
+                        "properties": {
+                            "narrative": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id: template_id.clone(),
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_events(vec![TemplateEvent::TemplateCreated {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            modified_at: test_utils::modified_at(),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::default(),
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+            schema: Box::new(Some(expected_schema)),
+            schema_properties_attributes: Some(expected_attrs),
+            holder_authorization: Authorization::default(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
 async fn test_create_open_badges_template_succeeds_with_const_required_properties(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",

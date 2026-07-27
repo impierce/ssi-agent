@@ -102,6 +102,16 @@ fn ob_opinionated_required_by_path() -> &'static [(&'static str, &'static [&'sta
     ]
 }
 
+/// Properties UniCore additionally permits per schema path, beyond the OB 3.0 `$def`.
+///
+/// Allows a `profile` object on the subject root to carry the recipient's OB 3.0 `Profile` data
+/// (givenName, familyName, email, dateOfBirth), all other homes for the recipient's profile seemed unsuitable.
+/// This is valid because `AchievementSubject` declares `"additionalProperties": true`. No `$def` governs
+/// the `profile` object, so its interior is unvalidated.
+fn ob_opinionated_allowed_by_path() -> &'static [(&'static str, &'static [&'static str])] {
+    &[("", &["profile"])]
+}
+
 /// Returns the combined required child keys per schema path: OB 3.0 spec + UniCore extras.
 fn ob_combined_required_by_path() -> std::collections::HashMap<String, Vec<String>> {
     let mut combined = ob_spec_required_by_path();
@@ -234,9 +244,20 @@ fn validate_ob_properties_recursive(
     };
 
     // Determine the set of allowed property names at this level from the current def.
-    let allowed: Option<std::collections::HashSet<&str>> = current_def
+    let mut allowed: Option<std::collections::HashSet<&str>> = current_def
         .and_then(|def| def.get("properties").and_then(|p| p.as_object()))
         .map(|props| props.keys().map(|k| k.as_str()).collect());
+
+    // Merge UniCore's opinionated extra-allowed properties for this path
+    // (see `ob_opinionated_allowed_by_path`).
+    if let Some(ref mut allowed_set) = allowed {
+        if let Some((_, extras)) = ob_opinionated_allowed_by_path()
+            .iter()
+            .find(|(p, _)| *p == current_path)
+        {
+            allowed_set.extend(extras.iter().copied());
+        }
+    }
 
     let mut disallowed: Vec<&str> = Vec::new();
 
