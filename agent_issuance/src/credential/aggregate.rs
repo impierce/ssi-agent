@@ -359,7 +359,7 @@ impl Aggregate for Credential {
                             iss,
                             iat,
                             status_claim,
-                            self.expires_at.clone(),
+                            self.expires_at,
                             holder_kid,
                         )
                         .await?
@@ -878,6 +878,7 @@ fn build_unsigned_w3c_credential_data(
 }
 
 /// Signs an IETF Digital Credentials SD-JWT (DC SD-JWT) credential.
+#[allow(clippy::too_many_arguments)]
 async fn sign_dc_sd_jwt(
     issuer: &Arc<Subject>,
     credential_data: serde_json::Value,

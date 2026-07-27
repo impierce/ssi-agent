@@ -9,8 +9,8 @@ publish.workspace = true
 agent_macros = { path = "../agent_macros" }
 shared-kernel.workspace = true
 
-async-trait.workspace = true
 anyhow.workspace = true
+async-trait.workspace = true
 base64.workspace = true
 chrono.workspace = true
 config = { version = "0.14" }
