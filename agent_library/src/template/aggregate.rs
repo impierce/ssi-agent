@@ -115,7 +115,7 @@ pub struct PropertyAttribute {
     #[serde(default)]
     pub non_removable: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skills: Vec<Skill>
+    pub skills: Vec<Skill>,
 }
 
 impl PropertyAttribute {
@@ -124,7 +124,7 @@ impl PropertyAttribute {
         Self {
             selectively_disclosable,
             non_removable,
-            skills
+            skills,
         }
     }
 
