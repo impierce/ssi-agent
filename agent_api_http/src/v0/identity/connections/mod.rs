@@ -130,9 +130,9 @@ pub(crate) async fn get_connections(
             .filter(|connection| {
                 display
                     .as_ref()
-                    .map_or(true, |display| connection.display.as_ref() == Some(display))
-                    && url.as_ref().map_or(true, |url| *url == connection.url)
-                    && did.as_ref().map_or(true, |did| connection.dids.contains(did))
+                    .is_none_or(|display| connection.display.as_ref() == Some(display))
+                    && url.as_ref().is_none_or(|url| *url == connection.url)
+                    && did.as_ref().is_none_or(|did| connection.dids.contains(did))
             })
             .collect();
 
@@ -290,8 +290,13 @@ pub(crate) async fn remove_connection(
 pub fn parse_url(input: &str) -> Result<Url, ApiError> {
     let input = input.trim();
     let with_scheme = match input.strip_prefix("http://") {
+        #[cfg(not(feature = "allow-localhost"))]
         Some(rest) => format!("https://{rest}"),
+        #[cfg(feature = "allow-localhost")]
+        Some(_rest) => input.to_string(),
         None if input.starts_with("https://") => input.to_string(),
+        #[cfg(feature = "allow-localhost")]
+        None if input.starts_with("localhost") => format!("http://{input}"),
         None => format!("https://{input}"),
     };
 
@@ -301,16 +306,19 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
             .finish()
     })?;
 
-    let host = url.host_str().ok_or_else(|| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .message("Url missing host".to_string())
-            .finish()
-    })?;
+    #[cfg(not(feature = "allow-localhost"))]
+    {
+        let host = url.host_str().ok_or_else(|| {
+            ApiError::builder(StatusCode::BAD_REQUEST)
+                .message("Url missing host".to_string())
+                .finish()
+        })?;
 
-    if !host.contains('.') {
-        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
-            .finish());
+        if !host.contains('.') {
+            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
+                .finish());
+        }
     }
 
     Ok(url)
@@ -321,7 +329,8 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn test_parsing_with_http_prefix() {
+    #[cfg(not(feature = "allow-localhost"))]
+    fn test_parsing_with_http_prefix_upgrades_to_https() {
         let input_string = "http://a-via-lactea.example.com/";
         let parsed = parse_url(input_string).unwrap();
 
@@ -353,8 +362,29 @@ pub mod tests {
     }
 
     #[test]
-    fn invalid_input_no_tld() {
+    #[cfg(not(feature = "allow-localhost"))]
+    fn invalid_input_no_tld_fails() {
         let input_string = "a-via-lactea";
         assert!(parse_url(input_string).is_err());
+    }
+
+    #[cfg(feature = "allow-localhost")]
+    pub mod allow_localhost_tests {
+        use super::*;
+
+        #[test]
+        fn test_parsing_with_http_prefix_preserves_http() {
+            let input_string = "http://a-via-lactea.example.com/";
+            let parsed = parse_url(input_string).unwrap();
+
+            assert_eq!(parsed, Url::parse("http://a-via-lactea.example.com/").unwrap());
+        }
+
+        #[test]
+        fn test_parsing_localhost_defaults_to_http() {
+            let input_string = "localhost:8080";
+            let parsed = parse_url(input_string).unwrap();
+            assert_eq!(parsed, Url::parse("http://localhost:8080/").unwrap());
+        }
     }
 }

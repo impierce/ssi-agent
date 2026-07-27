@@ -54,7 +54,7 @@ pub(crate) async fn get_documents(
             .filter(|document| {
                 did_method
                     .as_ref()
-                    .map_or(true, |method| document.did_method.as_ref() == Some(method))
+                    .is_none_or(|method| document.did_method.as_ref() == Some(method))
             })
             .collect();
 

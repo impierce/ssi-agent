@@ -51,24 +51,6 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
             // Fail fast when the configuration is not suitable for the current application profile.
             .unwrap_or_else(|e| panic!("{e}"));
 
-    #[cfg(not(feature = "test_utils"))]
-    {
-        use tracing::{debug, info};
-        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-        let tracing_subscriber = tracing_subscriber::registry()
-            // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-            .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
-
-        match application_configuration.log_format {
-            LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-            LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
-        }
-
-        info!("Configuration loaded successfully");
-        debug!("{:#?}", application_configuration);
-    }
-
     RwLock::new(application_configuration)
 });
 
@@ -194,14 +176,6 @@ pub struct ApplicationConfiguration {
     pub redirect_uri: Url,
     #[config(default)]
     pub cors_enabled: bool,
-    #[config(
-        default,
-        development_default = "Metrics {
-            enabled: false,
-            port: 9090
-        }"
-    )]
-    pub metrics: Metrics,
     #[config(
         default,
         development_default = "HashMap::from(
@@ -811,22 +785,6 @@ pub enum AuthorizationRequestEvent {
     OID4VPAuthorizationResponseVerified,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
-#[serde(default)]
-pub struct Metrics {
-    pub enabled: bool,
-    pub port: u16,
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            port: 9090,
-        }
-    }
-}
-
 /// All DID methods supported by UniCore
 /// ```
 /// use agent_shared::config::SupportedDidMethod;
@@ -1130,10 +1088,6 @@ mod tests {
               "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
-              "metrics": {
-                "enabled": false,
-                "port": 9090
-              },
               "did_methods": {
                 "did:jwk": {
                   "enabled": true,

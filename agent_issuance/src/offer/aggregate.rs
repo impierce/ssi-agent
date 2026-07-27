@@ -237,8 +237,18 @@ impl Aggregate for Offer {
                 match delivery_method {
                     DeliveryMethod::TargetUrl { target_url } => {
                         let client = reqwest::Client::new();
-                        let target = form_url_encoded_credential_offer
-                            .replace("openid-credential-offer://", target_url.as_str());
+
+                        // TODO: Currently, we are hardcoding the `/credential_offer` endpoint on the target URL.
+                        // According to the OpenID4VCI specification, we should instead retrieve the `credential_offer_endpoint`
+                        // from the Wallet's Client Metadata.
+                        // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-client-metadata
+                        let target = form_url_encoded_credential_offer.replace(
+                            "openid-credential-offer://",
+                            target_url
+                                .join("credential_offer")
+                                .map_err(InvalidCredentialOfferUriError)?
+                                .as_str(),
+                        );
 
                         info!("Sending credential offer to: {}", target);
 
@@ -260,8 +270,8 @@ impl Aggregate for Offer {
 
                         // TODO: Remove this client-side logic.
                         let offer_link = config()
-                            .application_url
-                            .join(&format!("offer/{}", offer_id))
+                            .public_url
+                            .join(&format!("public/offers/{}", offer_id))
                             .expect("Failed to construct offer link URL");
 
                         Ok(vec![CredentialOfferEmailSent {

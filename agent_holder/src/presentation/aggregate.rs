@@ -11,10 +11,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
+#[schema(as = PresentationView)]
 pub struct Presentation {
     #[serde(rename = "id")]
     pub presentation_id: String,
+    #[schema(value_type = Option<String>)]
     pub signed: Option<Jwt>,
 }
 

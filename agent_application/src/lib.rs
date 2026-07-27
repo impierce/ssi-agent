@@ -1,8 +1,8 @@
 mod metadata;
 mod probes;
+pub mod telemetry;
 
-pub use agent_api_http::metrics::metrics;
-use agent_api_http::{app, metrics::track_metrics, ApplicationState, API_VERSION};
+use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
@@ -13,14 +13,24 @@ use agent_issuance::{
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
-use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, EventPublisher};
+pub use agent_store::event_verification::{core_event_verifiers, EventVerifier};
+use agent_store::{
+    event_verification::{EventVerificationError, EventVerificationReport},
+    in_memory::InMemory,
+    mongodb::MongoDB,
+    postgres::Postgres,
+    EventPublisher,
+};
 use agent_verification::services::VerificationServices;
-use probes::liveness::healthz;
+use probes::{
+    liveness::healthz,
+    readiness::{readyz, ReadinessState},
+};
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::io;
 use tower_http::cors::CorsLayer;
-use tracing::info;
+use tracing::{error, info};
 use verification_authorization::VerificationAuthorizationAdapter;
 
 // Re-export states
@@ -31,9 +41,63 @@ pub use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 pub use agent_library::state::LibraryState;
 pub use agent_verification::state::VerificationState;
 
+pub struct ApplicationState {
+    pub api: ApiState,
+    pub event_verification: EventVerification,
+    readiness: ReadinessState,
+}
+
+impl ApplicationState {
+    pub async fn verify_persisted_events(&self) {
+        verify_persisted_events(self.event_verification.verify_events().await, &self.readiness);
+    }
+
+    pub async fn verify_persisted_events_with(&self, verifiers: &[EventVerifier]) {
+        verify_persisted_events(
+            self.event_verification.verify_events_with(verifiers).await,
+            &self.readiness,
+        );
+    }
+
+    pub fn mark_ready(&self) {
+        self.readiness.mark_ready();
+    }
+}
+
+pub enum EventVerification {
+    Postgres(Postgres),
+    MongoDb(MongoDB),
+    InMemory,
+}
+
+impl EventVerification {
+    pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
+        self.verify_events_with(core_event_verifiers()).await
+    }
+
+    pub async fn verify_events_with(
+        &self,
+        verifiers: &[EventVerifier],
+    ) -> Result<EventVerificationReport, EventVerificationError> {
+        match self {
+            Self::Postgres(store) => store.verify_events_with(verifiers).await,
+            Self::MongoDb(store) => store.verify_events_with(verifiers).await,
+            Self::InMemory => Ok(EventVerificationReport::default()),
+        }
+    }
+}
+
 pub async fn run() -> io::Result<()> {
+    // Initialize the tracing subscriber before anything else so that all subsequent log output is captured.
+    // Reading the log format triggers the configuration to be loaded first.
+    let log_format = config().log_format.clone();
+    let _telemetry_guard = telemetry::init_telemetry(&log_format);
+
+    info!("Configuration loaded successfully");
+
     let subject = Arc::new(Subject::new().await);
     let state = state(subject).await?;
+    state.verify_persisted_events().await;
 
     serve(router(state)).await
 }
@@ -82,6 +146,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         .collect();
 
     let event_store_type = config().event_store.type_.clone();
+    let event_verification;
+    let readiness = ReadinessState::default();
 
     // TODO: Refactor this to reduce code duplication.
     let (identity_state, library_state, authorization_state, issuance_state, holder_state, verification_state) =
@@ -117,7 +183,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
-                (
+                let states = (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
                     library_state,
                     Arc::new(
@@ -132,7 +198,9 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     issuance_state,
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
                     verification_state,
-                )
+                );
+                event_verification = EventVerification::Postgres(builder);
+                states
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
@@ -165,7 +233,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
-                (
+                let states = (
                     Arc::new(agent_store::identity_state(&builder, identity_services, identity_event_publishers).await),
                     library_state,
                     Arc::new(
@@ -180,7 +248,9 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     issuance_state,
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
                     verification_state,
-                )
+                );
+                event_verification = EventVerification::MongoDb(builder);
+                states
             }
             EventStoreType::InMemory => {
                 let issuance_state = Arc::new(
@@ -212,7 +282,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
-                (
+                let states = (
                     Arc::new(
                         agent_store::identity_state(&InMemory, identity_services, identity_event_publishers).await,
                     ),
@@ -229,7 +299,9 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     issuance_state,
                     Arc::new(agent_store::holder_state(&InMemory, holder_services, holder_event_publishers).await),
                     verification_state,
-                )
+                );
+                event_verification = EventVerification::InMemory;
+                states
             }
         };
 
@@ -246,12 +318,16 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
     Ok(ApplicationState {
-        identity_state: Some(identity_state),
-        library_state: Some(library_state),
-        authorization_state: Some(authorization_state),
-        issuance_state: Some(issuance_state),
-        holder_state: Some(holder_state),
-        verification_state: Some(verification_state),
+        api: ApiState {
+            identity_state: Some(identity_state),
+            library_state: Some(library_state),
+            authorization_state: Some(authorization_state),
+            issuance_state: Some(issuance_state),
+            holder_state: Some(holder_state),
+            verification_state: Some(verification_state),
+        },
+        event_verification,
+        readiness,
     })
 }
 
@@ -266,8 +342,13 @@ pub fn router_with_actor_extractor<E>(application_state: ApplicationState, actor
 where
     E: ActorExtractor,
 {
+    let ApplicationState {
+        api,
+        event_verification: _,
+        readiness,
+    } = application_state;
     let actor_extractor = Arc::new(actor_extractor);
-    let app = app(application_state, actor_extractor);
+    let app = app(api, actor_extractor);
 
     let metadata_state = metadata::MetadataState {
         startup_instant: std::time::Instant::now(),
@@ -282,14 +363,14 @@ where
     let app = metadata_router.merge(app);
 
     // Add probes routes
-    let probes_router = axum::Router::new().route("/healthz", axum::routing::get(healthz));
-    let mut app = probes_router.merge(app);
+    let probes_router = axum::Router::new()
+        .route("/healthz", axum::routing::get(healthz))
+        .route("/readyz", axum::routing::get(readyz))
+        .with_state(readiness);
+    let app = probes_router.merge(app);
 
-    if config().metrics.enabled {
-        app = app.route_layer(axum::middleware::from_fn(track_metrics));
-    }
-
-    app
+    // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
+    app.route_layer(axum::middleware::from_fn(track_metrics))
 }
 
 /// Builds the application configuration router without the API version prefix.
@@ -297,17 +378,38 @@ pub fn configuration_router() -> axum::Router {
     axum::Router::new().route("/configuration", axum::routing::get(metadata::config::configuration))
 }
 
+fn verify_persisted_events(
+    result: Result<EventVerificationReport, EventVerificationError>,
+    readiness: &ReadinessState,
+) {
+    match result {
+        Ok(report) if report.is_compatible() => {
+            info!(checked = report.checked, "Persisted event verification succeeded");
+            readiness.mark_ready();
+        }
+        Ok(report) => {
+            for event in report.incompatible {
+                error!(
+                    aggregate_type = %event.aggregate_type,
+                    aggregate_id = %event.aggregate_id,
+                    sequence = event.sequence,
+                    event_type = %event.event_type,
+                    event_version = %event.event_version,
+                    reason = %event.reason,
+                    "Incompatible persisted event"
+                );
+            }
+        }
+        Err(error) => {
+            error!(%error, "Failed to verify persisted events");
+        }
+    }
+}
+
 async fn serve(app: axum::Router) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
 
-    let app_handle = tokio::spawn(start_server("HTTP API".to_string(), app, port));
-
-    if config().metrics.enabled {
-        let metrics_handle = tokio::spawn(start_server("Metrics".to_string(), metrics(), config().metrics.port));
-        let _ = tokio::join!(app_handle, metrics_handle);
-    } else {
-        let _ = app_handle.await;
-    }
+    start_server("HTTP API".to_string(), app, port).await;
 
     Ok(())
 }
