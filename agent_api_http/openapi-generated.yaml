@@ -1806,7 +1806,17 @@ components:
       properties:
         id:
           type: string
-<<<<<<< HEAD
+    RemoveTemplatesRequest:
+      type: object
+      properties:
+        catalogId:
+          type: string
+          default: ''
+        templateIds:
+          type: array
+          items:
+            type: string
+          default: []
     ResultKind:
       type: string
       enum:
@@ -1839,19 +1849,6 @@ components:
           type: string
         result_kind:
           $ref: '#/components/schemas/ResultKind'
-=======
-    RemoveTemplatesRequest:
-      type: object
-      properties:
-        catalogId:
-          type: string
-          default: ''
-        templateIds:
-          type: array
-          items:
-            type: string
-          default: []
->>>>>>> beta
     Source:
       type: string
       enum:
