@@ -1617,7 +1617,11 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
     });
 
     let mut expected_attrs = HashMap::new();
-    for required_leaf in ["/achievement/name", "/achievement/description", "/achievement/criteria/narrative"] {
+    for required_leaf in [
+        "/achievement/name",
+        "/achievement/description",
+        "/achievement/criteria/narrative",
+    ] {
         expected_attrs.insert(
             required_leaf.to_string(),
             PropertyAttribute {
@@ -1627,7 +1631,12 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
             },
         );
     }
-    for profile_leaf in ["/profile/givenName", "/profile/familyName", "/profile/email", "/profile/dateOfBirth"] {
+    for profile_leaf in [
+        "/profile/givenName",
+        "/profile/familyName",
+        "/profile/email",
+        "/profile/dateOfBirth",
+    ] {
         expected_attrs.insert(
             profile_leaf.to_string(),
             PropertyAttribute {
