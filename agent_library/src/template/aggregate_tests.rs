@@ -1587,7 +1587,9 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
 #[serial_test::serial]
 async fn test_create_open_badges_template_allows_profile_object_on_subject_root(template_id: String) {
     // `AchievementSubject` declares `additionalProperties: true`, so UniCore permits a `profile`
-    // object on the subject root carrying the recipient's OB 3.0 `Profile` fields.
+    // object on the subject root carrying the recipient's OB 3.0 `Profile` fields. UniCore
+    // constrains it to exactly `givenName`/`familyName`/`email`/`dateOfBirth` with enforced types
+    // (all strings; `email` → `format: email`, `dateOfBirth` → `format: date`).
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -1596,7 +1598,7 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
                 "properties": {
                     "givenName": { "type": "string" },
                     "familyName": { "type": "string" },
-                    "email": { "type": "string" },
+                    "email": { "type": "string", "format": "email" },
                     "dateOfBirth": { "type": "string", "format": "date" }
                 }
             },
@@ -1656,7 +1658,7 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
                 "properties": {
                     "givenName": { "type": "string" },
                     "familyName": { "type": "string" },
-                    "email": { "type": "string" },
+                    "email": { "type": "string", "format": "email" },
                     "dateOfBirth": { "type": "string", "format": "date" }
                 }
             },
@@ -1715,6 +1717,142 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
         }])
+}
+
+/// Reusable valid `achievement` block so profile-focused negative tests fail on the profile,
+/// not on missing required achievement fields.
+fn valid_ob_achievement() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "criteria": {
+                "type": "object",
+                "properties": {
+                    "narrative": { "type": "string" }
+                }
+            }
+        }
+    })
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_unknown_profile_property(template_id: String) {
+    // The `profile` object is constrained to the four supported fields; anything else is rejected.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "phoneNumber": { "type": "string" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/profile`: [phoneNumber]")
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_profile_field_wrong_type(template_id: String) {
+    // Profile fields must be strings; a non-string type is rejected.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "number" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/givenName]")
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_profile_email_without_format(template_id: String) {
+    // `email` must carry `format: "email"`; a plain string is rejected.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "email": { "type": "string" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/email]")
 }
 
 #[rstest]
