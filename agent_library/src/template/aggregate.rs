@@ -87,6 +87,17 @@ impl Default for Expiration {
     }
 }
 
+// A rendering hint for a schema property, carrying type information that standard JSON Schema
+// keywords cannot express.
+//
+// This is metadata only: UniCore stores and returns it verbatim and never validates anything
+// against it. Marking a property as `country` does not make UniCore reject a non-string schema
+// or an issued value that is not a country code — keeping the hint, the schema and the values
+// consistent is the caller's responsibility.
+//
+// `country`: the property holds a country, expected to be a `string` carrying an ISO 3166-1
+// alpha-2 code (e.g. `"NL"`). Frontends can use this to render a flag or a country picker
+// instead of a plain text field.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum FormFieldType {
@@ -106,6 +117,8 @@ pub struct PropertyAttribute {
     pub non_removable: bool,
     /// Allows the caller to store additional type information not supported by standard JSON Schema keywords.
     /// This can be used by frontends to preserve field type information for visualizations.
+    /// Purely a rendering hint that UniCore stores as given and never validates against the
+    /// schema or the issued values.
     #[serde(default)]
     pub r#type: Option<FormFieldType>,
 }

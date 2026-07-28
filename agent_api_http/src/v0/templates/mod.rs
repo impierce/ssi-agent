@@ -1056,4 +1056,67 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
+
+    #[tokio::test]
+    async fn schema_properties_attributes_type_survives_api_round_trip() {
+        // Verifies that `schemaPropertiesAttributes[*].type` (a caller-supplied rendering hint)
+        // is preserved end-to-end: create template → retrieve via get endpoint → field still present.
+        use agent_library::template::aggregate::FormFieldType;
+
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let response = create_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(CreateNewTemplateRequestBody {
+                title: "Country Template".to_string(),
+                display: None,
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![],
+                schema: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "nationality": { "type": "string" }
+                    }
+                })),
+                schema_properties_attributes: Some(HashMap::from([(
+                    "/nationality".to_string(),
+                    PropertyAttribute {
+                        selectively_disclosable: false,
+                        non_removable: false,
+                        r#type: Some(FormFieldType::Country),
+                    },
+                )])),
+                holder_authorization: Authorization::default(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let created: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let template_id = created["id"].as_str().unwrap().to_string();
+
+        let response = get_template(State(state), RequestActor(None), Path(template_id))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let retrieved: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(
+            retrieved["schemaPropertiesAttributes"]["/nationality"]["type"],
+            json!("country")
+        );
+    }
 }

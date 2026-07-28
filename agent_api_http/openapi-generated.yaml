@@ -1785,6 +1785,8 @@ components:
             description: |-
               Allows the caller to store additional type information not supported by standard JSON Schema keywords.
               This can be used by frontends to preserve field type information for visualizations.
+              Purely a rendering hint that UniCore stores as given and never validates against the
+              schema or the issued values.
     PublicOfferStatusDto:
       type: object
       required:
