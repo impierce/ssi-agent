@@ -53,7 +53,7 @@ pub mod tests {
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
+    use agent_store::{in_memory::InMemory, verification_state};
     use agent_verification::services::VerificationServices;
     use axum::{
         body::Body,
@@ -154,10 +154,9 @@ pub mod tests {
 
         let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
         agent_event_publisher_http::start_http_forwarder(bus.clone());
-        let event_publishers: Vec<Box<dyn EventPublisher>> = vec![Box::new(agent_store::EventBusPublisher::new(bus))];
 
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, event_publishers).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, Some(bus)).await);
 
         let mut app = router(verification_state);
 

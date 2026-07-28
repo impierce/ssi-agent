@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use convert_case::{Case, Casing};
 use futures::stream::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -61,13 +62,12 @@ pub fn build_cloud_event(
     payload: serde_json::Value,
     occurred_at: Option<DateTime<Utc>>,
 ) -> CloudEvent {
-    let cloud_type = format!(
-        "io.impierce.unicore.{}.{}",
-        aggregate_type.to_lowercase(),
-        event_type.to_lowercase()
-    );
+    let cloud_type = format!("io.impierce.unicore.{}", event_type.to_case(Case::Kebab));
     let source = format!("/services/{}", aggregate_type.to_lowercase());
     let id = format!("{}:{}:{}", aggregate_type, aggregate_id, sequence);
+
+    // TODO: Manually unwrapping enum variant tags from payloads until enum serialization is refactored (e.g., via adjacent tagging).
+    let data = payload.get(event_type).cloned().unwrap_or(payload);
 
     CloudEvent {
         id,
@@ -78,7 +78,7 @@ pub fn build_cloud_event(
         dataschema: None,
         subject: Some(aggregate_id.to_string()),
         time: occurred_at.or_else(|| Some(Utc::now())),
-        data: Some(payload),
+        data: Some(data),
     }
 }
 
@@ -306,7 +306,33 @@ mod tests {
         );
         assert_eq!(event.id, "offer:123:4");
         assert_eq!(event.source, "/services/offer");
-        assert_eq!(event.event_type, "io.impierce.unicore.offer.offercreated");
+        assert_eq!(event.event_type, "io.impierce.unicore.offer-created");
+    }
+
+    #[test]
+    fn test_build_cloud_event_unwraps_tagged_variant() {
+        let tagged_payload = serde_json::json!({
+            "TemplateCreated": {
+                "template_id": "tpl-1",
+                "title": "Test Title"
+            }
+        });
+        let event = build_cloud_event(
+            "Template",
+            "tpl-1",
+            1,
+            "TemplateCreated",
+            tagged_payload,
+            Some(Utc::now()),
+        );
+
+        assert_eq!(
+            event.data,
+            Some(serde_json::json!({
+                "template_id": "tpl-1",
+                "title": "Test Title"
+            }))
+        );
     }
 
     #[test]

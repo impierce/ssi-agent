@@ -28,6 +28,7 @@ impl EventSource for MongoEventSource {
             .default_database()
             .ok_or_else(|| EventBusError::Source("No default database configured on MongoDB client".to_string()))?;
 
+        let _ = database.create_collection("events").await;
         let collection = database.collection::<bson::Document>("events");
 
         let change_stream = collection

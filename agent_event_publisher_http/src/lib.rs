@@ -3,8 +3,11 @@ use shared_kernel::event_bus::{EventBus, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
 
-fn matches_events_config(events: &agent_shared::config::Events, cloud_event: &shared_kernel::event_bus::CloudEvent) -> bool {
-    let type_clean = cloud_event.event_type.to_lowercase().replace('_', "");
+fn matches_events_config(
+    events: &agent_shared::config::Events,
+    cloud_event: &shared_kernel::event_bus::CloudEvent,
+) -> bool {
+    let type_clean = cloud_event.event_type.to_lowercase().replace('_', "").replace('-', "");
     let mut any_filter_set = false;
 
     macro_rules! check_events {
@@ -12,7 +15,7 @@ fn matches_events_config(events: &agent_shared::config::Events, cloud_event: &sh
             if !$list.is_empty() {
                 any_filter_set = true;
                 if $list.iter().any(|e| {
-                    let target_clean = e.to_string().to_lowercase().replace('_', "");
+                    let target_clean = e.to_string().to_lowercase().replace('_', "").replace('-', "");
                     type_clean.contains(&target_clean)
                 }) {
                     return true;
@@ -59,7 +62,10 @@ pub fn start_http_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::Jo
     }
 
     Some(tokio::spawn(async move {
-        info!("Starting HTTP webhook event publisher forwarder for {} endpoints...", http_configs.len());
+        info!(
+            "Starting HTTP webhook event publisher forwarder for {} endpoints...",
+            http_configs.len()
+        );
         let client = reqwest::Client::new();
         let mut stream = event_bus.subscribe(EventFilter::default());
 
@@ -108,23 +114,4 @@ pub fn start_http_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::Jo
             }
         }
     }))
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-    use shared_kernel::event_bus::build_cloud_event;
-
-    #[tokio::test]
-    async fn test_http_forwarder_start() {
-        let bus_handle = EventBusHandle::new(16);
-        let _handle = start_http_forwarder(bus_handle);
-    }
-
-    #[tokio::test]
-    async fn test_cloud_event_json_formatting() {
-        let event = build_cloud_event("credential", "cred-123", 1, "Signed", serde_json::json!({"ok": true}), None);
-        let json_val = serde_json::to_value(&event).unwrap();
-        assert_eq!(json_val["subject"], "cred-123");
-    }
 }

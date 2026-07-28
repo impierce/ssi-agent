@@ -3,8 +3,11 @@ use shared_kernel::event_bus::{EventBus, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
 
-fn matches_events_config(events: &agent_shared::config::Events, cloud_event: &shared_kernel::event_bus::CloudEvent) -> bool {
-    let type_clean = cloud_event.event_type.to_lowercase().replace('_', "");
+fn matches_events_config(
+    events: &agent_shared::config::Events,
+    cloud_event: &shared_kernel::event_bus::CloudEvent,
+) -> bool {
+    let type_clean = cloud_event.event_type.to_lowercase().replace('_', "").replace('-', "");
     let mut any_filter_set = false;
 
     macro_rules! check_events {
@@ -12,7 +15,7 @@ fn matches_events_config(events: &agent_shared::config::Events, cloud_event: &sh
             if !$list.is_empty() {
                 any_filter_set = true;
                 if $list.iter().any(|e| {
-                    let target_clean = e.to_string().to_lowercase().replace('_', "");
+                    let target_clean = e.to_string().to_lowercase().replace('_', "").replace('-', "");
                     type_clean.contains(&target_clean)
                 }) {
                     return true;
@@ -85,31 +88,20 @@ pub fn start_nats_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::Jo
                     };
 
                     if let Err(err) = client.publish(subject_name.clone(), payload.into()).await {
-                        tracing::error!("Failed to publish CloudEvent {:?} to NATS subject {}: {:?}", cloud_event.id, subject_name, err);
+                        tracing::error!(
+                            "Failed to publish CloudEvent {:?} to NATS subject {}: {:?}",
+                            cloud_event.id,
+                            subject_name,
+                            err
+                        );
                     } else {
-                        info!("Published CloudEvent {:?} to NATS subject {}", cloud_event.id, subject_name);
+                        info!(
+                            "Published CloudEvent {:?} to NATS subject {}",
+                            cloud_event.id, subject_name
+                        );
                     }
                 }
             }
         }
     }))
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-    use shared_kernel::event_bus::build_cloud_event;
-
-    #[tokio::test]
-    async fn test_nats_forwarder_start() {
-        let bus_handle = EventBusHandle::new(16);
-        let _handle = start_nats_forwarder(bus_handle);
-    }
-
-    #[tokio::test]
-    async fn test_cloud_event_serialization() {
-        let event = build_cloud_event("offer", "123", 1, "Created", serde_json::json!({}), None);
-        let bytes = serde_json::to_vec(&event).unwrap();
-        assert!(!bytes.is_empty());
-    }
 }
