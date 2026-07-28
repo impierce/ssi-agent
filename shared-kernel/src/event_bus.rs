@@ -184,6 +184,15 @@ impl EventBusHandle {
             history_capacity: 500,
         }
     }
+}
+
+impl Default for EventBusHandle {
+    fn default() -> Self {
+        Self::new(1024)
+    }
+}
+
+impl EventBusHandle {
 
     pub fn publish(&self, event: CloudEvent) {
         let _ = self.sender.send(Arc::new(event.clone()));

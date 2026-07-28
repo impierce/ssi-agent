@@ -438,8 +438,9 @@ pub mod tests {
             (None, None)
         };
 
+        let event_bus = bus_opt.unwrap_or_default();
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, bus_opt).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, event_bus).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;

@@ -1,4 +1,3 @@
-use agent_shared::config::config;
 use axum::{
     extract::{Query, State},
     response::sse::{self, KeepAlive, Sse},
@@ -55,20 +54,13 @@ pub async fn events_sse_handler(
     headers: axum::http::HeaderMap,
     Query(params): Query<EventQueryParams>,
 ) -> Sse<impl Stream<Item = Result<sse::Event, axum::Error>>> {
-    let mut sources: Vec<String> = params
+    let sources: Vec<String> = params
         .sources
         .or(params.aggregate_types)
         .map(|s| s.split(',').map(|item| item.trim().to_string()).filter(|i| !i.is_empty()).collect())
         .unwrap_or_default();
 
-    let allowed_types = config().event_bus.sse.allowed_aggregate_types.clone();
 
-    // Default to all allowed sources if unconstrained
-    if sources.is_empty() && !allowed_types.is_empty() {
-        sources = allowed_types.clone();
-    } else if !allowed_types.is_empty() {
-        sources.retain(|t| allowed_types.iter().any(|a| a.eq_ignore_ascii_case(t)));
-    }
 
     let event_types: Vec<String> = params
         .types

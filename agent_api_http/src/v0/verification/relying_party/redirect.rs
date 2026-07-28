@@ -156,7 +156,7 @@ pub mod tests {
         agent_event_publisher_http::start_http_forwarder(bus.clone());
 
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, Some(bus)).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, bus).await);
 
         let mut app = router(verification_state);
 

@@ -198,19 +198,17 @@ pub trait CqrsComponentBuilder {
         <A as Aggregate>::Command: Send + Sync;
 }
 
-fn bus_publisher<A: Aggregate + 'static>(bus: &Option<EventBusHandle>) -> Vec<Box<dyn Query<A>>>
+fn bus_publisher<A: Aggregate + 'static>(bus: &EventBusHandle) -> Vec<Box<dyn Query<A>>>
 where
     A::Event: serde::Serialize + DomainEvent,
 {
-    bus.as_ref()
-        .map(|b| vec![Box::new(EventBusPublisher::<A>::new(b.clone())) as Box<dyn Query<A>>])
-        .unwrap_or_default()
+    vec![Box::new(EventBusPublisher::<A>::new(bus.clone())) as Box<dyn Query<A>>]
 }
 
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<IdentityServices>,
-    event_bus: Option<EventBusHandle>,
+    event_bus: EventBusHandle,
 ) -> IdentityState {
     let (connection_command_handler, connection, all_connections) = builder
         .commands_and_queries::<ConnectionView, Connection, AllConnectionsView>(
@@ -250,7 +248,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
 
 pub async fn library_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
-    event_bus: Option<EventBusHandle>,
+    event_bus: EventBusHandle,
     template_queries: Vec<Box<dyn Query<Template>>>,
 ) -> LibraryState {
     let mut queries: Vec<Box<dyn Query<Template>>> = bus_publisher(&event_bus);
@@ -286,7 +284,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
 pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<AuthorizationServices>,
-    event_bus: Option<EventBusHandle>,
+    event_bus: EventBusHandle,
     oauth2_authorization_request_domain_services: OAuth2AuthorizationRequestDomainServices,
 ) -> AuthorizationState {
     let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
@@ -337,7 +335,7 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
 pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<agent_issuance::services::IssuanceServices>,
-    event_bus: Option<EventBusHandle>,
+    event_bus: EventBusHandle,
 ) -> agent_issuance::state::IssuanceState {
     let (credential_command_handler, credential, all_credentials) = builder
         .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
@@ -399,7 +397,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
 pub async fn verification_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<VerificationServices>,
-    event_bus: Option<EventBusHandle>,
+    event_bus: EventBusHandle,
 ) -> VerificationState {
     let (authorization_request_command_handler, authorization_request, all_authorization_requests) = builder
         .commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
@@ -423,7 +421,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
 pub async fn holder_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<HolderServices>,
-    event_bus: Option<EventBusHandle>,
+    event_bus: EventBusHandle,
 ) -> HolderState {
     let (holder_credential_command_handler, holder_credential, all_holder_credential) = builder
         .commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
