@@ -221,7 +221,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, Default::default()).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;

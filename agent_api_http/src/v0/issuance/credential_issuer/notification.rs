@@ -82,7 +82,7 @@ mod tests {
     #[tokio::test]
     async fn test_valid_notification_request() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -97,6 +97,7 @@ mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &shared_kernel::event_bus::EventBusHandle::default(),
                 Default::default(),
                 Default::default(),
             )
@@ -134,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_notification_request() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -149,6 +150,7 @@ mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &shared_kernel::event_bus::EventBusHandle::default(),
                 Default::default(),
                 Default::default(),
             )

@@ -219,9 +219,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 3.21.0",
- "shared-kernel",
  "tokio",
- "tokio-stream",
  "tracing",
  "wiremock",
 ]
@@ -241,9 +239,7 @@ dependencies = [
  "futures",
  "serde",
  "serde_json",
- "shared-kernel",
  "tokio",
- "tokio-stream",
  "tracing",
  "uuid",
 ]

@@ -48,12 +48,13 @@ fn create_test_event_template_created(
 }
 
 async fn setup() -> (Arc<IssuanceState>, Arc<LibraryState>, CredentialConfigurationProjection) {
-    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+    let bus = shared_kernel::event_bus::EventBusHandle::default();
+    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus, Default::default()).await);
     let (projection, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
     // Build the library state WITHOUT the projection (the projection dispatches commands to issuance_state,
     // not to this library state). Then wire the real view repo into the projection's OnceLock handle so
     // that partial-update re-queries use the same MemRepository that the CQRS framework updates.
-    let lib_state = Arc::new(library_state(&InMemory, Default::default(), vec![]).await);
+    let lib_state = Arc::new(library_state(&InMemory, &bus, Default::default(), vec![]).await);
     assert!(
         template_view_handle.set(lib_state.query.template.clone()).is_ok(),
         "template view already initialized"

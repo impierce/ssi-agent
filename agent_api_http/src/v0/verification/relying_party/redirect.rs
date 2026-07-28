@@ -153,10 +153,22 @@ pub mod tests {
         );
 
         let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        agent_event_publisher_http::start_http_forwarder(bus.clone());
+        let verification_event_publishers: Vec<Box<dyn agent_store::EventPublisher>> =
+            agent_event_publisher_http::EventPublisherHttp::load()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|p| Box::new(p) as Box<dyn agent_store::EventPublisher>)
+                .collect();
 
-        let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, bus).await);
+        let verification_state = Arc::new(
+            verification_state(
+                &InMemory,
+                VerificationServices::default().await,
+                &bus,
+                verification_event_publishers,
+            )
+            .await,
+        );
 
         let mut app = router(verification_state);
 

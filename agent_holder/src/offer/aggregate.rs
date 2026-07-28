@@ -376,10 +376,10 @@ pub mod tests {
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &shared_kernel::event_bus::EventBusHandle::default(), Default::default(), Default::default()).await);
 
         // Create a template and register a credential configuration for it.
         // (The CredentialConfigurationProjection is not wired in tests, so we do this manually.)
@@ -447,6 +447,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &shared_kernel::event_bus::EventBusHandle::default(),
                 Default::default(),
                 Default::default(),
             )

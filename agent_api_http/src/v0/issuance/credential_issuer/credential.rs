@@ -259,14 +259,8 @@ pub mod tests {
         ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
-                .and(move |request: &wiremock::Request| {
-                    let cloud_event: shared_kernel::event_bus::CloudEvent = request.body_json().unwrap();
-                    let data = cloud_event.data.unwrap();
-                    let offer_event: OfferEvent = serde_json::from_value(serde_json::json!({
-                        "CredentialRequestVerified": data
-                    }))
-                    .unwrap();
-                    match offer_event {
+                .and(
+                    move |request: &wiremock::Request| match request.body_json::<OfferEvent>().unwrap() {
                         // Validate that the event is a `CredentialRequestVerified` event.
                         OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
@@ -325,8 +319,8 @@ pub mod tests {
                             true
                         }
                         _ => false,
-                    }
-                })
+                    },
+                )
                 .respond_with(ResponseTemplate::new(200))
                 .mount(self)
                 .await;
@@ -416,7 +410,7 @@ pub mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        let (external_server, bus_opt) = if with_external_server {
+        let external_server = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
@@ -431,15 +425,22 @@ pub mod tests {
                 },
             );
 
-            let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-            agent_event_publisher_http::start_http_forwarder(bus.clone());
-            (Some(external_server), Some(bus))
+            Some(external_server)
         } else {
-            (None, None)
+            None
         };
 
-        let event_bus = bus_opt.unwrap_or_default();
-        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, event_bus).await);
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        let issuance_event_publishers: Vec<Box<dyn agent_store::EventPublisher>> = if with_external_server {
+            agent_event_publisher_http::EventPublisherHttp::load()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|p| Box::new(p) as Box<dyn agent_store::EventPublisher>)
+                .collect()
+        } else {
+            vec![]
+        };
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus, issuance_event_publishers).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -484,6 +485,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &event_bus,
                 Default::default(),
                 Default::default(),
             )

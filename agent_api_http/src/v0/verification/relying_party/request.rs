@@ -77,7 +77,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_request_endpoint() {
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, Default::default()).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
 
         let mut app = router(verification_state);
 

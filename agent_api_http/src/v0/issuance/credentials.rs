@@ -718,7 +718,8 @@ pub mod tests {
     /// issuance state is automatically synchronized via the projection.
     pub async fn setup_library_state(issuance_state: &Arc<IssuanceState>) -> Arc<LibraryState> {
         let (projection, view_handle) = CredentialConfigurationProjection::new(issuance_state.clone());
-        let lib = Arc::new(library_state(&InMemory, Default::default(), vec![Box::new(projection)]).await);
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        let lib = Arc::new(library_state(&InMemory, &event_bus, Default::default(), vec![Box::new(projection)]).await);
         assert!(
             view_handle.set(lib.query.template.clone()).is_ok(),
             "template view already initialized"
@@ -1093,7 +1094,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_patch_credential() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1109,7 +1110,7 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1123,7 +1124,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_credentials_endpoint_requires_template_id() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1140,7 +1141,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_credentials_endpoint_requires_existing_template() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1157,10 +1158,10 @@ pub mod tests {
     #[tokio::test]
     async fn test_credentials_endpoint_requires_credential_configuration() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &shared_kernel::event_bus::EventBusHandle::default(), Default::default(), Default::default()).await);
         let template_id = create_new_template(
             &library_state,
             Status::Published,
@@ -1182,7 +1183,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_signed_credentials_require_published_template() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1212,7 +1213,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_unsigned_credentials_require_published_template() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1246,7 +1247,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_signed_credentials_ignore_expires_at_request_override() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1272,7 +1273,7 @@ pub mod tests {
     #[tokio::test]
     async fn test_signed_credentials_must_match_template_configuration_format() {
         let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
