@@ -1542,6 +1542,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
+
             skills: Vec::new(),
         },
     );
