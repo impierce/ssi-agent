@@ -1783,7 +1783,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Skill'
-<<<<<<< HEAD
         type:
           oneOf:
           - type: 'null'
@@ -1791,8 +1790,6 @@ components:
             description: |-
               Allows the caller to store additional type information not supported by standard JSON Schema keywords.
               This can be used by frontends to preserve field type information for visualizations.
-=======
->>>>>>> a0d008a7d26f242a2624cf84b88c538496d78c99
     PublicOfferStatusDto:
       type: object
       required:
