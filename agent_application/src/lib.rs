@@ -4,8 +4,8 @@ pub mod telemetry;
 
 use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
-use agent_event_publisher_http::EventPublisherHttp;
-use agent_event_publisher_nats::EventPublisherNats;
+use agent_event_publisher_http::start_http_forwarder;
+use agent_event_publisher_nats::start_nats_forwarder;
 use agent_holder::services::HolderServices;
 use agent_identity::services::IdentityServices;
 use agent_issuance::{
@@ -14,6 +14,7 @@ use agent_issuance::{
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
 pub use agent_store::event_verification::{core_event_verifiers, EventVerifier};
+pub use agent_store::{BusForwardingQuery, EventBusPublisher};
 use agent_store::{
     event_verification::{EventVerificationError, EventVerificationReport},
     in_memory::InMemory,
@@ -109,41 +110,20 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     let holder_services = Arc::new(HolderServices::new(subject.clone()));
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
 
-    // TODO: Currently all these `*_event_publishers` are exactly the same, which is weird. We need some sort of layer
-    // between `agent_application` and `agent_store` that will provide a cleaner way of initializing the event
-    // publishers and sending them over to `agent_store`.
-    let identity_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    // Issuance events are also published to NATS.
-    let mut issuance_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    issuance_event_publishers.push(Box::new(EventPublisherNats::load().await.unwrap()));
-    let library_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    let authorization_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    let verification_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
+    let event_bus = shared_kernel::event_bus::EventBusHandle::new(config().event_bus.capacity);
+
+    // Start background forwarders subscribing to EventBus
+    start_nats_forwarder(event_bus.clone());
+    start_http_forwarder(event_bus.clone());
+
+    let get_publishers = || vec![Box::new(agent_store::EventBusPublisher::new(event_bus.clone())) as Box<dyn EventPublisher>];
+
+    let identity_event_publishers = get_publishers();
+    let issuance_event_publishers = get_publishers();
+    let library_event_publishers = get_publishers();
+    let authorization_event_publishers = get_publishers();
+    let holder_event_publishers = get_publishers();
+    let verification_event_publishers = get_publishers();
 
     let event_store_type = config().event_store.type_.clone();
     let event_verification;
@@ -204,6 +184,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
+                event_bus.attach_source(agent_store::MongoEventSource::new(builder.client.clone()));
 
                 let issuance_state =
                     Arc::new(agent_store::issuance_state(&builder, issuance_services, issuance_event_publishers).await);
@@ -325,6 +306,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             issuance_state: Some(issuance_state),
             holder_state: Some(holder_state),
             verification_state: Some(verification_state),
+            event_bus: Some(event_bus),
         },
         event_verification,
         readiness,

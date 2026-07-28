@@ -1,4 +1,5 @@
 pub mod authorization;
+pub mod events;
 pub mod holder;
 pub mod identity;
 pub mod issuance;

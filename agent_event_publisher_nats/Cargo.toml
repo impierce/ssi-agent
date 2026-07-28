@@ -9,6 +9,8 @@ publish.workspace = true
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
+shared-kernel = { path = "../shared-kernel" }
+tokio-stream.workspace = true
 
 anyhow.workspace = true
 async-nats = "0.42"

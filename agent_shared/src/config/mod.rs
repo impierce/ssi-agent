@@ -269,6 +269,8 @@ pub struct ApplicationConfiguration {
     pub display: Vec<Display>,
     #[config(default)]
     pub event_publishers: EventPublishers,
+    #[config(default)]
+    pub event_bus: EventBusConfig,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
             alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
@@ -575,6 +577,48 @@ pub struct Display {
     pub locale: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct EventBusConfig {
+    #[serde(default = "default_event_bus_capacity")]
+    pub capacity: usize,
+    #[serde(default)]
+    pub sse: SseConfig,
+}
+
+fn default_event_bus_capacity() -> usize {
+    1024
+}
+
+impl Default for EventBusConfig {
+    fn default() -> Self {
+        Self {
+            capacity: 1024,
+            sse: SseConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct SseConfig {
+    #[serde(default = "default_sse_enabled")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_aggregate_types: Vec<String>,
+}
+
+fn default_sse_enabled() -> bool {
+    true
+}
+
+impl Default for SseConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            allowed_aggregate_types: Vec::new(),
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -1078,6 +1122,12 @@ mod tests {
               "log_format": "text",
               "event_store": {
                 "type": "in_memory"
+              },
+              "event_bus": {
+                "capacity": 1024,
+                "sse": {
+                  "enabled": true
+                }
               },
               "application_url": "http://localhost:3033/",
               "public_url": "http://localhost:3033/",

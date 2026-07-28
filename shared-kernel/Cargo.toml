@@ -10,17 +10,23 @@ async-trait.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 convert_case = "0.11"
 cqrs-es = "0.5"
-strum = { version = "0.28", features = ["derive"] }
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 slug = "0.1"
+strum = { version = "0.28", features = ["derive"] }
 thiserror.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 tracing.workspace = true
+url.workspace = true
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+
 serde = { version = "1.0", features = ["derive"] }
 
 [features]

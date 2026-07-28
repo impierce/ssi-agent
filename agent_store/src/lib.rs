@@ -68,10 +68,15 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod event_bus_publisher;
+pub mod event_source;
 pub mod event_verification;
 pub mod in_memory;
 pub mod mongodb;
 pub mod postgres;
+
+pub use event_bus_publisher::{BusForwardingQuery, EventBusPublisher};
+pub use event_source::MongoEventSource;
 
 /// A generic command handler for a specific aggregate.
 ///
@@ -100,8 +105,18 @@ where
         &self,
         aggregate_id: &str,
         command: A::Command,
-        metadata: HashMap<String, String>,
+        mut metadata: HashMap<String, String>,
     ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
+        metadata
+            .entry("occurred_at".to_string())
+            .or_insert_with(|| chrono::Utc::now().to_rfc3339());
+        metadata
+            .entry("correlation_id".to_string())
+            .or_insert_with(|| uuid::Uuid::new_v4().to_string());
+        metadata
+            .entry("causation_id".to_string())
+            .or_insert_with(|| uuid::Uuid::new_v4().to_string());
+
         self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
     }
 }

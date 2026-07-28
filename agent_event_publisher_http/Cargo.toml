@@ -14,6 +14,8 @@ agent_library = { path = "../agent_library" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
+shared-kernel = { path = "../shared-kernel" }
+tokio-stream.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true

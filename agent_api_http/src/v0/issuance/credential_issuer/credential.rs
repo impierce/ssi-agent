@@ -208,7 +208,6 @@ pub mod tests {
     };
 
     use agent_authorization::services::AuthorizationServices;
-    use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
@@ -260,8 +259,10 @@ pub mod tests {
         ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
-                .and(
-                    move |request: &wiremock::Request| match request.body_json::<OfferEvent>().unwrap() {
+                .and(move |request: &wiremock::Request| {
+                        let cloud_event: shared_kernel::event_bus::CloudEvent = request.body_json().unwrap();
+                        let offer_event: OfferEvent = serde_json::from_value(cloud_event.data.unwrap()).unwrap();
+                        match offer_event {
                         // Validate that the event is a `CredentialRequestVerified` event.
                         OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
@@ -320,8 +321,8 @@ pub mod tests {
                             true
                         }
                         _ => false,
-                    },
-                )
+                    }
+                })
                 .respond_with(ResponseTemplate::new(200))
                 .mount(self)
                 .await;
@@ -426,13 +427,11 @@ pub mod tests {
                 },
             );
 
+            let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+            agent_event_publisher_http::start_http_forwarder(bus.clone());
             (
                 Some(external_server),
-                EventPublisherHttp::load()
-                    .unwrap()
-                    .into_iter()
-                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-                    .collect(),
+                vec![Box::new(agent_store::EventBusPublisher::new(bus)) as Box<dyn EventPublisher>],
             )
         } else {
             (None, Default::default())
@@ -503,6 +502,10 @@ pub mod tests {
             // This JWT contains the nonce we just generated
             "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
         };
+
+        if with_external_server {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
 
         let response = issuance_app
             .oneshot(

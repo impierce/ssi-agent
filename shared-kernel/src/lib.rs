@@ -13,6 +13,7 @@ pub mod application_service;
 pub mod authorization;
 pub mod command_handler;
 pub mod custom_queries;
+pub mod event_bus;
 pub mod service_registry;
 pub mod view_repository;
 
@@ -24,6 +25,9 @@ pub use async_trait::async_trait;
 pub use chrono;
 pub use convert_case;
 pub use cqrs_es;
+pub use event_bus::{
+    build_cloud_event, BusEventStream, CloudEvent, EventBus, EventBusError, EventBusHandle, EventFilter, EventSource,
+};
 pub use slug::slugify;
 pub use strum;
 pub use uuid::Uuid;
