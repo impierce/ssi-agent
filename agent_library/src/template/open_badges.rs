@@ -106,7 +106,7 @@ fn ob_opinionated_required_by_path() -> &'static [(&'static str, &'static [&'sta
 /// itself leaves unvalidated.
 ///
 /// `AchievementSubject` declares `"additionalProperties": true`, so a `profile` object is
-/// permitted on the subject root to carry the recipient's OB 3.0 `Profile` data — all other
+/// permitted on the subject root to carry the recipient's OB 3.0 `Profile` data - all other
 /// homes for the recipient's profile seemed unsuitable. No spec `$def` governs it, so instead
 /// of leaving its interior open, UniCore constrains it to exactly these four fields with enforced
 /// types: `givenName`/`familyName`/`email`/`dateOfBirth` are all strings, `email` carries
