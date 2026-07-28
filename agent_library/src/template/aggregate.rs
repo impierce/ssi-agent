@@ -113,23 +113,6 @@ pub enum ResultKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
-pub struct Skill {
-    pub public_uri: String,
-    pub id: String,
-    pub ecosystem: String,
-    pub description: String,
-    pub label: String,
-    pub alternative_labels: Vec<String>,
-    pub result_kind: ResultKind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
-pub enum ResultKind {
-    Skill,
-    Occupation,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     pub selectively_disclosable: bool,
