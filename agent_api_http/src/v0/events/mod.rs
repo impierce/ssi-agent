@@ -57,15 +57,23 @@ pub async fn events_sse_handler(
     let sources: Vec<String> = params
         .sources
         .or(params.aggregate_types)
-        .map(|s| s.split(',').map(|item| item.trim().to_string()).filter(|i| !i.is_empty()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|item| item.trim().to_string())
+                .filter(|i| !i.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
-
-
 
     let event_types: Vec<String> = params
         .types
         .or(params.event_types)
-        .map(|s| s.split(',').map(|item| item.trim().to_string()).filter(|i| !i.is_empty()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|item| item.trim().to_string())
+                .filter(|i| !i.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
 
     let subject = params.subject.or(params.aggregate_id);
@@ -95,10 +103,7 @@ pub async fn events_sse_handler(
         let event_type = cloud_event.event_type.clone();
         let event_id = cloud_event.id.clone();
         match serde_json::to_string(&cloud_event) {
-            Ok(json_data) => Ok(sse::Event::default()
-                .id(event_id)
-                .event(event_type)
-                .data(json_data)),
+            Ok(json_data) => Ok(sse::Event::default().id(event_id).event(event_type).data(json_data)),
             Err(err) => Ok(sse::Event::default()
                 .event("error")
                 .data(format!("Serialization error: {}", err))),
@@ -110,10 +115,7 @@ pub async fn events_sse_handler(
             let event_type = cloud_event.event_type.clone();
             let event_id = cloud_event.id.clone();
             match serde_json::to_string(&cloud_event) {
-                Ok(json_data) => Ok(sse::Event::default()
-                    .id(event_id)
-                    .event(event_type)
-                    .data(json_data)),
+                Ok(json_data) => Ok(sse::Event::default().id(event_id).event(event_type).data(json_data)),
                 Err(err) => Ok(sse::Event::default()
                     .event("error")
                     .data(format!("Serialization error: {}", err))),
@@ -148,10 +150,7 @@ mod tests {
 
         let response = tower::ServiceExt::oneshot(app, req).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
-        assert_eq!(
-            response.headers().get("content-type").unwrap(),
-            "text/event-stream"
-        );
+        assert_eq!(response.headers().get("content-type").unwrap(), "text/event-stream");
     }
 
     #[tokio::test]
