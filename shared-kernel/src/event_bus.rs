@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use convert_case::{Case, Casing};
+use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
 use futures::stream::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -193,7 +194,6 @@ impl Default for EventBusHandle {
 }
 
 impl EventBusHandle {
-
     pub fn publish(&self, event: CloudEvent) {
         let _ = self.sender.send(Arc::new(event.clone()));
 
@@ -296,6 +296,36 @@ impl EventBus for EventBusHandle {
             }
         });
         Box::pin(stream)
+    }
+}
+
+#[async_trait]
+impl<A> Query<A> for EventBusHandle
+where
+    A: Aggregate,
+    A::Event: serde::Serialize + DomainEvent,
+{
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
+        for envelope in events {
+            let payload = match serde_json::to_value(&envelope.payload) {
+                Ok(val) => val,
+                Err(err) => {
+                    tracing::error!("Failed to serialize event payload for EventBus: {:?}", err);
+                    continue;
+                }
+            };
+
+            let cloud_event = build_cloud_event(
+                A::TYPE,
+                aggregate_id,
+                envelope.sequence,
+                &envelope.payload.event_type(),
+                payload,
+                Some(chrono::Utc::now()),
+            );
+
+            self.publish(cloud_event);
+        }
     }
 }
 

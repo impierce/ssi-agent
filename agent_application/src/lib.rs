@@ -14,7 +14,6 @@ use agent_issuance::{
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
 pub use agent_store::event_verification::{core_event_verifiers, EventVerifier};
-pub use agent_store::EventBusPublisher;
 use agent_store::{
     event_verification::{EventVerificationError, EventVerificationReport},
     in_memory::InMemory,
@@ -144,10 +143,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     "template view already initialized"
                 );
 
-                let verification_state = Arc::new(
-                    agent_store::verification_state(&builder, verification_services, event_bus.clone())
-                        .await,
-                );
+                let verification_state =
+                    Arc::new(agent_store::verification_state(&builder, verification_services, event_bus.clone()).await);
 
                 let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
@@ -195,10 +192,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     "template view already initialized"
                 );
 
-                let verification_state = Arc::new(
-                    agent_store::verification_state(&builder, verification_services, event_bus.clone())
-                        .await,
-                );
+                let verification_state =
+                    Arc::new(agent_store::verification_state(&builder, verification_services, event_bus.clone()).await);
 
                 let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
@@ -224,9 +219,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 states
             }
             EventStoreType::InMemory => {
-                let issuance_state = Arc::new(
-                    agent_store::issuance_state(&InMemory, issuance_services, event_bus.clone()).await,
-                );
+                let issuance_state =
+                    Arc::new(agent_store::issuance_state(&InMemory, issuance_services, event_bus.clone()).await);
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
@@ -245,8 +239,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 );
 
                 let verification_state = Arc::new(
-                    agent_store::verification_state(&InMemory, verification_services, event_bus.clone())
-                        .await,
+                    agent_store::verification_state(&InMemory, verification_services, event_bus.clone()).await,
                 );
 
                 let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
@@ -254,9 +247,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 );
 
                 let states = (
-                    Arc::new(
-                        agent_store::identity_state(&InMemory, identity_services, event_bus.clone()).await,
-                    ),
+                    Arc::new(agent_store::identity_state(&InMemory, identity_services, event_bus.clone()).await),
                     library_state,
                     Arc::new(
                         agent_store::authorization_state(

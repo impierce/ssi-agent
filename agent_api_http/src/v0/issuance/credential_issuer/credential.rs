@@ -260,13 +260,13 @@ pub mod tests {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
                 .and(move |request: &wiremock::Request| {
-                        let cloud_event: shared_kernel::event_bus::CloudEvent = request.body_json().unwrap();
-                        let data = cloud_event.data.unwrap();
-                        let offer_event: OfferEvent = serde_json::from_value(serde_json::json!({
-                            "CredentialRequestVerified": data
-                        }))
-                        .unwrap();
-                        match offer_event {
+                    let cloud_event: shared_kernel::event_bus::CloudEvent = request.body_json().unwrap();
+                    let data = cloud_event.data.unwrap();
+                    let offer_event: OfferEvent = serde_json::from_value(serde_json::json!({
+                        "CredentialRequestVerified": data
+                    }))
+                    .unwrap();
+                    match offer_event {
                         // Validate that the event is a `CredentialRequestVerified` event.
                         OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
@@ -439,8 +439,7 @@ pub mod tests {
         };
 
         let event_bus = bus_opt.unwrap_or_default();
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, event_bus).await);
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, event_bus).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;

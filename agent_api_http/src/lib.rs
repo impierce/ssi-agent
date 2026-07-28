@@ -67,8 +67,6 @@ pub fn app<E>(
 where
     E: ActorExtractor,
 {
-    let events_router = event_bus.map(v0::events::router).unwrap_or_default();
-
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
@@ -89,7 +87,7 @@ where
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(events_router)
+        .merge(event_bus.map(v0::events::router).unwrap_or_default())
         .merge(public::router())
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
         // Trace layers
