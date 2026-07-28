@@ -62,7 +62,7 @@ use agent_verification::services::VerificationServices;
 use agent_verification::state::VerificationState;
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
-use cqrs_es::{Aggregate, CqrsFramework, DomainEvent, EventStore, Query, View};
+use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
 use shared_kernel::authorization::AllowAllAuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
@@ -186,13 +186,6 @@ pub trait CqrsComponentBuilder {
         <A as Aggregate>::Command: Send + Sync;
 }
 
-fn bus_publisher<A: Aggregate + 'static>(bus: &EventBusHandle) -> Vec<Box<dyn Query<A>>>
-where
-    A::Event: serde::Serialize + DomainEvent,
-{
-    vec![Box::new(bus.clone()) as Box<dyn Query<A>>]
-}
-
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<IdentityServices>,
@@ -201,17 +194,17 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     let (connection_command_handler, connection, all_connections) = builder
         .commands_and_queries::<ConnectionView, Connection, AllConnectionsView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
     let (document_command_handler, document, all_documents) = builder
-        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), bus_publisher(&event_bus))
+        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), vec![event_bus.query()])
         .await;
     let (profile_command_handler, profile, _all_profiles) = builder
-        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), bus_publisher(&event_bus))
+        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![event_bus.query()])
         .await;
     let (service_command_handler, service, all_services) = builder
-        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), bus_publisher(&event_bus))
+        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), vec![event_bus.query()])
         .await;
 
     IdentityState {
@@ -239,7 +232,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
     event_bus: EventBusHandle,
     template_queries: Vec<Box<dyn Query<Template>>>,
 ) -> LibraryState {
-    let mut queries: Vec<Box<dyn Query<Template>>> = bus_publisher(&event_bus);
+    let mut queries: Vec<Box<dyn Query<Template>>> = vec![event_bus.query()];
     queries.extend(template_queries);
 
     let (template_command_handler, template, all_templates) = builder
@@ -251,7 +244,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
     });
 
     let (catalog_command_handler, catalog, all_catalogs) = builder
-        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, bus_publisher(&event_bus))
+        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![event_bus.query()])
         .await;
 
     LibraryState {
@@ -278,11 +271,11 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
         .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
             (),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
     let (client_command_handler, client, _all_clients) = builder
-        .commands_and_queries::<ClientView, Client, AllClientsView>((), bus_publisher(&event_bus))
+        .commands_and_queries::<ClientView, Client, AllClientsView>((), vec![event_bus.query()])
         .await;
     let (
         oauth2_authorization_request_command_handler,
@@ -295,11 +288,11 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
             AllOAuth2AuthorizationRequestsView,
         >(
             oauth2_authorization_request_domain_services,
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
     let (token_command_handler, access_token, _all_access_tokens) = builder
-        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), bus_publisher(&event_bus))
+        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), vec![event_bus.query()])
         .await;
 
     AuthorizationState {
@@ -328,31 +321,28 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     let (credential_command_handler, credential, all_credentials) = builder
         .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
     let (offer_command_handler, offer, all_offers) = builder
-        .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), bus_publisher(&event_bus))
+        .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), vec![event_bus.query()])
         .await;
     let (public_offer_command_handler, public_offer, all_public_offers) = builder
         .commands_and_queries::<PublicOfferView, PublicOffer, AllPublicOffersView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
     let (server_config_command_handler, server_config, _all_server_configs) = builder
-        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(
-            services.clone(),
-            bus_publisher(&event_bus),
-        )
+        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(services.clone(), vec![event_bus.query()])
         .await;
     let (nonce_command_handler, nonce, _) = builder
-        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), bus_publisher(&event_bus))
+        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), vec![event_bus.query()])
         .await;
     let (status_list_command_handler, status_list, all_status_lists) = builder
         .commands_and_queries::<StatusListView, StatusListAggregate, AllStatusListsView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
 
@@ -390,7 +380,7 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
     let (authorization_request_command_handler, authorization_request, all_authorization_requests) = builder
         .commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
 
@@ -414,21 +404,21 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
     let (holder_credential_command_handler, holder_credential, all_holder_credential) = builder
         .commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
 
     let (presentation_command_handler, presentation, all_presentations) = builder
         .commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
 
     let (received_offer_command_handler, received_offer, all_received_offers) = builder
         .commands_and_queries::<ReceivedOffer, ReceivedOffer, AllReceivedOffersView>(
             services.clone(),
-            bus_publisher(&event_bus),
+            vec![event_bus.query()],
         )
         .await;
 

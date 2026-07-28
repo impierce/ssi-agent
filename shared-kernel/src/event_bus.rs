@@ -273,6 +273,15 @@ impl EventBusHandle {
             }
         })
     }
+
+    /// Converts this `EventBusHandle` into a boxed `Query<A>` publisher for a specific aggregate `A`.
+    pub fn query<A>(&self) -> Box<dyn Query<A>>
+    where
+        A: Aggregate,
+        A::Event: serde::Serialize + DomainEvent,
+    {
+        Box::new(self.clone())
+    }
 }
 
 impl EventBus for EventBusHandle {
