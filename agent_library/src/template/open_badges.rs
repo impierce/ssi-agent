@@ -112,6 +112,11 @@ fn ob_opinionated_required_by_path() -> &'static [(&'static str, &'static [&'sta
 /// types: `givenName`/`familyName`/`email`/`dateOfBirth` are all strings, `email` carries
 /// `format: "email"` and `dateOfBirth` carries `format: "date"`.
 ///
+/// Each entry is an exact pin, not a lower bound: a field whose def declares no `format` must not
+/// carry one either. A caller-supplied format on `givenName`/`familyName` is therefore rejected —
+/// UniCore decides what these fields mean, and an unvetted `format` would let callers constrain
+/// them in ways UniCore never agreed to (e.g. `format: "email"` on `givenName`).
+///
 /// This is the single source of truth for both the allowed property set (its presence adds
 /// `profile` to the subject root's allowed keys, see [`validate_ob_properties_recursive`]) and
 /// the interior name/type validation ([`validate_ob_opinionated_types`]).
@@ -144,16 +149,23 @@ fn split_parent_path(path: &str) -> (&str, &str) {
     }
 }
 
+/// Navigates through `properties` segments to the schema node at `path`, i.e. the node that
+/// declares the `type` of the field itself, not its children. Returns `None` if the path is
+/// absent from the schema.
+fn node_at_path<'a>(schema: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut current = schema;
+    for seg in path.split('/').filter(|s| !s.is_empty()) {
+        current = current.get("properties")?.as_object()?.get(seg)?;
+    }
+    Some(current)
+}
+
 /// Navigates through `properties` segments to the properties map at `path`.
 fn props_at_path<'a>(
     schema: &'a serde_json::Value,
     path: &str,
 ) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
-    let mut current = schema.get("properties")?.as_object()?;
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
-        current = current.get(seg)?.get("properties")?.as_object()?;
-    }
-    Some(current)
+    node_at_path(schema, path)?.get("properties")?.as_object()
 }
 
 /// Returns the combined required child keys per schema path: OB 3.0 spec + UniCore extras.
@@ -277,15 +289,34 @@ pub(crate) fn validate_open_badges_schema_properties(schema: &serde_json::Value)
     validate_ob_opinionated_types(schema)
 }
 
+/// Reports whether a schema node matches the `type`/`format` a synthetic def declares.
+/// Both are compared exactly: a def that declares no `format` requires the node to have none
+/// either, so callers cannot attach a format UniCore has not sanctioned.
+fn schema_matches_def(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+    actual.get("type") == expected.get("type") && actual.get("format") == expected.get("format")
+}
+
 /// Enforces the declared `type`/`format` of UniCore-opinionated fields (e.g. the recipient
-/// `profile` object) that OB 3.0 leaves unvalidated. Each field that is present must match the
-/// synthetic def in [`ob_opinionated_defs`] exactly; absent (optional) fields are skipped.
+/// `profile` object) that OB 3.0 leaves unvalidated. Each node that is present must match the
+/// synthetic def in [`ob_opinionated_defs`]; absent (optional) nodes and fields are skipped.
+///
+/// The node at an opinionated path is checked before its children, so a `profile` declared as
+/// anything other than an object is rejected rather than silently skipped for lack of children.
 fn validate_ob_opinionated_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
     let mut mismatched: Vec<String> = Vec::new();
 
     for (path, def) in ob_opinionated_defs() {
+        let Some(node) = node_at_path(schema, path) else {
+            continue; // Optional node — absence is fine; only the shape is constrained.
+        };
+
+        if !schema_matches_def(node, def) {
+            mismatched.push(format!("/{path}"));
+            continue; // Not the declared shape — its children are not meaningful to check.
+        }
+
         let (Some(actual), Some(expected)) = (
-            props_at_path(schema, path),
+            node.get("properties").and_then(|p| p.as_object()),
             def.get("properties").and_then(|p| p.as_object()),
         ) else {
             continue;
@@ -295,9 +326,7 @@ fn validate_ob_opinionated_types(schema: &serde_json::Value) -> Result<(), Templ
             let Some(actual_schema) = actual.get(field) else {
                 continue; // Optional field — absence is fine; only the shape is constrained.
             };
-            let type_matches = actual_schema.get("type") == expected_schema.get("type");
-            let format_matches = actual_schema.get("format") == expected_schema.get("format");
-            if !type_matches || !format_matches {
+            if !schema_matches_def(actual_schema, expected_schema) {
                 mismatched.push(format!("/{path}/{field}"));
             }
         }

@@ -1883,6 +1883,128 @@ async fn test_create_open_badges_template_rejects_profile_email_without_format(t
 }
 
 #[rstest]
+#[case::declared_as_string(serde_json::json!({ "type": "string" }))]
+#[case::type_omitted(serde_json::json!({ "properties": { "givenName": { "type": "string" } } }))]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_non_object_profile(
+    template_id: String,
+    #[case] profile: serde_json::Value,
+) {
+    // `profile` itself must be an object. Without checking the node's own type, a non-object
+    // `profile` would carry no children to validate and slip through untouched.
+    // (`"type": "array"` never reaches this check — arrays are rejected for every template
+    // schema, see `test_create_open_badges_template_rejects_array_profile`.)
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": profile,
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile]")
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_array_profile(template_id: String) {
+    // An array `profile` is rejected too, but by the schema-wide array rule that runs before
+    // OpenBadges validation — hence the different error message.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": { "type": "array", "items": { "type": "string" } },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message(
+            "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.",
+        )
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_unsanctioned_format_on_profile_name(template_id: String) {
+    // The synthetic def is an exact pin: `givenName`/`familyName` are plain strings, so a
+    // caller-supplied `format` on them is rejected even though the type is right. `email` keeps
+    // the format its def declares and is accepted alongside them.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string", "format": "given-name" },
+                    "familyName": { "type": "string", "format": "family-name" },
+                    "email": { "type": "string", "format": "email" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/familyName, /profile/givenName]")
+}
+
+#[rstest]
 #[serial_test::serial]
 async fn test_create_open_badges_template_succeeds_with_const_required_properties(template_id: String) {
     let schema = serde_json::json!({
@@ -2678,4 +2800,65 @@ fn property_attribute_type_survives_serde_round_trip() {
         serde_json::json!({ "selectivelyDisclosable": false, "type": "not-a-real-type" }),
     );
     assert!(should_error.is_err());
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_template_preserves_property_attribute_type(template_id: String) {
+    // The `country` field type is caller-supplied metadata the aggregate must carry through
+    // untouched: it has to survive command handling and land in the emitted event, alongside the
+    // system-controlled flags the aggregate derives itself.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "nationality": { "type": "string" }
+        }
+    });
+
+    let attributes = HashMap::from([(
+        "/nationality".to_string(),
+        PropertyAttribute {
+            selectively_disclosable: true,
+            non_removable: false,
+            r#type: Some(FormFieldType::Country),
+        },
+    )]);
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id: template_id.clone(),
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema.clone())),
+            schema_properties_attributes: Some(attributes.clone()),
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_events(vec![TemplateEvent::TemplateCreated {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            modified_at: test_utils::modified_at(),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::default(),
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: Some(attributes),
+            holder_authorization: Authorization::default(),
+        }])
 }
