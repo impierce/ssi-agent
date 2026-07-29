@@ -137,7 +137,7 @@ mod tests {
         let app = router(bus_handle.clone());
 
         let req = axum::http::Request::builder()
-            .uri("/events?sources=credential")
+            .uri("/v0/events?sources=credential")
             .body(axum::body::Body::empty())
             .unwrap();
 
@@ -172,7 +172,7 @@ mod tests {
         let app = router(bus_handle.clone());
 
         let req = axum::http::Request::builder()
-            .uri("/events?sources=credential")
+            .uri("/v0/events?sources=credential")
             .header("last-event-id", event1.id)
             .body(axum::body::Body::empty())
             .unwrap();
@@ -200,7 +200,10 @@ mod tests {
         let app = router(bus_handle.clone());
 
         let past_time = (now - chrono::Duration::hours(1)).to_rfc3339();
-        let uri = format!("/events?sources=credential&since={}", urlencoding::encode(&past_time));
+        let uri = format!(
+            "/v0/events?sources=credential&since={}",
+            urlencoding::encode(&past_time)
+        );
 
         let req = axum::http::Request::builder()
             .uri(&uri)
