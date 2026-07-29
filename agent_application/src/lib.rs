@@ -322,8 +322,13 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
                 let states = (
                     Arc::new(
-                        agent_store::identity_state(&InMemory, identity_services, &event_bus, identity_event_publishers)
-                            .await,
+                        agent_store::identity_state(
+                            &InMemory,
+                            identity_services,
+                            &event_bus,
+                            identity_event_publishers,
+                        )
+                        .await,
                     ),
                     library_state,
                     Arc::new(

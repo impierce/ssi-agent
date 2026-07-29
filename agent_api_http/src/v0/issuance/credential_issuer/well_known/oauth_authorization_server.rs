@@ -78,8 +78,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;

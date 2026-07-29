@@ -8,6 +8,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[allow(clippy::doc_markdown)]
 /// A CNCF CloudEvent envelope (v1.0 spec).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CloudEvent {
@@ -43,18 +44,21 @@ impl CloudEvent {
         }
     }
 
+    #[must_use]
     pub fn with_data(mut self, data: serde_json::Value) -> Self {
         self.data = Some(data);
         self
     }
 
+    #[must_use]
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.subject = Some(subject.into());
         self
     }
 }
 
-/// Helper function to construct a reverse-DNS standard CNCF CloudEvent v1.0.
+/// Helper function to construct a reverse-DNS standard CNCF `CloudEvent` v1.0.
+#[must_use]
 pub fn build_cloud_event(
     aggregate_type: &str,
     aggregate_id: &str,
@@ -65,7 +69,7 @@ pub fn build_cloud_event(
 ) -> CloudEvent {
     let cloud_type = format!("io.impierce.unicore.{}", event_type.to_case(Case::Kebab));
     let source = format!("/services/{}", aggregate_type.to_lowercase());
-    let id = format!("{}:{}:{}", aggregate_type, aggregate_id, sequence);
+    let id = format!("{aggregate_type}:{aggregate_id}:{sequence}");
 
     // TODO: Manually unwrapping enum variant tags from payloads until enum serialization is refactored (e.g., via adjacent tagging).
     let data = payload.get(event_type).cloned().unwrap_or(payload);
@@ -94,6 +98,7 @@ pub struct EventFilter {
 }
 
 impl EventFilter {
+    #[must_use]
     pub fn matches(&self, event: &CloudEvent) -> bool {
         if !self.event_types.is_empty()
             && !self.event_types.iter().any(|t| {
@@ -160,7 +165,7 @@ pub trait EventBus: Send + Sync {
     fn subscribe(&self, filter: EventFilter) -> BusEventStream;
 }
 
-/// SPI for event source adapters (e.g., MongoDB Change Streams).
+/// SPI for event source adapters (e.g., `MongoDB` Change Streams).
 #[async_trait]
 pub trait EventSource: Send + Sync + 'static {
     async fn open(&self, from: SubscribePosition) -> Result<BusEventStream, EventBusError>;
@@ -177,6 +182,11 @@ pub struct EventBusHandle {
 }
 
 impl EventBusHandle {
+    /// Creates a new `EventBusHandle` with the specified broadcast channel `capacity`.
+    ///
+    /// The in-memory history ring-buffer is allocated for 500 events, providing a reasonable
+    /// window for subscriber catch-up (e.g. SSE reconnects via `Last-Event-ID`) while bounding memory usage.
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         let (sender, _) = tokio::sync::broadcast::channel(capacity);
         Self {
@@ -275,6 +285,7 @@ impl EventBusHandle {
     }
 
     /// Converts this `EventBusHandle` into a boxed `Query<A>` publisher for a specific aggregate `A`.
+    #[must_use]
     pub fn query<A>(&self) -> Box<dyn Query<A>>
     where
         A: Aggregate,

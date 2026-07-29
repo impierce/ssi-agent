@@ -49,7 +49,8 @@ fn create_test_event_template_created(
 
 async fn setup() -> (Arc<IssuanceState>, Arc<LibraryState>, CredentialConfigurationProjection) {
     let bus = shared_kernel::event_bus::EventBusHandle::default();
-    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus, Default::default()).await);
+    let issuance =
+        Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus, Default::default()).await);
     let (projection, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
     // Build the library state WITHOUT the projection (the projection dispatches commands to issuance_state,
     // not to this library state). Then wire the real view repo into the projection's OnceLock handle so

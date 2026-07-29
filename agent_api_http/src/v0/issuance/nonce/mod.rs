@@ -47,8 +47,15 @@ pub mod tests {
         use agent_store::in_memory::InMemory;
         use agent_store::issuance_state;
 
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;

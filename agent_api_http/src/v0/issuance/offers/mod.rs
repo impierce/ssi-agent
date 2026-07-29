@@ -314,11 +314,19 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_requires_existing_template() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, &shared_kernel::event_bus::EventBusHandle::default(), Default::default(), Default::default()).await);
+        let library_state =
+            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
         let mut app = router((issuance_state, library_state));
 
         let response = post_offer_request(&mut app, "missing-template").await;
@@ -332,11 +340,19 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_requires_template_id() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, &shared_kernel::event_bus::EventBusHandle::default(), Default::default(), Default::default()).await);
+        let library_state =
+            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
         let mut app = router((issuance_state, library_state));
 
         let response = post_offer_request(&mut app, "").await;
@@ -350,11 +366,19 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_requires_published_template() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, &shared_kernel::event_bus::EventBusHandle::default(), Default::default(), Default::default()).await);
+        let library_state =
+            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
         let template_id = create_test_template_with_status_and_format(
             &library_state,
             Status::Draft,
@@ -375,11 +399,19 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_accepts_published_template_without_pre_synced_configuration() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        let library_state = Arc::new(library_state(&InMemory, &shared_kernel::event_bus::EventBusHandle::default(), Default::default(), Default::default()).await);
+        let library_state =
+            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
         let template_id = create_new_template(
             &library_state,
             Status::Published,
@@ -403,8 +435,15 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -421,8 +460,15 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &shared_kernel::event_bus::EventBusHandle::default(), Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
