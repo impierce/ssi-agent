@@ -2821,6 +2821,7 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             selectively_disclosable: true,
             non_removable: false,
             r#type: Some(FormFieldType::Country),
+            skills: Vec::new(),
         },
     )]);
 
