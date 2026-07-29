@@ -1,3 +1,5 @@
+pub mod openapi;
+
 use axum::{
     extract::{Query, State},
     response::sse::{self, KeepAlive, Sse},
@@ -36,7 +38,7 @@ pub fn router(event_bus: EventBusHandle) -> Router {
 /// Stream domain events as CloudEvents via SSE with Catch-Up.
 #[utoipa::path(
     get,
-    path = "/v0/events",
+    path = "/events",
     params(
         ("types" = Option<String>, Query, description = "Comma-separated list of CloudEvent types to filter"),
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),

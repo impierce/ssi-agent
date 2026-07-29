@@ -8,6 +8,7 @@ pub mod openapi;
 pub mod templates;
 pub mod verification;
 
+pub use crate::v0::events::openapi::EventsApi;
 pub use crate::v0::holder::openapi::HolderApi;
 pub use crate::v0::identity::connections::openapi::ConnectionsApi;
 pub use crate::v0::identity::openapi::IdentityApi;
