@@ -478,7 +478,9 @@ paths:
         '200':
           description: Server-Sent Events stream of CloudEvents
           content:
-            text/event-stream: {}
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/CloudEvent'
   /v0/get-all-catalogs:
     get:
       tags:
@@ -1051,6 +1053,42 @@ components:
             name: ''
             description: ''
             icon: null
+    CloudEvent:
+      type: object
+      description: A CNCF CloudEvent envelope (v1.0 spec).
+      required:
+      - id
+      - source
+      - specversion
+      - type
+      properties:
+        data: {}
+        datacontenttype:
+          type:
+          - string
+          - 'null'
+        dataschema:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        source:
+          type: string
+        specversion:
+          type: string
+        subject:
+          type:
+          - string
+          - 'null'
+        time:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        type:
+          type: string
+          example: org.unicore.connection.created
     Connection:
       type: object
       required:

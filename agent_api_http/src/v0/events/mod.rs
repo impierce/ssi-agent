@@ -20,13 +20,7 @@ pub struct EventQueryParams {
     pub subject: Option<String>,
     pub limit: Option<usize>,
     pub since: Option<DateTime<Utc>>,
-    pub after: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,
-    pub before: Option<DateTime<Utc>>,
-    // For backwards compatibility
-    pub aggregate_types: Option<String>,
-    pub event_types: Option<String>,
-    pub aggregate_id: Option<String>,
 }
 
 pub fn router(event_bus: EventBusHandle) -> Router {
@@ -47,7 +41,7 @@ pub fn router(event_bus: EventBusHandle) -> Router {
         ("until" = Option<String>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
     responses(
-        (status = 200, description = "Server-Sent Events stream of CloudEvents", content_type = "text/event-stream")
+        (status = 200, description = "Server-Sent Events stream of CloudEvents", body = shared_kernel::event_bus::CloudEvent, content_type = "text/event-stream")
     ),
     tag = "Events"
 )]
@@ -58,7 +52,6 @@ pub async fn events_sse_handler(
 ) -> Sse<impl Stream<Item = Result<sse::Event, axum::Error>>> {
     let sources: Vec<String> = params
         .sources
-        .or(params.aggregate_types)
         .map(|s| {
             s.split(',')
                 .map(|item| item.trim().to_string())
@@ -69,7 +62,6 @@ pub async fn events_sse_handler(
 
     let event_types: Vec<String> = params
         .types
-        .or(params.event_types)
         .map(|s| {
             s.split(',')
                 .map(|item| item.trim().to_string())
@@ -78,16 +70,12 @@ pub async fn events_sse_handler(
         })
         .unwrap_or_default();
 
-    let subject = params.subject.or(params.aggregate_id);
-    let since = params.since.or(params.after);
-    let until = params.until.or(params.before);
-
     let filter = EventFilter {
         event_types,
         sources,
-        subject,
-        since,
-        until,
+        subject: params.subject,
+        since: params.since,
+        until: params.until,
     };
 
     let last_event_id = headers

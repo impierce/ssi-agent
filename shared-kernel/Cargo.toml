@@ -20,6 +20,7 @@ tokio.workspace = true
 tokio-stream.workspace = true
 tracing.workspace = true
 url.workspace = true
+utoipa.workspace = true
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 
 [lints]

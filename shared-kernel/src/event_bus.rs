@@ -10,12 +10,13 @@ use thiserror::Error;
 
 #[allow(clippy::doc_markdown)]
 /// A CNCF CloudEvent envelope (v1.0 spec).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CloudEvent {
     pub id: String,
     pub source: String,
     pub specversion: String,
     #[serde(rename = "type")]
+    #[schema(example = "org.unicore.connection.created")]
     pub event_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datacontenttype: Option<String>,

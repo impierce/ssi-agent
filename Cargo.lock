@@ -11572,6 +11572,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
+ "utoipa",
  "uuid",
 ]
 
