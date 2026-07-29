@@ -24,9 +24,12 @@ pub struct EventQueryParams {
 }
 
 pub fn router(event_bus: EventBusHandle) -> Router {
-    Router::new()
-        .route("/events", get(events_sse_handler))
-        .with_state(event_bus)
+    Router::new().nest(
+        crate::API_VERSION,
+        Router::new()
+            .route("/events", get(events_sse_handler))
+            .with_state(event_bus),
+    )
 }
 
 /// Stream domain events as CloudEvents via SSE with Catch-Up.
