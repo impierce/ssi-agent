@@ -51,9 +51,10 @@ pub mod tests {
     use crate::v0::verification::{
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
+    use agent_event_publisher_http::EventPublisherHttp;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory::InMemory, verification_state};
+    use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
     use agent_verification::services::VerificationServices;
     use axum::{
         body::Body,
@@ -153,21 +154,14 @@ pub mod tests {
         );
 
         let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        let verification_event_publishers: Vec<Box<dyn agent_store::EventPublisher>> =
-            agent_event_publisher_http::EventPublisherHttp::load()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|p| Box::new(p) as Box<dyn agent_store::EventPublisher>)
-                .collect();
+        let event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+            .unwrap()
+            .into_iter()
+            .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+            .collect();
 
         let verification_state = Arc::new(
-            verification_state(
-                &InMemory,
-                VerificationServices::default().await,
-                &bus,
-                verification_event_publishers,
-            )
-            .await,
+            verification_state(&InMemory, VerificationServices::default().await, &bus, event_publishers).await,
         );
 
         let mut app = router(verification_state);

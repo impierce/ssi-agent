@@ -208,6 +208,7 @@ pub mod tests {
     };
 
     use agent_authorization::services::AuthorizationServices;
+    use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
@@ -215,7 +216,7 @@ pub mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
     use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -410,7 +411,7 @@ pub mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        let external_server = if with_external_server {
+        let (external_server, issuance_event_publishers) = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
@@ -425,22 +426,28 @@ pub mod tests {
                 },
             );
 
-            Some(external_server)
+            (
+                Some(external_server),
+                EventPublisherHttp::load()
+                    .unwrap()
+                    .into_iter()
+                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+                    .collect(),
+            )
         } else {
-            None
+            (None, Default::default())
         };
 
         let event_bus = shared_kernel::event_bus::EventBusHandle::default();
-        let issuance_event_publishers: Vec<Box<dyn agent_store::EventPublisher>> = if with_external_server {
-            agent_event_publisher_http::EventPublisherHttp::load()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|p| Box::new(p) as Box<dyn agent_store::EventPublisher>)
-                .collect()
-        } else {
-            vec![]
-        };
-        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus, issuance_event_publishers).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &event_bus,
+                issuance_event_publishers,
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -505,10 +512,6 @@ pub mod tests {
             // This JWT contains the nonce we just generated
             "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
         };
-
-        if with_external_server {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
 
         let response = issuance_app
             .oneshot(
