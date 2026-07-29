@@ -16,7 +16,7 @@ pub struct CloudEvent {
     pub source: String,
     pub specversion: String,
     #[serde(rename = "type")]
-    #[schema(example = "org.unicore.connection.created")]
+    #[schema(example = "io.impierce.unicore.offer-created")]
     pub event_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datacontenttype: Option<String>,
@@ -178,7 +178,7 @@ use std::collections::VecDeque;
 #[derive(Clone)]
 pub struct EventBusHandle {
     sender: tokio::sync::broadcast::Sender<Arc<CloudEvent>>,
-    history: Arc<tokio::sync::RwLock<VecDeque<CloudEvent>>>,
+    history: Arc<std::sync::RwLock<VecDeque<CloudEvent>>>,
     history_capacity: usize,
 }
 
@@ -192,7 +192,7 @@ impl EventBusHandle {
         let (sender, _) = tokio::sync::broadcast::channel(capacity);
         Self {
             sender,
-            history: Arc::new(tokio::sync::RwLock::new(VecDeque::with_capacity(500))),
+            history: Arc::new(std::sync::RwLock::new(VecDeque::with_capacity(500))),
             history_capacity: 500,
         }
     }
@@ -204,23 +204,37 @@ impl Default for EventBusHandle {
     }
 }
 
+/// Result of querying historical events in ascending order.
+///
+/// Contains the list of matching [`CloudEvent`]s and a `gap_detected` flag indicating
+/// whether a requested `last_event_id` was absent from memory/storage (e.g. evicted ring-buffer).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct HistoryAscendingResult {
+    pub events: Vec<CloudEvent>,
+    /// Set to `true` if `last_event_id` was specified but could not be found in retained history.
+    pub gap_detected: bool,
+}
+
 impl EventBusHandle {
+    /// Publishes a [`CloudEvent`] to all active subscribers and synchronously appends it to the in-memory ring-buffer.
     pub fn publish(&self, event: CloudEvent) {
         let _ = self.sender.send(Arc::new(event.clone()));
 
-        let history = self.history.clone();
-        let cap = self.history_capacity;
-        tokio::spawn(async move {
-            let mut lock = history.write().await;
-            if lock.len() >= cap {
+        if let Ok(mut lock) = self.history.write() {
+            if lock.len() >= self.history_capacity {
                 lock.pop_front();
             }
             lock.push_back(event);
-        });
+        }
     }
 
-    pub async fn history(&self, filter: &EventFilter, limit: usize) -> Vec<CloudEvent> {
-        let lock = self.history.read().await;
+    /// Queries the most recent historical events matching `filter` in descending order up to `limit`.
+    #[must_use]
+    pub fn history(&self, filter: &EventFilter, limit: usize) -> Vec<CloudEvent> {
+        let lock = match self.history.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         lock.iter()
             .rev()
             .filter(|e| filter.matches(e))
@@ -229,15 +243,26 @@ impl EventBusHandle {
             .collect()
     }
 
-    pub async fn history_ascending(
+    /// Returns historical events in chronological (ascending) order matching `filter`.
+    ///
+    /// If `last_event_id` is specified:
+    /// - If found, events occurring *after* `last_event_id` are returned (`gap_detected = false`).
+    /// - If missing/evicted, the latest `limit` events are returned and `gap_detected` is set to `true`.
+    #[must_use]
+    pub fn history_ascending(
         &self,
         filter: &EventFilter,
         last_event_id: Option<&str>,
         limit: usize,
-    ) -> Vec<CloudEvent> {
-        let lock = self.history.read().await;
+    ) -> HistoryAscendingResult {
+        let lock = match self.history.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
 
-        if let Some(last_id) = last_event_id {
+        let mut gap_detected = false;
+
+        let events: Vec<CloudEvent> = if let Some(last_id) = last_event_id {
             if let Some(pos) = lock.iter().position(|e| e.id == last_id) {
                 lock.iter()
                     .skip(pos + 1)
@@ -245,6 +270,7 @@ impl EventBusHandle {
                     .cloned()
                     .collect()
             } else {
+                gap_detected = true;
                 let count = lock.len();
                 let skip = count.saturating_sub(limit);
                 lock.iter().skip(skip).filter(|e| filter.matches(e)).cloned().collect()
@@ -253,7 +279,9 @@ impl EventBusHandle {
             let count = lock.len();
             let skip = count.saturating_sub(limit);
             lock.iter().skip(skip).filter(|e| filter.matches(e)).cloned().collect()
-        }
+        };
+
+        HistoryAscendingResult { events, gap_detected }
     }
 
     pub fn attach_source<S: EventSource>(&self, source: S) -> tokio::task::JoinHandle<()> {

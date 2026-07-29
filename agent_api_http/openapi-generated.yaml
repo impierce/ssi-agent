@@ -1088,7 +1088,7 @@ components:
           format: date-time
         type:
           type: string
-          example: org.unicore.connection.created
+          example: io.impierce.unicore.offer-created
     Connection:
       type: object
       required:
