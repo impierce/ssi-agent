@@ -108,6 +108,7 @@ pub enum FormFieldType {
     Skill,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
