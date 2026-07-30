@@ -6,7 +6,10 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
 
     let config_file_path_str = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
         if cfg!(feature = "test_utils") {
-            "../agent_shared/tests/test.config.yaml".to_string()
+            // Uses compile-time CARGO_MANIFEST_DIR to ensure tests locate test.config.yaml
+            // regardless of the working directory across workspaces.
+            // See `docs/adr/0003-hermetic-test-architecture-and-config-decoupling.md` for context.
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/test.config.yaml").to_string()
         } else {
             "./config.yaml".to_string()
         }
