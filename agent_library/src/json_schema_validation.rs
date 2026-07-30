@@ -261,15 +261,15 @@ mod tests {
                 "activityStartDate": "2020-01-01T00:00:00Z",
                 "activityEndDate": "2020-06-01T00:00:00Z",
                 "achievement": {
-                "id": "https://example.com/achievements/21st-century-skills/teamwork",
-                "type": ["Achievement"],
-                "criteria": {
-                    "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
-                },
-                "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
-                "name": "Teamwork",
-                "fieldOfStudy": "Business",
-                "specialization": "Team Leadership"
+                    "id": "https://example.com/achievements/21st-century-skills/teamwork",
+                    "type": ["Achievement"],
+                    "criteria": {
+                        "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+                    },
+                    "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+                    "name": "Teamwork",
+                    "fieldOfStudy": "Business",
+                    "specialization": "Team Leadership"
                 }
             }
         });
