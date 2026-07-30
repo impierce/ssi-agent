@@ -143,21 +143,16 @@ fn ob_opinionated_defs() -> &'static std::collections::HashMap<String, serde_jso
 /// Splits a schema path into its parent path and final segment, e.g. `"profile"` → `("", "profile")`
 /// and `"profile/address"` → `("profile", "address")`.
 fn split_parent_path(path: &str) -> (&str, &str) {
-    match path.rfind('/') {
-        Some(i) => (&path[..i], &path[i + 1..]),
-        None => ("", path),
-    }
+    path.rsplit_once("/").unwrap_or(("", path))
 }
 
 /// Navigates through `properties` segments to the schema node at `path`, i.e. the node that
 /// declares the `type` of the field itself, not its children. Returns `None` if the path is
 /// absent from the schema.
 fn node_at_path<'a>(schema: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
-    let mut current = schema;
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
-        current = current.get("properties")?.as_object()?.get(seg)?;
-    }
-    Some(current)
+    path.is_empty()
+        .then_some(schema)
+        .or_else(|| schema.pointer(&format!("/properties/{}", path.replace('/', "/properties/"))))
 }
 
 /// Navigates through `properties` segments to the properties map at `path`.

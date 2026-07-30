@@ -140,7 +140,7 @@ pub struct PropertyAttribute {
     /// This can be used by frontends to preserve field type information for visualizations.
     /// Purely a rendering hint that UniCore stores as given and never validates against the
     /// schema or the issued values.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub r#type: Option<FormFieldType>,
 }
 
@@ -1141,7 +1141,7 @@ pub mod test_utils {
             PropertyAttribute {
                 selectively_disclosable: true,
                 non_removable: false,
-                r#type: None
+                r#type: None,
             },
         );
         Some(config)

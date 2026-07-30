@@ -2616,7 +2616,6 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-  
         },
     );
     attrs.insert(
@@ -2625,7 +2624,6 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             selectively_disclosable: false,
             non_removable: false,
             r#type: None,
-   
         },
     );
 
