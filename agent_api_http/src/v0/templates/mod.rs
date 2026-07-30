@@ -1091,7 +1091,6 @@ mod tests {
                         selectively_disclosable: false,
                         non_removable: false,
                         r#type: Some(FormFieldType::Country),
-                        skills: Vec::new(),
                     },
                 )])),
                 holder_authorization: Authorization::default(),

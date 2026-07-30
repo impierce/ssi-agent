@@ -762,7 +762,6 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -798,7 +797,6 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -841,7 +839,6 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -884,7 +881,6 @@ async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -924,7 +920,6 @@ async fn test_update_field_attributes_with_no_schema(template_id: String) {
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -971,7 +966,6 @@ async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1018,7 +1012,6 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1027,7 +1020,6 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
             selectively_disclosable: false,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1075,7 +1067,6 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1084,7 +1075,6 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
             selectively_disclosable: false,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1102,7 +1092,6 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1163,7 +1152,6 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1233,7 +1221,6 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1242,7 +1229,6 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
             selectively_disclosable: false,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1318,7 +1304,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1327,7 +1312,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1336,7 +1320,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -1345,7 +1328,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1376,7 +1358,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1385,7 +1366,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1394,7 +1374,6 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -1524,7 +1503,6 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1533,7 +1511,6 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -1542,8 +1519,6 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-
-            skills: Vec::new(),
         },
     );
 
@@ -1655,7 +1630,6 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
                 selectively_disclosable: false,
                 non_removable: true,
                 r#type: None,
-                skills: Vec::new(),
             },
         );
     }
@@ -1671,7 +1645,6 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
                 selectively_disclosable: false,
                 non_removable: false,
                 r#type: None,
-                skills: Vec::new(),
             },
         );
     }
@@ -2033,7 +2006,6 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -2042,7 +2014,6 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     expected_attrs.insert(
@@ -2051,7 +2022,6 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -2133,7 +2103,6 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -2145,7 +2114,6 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
             selectively_disclosable: true,
             non_removable: false, // User tries to change this
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -2156,7 +2124,6 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
             selectively_disclosable: true,
             non_removable: true, // System preserves non_removable
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -2271,7 +2238,6 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -2280,7 +2246,6 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
     attrs.insert(
@@ -2289,7 +2254,6 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
             selectively_disclosable: false,
             non_removable: true,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -2384,7 +2348,6 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
                 selectively_disclosable: false,
                 non_removable: required_paths.contains(&key.to_string()),
                 r#type: None,
-                skills: Vec::new(),
             },
         );
     }
@@ -2493,7 +2456,6 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
                 selectively_disclosable: false,
                 non_removable: required_paths.contains(&key.to_string()),
                 r#type: None,
-                skills: Vec::new(),
             },
         );
     }
@@ -2654,7 +2616,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
+  
         },
     );
     attrs.insert(
@@ -2663,7 +2625,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             selectively_disclosable: false,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
+   
         },
     );
 
@@ -2743,7 +2705,6 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
             selectively_disclosable: true,
             non_removable: false,
             r#type: None,
-            skills: Vec::new(),
         },
     );
 
@@ -2778,7 +2739,6 @@ fn property_attribute_type_survives_serde_round_trip() {
         selectively_disclosable: false,
         non_removable: false,
         r#type: Some(FormFieldType::Country),
-        skills: Vec::new(),
     };
 
     let json = serde_json::to_value(&expected).unwrap();
@@ -2821,7 +2781,6 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             selectively_disclosable: true,
             non_removable: false,
             r#type: Some(FormFieldType::Country),
-            skills: Vec::new(),
         },
     )]);
 

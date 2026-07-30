@@ -477,8 +477,8 @@ mod tests {
         });
 
         let mut attrs = HashMap::new();
-        attrs.insert("name".to_string(), PropertyAttribute::new(true, false, vec![]));
-        attrs.insert("age".to_string(), PropertyAttribute::new(false, false, vec![]));
+        attrs.insert("name".to_string(), PropertyAttribute::new(true, false));
+        attrs.insert("age".to_string(), PropertyAttribute::new(false, false,));
 
         let template = Template {
             template_id: "t7".to_string(),
@@ -696,8 +696,8 @@ mod tests {
         let mut attrs = HashMap::new();
         attrs.insert(
             "achievement.criteria.narrative".to_string(),
-            PropertyAttribute::new(false, false, vec![]),
-        );
+            PropertyAttribute::new(false, false))
+        ;
 
         let template = Template {
             template_id: "t_nested_attrs".to_string(),

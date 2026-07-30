@@ -98,6 +98,7 @@ impl Default for Expiration {
 // `country`: the property holds a country, expected to be a `string` carrying an ISO 3166-1
 // alpha-2 code (e.g. `"NL"`). Frontends can use this to render a flag or a country picker
 // instead of a plain text field.
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum FormFieldType {
@@ -139,18 +140,15 @@ pub struct PropertyAttribute {
     /// schema or the issued values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#type: Option<FormFieldType>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skills: Vec<Skill>,
 }
 
 impl PropertyAttribute {
     /// Creates a new `PropertyAttribute`.
-    pub fn new(selectively_disclosable: bool, non_removable: bool, skills: Vec<Skill>) -> Self {
+    pub fn new(selectively_disclosable: bool, non_removable: bool) -> Self {
         Self {
             selectively_disclosable,
             non_removable,
             r#type: None,
-            skills,
         }
     }
 
@@ -303,7 +301,6 @@ impl Aggregate for Template {
                                 selectively_disclosable: false,
                                 non_removable: false,
                                 r#type: None,
-                                skills: Vec::new(),
                             });
                             attr.non_removable = is_required;
                         }
@@ -1142,8 +1139,7 @@ pub mod test_utils {
             PropertyAttribute {
                 selectively_disclosable: true,
                 non_removable: false,
-                r#type: None,
-                skills: Vec::new(),
+                r#type: None
             },
         );
         Some(config)
