@@ -29,8 +29,11 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Lint (Default features)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Lint (All features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Test (Default features)
         run: cargo test --workspace
