@@ -1479,6 +1479,7 @@ components:
       type: string
       enum:
       - country
+      - skill
     GetConnectionsEndpointRequest:
       type: object
       properties:

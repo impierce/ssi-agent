@@ -98,10 +98,13 @@ impl Default for Expiration {
 // `country`: the property holds a country, expected to be a `string` carrying an ISO 3166-1
 // alpha-2 code (e.g. `"NL"`). Frontends can use this to render a flag or a country picker
 // instead of a plain text field.
+// `skill`: this hint tells the frontends to render a skill picker rather than a plain
+// text field. The skills themselves are stored as a JSON Schema `const` within the property;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum FormFieldType {
     Country,
+    Skill,
 }
 
 #[skip_serializing_none]
