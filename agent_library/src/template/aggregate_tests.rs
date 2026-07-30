@@ -761,6 +761,7 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -795,6 +796,7 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -836,6 +838,7 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -877,6 +880,7 @@ async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -915,6 +919,7 @@ async fn test_update_field_attributes_with_no_schema(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -960,6 +965,7 @@ async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1005,6 +1011,7 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1012,6 +1019,7 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1058,6 +1066,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1065,6 +1074,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1081,6 +1091,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1140,6 +1151,7 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1208,6 +1220,7 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1215,6 +1228,7 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1289,6 +1303,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1296,6 +1311,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1303,6 +1319,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1310,6 +1327,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -1339,6 +1357,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     expected_attrs.insert(
@@ -1346,6 +1365,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     expected_attrs.insert(
@@ -1353,6 +1373,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
 
@@ -1481,6 +1502,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     expected_attrs.insert(
@@ -1488,6 +1510,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     expected_attrs.insert(
@@ -1495,6 +1518,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
 
@@ -1561,6 +1585,400 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
 
 #[rstest]
 #[serial_test::serial]
+async fn test_create_open_badges_template_allows_profile_object_on_subject_root(template_id: String) {
+    // `AchievementSubject` declares `additionalProperties: true`, so UniCore permits a `profile`
+    // object on the subject root carrying the recipient's OB 3.0 `Profile` fields. UniCore
+    // constrains it to exactly `givenName`/`familyName`/`email`/`dateOfBirth` with enforced types
+    // (all strings; `email` → `format: email`, `dateOfBirth` → `format: date`).
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "familyName": { "type": "string" },
+                    "email": { "type": "string", "format": "email" },
+                    "dateOfBirth": { "type": "string", "format": "date" }
+                }
+            },
+            "achievement": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "criteria": {
+                        "type": "object",
+                        "properties": {
+                            "narrative": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let mut expected_attrs = HashMap::new();
+    for required_leaf in [
+        "/achievement/name",
+        "/achievement/description",
+        "/achievement/criteria/narrative",
+    ] {
+        expected_attrs.insert(
+            required_leaf.to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: true,
+                r#type: None,
+            },
+        );
+    }
+    for profile_leaf in [
+        "/profile/givenName",
+        "/profile/familyName",
+        "/profile/email",
+        "/profile/dateOfBirth",
+    ] {
+        expected_attrs.insert(
+            profile_leaf.to_string(),
+            PropertyAttribute {
+                selectively_disclosable: false,
+                non_removable: false,
+                r#type: None,
+            },
+        );
+    }
+
+    let expected_schema = serde_json::json!({
+        "type": "object",
+        "required": ["achievement"],
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "familyName": { "type": "string" },
+                    "email": { "type": "string", "format": "email" },
+                    "dateOfBirth": { "type": "string", "format": "date" }
+                }
+            },
+            "achievement": {
+                "type": "object",
+                "required": ["criteria", "description", "name"],
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "criteria": {
+                        "type": "object",
+                        "required": ["narrative"],
+                        "properties": {
+                            "narrative": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id: template_id.clone(),
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_events(vec![TemplateEvent::TemplateCreated {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            modified_at: test_utils::modified_at(),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::default(),
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string(), "OpenBadgeCredential".to_string()],
+            schema: Box::new(Some(expected_schema)),
+            schema_properties_attributes: Some(expected_attrs),
+            holder_authorization: Authorization::default(),
+        }])
+}
+
+/// Reusable valid `achievement` block so profile-focused negative tests fail on the profile,
+/// not on missing required achievement fields.
+fn valid_ob_achievement() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "criteria": {
+                "type": "object",
+                "properties": {
+                    "narrative": { "type": "string" }
+                }
+            }
+        }
+    })
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_unknown_profile_property(template_id: String) {
+    // The `profile` object is constrained to the four supported fields; anything else is rejected.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "phoneNumber": { "type": "string" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/profile`: [phoneNumber]")
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_profile_field_wrong_type(template_id: String) {
+    // Profile fields must be strings; a non-string type is rejected.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "number" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/givenName]")
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_profile_email_without_format(template_id: String) {
+    // `email` must carry `format: "email"`; a plain string is rejected.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "email": { "type": "string" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/email]")
+}
+
+#[rstest]
+#[case::declared_as_string(serde_json::json!({ "type": "string" }))]
+#[case::type_omitted(serde_json::json!({ "properties": { "givenName": { "type": "string" } } }))]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_non_object_profile(
+    template_id: String,
+    #[case] profile: serde_json::Value,
+) {
+    // `profile` itself must be an object. Without checking the node's own type, a non-object
+    // `profile` would carry no children to validate and slip through untouched.
+    // (`"type": "array"` never reaches this check — arrays are rejected for every template
+    // schema, see `test_create_open_badges_template_rejects_array_profile`.)
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": profile,
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile]")
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_array_profile(template_id: String) {
+    // An array `profile` is rejected too, but by the schema-wide array rule that runs before
+    // OpenBadges validation — hence the different error message.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": { "type": "array", "items": { "type": "string" } },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message(
+            "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.",
+        )
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_open_badges_template_rejects_unsanctioned_format_on_profile_name(template_id: String) {
+    // The synthetic def is an exact pin: `givenName`/`familyName` are plain strings, so a
+    // caller-supplied `format` on them is rejected even though the type is right. `email` keeps
+    // the format its def declares and is accepted alongside them.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string", "format": "given-name" },
+                    "familyName": { "type": "string", "format": "family-name" },
+                    "email": { "type": "string", "format": "email" }
+                }
+            },
+            "achievement": valid_ob_achievement()
+        }
+    });
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::OpenBadges3_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/familyName, /profile/givenName]")
+}
+
+#[rstest]
+#[serial_test::serial]
 async fn test_create_open_badges_template_succeeds_with_const_required_properties(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -1587,6 +2005,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     expected_attrs.insert(
@@ -1594,6 +2013,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     expected_attrs.insert(
@@ -1601,6 +2021,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
 
@@ -1681,6 +2102,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
 
@@ -1691,6 +2113,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false, // User tries to change this
+            r#type: None,
         },
     );
 
@@ -1700,6 +2123,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: true, // System preserves non_removable
+            r#type: None,
         },
     );
 
@@ -1813,6 +2237,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1820,6 +2245,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -1827,6 +2253,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: true,
+            r#type: None,
         },
     );
 
@@ -1920,6 +2347,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             PropertyAttribute {
                 selectively_disclosable: false,
                 non_removable: required_paths.contains(&key.to_string()),
+                r#type: None,
             },
         );
     }
@@ -2027,6 +2455,7 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             PropertyAttribute {
                 selectively_disclosable: false,
                 non_removable: required_paths.contains(&key.to_string()),
+                r#type: None,
             },
         );
     }
@@ -2186,6 +2615,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
     attrs.insert(
@@ -2193,6 +2623,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
         PropertyAttribute {
             selectively_disclosable: false,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -2271,6 +2702,7 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
         PropertyAttribute {
             selectively_disclosable: true,
             non_removable: false,
+            r#type: None,
         },
     );
 
@@ -2294,4 +2726,97 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
             holder_authorization: Authorization::default(),
         })
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [/address]")
+}
+
+#[rstest]
+fn property_attribute_type_survives_serde_round_trip() {
+    // The `country` field type is not recoverable from standard JSON Schema keywords, so the
+    // frontend persists it out-of-band in `schemaPropertiesAttributes[*].type`. Verify it is
+    // serialized under the `type` key and deserializes back unchanged.
+    let expected = PropertyAttribute {
+        selectively_disclosable: false,
+        non_removable: false,
+        r#type: Some(FormFieldType::Country),
+    };
+
+    let json = serde_json::to_value(&expected).unwrap();
+    assert_eq!(json["type"], serde_json::json!("country"));
+    // An absent `type` must not be emitted, and `non_removable` is not affected.
+    assert_eq!(json.get("nonRemovable"), Some(&serde_json::json!(false)));
+
+    let actual: PropertyAttribute = serde_json::from_value(json).unwrap();
+    assert_eq!(actual, expected);
+
+    // Omitting `type` on the wire deserializes to `None` (backward compatible).
+    let without_type: PropertyAttribute =
+        serde_json::from_value(serde_json::json!({ "selectivelyDisclosable": true })).unwrap();
+    assert_eq!(without_type.r#type, None);
+    assert!(serde_json::to_value(&without_type).unwrap().get("type").is_none());
+
+    // An unrecognized field type is rejected (constrained enum).
+    let should_error = serde_json::from_value::<PropertyAttribute>(
+        serde_json::json!({ "selectivelyDisclosable": false, "type": "not-a-real-type" }),
+    );
+    assert!(should_error.is_err());
+}
+
+#[rstest]
+#[serial_test::serial]
+async fn test_create_template_preserves_property_attribute_type(template_id: String) {
+    // The `country` field type is caller-supplied metadata the aggregate must carry through
+    // untouched: it has to survive command handling and land in the emitted event, alongside the
+    // system-controlled flags the aggregate derives itself.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "nationality": { "type": "string" }
+        }
+    });
+
+    let attributes = HashMap::from([(
+        "/nationality".to_string(),
+        PropertyAttribute {
+            selectively_disclosable: true,
+            non_removable: false,
+            r#type: Some(FormFieldType::Country),
+        },
+    )]);
+
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when(TemplateCommand::CreateNewTemplate {
+            template_id: template_id.clone(),
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec![],
+            schema: Box::new(Some(schema.clone())),
+            schema_properties_attributes: Some(attributes.clone()),
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_events(vec![TemplateEvent::TemplateCreated {
+            template_id,
+            source_template_id: None,
+            title: "Test".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            modified_at: test_utils::modified_at(),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::default(),
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: Some(attributes),
+            holder_authorization: Authorization::default(),
+        }])
 }
