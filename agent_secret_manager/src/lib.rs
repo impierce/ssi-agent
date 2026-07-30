@@ -23,18 +23,21 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
     info!("Initializing Stronghold storage");
 
     let stronghold_password = config().secret_manager.stronghold_password.clone();
-    let mut stronghold_path = config().secret_manager.stronghold_path.clone();
-
     #[cfg(feature = "test_utils")]
-    {
+    let stronghold_path = {
         // Manifest-relative test stronghold path ensures tests find the test keys
         // regardless of the current working directory across workspaces.
         // See `docs/adr/0003-hermetic-test-architecture-and-config-decoupling.md` for context.
         let manifest_relative = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/res/test.stronghold.dat");
         if std::path::Path::new(manifest_relative).exists() {
-            stronghold_path = manifest_relative.to_string();
+            manifest_relative.to_string()
+        } else {
+            config().secret_manager.stronghold_path.clone()
         }
-    }
+    };
+
+    #[cfg(not(feature = "test_utils"))]
+    let stronghold_path = config().secret_manager.stronghold_path.clone();
 
     info!("Stronghold path: {stronghold_path}");
 

@@ -29,7 +29,10 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Lint
+      - name: Lint (Default features)
+        run: cargo clippy --all -- -D warnings
+
+      - name: Lint (All features)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Test (Default features)
