@@ -517,7 +517,9 @@ dependencies = [
  "agent_shared",
  "agent_verification",
  "async-trait",
+ "chrono",
  "cqrs-es",
+ "futures",
  "mongo-es",
  "mongodb 3.7.0",
  "postgres-es",
@@ -527,6 +529,9 @@ dependencies = [
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -11558,12 +11563,17 @@ dependencies = [
  "chrono",
  "convert_case 0.11.0",
  "cqrs-es",
+ "futures",
  "serde",
+ "serde_json",
  "slug",
  "strum 0.28.0",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
  "tracing",
+ "url",
+ "utoipa",
  "uuid",
 ]
 

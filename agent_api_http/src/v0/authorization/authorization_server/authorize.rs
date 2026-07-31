@@ -114,8 +114,15 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_authorization_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -133,6 +140,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &Default::default(),
                 Default::default(),
                 Default::default(),
             )

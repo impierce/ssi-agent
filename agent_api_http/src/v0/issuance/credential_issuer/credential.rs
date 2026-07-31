@@ -438,8 +438,16 @@ pub mod tests {
             (None, Default::default())
         };
 
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &event_bus,
+                issuance_event_publishers,
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -484,6 +492,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &event_bus,
                 Default::default(),
                 Default::default(),
             )
