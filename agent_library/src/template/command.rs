@@ -3,6 +3,7 @@ use std::collections::HashMap;
 pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
 use agent_shared::config::Authorization;
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -71,4 +72,24 @@ pub enum TemplateCommand {
     DeleteTemplate {
         template_id: String,
     },
+}
+
+impl CommandOperation for TemplateCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateNewTemplate { .. } => "library.templates.create",
+            Self::UpdateTitle { .. } => "library.templates.title.update",
+            Self::UpdateDisplay { .. } => "library.templates.display.update",
+            Self::UpdateTags { .. } => "library.templates.tags.update",
+            Self::UpdateStatus { .. } => "library.templates.status.update",
+            Self::UpdateVisibility { .. } => "library.templates.visibility.update",
+            Self::UpdateDescription { .. } => "library.templates.description.update",
+            Self::UpdateType { .. } => "library.templates.types.update",
+            Self::UpdateSchema { .. } => "library.templates.schema.update",
+            Self::UpdateSchemaPropertiesAttributes { .. } => "library.templates.schema_properties.update",
+            Self::UpdateCredentialExpiration { .. } => "library.templates.credential_expiration.update",
+            Self::UpdateHolderAuthorization { .. } => "library.templates.holder_authorization.update",
+            Self::DeleteTemplate { .. } => "library.templates.delete",
+        }
+    }
 }

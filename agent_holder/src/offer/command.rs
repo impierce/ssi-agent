@@ -1,5 +1,6 @@
 use oid4vci::credential_offer::CredentialOffer;
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -17,4 +18,15 @@ pub enum OfferCommand {
     RejectCredentialOffer {
         received_offer_id: String,
     },
+}
+
+impl CommandOperation for OfferCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::ReceiveCredentialOffer { .. } => "holder.offers.receive",
+            Self::AcceptCredentialOffer { .. } => "holder.offers.accept",
+            Self::SendCredentialRequest { .. } => "holder.offers.credential_request.send",
+            Self::RejectCredentialOffer { .. } => "holder.offers.reject",
+        }
+    }
 }

@@ -1,5 +1,5 @@
 use agent_shared::application_state::CommandHandler;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -12,6 +12,22 @@ use crate::catalog::{
     aggregate::Catalog,
     views::{view_all_catalogs::AllCatalogsView, CatalogView},
 };
+
+impl QueryOperation for TemplateView {
+    const OPERATION_NAME: &'static str = "library.templates.get";
+}
+
+impl QueryOperation for AllTemplatesView {
+    const OPERATION_NAME: &'static str = "library.templates.list";
+}
+
+impl QueryOperation for CatalogView {
+    const OPERATION_NAME: &'static str = "library.catalogs.get";
+}
+
+impl QueryOperation for AllCatalogsView {
+    const OPERATION_NAME: &'static str = "library.catalogs.list";
+}
 
 #[derive(Clone)]
 pub struct LibraryState {

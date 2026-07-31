@@ -206,6 +206,14 @@ mod tests {
         async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError> {
             Ok(TestView(query))
         }
+
+        fn command_operation_name(&self, _command: &Self::Command) -> &'static str {
+            "test.echo.command"
+        }
+
+        fn query_operation_name(&self, _query: &Self::Query) -> &'static str {
+            "test.echo.query"
+        }
     }
 
     // ── Tests ──────────────────────────────────────────────────────

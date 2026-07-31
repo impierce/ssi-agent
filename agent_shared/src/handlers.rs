@@ -1,6 +1,7 @@
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use shared_kernel::authorization::{
-    AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller,
+    AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
+    QueryOperation,
 };
 use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
@@ -47,13 +48,13 @@ pub async fn query_handler<A, V>(
 ) -> Result<Option<V>, QueryHandlerError>
 where
     A: Aggregate,
-    V: View<A>,
+    V: View<A> + QueryOperation,
 {
     let authorization_request = AuthorizationRequest {
         caller,
         operation: AuthorizationOperation::Query {
             resource_id: None,
-            operation_name: std::any::type_name::<V>(),
+            operation_name: V::OPERATION_NAME,
         },
     };
 
@@ -88,15 +89,15 @@ pub async fn command_handler<A>(
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
 {
+    let operation_name = command.operation_name();
     let authorization_request = AuthorizationRequest {
         caller,
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
             resource_id: None,
-            // TODO: Use command variant names when authorization needs finer-grained permissions.
-            operation_name: std::any::type_name::<A::Command>(),
+            operation_name,
         },
     };
 
@@ -145,6 +146,26 @@ mod tests {
     struct TestAggregate;
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    struct TestCommand(String);
+
+    impl CommandOperation for TestCommand {
+        fn operation_name(&self) -> &'static str {
+            "test.commands.emit"
+        }
+    }
+
+    #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+    struct TestView;
+
+    impl View<TestAggregate> for TestView {
+        fn update(&mut self, _event: &cqrs_es::EventEnvelope<TestAggregate>) {}
+    }
+
+    impl QueryOperation for TestView {
+        const OPERATION_NAME: &'static str = "test.queries.get";
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestEvent;
 
     impl DomainEvent for TestEvent {
@@ -162,7 +183,7 @@ mod tests {
     struct TestError;
 
     impl Aggregate for TestAggregate {
-        type Command = String;
+        type Command = TestCommand;
         type Event = TestEvent;
         type Error = TestError;
         type Services = ();
@@ -175,7 +196,7 @@ mod tests {
             _service: &Self::Services,
             sink: &EventSink<Self>,
         ) -> Result<(), Self::Error> {
-            if command == "emit" {
+            if command.0 == "emit" {
                 sink.write(TestEvent, self).await;
             }
 
@@ -193,7 +214,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     struct CapturedCommand {
         aggregate_id: String,
-        command: String,
+        command: TestCommand,
         metadata: HashMap<String, String>,
     }
 
@@ -202,7 +223,7 @@ mod tests {
         async fn execute_with_metadata(
             &self,
             aggregate_id: &str,
-            command: String,
+            command: TestCommand,
             metadata: HashMap<String, String>,
         ) -> Result<(), AggregateError<TestError>> {
             self.calls.lock().unwrap().push(CapturedCommand {
@@ -212,6 +233,30 @@ mod tests {
             });
 
             Ok(())
+        }
+    }
+
+    struct TestViewRepository;
+
+    #[async_trait]
+    impl DynViewRepository<TestView, TestAggregate> for TestViewRepository {
+        async fn load(&self, _view_id: &str) -> Result<Option<TestView>, PersistenceError> {
+            Ok(Some(TestView))
+        }
+
+        async fn load_with_context(
+            &self,
+            _view_id: &str,
+        ) -> Result<Option<(TestView, cqrs_es::persist::ViewContext)>, PersistenceError> {
+            unreachable!("query_handler only loads views")
+        }
+
+        async fn update_view(
+            &self,
+            _view: TestView,
+            _context: cqrs_es::persist::ViewContext,
+        ) -> Result<(), PersistenceError> {
+            unreachable!("query_handler only loads views")
         }
     }
 
@@ -247,7 +292,7 @@ mod tests {
             Caller::Anonymous,
             "aggregate-id",
             &handler_ref,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await
         .unwrap();
@@ -255,7 +300,7 @@ mod tests {
         let calls = handler.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].aggregate_id, "aggregate-id");
-        assert_eq!(calls[0].command, "emit");
+        assert_eq!(calls[0].command, TestCommand("emit".to_string()));
         assert!(calls[0].metadata.contains_key("timestamp"));
     }
 
@@ -269,7 +314,7 @@ mod tests {
             Caller::Anonymous,
             "aggregate-id",
             &state,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await;
 
@@ -289,7 +334,7 @@ mod tests {
             Caller::Anonymous,
             "aggregate-id",
             &state,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await;
 
@@ -312,7 +357,7 @@ mod tests {
             Caller::Actor(actor.clone()),
             "aggregate-id",
             &state,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await
         .unwrap();
@@ -324,7 +369,39 @@ mod tests {
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     resource_id: None,
-                    operation_name: std::any::type_name::<String>(),
+                    operation_name: "test.commands.emit",
+                },
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn query_handler_sends_stable_operation_name() {
+        let state: Arc<dyn DynViewRepository<TestView, TestAggregate>> = Arc::new(TestViewRepository);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+
+        let view = query_handler(
+            Arc::new(CapturingAuthorizationChecker {
+                requests: Arc::clone(&requests),
+            }),
+            Caller::Actor(actor.clone()),
+            "view-id",
+            &state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(view, Some(TestView));
+        assert_eq!(
+            requests.lock().unwrap().as_slice(),
+            &[AuthorizationRequest {
+                caller: Caller::Actor(actor),
+                operation: AuthorizationOperation::Query {
+                    resource_id: None,
+                    operation_name: "test.queries.get",
                 },
             }]
         );

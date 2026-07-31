@@ -1,6 +1,8 @@
 use crate::error::ErrorWrapper;
 use cqrs_es::{Aggregate, View};
-use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, AuthorizationChecker, Caller};
+use shared_kernel::authorization::{
+    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, Caller, CommandOperation, QueryOperation,
+};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -16,7 +18,7 @@ pub async fn command_handler<A>(
 ) -> Result<(), ErrorWrapper<A::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
 {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
 
@@ -33,7 +35,7 @@ pub async fn public_command_handler<A>(
 ) -> Result<(), ErrorWrapper<A::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
 {
     agent_shared::handlers::command_handler(
         ALLOW_ALL_AUTHORIZATION_CHECKER
@@ -71,7 +73,7 @@ pub async fn query_handler<A, V>(
 ) -> Result<Option<V>, ErrorWrapper<A::Error>>
 where
     A: Aggregate,
-    V: View<A>,
+    V: View<A> + QueryOperation,
 {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
 

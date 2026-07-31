@@ -20,6 +20,22 @@ pub struct Actor {
     pub subject: String,
 }
 
+/// Provides the stable operation name for a command.
+pub trait CommandOperation {
+    fn operation_name(&self) -> &'static str;
+}
+
+/// Provides a stable operation name for an authorized direct view lookup.
+///
+/// TODO: Replace this view-based contract with typed query values when the direct repository
+/// query API is redesigned, or when multiple authorized operations need to return the same view
+/// type. The current handler receives no query value, so the view type is temporarily the only
+/// compile-time place to associate a stable operation identity. This assumes one operation per
+/// view and cannot reliably describe query-specific resource identity.
+pub trait QueryOperation {
+    const OPERATION_NAME: &'static str;
+}
+
 /// Adapter trait for request-like inputs that can expose actor information.
 pub trait ToActor: Sync {
     /// Returns the actor represented by this input, if one can be derived.

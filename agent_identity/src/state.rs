@@ -20,7 +20,7 @@ use agent_shared::{application_state::CommandHandler, handlers::public_query_han
 use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
-use shared_kernel::authorization::{AuthorizationChecker, Caller};
+use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,6 +31,34 @@ use tracing::{info, warn};
 /// This is for internal use only within the identity bounded context to ensure
 /// all operations consistently target the one and only profile.
 pub const PROFILE_ID: &str = "PROFILE-001";
+
+impl QueryOperation for ConnectionView {
+    const OPERATION_NAME: &'static str = "identity.connections.get";
+}
+
+impl QueryOperation for AllConnectionsView {
+    const OPERATION_NAME: &'static str = "identity.connections.list";
+}
+
+impl QueryOperation for DocumentView {
+    const OPERATION_NAME: &'static str = "identity.documents.get";
+}
+
+impl QueryOperation for AllDocumentsView {
+    const OPERATION_NAME: &'static str = "identity.documents.list";
+}
+
+impl QueryOperation for ProfileView {
+    const OPERATION_NAME: &'static str = "identity.profile.get";
+}
+
+impl QueryOperation for ServiceView {
+    const OPERATION_NAME: &'static str = "identity.services.get";
+}
+
+impl QueryOperation for AllServicesView {
+    const OPERATION_NAME: &'static str = "identity.services.list";
+}
 
 #[derive(Clone)]
 pub struct IdentityState {

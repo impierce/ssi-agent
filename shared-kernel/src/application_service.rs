@@ -49,21 +49,10 @@ pub trait ApplicationContext: Send + Sync + 'static {
     }
 
     /// Returns the stable authorization operation name for a command.
-    ///
-    /// The default is the command type name, which is enough for contexts with one operation per
-    /// command type. Contexts with enum commands should override this to return variant-level names
-    /// so downstream authorization can distinguish operations such as create, update, and delete.
-    fn command_operation_name(&self, _command: &Self::Command) -> &'static str {
-        std::any::type_name::<Self::Command>()
-    }
+    fn command_operation_name(&self, command: &Self::Command) -> &'static str;
 
     /// Returns the stable authorization operation name for a query.
-    ///
-    /// The default is the query type name. Contexts with enum queries should override this to return
-    /// variant-level names when different query variants need different authorization policies.
-    fn query_operation_name(&self, _query: &Self::Query) -> &'static str {
-        std::any::type_name::<Self::Query>()
-    }
+    fn query_operation_name(&self, query: &Self::Query) -> &'static str;
 }
 
 /// A command message together with routing information and a reply channel.
@@ -340,6 +329,14 @@ mod tests {
         fn query_resource_id(&self, query: &Self::Query) -> Option<String> {
             Some(query.clone())
         }
+
+        fn command_operation_name(&self, _command: &Self::Command) -> &'static str {
+            "test.echo.command"
+        }
+
+        fn query_operation_name(&self, _query: &Self::Query) -> &'static str {
+            "test.echo.query"
+        }
     }
 
     /// A context that always fails, to test error paths.
@@ -363,6 +360,14 @@ mod tests {
 
         async fn handle_query(&self, _query: Self::Query) -> Result<Self::View, Self::QueryError> {
             Err(TestQueryError("query failed".into()))
+        }
+
+        fn command_operation_name(&self, _command: &Self::Command) -> &'static str {
+            "test.failing.command"
+        }
+
+        fn query_operation_name(&self, _query: &Self::Query) -> &'static str {
+            "test.failing.query"
         }
     }
 
@@ -634,7 +639,7 @@ mod tests {
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
                     resource_id: Some("create".to_string()),
-                    operation_name: std::any::type_name::<String>(),
+                    operation_name: "test.echo.command",
                 },
             }]
         );
@@ -664,7 +669,7 @@ mod tests {
                 caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Query {
                     resource_id: Some("my-query".to_string()),
-                    operation_name: std::any::type_name::<String>(),
+                    operation_name: "test.echo.query",
                 },
             }]
         );

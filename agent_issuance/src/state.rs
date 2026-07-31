@@ -5,7 +5,7 @@ use agent_shared::handlers::{command_handler, public_query_handler};
 use agent_shared::UrlAppendHelpers;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
-use shared_kernel::authorization::{AuthorizationChecker, Caller};
+use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -26,6 +26,46 @@ use crate::server_config::views::ServerConfigView;
 use crate::status_list::aggregate::StatusListAggregate;
 use crate::status_list::views::all_status_lists::AllStatusListsView;
 use crate::status_list::views::StatusListView;
+
+impl QueryOperation for ServerConfigView {
+    const OPERATION_NAME: &'static str = "issuance.configurations.get";
+}
+
+impl QueryOperation for CredentialView {
+    const OPERATION_NAME: &'static str = "issuance.credentials.get";
+}
+
+impl QueryOperation for AllCredentialsView {
+    const OPERATION_NAME: &'static str = "issuance.credentials.list";
+}
+
+impl QueryOperation for OfferView {
+    const OPERATION_NAME: &'static str = "issuance.offers.get";
+}
+
+impl QueryOperation for AllOffersView {
+    const OPERATION_NAME: &'static str = "issuance.offers.list";
+}
+
+impl QueryOperation for NonceView {
+    const OPERATION_NAME: &'static str = "issuance.nonces.get";
+}
+
+impl QueryOperation for StatusListView {
+    const OPERATION_NAME: &'static str = "issuance.status_lists.get";
+}
+
+impl QueryOperation for AllStatusListsView {
+    const OPERATION_NAME: &'static str = "issuance.status_lists.list";
+}
+
+impl QueryOperation for PublicOfferView {
+    const OPERATION_NAME: &'static str = "issuance.public_offers.get";
+}
+
+impl QueryOperation for AllPublicOffersView {
+    const OPERATION_NAME: &'static str = "issuance.public_offers.list";
+}
 
 #[derive(Clone)]
 pub struct IssuanceState {
