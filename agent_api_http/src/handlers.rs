@@ -27,6 +27,22 @@ where
         .map_err(ErrorWrapper::CommandHandlerError)
 }
 
+/// Executes a command that is a trusted continuation of an already-authorized operation.
+pub async fn internal_command_handler<A>(
+    authorization_checker: Arc<dyn AuthorizationChecker>,
+    aggregate_id: &str,
+    state: &agent_shared::application_state::CommandHandler<A>,
+    command: <A as cqrs_es::Aggregate>::Command,
+) -> Result<(), ErrorWrapper<A::Error>>
+where
+    A: Aggregate,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
+{
+    agent_shared::handlers::command_handler(authorization_checker, Caller::Internal, aggregate_id, state, command)
+        .await
+        .map_err(ErrorWrapper::CommandHandlerError)
+}
+
 /// Executes a command for public protocol endpoints that are authorized by protocol-specific checks.
 pub async fn public_command_handler<A>(
     aggregate_id: &str,
@@ -78,6 +94,21 @@ where
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
 
     agent_shared::handlers::query_handler(authorization_checker, caller, view_id, state)
+        .await
+        .map_err(ErrorWrapper::QueryHandlerError)
+}
+
+/// Executes a query that is a trusted continuation of an already-authorized operation.
+pub async fn internal_query_handler<A, V>(
+    authorization_checker: Arc<dyn AuthorizationChecker>,
+    view_id: &str,
+    state: &Arc<dyn DynViewRepository<V, A>>,
+) -> Result<Option<V>, ErrorWrapper<A::Error>>
+where
+    A: Aggregate,
+    V: View<A> + QueryOperation,
+{
+    agent_shared::handlers::query_handler(authorization_checker, Caller::Internal, view_id, state)
         .await
         .map_err(ErrorWrapper::QueryHandlerError)
 }

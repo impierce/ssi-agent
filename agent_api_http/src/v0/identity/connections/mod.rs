@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -66,9 +66,8 @@ pub(crate) async fn post_connection(
     .await?;
 
     // Return the connection.
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &connection_id,
         &state.query.connection,
     )

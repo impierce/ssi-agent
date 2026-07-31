@@ -1,6 +1,6 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -162,26 +162,21 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        &state.query.template,
-    )
-    .await?
-    .map(|template_view| {
-        (
-            StatusCode::CREATED,
-            [(
-                header::LOCATION,
-                &format!("{API_VERSION}/get-template-by-id/{template_id}"),
-            )],
-            Json(TemplateDto::from(template_view)),
-        )
-            .into_response()
-    })
-    // TODO: this *should* be an impossible error, what should we return here?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(state.authorization_checker.clone(), &template_id, &state.query.template)
+        .await?
+        .map(|template_view| {
+            (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    &format!("{API_VERSION}/get-template-by-id/{template_id}"),
+                )],
+                Json(TemplateDto::from(template_view)),
+            )
+                .into_response()
+        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -252,9 +247,8 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = query_handler(
+    let new_template = internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &new_template_id,
         &state.query.template,
     )

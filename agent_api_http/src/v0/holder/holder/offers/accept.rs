@@ -1,5 +1,5 @@
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{
@@ -71,18 +71,16 @@ pub(crate) async fn accept(
     };
 
     // Send the Credential Request
-    command_handler(
+    internal_command_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &received_offer_id,
         &state.command.offer,
         command,
     )
     .await?;
 
-    let credentials = match query_handler(
+    let credentials = match internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &received_offer_id,
         &state.query.received_offer,
     )
@@ -105,9 +103,8 @@ pub(crate) async fn accept(
         };
 
         // Add the Credential to the state.
-        command_handler(
+        internal_command_handler(
             state.authorization_checker.clone(),
-            actor.clone(),
             &holder_credential_id,
             &state.command.credential,
             command,
@@ -115,9 +112,8 @@ pub(crate) async fn accept(
         .await?;
     }
 
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &received_offer_id,
         &state.query.received_offer,
     )

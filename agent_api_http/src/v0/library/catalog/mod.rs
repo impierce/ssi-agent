@@ -2,7 +2,7 @@ pub mod openapi;
 pub mod queries;
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
@@ -98,22 +98,17 @@ pub(crate) async fn create_catalog(
     .await?;
 
     // Return the created catalog
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| {
-        (
-            StatusCode::CREATED,
-            [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
-            Json(CatalogDto::from(catalog_view)),
-        )
-            .into_response()
-    })
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
+        .await?
+        .map(|catalog_view| {
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
+                Json(CatalogDto::from(catalog_view)),
+            )
+                .into_response()
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -147,14 +142,9 @@ pub(crate) async fn add_templates_to_catalog(
         template_ids,
     }): Json<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::AddTemplateIds {
         catalog_id: catalog_id.clone(),
@@ -171,15 +161,10 @@ pub(crate) async fn add_templates_to_catalog(
     .await?;
 
     // Return the updated catalog
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
+        .await?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -213,14 +198,9 @@ pub(crate) async fn remove_templates_from_catalog(
         template_ids,
     }): Json<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
+        .await?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::RemoveTemplateIds {
         catalog_id: catalog_id.clone(),

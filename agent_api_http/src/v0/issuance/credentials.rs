@@ -1,6 +1,6 @@
 use crate::error::type_url;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -300,9 +300,8 @@ pub(crate) async fn credentials(
     .await?;
 
     // Return the credential.
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &credential_id,
         &state.query.credential,
     )
@@ -519,9 +518,8 @@ pub async fn patch_credential(
             .next_back()
             .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
 
-        command_handler(
+        internal_command_handler(
             state.authorization_checker.clone(),
-            actor.clone(),
             status_list_id,
             &state.command.status_list,
             command,

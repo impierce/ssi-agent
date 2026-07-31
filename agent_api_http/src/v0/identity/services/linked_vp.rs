@@ -1,5 +1,5 @@
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_command_handler, internal_query_handler};
 use agent_identity::{
     document::{aggregate::Status, command::DocumentCommand},
     service::{aggregate::Service, command::ServiceCommand},
@@ -45,26 +45,19 @@ pub(crate) async fn linked_vp(
     )
     .await?;
 
-    let linked_verifiable_presentation_service = match query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &service_id,
-        &state.query.service,
-    )
-    .await?
-    {
-        Some(Service {
-            service: Some(linked_verifiable_presentation_service),
-            ..
-        }) => linked_verifiable_presentation_service,
-        // TODO: this *should* be an impossible error, what should we return here?
-        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
-    };
+    let linked_verifiable_presentation_service =
+        match internal_query_handler(state.authorization_checker.clone(), &service_id, &state.query.service).await? {
+            Some(Service {
+                service: Some(linked_verifiable_presentation_service),
+                ..
+            }) => linked_verifiable_presentation_service,
+            // TODO: this *should* be an impossible error, what should we return here?
+            _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
+        };
 
     // Query all DID Documents that require an update.
-    let document_ids: Vec<String> = query_handler(
+    let document_ids: Vec<String> = internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         "all_documents",
         &state.query.all_documents,
     )
@@ -92,9 +85,8 @@ pub(crate) async fn linked_vp(
             service: Box::new(linked_verifiable_presentation_service.clone()),
         };
 
-        command_handler(
+        internal_command_handler(
             state.authorization_checker.clone(),
-            actor.clone(),
             document_id,
             &state.command.document,
             command,
@@ -106,9 +98,8 @@ pub(crate) async fn linked_vp(
         .await
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         "all_documents",
         &state.query.all_documents,
     )
