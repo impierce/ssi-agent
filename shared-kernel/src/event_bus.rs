@@ -16,7 +16,7 @@ pub struct CloudEvent {
     pub source: String,
     pub specversion: String,
     #[serde(rename = "type")]
-    #[schema(example = "io.impierce.unicore.offer-created")]
+    #[schema(example = "com.impierce.unicore.offer-created")]
     pub event_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datacontenttype: Option<String>,
@@ -68,7 +68,7 @@ pub fn build_cloud_event(
     payload: serde_json::Value,
     occurred_at: Option<DateTime<Utc>>,
 ) -> CloudEvent {
-    let cloud_type = format!("io.impierce.unicore.{}", event_type.to_case(Case::Kebab));
+    let cloud_type = format!("com.impierce.unicore.{}", event_type.to_case(Case::Kebab));
     let source = format!("/services/{}", aggregate_type.to_lowercase());
     let id = format!("{aggregate_type}:{aggregate_id}:{sequence}");
 
@@ -394,7 +394,7 @@ mod tests {
         );
         assert_eq!(event.id, "offer:123:4");
         assert_eq!(event.source, "/services/offer");
-        assert_eq!(event.event_type, "io.impierce.unicore.offer-created");
+        assert_eq!(event.event_type, "com.impierce.unicore.offer-created");
     }
 
     #[test]
