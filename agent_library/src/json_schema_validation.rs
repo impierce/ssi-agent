@@ -243,30 +243,34 @@ mod tests {
     lazy_static! {
         static ref EXAMPLE_BASIC_OB3: Value = json!({
             "@context": [
-              "https://www.w3.org/ns/credentials/v2",
-              "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+                "https://www.w3.org/ns/credentials/v2",
+                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
             ],
             "id": "http://example.com/credentials/3527",
             "type": ["VerifiableCredential", "AchievementCredential"],
             "issuer": {
-              "id": "https://example.com/issuers/876543",
-              "type": ["Profile"],
-              "name": "Example Corp"
+                "id": "https://example.com/issuers/876543",
+                "type": ["Profile"],
+                "name": "Example Corp"
             },
             "validFrom": "2010-01-01T00:00:00Z",
             "name": "Teamwork Badge",
             "credentialSubject": {
-              "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
-              "type": ["AchievementSubject"],
-              "achievement": {
-                        "id": "https://example.com/achievements/21st-century-skills/teamwork",
-                        "type": ["Achievement"],
-                        "criteria": {
-                            "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
-                        },
-                        "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
-                        "name": "Teamwork"
-                    }
+                "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
+                "type": ["AchievementSubject"],
+                "activityStartDate": "2020-01-01T00:00:00Z",
+                "activityEndDate": "2020-06-01T00:00:00Z",
+                "achievement": {
+                    "id": "https://example.com/achievements/21st-century-skills/teamwork",
+                    "type": ["Achievement"],
+                    "criteria": {
+                        "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+                    },
+                    "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+                    "name": "Teamwork",
+                    "fieldOfStudy": "Business",
+                    "specialization": "Team Leadership"
+                }
             }
         });
         static ref EXAMPLE_BASIC_ELM_EDC: Value = json!({
