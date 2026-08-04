@@ -142,9 +142,14 @@ pub(crate) async fn add_templates_to_catalog(
         template_ids,
     }): Json<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::AddTemplateIds {
         catalog_id: catalog_id.clone(),
@@ -198,9 +203,14 @@ pub(crate) async fn remove_templates_from_catalog(
         template_ids,
     }): Json<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
-        .await?
-        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        &state.query.catalog,
+    )
+    .await?
+    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::RemoveTemplateIds {
         catalog_id: catalog_id.clone(),
@@ -217,15 +227,10 @@ pub(crate) async fn remove_templates_from_catalog(
     .await?;
 
     // Return the updated catalog
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
+        .await?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -441,4 +446,130 @@ pub(crate) async fn delete_catalog(
     )
     .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handlers::public_command_handler;
+    use agent_store::{in_memory::InMemory, library_state};
+    use shared_kernel::{
+        async_trait,
+        authorization::{
+            Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller,
+        },
+    };
+    use std::sync::Mutex;
+
+    struct CapturingAuthorizationChecker {
+        requests: Arc<Mutex<Vec<AuthorizationRequest>>>,
+    }
+
+    #[async_trait]
+    impl AuthorizationChecker for CapturingAuthorizationChecker {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(())
+        }
+    }
+
+    async fn catalog_state(requests: Arc<Mutex<Vec<AuthorizationRequest>>>, catalog_id: &str) -> Arc<LibraryState> {
+        let mut state = library_state(&InMemory, Default::default(), Default::default()).await;
+
+        public_command_handler(
+            catalog_id,
+            &state.command.catalog,
+            CatalogCommand::CreateCatalog {
+                catalog_id: catalog_id.to_string(),
+                display: CatalogDisplay {
+                    name: "Catalog".to_string(),
+                    description: String::new(),
+                    icon: None,
+                },
+                visibility: CatalogVisibility::Private,
+            },
+        )
+        .await
+        .unwrap();
+
+        state.authorization_checker = Arc::new(CapturingAuthorizationChecker { requests });
+        Arc::new(state)
+    }
+
+    fn assert_catalog_mutation_sequence(
+        requests: &[AuthorizationRequest],
+        actor: &Actor,
+        catalog_id: &str,
+        command_operation_name: &'static str,
+    ) {
+        assert_eq!(requests.len(), 3);
+        assert_eq!(requests[0].caller, Caller::Actor(actor.clone()));
+        assert_eq!(requests[1].caller, Caller::Actor(actor.clone()));
+        assert_eq!(requests[2].caller, Caller::Internal);
+
+        assert_eq!(
+            requests[0].operation,
+            AuthorizationOperation::Query {
+                resource_id: None,
+                operation_name: "library.catalogs.get",
+            }
+        );
+        assert_eq!(
+            requests[1].operation,
+            AuthorizationOperation::Command {
+                aggregate_id: catalog_id.to_string(),
+                resource_id: None,
+                operation_name: command_operation_name,
+            }
+        );
+        assert_eq!(
+            requests[2].operation,
+            AuthorizationOperation::Query {
+                resource_id: None,
+                operation_name: "library.catalogs.get",
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn catalog_template_mutations_preserve_the_authorization_boundary() {
+        let catalog_id = "catalog-1";
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+
+        for (operation_name, add) in [
+            ("library.catalogs.templates.add", true),
+            ("library.catalogs.templates.remove", false),
+        ] {
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let state = catalog_state(Arc::clone(&requests), catalog_id).await;
+
+            if add {
+                add_templates_to_catalog(
+                    State(state),
+                    RequestActor(Some(actor.clone())),
+                    Json(AddTemplatesRequest {
+                        catalog_id: catalog_id.to_string(),
+                        template_ids: Vec::new(),
+                    }),
+                )
+                .await
+                .unwrap();
+            } else {
+                remove_templates_from_catalog(
+                    State(state),
+                    RequestActor(Some(actor.clone())),
+                    Json(RemoveTemplatesRequest {
+                        catalog_id: catalog_id.to_string(),
+                        template_ids: Vec::new(),
+                    }),
+                )
+                .await
+                .unwrap();
+            }
+
+            assert_catalog_mutation_sequence(&requests.lock().unwrap(), &actor, catalog_id, operation_name);
+        }
+    }
 }
