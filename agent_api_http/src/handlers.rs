@@ -27,7 +27,9 @@ where
         .map_err(ErrorWrapper::CommandHandlerError)
 }
 
-/// Executes a command that is a trusted continuation of an already-authorized operation.
+/// Executes a command that is a fixed, trusted continuation of an already-authorized operation.
+///
+/// The installed authorization checker must explicitly permit the operation for [`Caller::Internal`].
 pub async fn internal_command_handler<A>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     aggregate_id: &str,
@@ -85,6 +87,7 @@ pub async fn query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     actor: Option<Actor>,
     view_id: &str,
+    resource_id: Option<&str>,
     state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, ErrorWrapper<A::Error>>
 where
@@ -93,22 +96,25 @@ where
 {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
 
-    agent_shared::handlers::query_handler(authorization_checker, caller, view_id, state)
+    agent_shared::handlers::query_handler(authorization_checker, caller, view_id, resource_id, state)
         .await
         .map_err(ErrorWrapper::QueryHandlerError)
 }
 
-/// Executes a query that is a trusted continuation of an already-authorized operation.
+/// Executes a query that is a fixed, trusted continuation of an already-authorized operation.
+///
+/// The installed authorization checker must explicitly permit the operation for [`Caller::Internal`].
 pub async fn internal_query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     view_id: &str,
+    resource_id: Option<&str>,
     state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, ErrorWrapper<A::Error>>
 where
     A: Aggregate,
     V: View<A> + QueryOperation,
 {
-    agent_shared::handlers::query_handler(authorization_checker, Caller::Internal, view_id, state)
+    agent_shared::handlers::query_handler(authorization_checker, Caller::Internal, view_id, resource_id, state)
         .await
         .map_err(ErrorWrapper::QueryHandlerError)
 }

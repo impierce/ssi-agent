@@ -55,6 +55,7 @@ pub(crate) async fn credential(
         state.authorization_checker.clone(),
         actor.clone(),
         &credential_id,
+        Some(&credential_id),
         &state.query.credential,
     )
     .await?
@@ -120,6 +121,7 @@ pub(crate) async fn credentials(
         library_state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &library_state.query.template,
     )
     .await?
@@ -158,6 +160,7 @@ pub(crate) async fn credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         SERVER_CONFIG_ID,
+        Some(SERVER_CONFIG_ID),
         &state.query.server_config,
     )
     .await?
@@ -248,6 +251,7 @@ pub(crate) async fn credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &state.query.offer,
     )
     .await?
@@ -303,6 +307,7 @@ pub(crate) async fn credentials(
     internal_query_handler(
         state.authorization_checker.clone(),
         &credential_id,
+        Some(&credential_id),
         &state.query.credential,
     )
     .await?
@@ -455,6 +460,7 @@ pub(crate) async fn all_credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_credentials",
+        None,
         &state.query.all_credentials,
     )
     .await?
@@ -483,6 +489,7 @@ pub async fn patch_credential(
         state.authorization_checker.clone(),
         actor.clone(),
         &credential_id,
+        Some(&credential_id),
         &state.query.credential,
     )
     .await?

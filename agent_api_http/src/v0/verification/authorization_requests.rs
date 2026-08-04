@@ -26,6 +26,7 @@ pub(crate) async fn all_authorization_requests(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_authorization_requests",
+        None,
         &state.query.all_authorization_requests,
     )
     .await?
@@ -50,6 +51,7 @@ pub(crate) async fn authorization_request(
         state.authorization_checker.clone(),
         actor.clone(),
         &authorization_request_id,
+        Some(&authorization_request_id),
         &state.query.authorization_request,
     )
     .await?
@@ -102,6 +104,7 @@ pub(crate) async fn authorization_requests(
     internal_query_handler(
         verification_state.authorization_checker.clone(),
         &state,
+        Some(&state),
         &verification_state.query.authorization_request,
     )
     .await?

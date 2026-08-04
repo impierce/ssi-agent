@@ -162,21 +162,26 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    internal_query_handler(state.authorization_checker.clone(), &template_id, &state.query.template)
-        .await?
-        .map(|template_view| {
-            (
-                StatusCode::CREATED,
-                [(
-                    header::LOCATION,
-                    &format!("{API_VERSION}/get-template-by-id/{template_id}"),
-                )],
-                Json(TemplateDto::from(template_view)),
-            )
-                .into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &template_id,
+        Some(&template_id),
+        &state.query.template,
+    )
+    .await?
+    .map(|template_view| {
+        (
+            StatusCode::CREATED,
+            [(
+                header::LOCATION,
+                &format!("{API_VERSION}/get-template-by-id/{template_id}"),
+            )],
+            Json(TemplateDto::from(template_view)),
+        )
+            .into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -213,6 +218,7 @@ pub(crate) async fn duplicate_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &source_template_id,
+        Some(&source_template_id),
         &state.query.template,
     )
     .await?
@@ -250,6 +256,7 @@ pub(crate) async fn duplicate_template(
     let new_template = internal_query_handler(
         state.authorization_checker.clone(),
         &new_template_id,
+        Some(&new_template_id),
         &state.query.template,
     )
     .await?
@@ -324,6 +331,7 @@ pub(crate) async fn update_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -522,6 +530,7 @@ pub(crate) async fn get_templates(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_templates",
+        None,
         &state.query.all_templates,
     )
     .await?
@@ -568,6 +577,7 @@ pub(crate) async fn get_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -615,6 +625,7 @@ pub(crate) async fn delete_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?

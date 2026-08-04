@@ -44,6 +44,7 @@ pub(crate) async fn get_documents(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_documents",
+        None,
         &state.query.all_documents,
     )
     .await?
@@ -88,6 +89,7 @@ pub(crate) async fn get_document(
         state.authorization_checker.clone(),
         actor.clone(),
         &document_id,
+        Some(&document_id),
         &state.query.document,
     )
     .await?

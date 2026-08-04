@@ -44,6 +44,7 @@ pub async fn query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     caller: Caller,
     view_id: &str,
+    resource_id: Option<&str>,
     state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, QueryHandlerError>
 where
@@ -53,7 +54,7 @@ where
     let authorization_request = AuthorizationRequest {
         caller,
         operation: AuthorizationOperation::Query {
-            resource_id: None,
+            resource_id: resource_id.map(str::to_owned),
             operation_name: V::OPERATION_NAME,
         },
     };
@@ -389,6 +390,7 @@ mod tests {
             }),
             Caller::Actor(actor.clone()),
             "view-id",
+            Some("resource-id"),
             &state,
         )
         .await
@@ -400,7 +402,7 @@ mod tests {
             &[AuthorizationRequest {
                 caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Query {
-                    resource_id: None,
+                    resource_id: Some("resource-id".to_string()),
                     operation_name: "test.queries.get",
                 },
             }]

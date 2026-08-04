@@ -98,17 +98,22 @@ pub(crate) async fn create_catalog(
     .await?;
 
     // Return the created catalog
-    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
-                Json(CatalogDto::from(catalog_view)),
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
+            Json(CatalogDto::from(catalog_view)),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -146,6 +151,7 @@ pub(crate) async fn add_templates_to_catalog(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -166,10 +172,15 @@ pub(crate) async fn add_templates_to_catalog(
     .await?;
 
     // Return the updated catalog
-    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -207,6 +218,7 @@ pub(crate) async fn remove_templates_from_catalog(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -227,10 +239,15 @@ pub(crate) async fn remove_templates_from_catalog(
     .await?;
 
     // Return the updated catalog
-    internal_query_handler(state.authorization_checker.clone(), &catalog_id, &state.query.catalog)
-        .await?
-        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -265,6 +282,7 @@ pub(crate) async fn change_catalog_appearance(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -289,6 +307,7 @@ pub(crate) async fn change_catalog_appearance(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -327,6 +346,7 @@ pub(crate) async fn make_catalog_public(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -378,6 +398,7 @@ pub(crate) async fn make_catalog_private(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -428,6 +449,7 @@ pub(crate) async fn delete_catalog(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -510,7 +532,7 @@ mod tests {
         assert_eq!(
             requests[0].operation,
             AuthorizationOperation::Query {
-                resource_id: None,
+                resource_id: Some(catalog_id.to_string()),
                 operation_name: "library.catalogs.get",
             }
         );
@@ -525,7 +547,7 @@ mod tests {
         assert_eq!(
             requests[2].operation,
             AuthorizationOperation::Query {
-                resource_id: None,
+                resource_id: Some(catalog_id.to_string()),
                 operation_name: "library.catalogs.get",
             }
         );

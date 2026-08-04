@@ -106,6 +106,7 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
             self.verification_state.authorization_checker.clone(),
             Caller::Internal,
             &authorization_request_id,
+            Some(&authorization_request_id),
             &self.verification_state.query.authorization_request,
         )
         .await?

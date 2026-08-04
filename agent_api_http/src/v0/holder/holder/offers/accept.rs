@@ -47,6 +47,7 @@ pub(crate) async fn accept(
         state.authorization_checker.clone(),
         actor.clone(),
         &received_offer_id,
+        Some(&received_offer_id),
         &state.query.received_offer,
     )
     .await?
@@ -82,6 +83,7 @@ pub(crate) async fn accept(
     let credentials = match internal_query_handler(
         state.authorization_checker.clone(),
         &received_offer_id,
+        Some(&received_offer_id),
         &state.query.received_offer,
     )
     .await?
@@ -115,6 +117,7 @@ pub(crate) async fn accept(
     internal_query_handler(
         state.authorization_checker.clone(),
         &received_offer_id,
+        Some(&received_offer_id),
         &state.query.received_offer,
     )
     .await?

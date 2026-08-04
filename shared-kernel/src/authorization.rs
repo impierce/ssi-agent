@@ -10,6 +10,11 @@ pub enum Caller {
     Actor(Actor),
 
     /// Trusted application code dispatching on its own behalf.
+    ///
+    /// This provenance is intended for fixed continuations of an operation that has already been
+    /// authorized, or for application work for which no external actor exists. It is not an
+    /// unconditional bypass: authorization checkers decide explicitly which operations permit an
+    /// internal caller. Initiating-actor audit lineage is separate from this authorization fact.
     Internal,
 }
 
@@ -21,17 +26,23 @@ pub struct Actor {
 }
 
 /// Provides the stable operation name for a command.
+///
+/// Operation names are compatibility-sensitive authorization identifiers. They describe the
+/// attempted operation rather than a permission and must not be renamed casually once published.
 pub trait CommandOperation {
     fn operation_name(&self) -> &'static str;
 }
 
 /// Provides a stable operation name for an authorized direct view lookup.
 ///
+/// Operation names are compatibility-sensitive authorization identifiers. They describe the
+/// attempted operation rather than a permission and must not be renamed casually once published.
+///
 /// TODO: Replace this view-based contract with typed query values when the direct repository
 /// query API is redesigned, or when multiple authorized operations need to return the same view
 /// type. The current handler receives no query value, so the view type is temporarily the only
 /// compile-time place to associate a stable operation identity. This assumes one operation per
-/// view and cannot reliably describe query-specific resource identity.
+/// view; resource identity is supplied separately at dispatch and remains untyped.
 pub trait QueryOperation {
     const OPERATION_NAME: &'static str;
 }

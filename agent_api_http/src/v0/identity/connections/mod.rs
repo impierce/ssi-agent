@@ -69,6 +69,7 @@ pub(crate) async fn post_connection(
     internal_query_handler(
         state.authorization_checker.clone(),
         &connection_id,
+        Some(&connection_id),
         &state.query.connection,
     )
     .await?
@@ -119,6 +120,7 @@ pub(crate) async fn get_connections(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_connections",
+        None,
         &state.query.all_connections,
     )
     .await?
@@ -164,6 +166,7 @@ pub(crate) async fn get_connection(
         state.authorization_checker.clone(),
         actor.clone(),
         &id,
+        Some(&id),
         &state.query.connection,
     )
     .await?
