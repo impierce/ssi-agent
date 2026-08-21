@@ -18,11 +18,12 @@ use std::{collections::HashMap, sync::Arc};
 // well: every template returned here is by definition published and public, so both fields would be
 // constants. `modifiedAt` is kept because, absent a versioning system, it is the only signal a
 // reader has of how fresh a template is.
-/// Data transfer object for publicly available Templates.
-///
-/// A reduced projection of a template, carrying only what is needed to understand and render it.
-/// Templates carry no public identifier: a reader that imports one assigns its own, and can refer
-/// to an entry by its position in the returned array in the meantime.
+//
+// Data transfer object for publicly available Templates.
+//
+// A reduced projection of a template, carrying only what is needed to understand and render it.
+// Templates carry no public identifier: a reader that imports one assigns its own, and can refer
+// to an entry by its position in the returned array in the meantime.
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(as = PublicTemplate)]

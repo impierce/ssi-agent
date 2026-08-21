@@ -1827,12 +1827,6 @@ components:
           type: string
     PublicTemplate:
       type: object
-      description: |-
-        Data transfer object for publicly available Templates.
-
-        A reduced projection of a template, carrying only what is needed to understand and render it.
-        Templates carry no public identifier: a reader that imports one assigns its own, and can refer
-        to an entry by its position in the returned array in the meantime.
       required:
       - title
       - dataModel
