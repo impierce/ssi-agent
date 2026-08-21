@@ -2158,7 +2158,7 @@ tags:
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
 - name: Public
-  description: Unauthenticated endpoints exposing publicly available information.
+  description: Endpoints that are publicly reachable without authentication, used to expose publicly available information or communicate with external systems.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation

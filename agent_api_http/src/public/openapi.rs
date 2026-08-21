@@ -5,7 +5,7 @@ use utoipa::OpenApi;
 #[openapi(
     paths(get_public_templates),
     tags(
-        (name = "Public", description = "Unauthenticated endpoints exposing publicly available information.")
+        (name = "Public", description = "Endpoints that are publicly reachable without authentication, used to expose publicly available information or communicate with external systems.")
     )
 )]
 pub struct PublicApi;
