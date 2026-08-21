@@ -9,6 +9,22 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
+  /public/templates:
+    get:
+      tags:
+      - Public
+      summary: List all public templates
+      description: Lists every template that is publicly visible and published. No authentication is required.
+      operationId: get_public_templates
+      responses:
+        '200':
+          description: All public templates retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicTemplate'
   /v0/add-templates-to-catalog:
     post:
       tags:
@@ -1809,6 +1825,60 @@ components:
           - Inactive
         templateId:
           type: string
+    PublicTemplate:
+      type: object
+      description: |-
+        Data transfer object for publicly available Templates.
+
+        A reduced projection of a template, carrying only what is needed to understand and render it.
+        Templates carry no public identifier: a reader that imports one assigns its own, and can refer
+        to an entry by its position in the returned array in the meantime.
+      required:
+      - title
+      - dataModel
+      - holderType
+      - type
+      - credentialExpiration
+      properties:
+        credentialExpiration:
+          $ref: '#/components/schemas/Expiration'
+        dataModel:
+          $ref: '#/components/schemas/DataModel'
+        description:
+          type:
+          - string
+          - 'null'
+        display:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Display'
+        holderType:
+          $ref: '#/components/schemas/HolderType'
+        modifiedAt:
+          type:
+          - string
+          - 'null'
+        schema: {}
+        schemaPropertiesAttributes:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyAttribute'
+          propertyNames:
+            type: string
+        tags:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        title:
+          type: string
+        type:
+          type: array
+          items:
+            type: string
     RemoveConnectionRequest:
       type: object
       required:
@@ -2093,6 +2163,8 @@ tags:
   description: Create and manage templates which provide the structure for credentials to be issued.
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
+- name: Public
+  description: Unauthenticated endpoints exposing publicly available information.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation

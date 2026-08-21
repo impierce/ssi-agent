@@ -17,6 +17,7 @@ use utoipa::OpenApi;
         (path = "/v0", api = crate::v0::issuance::openapi::IssuanceApi),
         (path = "/v0", api = crate::v0::templates::openapi::TemplatesApi),
         (path = "/v0", api = crate::v0::library::catalog::openapi::CatalogsApi),
+        (path = "/public", api = crate::public::openapi::PublicApi),
     )
 )]
 pub struct ApiDoc;
