@@ -2,13 +2,14 @@ use crate::services::IdentityServices;
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Url;
+use identity_credential::credential::Credential;
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
+use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent, openapi::credentials};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Connection {
@@ -36,7 +37,10 @@ pub enum Validation {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct LinkedVpValidation {
-    // TODO: add validation!
+    pub url: Url,
+    pub result: ValidationResult,
+    #[schema(schema_with = credentials)]
+    pub credentials: Vec<Credential>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
@@ -99,7 +103,7 @@ impl Aggregate for Connection {
                 let (dids, domain_linkage_valid) = services.fetch_linked_dids(&url).await?;
                 let now = services.now();
 
-                let validations = vec![Validation::DomainLinkage(DomainLinkageValidation {
+                let mut validations = vec![Validation::DomainLinkage(DomainLinkageValidation {
                     domain: url.clone(),
                     result: ValidationResult {
                         valid: domain_linkage_valid,
@@ -107,6 +111,13 @@ impl Aggregate for Connection {
                         last_validated_at: now,
                     },
                 })];
+                validations.extend(
+                    services
+                        .fetch_linked_vp_validations(&dids)
+                        .await
+                        .into_iter()
+                        .map(Validation::LinkedVp),
+                );
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
@@ -130,7 +141,7 @@ impl Aggregate for Connection {
                 let (new_dids, domain_linkage_valid) = services.fetch_linked_dids(domain_ref).await?;
                 let now = services.now();
 
-                let validations = vec![Validation::DomainLinkage(DomainLinkageValidation {
+                let mut validations = vec![Validation::DomainLinkage(DomainLinkageValidation {
                     domain: domain_ref.clone(),
                     result: ValidationResult {
                         valid: domain_linkage_valid,
@@ -138,6 +149,13 @@ impl Aggregate for Connection {
                         last_validated_at: now,
                     },
                 })];
+                validations.extend(
+                    services
+                        .fetch_linked_vp_validations(&new_dids)
+                        .await
+                        .into_iter()
+                        .map(Validation::LinkedVp),
+                );
 
                 let proposed = PendingChanges {
                     dids: Some(new_dids),

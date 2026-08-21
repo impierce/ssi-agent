@@ -1548,6 +1548,117 @@ components:
           example: '0x1234567890'
     LinkedVpValidation:
       type: object
+      required:
+      - url
+      - result
+      - credentials
+      properties:
+        credentials:
+          type: array
+          items:
+            type: object
+            required:
+            - '@context'
+            - type
+            - credentialSubject
+            - issuer
+            - issuanceDate
+            properties:
+              '@context':
+                oneOf:
+                - oneOf:
+                  - type: string
+                    format: uri
+                  - type: object
+                    additionalProperties: true
+                - type: array
+                  items:
+                    oneOf:
+                    - type: string
+                      format: uri
+                    - type: object
+                      additionalProperties: true
+              credentialSchema:
+                oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+              credentialStatus:
+                type: object
+                additionalProperties: true
+              credentialSubject:
+                oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+              evidence:
+                oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+              expirationDate:
+                type: string
+                format: date-time
+              id:
+                type: string
+                format: uri
+              issuanceDate:
+                type: string
+                format: date-time
+              issuer:
+                oneOf:
+                - type: string
+                  format: uri
+                - type: object
+                  required:
+                  - id
+                  properties:
+                    id:
+                      type: string
+                      format: uri
+                  additionalProperties: true
+              nonTransferable:
+                type: boolean
+              proof:
+                type: object
+                additionalProperties: true
+              refreshService:
+                oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+              termsOfUse:
+                oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+              type:
+                oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+            additionalProperties: true
+        result:
+          $ref: '#/components/schemas/ValidationResult'
+        url:
+          type: string
+          format: uri
     Logo:
       type: object
       properties:

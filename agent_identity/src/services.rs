@@ -1,19 +1,25 @@
-use crate::connection::error::ConnectionError;
+use crate::connection::{
+    aggregate::{LinkedVpValidation, ValidationResult},
+    error::ConnectionError,
+};
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
-use identity_did::DIDUrl;
-use identity_did::DID;
+use identity_did::{CoreDID, DIDUrl, DID};
 use identity_iota::{
-    core::{FromJson, ToJson},
-    credential::JwtCredentialValidationOptions,
+    core::{FromJson, Object, ToJson},
+    credential::{
+        Credential, DecodedJwtPresentation, FailFast, Jwt, JwtCredentialValidationOptions, JwtCredentialValidator,
+        JwtCredentialValidatorUtils, JwtPresentationValidationOptions, JwtPresentationValidator, StatusCheck,
+    },
+    document::CoreDocument,
 };
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::Client;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 use url::Url;
 
 /// Identity services.
@@ -127,6 +133,109 @@ impl IdentityServices {
         Ok((linked_dids, all_valid))
     }
 
+    pub async fn fetch_linked_vp_validations(&self, dids: &[DIDUrl]) -> Vec<LinkedVpValidation> {
+        let mut validations = Vec::new();
+
+        for did in dids {
+            let document = match self.subject.resolver.resolve(did.did().as_str()).await {
+                Ok(document) => document,
+                Err(error) => {
+                    warn!("Failed to resolve DID {did} for linked VP validation: {error}");
+                    continue;
+                }
+            };
+
+            for url in linked_verifiable_presentation_urls(&document) {
+                validations.push(self.validate_linked_verifiable_presentation(&document, url).await);
+            }
+        }
+
+        validations
+    }
+
+    async fn validate_linked_verifiable_presentation(
+        &self,
+        holder_document: &CoreDocument,
+        url: Url,
+    ) -> LinkedVpValidation {
+        let last_validated_at = self.now();
+        let result = self
+            .validated_credentials(holder_document, &url)
+            .await
+            .map_err(|error| error.to_string());
+
+        match result {
+            Ok(credentials) => LinkedVpValidation {
+                url: url.into(),
+                result: ValidationResult {
+                    valid: true,
+                    error: None,
+                    last_validated_at,
+                },
+                credentials,
+            },
+            Err(error) => LinkedVpValidation {
+                url: url.into(),
+                result: ValidationResult {
+                    valid: false,
+                    error: Some(error),
+                    last_validated_at,
+                },
+                credentials: Vec::new(),
+            },
+        }
+    }
+
+    async fn validated_credentials(
+        &self,
+        holder_document: &CoreDocument,
+        url: &Url,
+    ) -> anyhow::Result<Vec<Credential>> {
+        let presentation_jwt = self
+            .client
+            .get(url.as_str())
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        let presentation: DecodedJwtPresentation<Jwt> =
+            JwtPresentationValidator::with_signature_verifier(SignatureVerifier)
+                .validate(
+                    &Jwt::from(presentation_jwt),
+                    holder_document,
+                    &JwtPresentationValidationOptions::default(),
+                )
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let validator = JwtCredentialValidator::with_signature_verifier(SignatureVerifier);
+        let options = JwtCredentialValidationOptions::new().status_check(StatusCheck::SkipUnsupported);
+        let mut credentials = Vec::new();
+
+        for credential_jwt in presentation.presentation.verifiable_credential {
+            let issuer: CoreDID = match JwtCredentialValidatorUtils::extract_issuer_from_jwt(&credential_jwt) {
+                Ok(issuer) => issuer,
+                Err(error) => {
+                    warn!("Failed to extract linked credential issuer: {error}");
+                    continue;
+                }
+            };
+            let issuer_document = match self.subject.resolver.resolve(issuer.as_str()).await {
+                Ok(document) => document,
+                Err(error) => {
+                    warn!("Failed to resolve linked credential issuer {issuer}: {error}");
+                    continue;
+                }
+            };
+
+            match validator.validate::<_, Object>(&credential_jwt, &issuer_document, &options, FailFast::FirstError) {
+                Ok(credential) => credentials.push(credential.credential),
+                Err(error) => warn!("Failed to validate linked credential issued by {issuer}: {error}"),
+            }
+        }
+
+        Ok(credentials)
+    }
+
     async fn fetch_domain_linkage_configuration(
         &self,
         url: &Url,
@@ -165,9 +274,42 @@ impl IdentityServices {
     }
 }
 
+fn linked_verifiable_presentation_urls(document: &CoreDocument) -> Vec<Url> {
+    document
+        .service()
+        .iter()
+        .filter(|service| service.type_().contains("LinkedVerifiablePresentation"))
+        .filter_map(|service| service.service_endpoint().to_json_value().ok())
+        .flat_map(|endpoint| match endpoint {
+            serde_json::Value::String(url) => vec![url],
+            serde_json::Value::Array(urls) => urls
+                .into_iter()
+                .filter_map(|url| url.as_str().map(ToOwned::to_owned))
+                .collect(),
+            _ => Vec::new(),
+        })
+        .filter_map(|url| {
+            url.parse()
+                .inspect_err(|error| warn!("Failed to parse linked VP URL '{url}': {error}"))
+                .ok()
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use identity_core::{common::Object, convert::FromJson};
+    use identity_credential::{
+        credential::{Credential, CredentialBuilder, Jwt, Subject as CredentialSubject},
+        presentation::{JwtPresentationOptions, PresentationBuilder},
+    };
+    use identity_document::document::CoreDocument;
+    use identity_iota::{
+        storage::{JwkDocumentExt, JwsSignatureOptions, KeyIdMemstore, Storage},
+        verification::{jws::JwsAlgorithm, MethodScope},
+    };
+    use identity_storage::JwkMemStore;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
@@ -188,6 +330,131 @@ mod tests {
             claims["iss"],
             "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM"
         );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_returns_validated_credentials() {
+        let mock_server = MockServer::start().await;
+        let holder_did = format!("did:web:localhost%3A{}", mock_server.address().port());
+        let mut holder_document = CoreDocument::from_json_value(serde_json::json!({
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": holder_did
+        }))
+        .unwrap();
+        let storage = Storage::new(JwkMemStore::new(), KeyIdMemstore::new());
+        let fragment = holder_document
+            .generate_method(
+                &storage,
+                JwkMemStore::ED25519_KEY_TYPE,
+                JwsAlgorithm::EdDSA,
+                None,
+                MethodScope::assertion_method(),
+            )
+            .await
+            .unwrap();
+
+        let credential: Credential = CredentialBuilder::new(Object::new())
+            .issuer(holder_document.id().to_url())
+            .type_("Endorsement")
+            .subject(
+                CredentialSubject::from_json_value(serde_json::json!({
+                    "id": holder_document.id().as_str(),
+                    "Content": "Awesome collaboration!"
+                }))
+                .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let credential_jwt = holder_document
+            .create_credential_jwt(&credential, &storage, &fragment, &JwsSignatureOptions::default(), None)
+            .await
+            .unwrap();
+        let presentation = PresentationBuilder::new(holder_document.id().to_url().into(), Object::new())
+            .credential(credential_jwt)
+            .build()
+            .unwrap();
+        let presentation_jwt: Jwt = holder_document
+            .create_presentation_jwt(
+                &presentation,
+                &storage,
+                &fragment,
+                &JwsSignatureOptions::default(),
+                &JwtPresentationOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        let presentation_url = format!("{}/linked-vp", mock_server.uri());
+        let linked_vp_service = identity_document::service::Service::builder(Default::default())
+            .id(format!("{holder_did}#linked-verifiable-presentation-service")
+                .parse()
+                .unwrap())
+            .type_("LinkedVerifiablePresentation")
+            .service_endpoint(presentation_url.parse::<identity_core::common::Url>().unwrap())
+            .build()
+            .unwrap();
+        holder_document.insert_service(linked_vp_service).unwrap();
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&holder_document))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/linked-vp"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(presentation_jwt.as_str()))
+            .mount(&mock_server)
+            .await;
+
+        let services = IdentityServices::default();
+        let resolved_document = services.subject.resolver.resolve(&holder_did).await.unwrap();
+        assert_eq!(linked_verifiable_presentation_urls(&resolved_document).len(), 1);
+        let validations = services
+            .fetch_linked_vp_validations(&[holder_did.parse().unwrap()])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        assert!(validations[0].result.valid);
+        assert_eq!(validations[0].credentials, vec![credential]);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_reports_invalid_presentations() {
+        let mock_server = MockServer::start().await;
+        let holder_did = format!("did:web:localhost%3A{}", mock_server.address().port());
+        let presentation_url = format!("{}/linked-vp", mock_server.uri());
+        let holder_document = serde_json::json!({
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": holder_did,
+            "service": [{
+                "id": format!("{holder_did}#linked-verifiable-presentation-service"),
+                "type": "LinkedVerifiablePresentation",
+                "serviceEndpoint": presentation_url
+            }]
+        });
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(holder_document))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/linked-vp"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not-a-jwt"))
+            .mount(&mock_server)
+            .await;
+
+        let services = IdentityServices::default();
+        let validations = services
+            .fetch_linked_vp_validations(&[holder_did.parse().unwrap()])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        assert!(!validations[0].result.valid);
+        assert!(validations[0].result.error.is_some());
+        assert!(validations[0].credentials.is_empty());
     }
 
     #[tokio::test]
