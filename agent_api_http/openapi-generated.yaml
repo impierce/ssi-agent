@@ -1432,6 +1432,13 @@ components:
       - domain
       - result
       properties:
+        did:
+          type:
+          - string
+          - 'null'
+          description: |-
+            The linked DID this result applies to, or `None` when the result covers the domain as a
+            whole (e.g. no linked DIDs could be extracted from its DID configuration).
         domain:
           type: string
           format: uri
@@ -1562,116 +1569,149 @@ components:
         wallet_address:
           type: string
           example: '0x1234567890'
+    LinkedCredentialValidation:
+      type: object
+      required:
+      - jwt
+      - result
+      properties:
+        credential:
+          type: object
+          required:
+          - '@context'
+          - type
+          - credentialSubject
+          - issuer
+          - issuanceDate
+          properties:
+            '@context':
+              oneOf:
+              - oneOf:
+                - type: string
+                  format: uri
+                - type: object
+                  additionalProperties: true
+              - type: array
+                items:
+                  oneOf:
+                  - type: string
+                    format: uri
+                  - type: object
+                    additionalProperties: true
+            credentialSchema:
+              oneOf:
+              - type: object
+                additionalProperties: true
+              - type: array
+                items:
+                  type: object
+                  additionalProperties: true
+            credentialStatus:
+              type: object
+              additionalProperties: true
+            credentialSubject:
+              oneOf:
+              - type: object
+                additionalProperties: true
+              - type: array
+                items:
+                  type: object
+                  additionalProperties: true
+            evidence:
+              oneOf:
+              - type: object
+                additionalProperties: true
+              - type: array
+                items:
+                  type: object
+                  additionalProperties: true
+            expirationDate:
+              type: string
+              format: date-time
+            id:
+              type: string
+              format: uri
+            issuanceDate:
+              type: string
+              format: date-time
+            issuer:
+              oneOf:
+              - type: string
+                format: uri
+              - type: object
+                required:
+                - id
+                properties:
+                  id:
+                    type: string
+                    format: uri
+                additionalProperties: true
+            nonTransferable:
+              type: boolean
+            proof:
+              type: object
+              additionalProperties: true
+            refreshService:
+              oneOf:
+              - type: object
+                additionalProperties: true
+              - type: array
+                items:
+                  type: object
+                  additionalProperties: true
+            termsOfUse:
+              oneOf:
+              - type: object
+                additionalProperties: true
+              - type: array
+                items:
+                  type: object
+                  additionalProperties: true
+            type:
+              oneOf:
+              - type: string
+              - type: array
+                items:
+                  type: string
+          additionalProperties: true
+        jwt:
+          type: string
+          description: The raw credential JWT exactly as it appeared in the presentation.
+        result:
+          $ref: '#/components/schemas/ValidationResult'
+          description: |-
+            Cryptographic and semantic validity against the credential's declared issuer DID. A valid
+            result does not establish that the issuer is trusted or associated with a known domain.
     LinkedVpValidation:
       type: object
       required:
       - url
+      - did
+      - domain_linkage_valid
       - result
       - credentials
       properties:
         credentials:
           type: array
           items:
-            type: object
-            required:
-            - '@context'
-            - type
-            - credentialSubject
-            - issuer
-            - issuanceDate
-            properties:
-              '@context':
-                oneOf:
-                - oneOf:
-                  - type: string
-                    format: uri
-                  - type: object
-                    additionalProperties: true
-                - type: array
-                  items:
-                    oneOf:
-                    - type: string
-                      format: uri
-                    - type: object
-                      additionalProperties: true
-              credentialSchema:
-                oneOf:
-                - type: object
-                  additionalProperties: true
-                - type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              credentialStatus:
-                type: object
-                additionalProperties: true
-              credentialSubject:
-                oneOf:
-                - type: object
-                  additionalProperties: true
-                - type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              evidence:
-                oneOf:
-                - type: object
-                  additionalProperties: true
-                - type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              expirationDate:
-                type: string
-                format: date-time
-              id:
-                type: string
-                format: uri
-              issuanceDate:
-                type: string
-                format: date-time
-              issuer:
-                oneOf:
-                - type: string
-                  format: uri
-                - type: object
-                  required:
-                  - id
-                  properties:
-                    id:
-                      type: string
-                      format: uri
-                  additionalProperties: true
-              nonTransferable:
-                type: boolean
-              proof:
-                type: object
-                additionalProperties: true
-              refreshService:
-                oneOf:
-                - type: object
-                  additionalProperties: true
-                - type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              termsOfUse:
-                oneOf:
-                - type: object
-                  additionalProperties: true
-                - type: array
-                  items:
-                    type: object
-                    additionalProperties: true
-              type:
-                oneOf:
-                - type: string
-                - type: array
-                  items:
-                    type: string
-            additionalProperties: true
+            $ref: '#/components/schemas/LinkedCredentialValidation'
+          description: |-
+            Every credential embedded in the presentation, each with its own validation outcome.
+            Credentials that failed validation are still returned, flagged as invalid.
+        did:
+          type: string
+          description: The linked DID whose DID Document advertised this presentation.
+        domain_linkage_valid:
+          type: boolean
+          description: |-
+            Whether `did` is verifiably linked to the connection's domain. When `false` the
+            presentation is still fetched, validated and returned, but nothing ties it to the domain.
+            The corresponding [`DomainLinkageValidation`] contains the linkage error.
         result:
           $ref: '#/components/schemas/ValidationResult'
+          description: |-
+            Outcome of validating the presentation itself. `valid` is `true` only when the
+            presentation's signature verified *and* every embedded credential validated.
         url:
           type: string
           format: uri

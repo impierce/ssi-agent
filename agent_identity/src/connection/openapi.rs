@@ -1,13 +1,9 @@
 use utoipa::openapi::{
     schema::{AdditionalProperties, SchemaType},
-    Array, ArrayBuilder, KnownFormat, Object, ObjectBuilder, OneOfBuilder, SchemaFormat, Type,
+    ArrayBuilder, KnownFormat, Object, ObjectBuilder, OneOfBuilder, SchemaFormat, Type,
 };
 
-pub(super) fn credentials() -> Array {
-    ArrayBuilder::new().items(credential()).build()
-}
-
-fn credential() -> Object {
+pub(super) fn credential() -> Object {
     ObjectBuilder::new()
         .property("@context", one_or_many(context()))
         .property("id", uri())
@@ -84,9 +80,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn credentials_schema_exposes_credential_fields() {
-        let schema = serde_json::to_value(credentials()).unwrap();
-        let credential = schema["items"]["properties"].as_object().unwrap();
+    fn credential_schema_exposes_credential_fields() {
+        let schema = serde_json::to_value(credential()).unwrap();
+        let credential = schema["properties"].as_object().unwrap();
 
         assert!(credential.contains_key("issuer"));
         assert!(credential.contains_key("credentialSubject"));

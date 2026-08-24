@@ -78,12 +78,15 @@ ignore = [
     "RUSTSEC-2026-0195",
 
     # RUSTSEC-2026-0258: h2 0.3.27 — unbounded empty DATA frames (low severity DoS)
-    # The instance of h2 reachable from ssi-agent's public-facing API server has already been
-    # fixed by upgrading to a patched version. The remaining instance is only used by the
-    # application's outbound HTTP client, never by the public listener, so it can only be
-    # triggered by a server ssi-agent chooses to connect to (e.g. a malicious/compromised
-    # did:web host or credential issuer) — not by an unauthenticated attacker reaching our API.
-    # No patched release fixing this remaining instance is available yet.
+    # The vulnerable h2 instance is selected by reqwest 0.11.27 through hyper 0.14.32. Its
+    # workspace paths include did-web 0.2.2, iota-sdk 1.1.5, and the OpenID4VC crates. These are
+    # outbound clients, so a malicious or compromised remote HTTP/2 peer can trigger the issue.
+    # Connection commands request CommandAuthorization::ACTOR_REQUIRED, which limits exposure when
+    # enforced by the configured authorization checker but is not, by itself, a reason to consider
+    # every outbound path trusted. The public Axum listener and direct reqwest 0.12 clients use the
+    # patched h2 0.4.18 instance. Tests assert both the lockfile paths and command authorization
+    # marker so this global ignore is revisited if either boundary changes.
+    # No patched release for the remaining transitive dependency paths is available yet.
     # TODO: revisit once a patched release becomes available upstream.
     "RUSTSEC-2026-0258",
 ]
