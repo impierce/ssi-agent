@@ -84,7 +84,7 @@ where
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(public::router())
+        .merge(public::router(library_state))
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
         // Trace layers
         .layer(
