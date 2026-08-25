@@ -1,5 +1,5 @@
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
     state::HolderState,
@@ -36,6 +36,7 @@ pub(crate) async fn credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_holder_credentials",
+        None,
         &state.query.all_holder_credentials,
     )
     .await?
@@ -74,10 +75,10 @@ pub(crate) async fn post_credentials(
     )
     .await?;
 
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &holder_credential_id,
+        Some(&holder_credential_id),
         &state.query.holder_credential,
     )
     .await?
@@ -109,6 +110,7 @@ pub(crate) async fn credential(
         state.authorization_checker.clone(),
         actor.clone(),
         &holder_credential_id,
+        Some(&holder_credential_id),
         &state.query.holder_credential,
     )
     .await?

@@ -1,6 +1,6 @@
 use crate::extractors::RequestActor;
 use crate::{
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
@@ -26,6 +26,7 @@ pub(crate) async fn all_authorization_requests(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_authorization_requests",
+        None,
         &state.query.all_authorization_requests,
     )
     .await?
@@ -50,6 +51,7 @@ pub(crate) async fn authorization_request(
         state.authorization_checker.clone(),
         actor.clone(),
         &authorization_request_id,
+        Some(&authorization_request_id),
         &state.query.authorization_request,
     )
     .await?
@@ -90,9 +92,8 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Sign the authorization request object.
-    command_handler(
+    internal_command_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone(),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
@@ -100,10 +101,10 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Return the authorization_request.
-    query_handler(
+    internal_query_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone(),
         &state,
+        Some(&state),
         &verification_state.query.authorization_request,
     )
     .await?

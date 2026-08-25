@@ -21,6 +21,7 @@ pub(crate) async fn services(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_services",
+        None,
         &state.query.all_services,
     )
     .await?
@@ -40,6 +41,7 @@ pub(crate) async fn service(
         state.authorization_checker.clone(),
         actor.clone(),
         &service_id,
+        Some(&service_id),
         &state.query.service,
     )
     .await?

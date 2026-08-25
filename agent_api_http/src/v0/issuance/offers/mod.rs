@@ -61,6 +61,7 @@ pub(crate) async fn offers(
             library_state.authorization_checker.clone(),
             actor.clone(),
             template_id,
+            Some(template_id),
             &library_state.query.template,
         )
         .await?
@@ -108,6 +109,7 @@ pub(crate) async fn offers(
         state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &state.query.offer,
     )
     .await?
@@ -135,6 +137,7 @@ pub(crate) async fn offers(
         state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &state.query.offer,
     )
     .await?
@@ -172,6 +175,7 @@ pub(crate) async fn all_offers(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_offers",
+        None,
         &state.query.all_offers,
     )
     .await?
@@ -204,6 +208,7 @@ pub(crate) async fn offer(
         state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &state.query.offer,
     )
     .await?

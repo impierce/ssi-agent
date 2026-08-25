@@ -4,6 +4,7 @@ use oid4vci::credential_issuer::{
     authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -35,4 +36,20 @@ pub enum ServerConfigCommand {
         credential_configuration_id: String,
         provisioned: bool,
     },
+}
+
+impl CommandOperation for ServerConfigCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::InitializeServerMetadata { .. } => "issuance.configurations.metadata.initialize",
+            Self::UpdateIssuerUrl { .. } => "issuance.configurations.issuer_url.update",
+            Self::UpdateIssuerDisplay { .. } => "issuance.configurations.issuer_display.update",
+            Self::UpdateCryptographicBindingMethods { .. } => {
+                "issuance.configurations.cryptographic_binding_methods.update"
+            }
+            Self::UpdateSigningAlgorithms { .. } => "issuance.configurations.signing_algorithms.update",
+            Self::UpdateCredentialConfiguration { .. } => "issuance.configurations.credentials.update",
+            Self::RemoveCredentialConfiguration { .. } => "issuance.configurations.credentials.remove",
+        }
+    }
 }

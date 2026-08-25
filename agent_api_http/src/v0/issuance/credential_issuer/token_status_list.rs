@@ -60,6 +60,7 @@ pub mod tests {
         tokens::status_list_token::StatusListTyp,
     };
     use oid4vc_core::authentication::verify::Verify;
+    use shared_kernel::authorization::Caller;
 
     use crate::tests::TEMPLATE_ID;
     use crate::v0::{
@@ -159,7 +160,7 @@ pub mod tests {
         };
         agent_shared::handlers::command_handler(
             issuance_state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             TEST_NONCE,
             &issuance_state.command.nonce,
             command,

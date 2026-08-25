@@ -147,6 +147,7 @@ pub(crate) async fn all_public_offers(
         issuance_state.authorization_checker.clone(),
         actor.clone(),
         "all_public_offers",
+        None,
         &issuance_state.query.all_public_offers,
     )
     .await?
@@ -160,6 +161,7 @@ pub(crate) async fn all_public_offers(
             issuance_state.authorization_checker.clone(),
             actor.clone(),
             &public_offer.id,
+            Some(&public_offer.id),
             &issuance_state.query.offer,
         )
         .await?
@@ -195,6 +197,7 @@ pub(crate) async fn create_public_offer(
         issuance_state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &issuance_state.query.offer,
     )
     .await?
@@ -207,6 +210,7 @@ pub(crate) async fn create_public_offer(
         library_state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &library_state.query.template,
     )
     .await
