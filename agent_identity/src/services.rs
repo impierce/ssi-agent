@@ -220,15 +220,17 @@ impl IdentityServices {
         let did = linked_did.did.to_string();
 
         let (valid, error, credentials) = match self.validated_credentials(holder_document, &url).await {
-            Ok(credentials) => {
+            Ok((credentials, presentation_error)) => {
                 let invalid = credentials.iter().filter(|c| !c.result.valid).count();
-                let error = (invalid > 0).then(|| {
-                    format!(
-                        "{invalid} of {} embedded credentials failed validation",
-                        credentials.len()
-                    )
+                let error = presentation_error.or_else(|| {
+                    (invalid > 0).then(|| {
+                        format!(
+                            "{invalid} of {} embedded credentials failed validation",
+                            credentials.len()
+                        )
+                    })
                 });
-                (invalid == 0, error, credentials)
+                (error.is_none(), error, credentials)
             }
             Err(error) => (false, Some(error.to_string()), Vec::new()),
         };
@@ -246,20 +248,39 @@ impl IdentityServices {
         }
     }
 
+    /// The embedded credentials, each with its own outcome, and the presentation's own error when
+    /// its signature could not be verified.
+    ///
+    /// A presentation that fails to verify does not invalidate the credentials inside it: each one
+    /// carries its issuer's signature, checked separately below against that issuer's DID Document.
+    /// Reporting them flagged rather than discarding them is what [`LinkedVpValidation`] documents,
+    /// and it keeps what a holder publishes legible — plainly marked unverified — while a signing
+    /// fault is fixed. What is lost with the presentation is the proof that *this holder* assembled
+    /// this set, so nothing here may be shown as the holder's own without that caveat.
     async fn validated_credentials(
         &self,
         holder_document: &CoreDocument,
         url: &Url,
-    ) -> anyhow::Result<Vec<LinkedCredentialValidation>> {
-        let presentation_jwt = self.fetch_linked_verifiable_presentation(url).await?;
-        let presentation: DecodedJwtPresentation<Jwt> =
-            JwtPresentationValidator::with_signature_verifier(SignatureVerifier)
-                .validate(
-                    &Jwt::from(presentation_jwt),
-                    holder_document,
-                    &JwtPresentationValidationOptions::default(),
+    ) -> anyhow::Result<(Vec<LinkedCredentialValidation>, Option<String>)> {
+        let presentation_jwt = Jwt::from(self.fetch_linked_verifiable_presentation(url).await?);
+        let validated: Result<DecodedJwtPresentation<Jwt>, _> =
+            JwtPresentationValidator::with_signature_verifier(SignatureVerifier).validate(
+                &presentation_jwt,
+                holder_document,
+                &JwtPresentationValidationOptions::default(),
+            );
+
+        let (credential_jwts, presentation_error) = match validated {
+            Ok(presentation) => (presentation.presentation.verifiable_credential, None),
+            Err(error) => {
+                warn!("Failed to validate the linked presentation at '{url}': {error}");
+                (
+                    unverified_presented_credentials(&presentation_jwt),
+                    Some(error.to_string()),
                 )
-                .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            }
+        };
+
         let validator = JwtCredentialValidator::with_signature_verifier(SignatureVerifier);
         let options = JwtCredentialValidationOptions::new().status_check(StatusCheck::SkipUnsupported);
         let last_validated_at = self.now();
@@ -268,14 +289,14 @@ impl IdentityServices {
         // Every embedded credential is reported with its own outcome. A credential that fails to
         // validate neither disappears from the response nor marks the others as untrustworthy; the
         // caller derives the presentation-level verdict from these per-credential results.
-        for credential_jwt in presentation.presentation.verifiable_credential {
+        for credential_jwt in credential_jwts {
             credentials.push(
                 self.validate_linked_credential(&validator, &options, credential_jwt, last_validated_at)
                     .await,
             );
         }
 
-        Ok(credentials)
+        Ok((credentials, presentation_error))
     }
 
     async fn validate_linked_credential(
@@ -389,6 +410,33 @@ impl IdentityServices {
             )
         })?;
         Ok(config)
+    }
+}
+
+/// The credential JWTs a presentation carries, read **without verifying its signature**.
+///
+/// Used only when the presentation itself failed to verify, so that what it carries can still be
+/// reported, clearly flagged as unverified. Says what the presentation *claims* to carry and
+/// nothing more; each credential is validated separately against its own issuer.
+fn unverified_presented_credentials(presentation_jwt: &Jwt) -> Vec<Jwt> {
+    let Ok(jwt_value) = presentation_jwt.to_json_value() else {
+        return Vec::new();
+    };
+    let Ok(claims) = get_unverified_jwt_claims(&jwt_value) else {
+        return Vec::new();
+    };
+    let Some(credentials) = claims.get("vp").and_then(|vp| vp.get("verifiableCredential")) else {
+        return Vec::new();
+    };
+
+    // `verifiableCredential` is one credential or a list of them.
+    match credentials {
+        serde_json::Value::String(jwt) => vec![Jwt::from(jwt.clone())],
+        serde_json::Value::Array(jwts) => jwts
+            .iter()
+            .filter_map(|jwt| jwt.as_str().map(|jwt| Jwt::from(jwt.to_owned())))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -902,6 +950,118 @@ mod tests {
         assert!(!validations[0].result.valid);
         let error = validations[0].result.error.as_deref().unwrap();
         assert!(!error.contains("not verifiably linked"));
+    }
+
+    /// The failure a stale `kid` produces: the presentation is well-formed and its credentials are
+    /// genuine, but its signing key is not in the holder's DID Document, so the presentation cannot
+    /// be verified. What it carries must still be reported, flagged, rather than vanish.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_reports_credentials_of_an_unverifiable_presentation() {
+        let mock_server = MockServer::start().await;
+        let holder_did = format!("did:web:localhost%3A{}", mock_server.address().port());
+        let mut holder_document = CoreDocument::from_json_value(serde_json::json!({
+            "@context": "https://www.w3.org/ns/did/v1",
+            "id": holder_did
+        }))
+        .unwrap();
+        let storage = Storage::new(JwkMemStore::new(), KeyIdMemstore::new());
+        let mut generate_method = async || {
+            holder_document
+                .generate_method(
+                    &storage,
+                    JwkMemStore::ED25519_KEY_TYPE,
+                    JwsAlgorithm::EdDSA,
+                    None,
+                    MethodScope::assertion_method(),
+                )
+                .await
+                .unwrap()
+        };
+        let issuing_fragment = generate_method().await;
+        let presenting_fragment = generate_method().await;
+
+        let credential: Credential = CredentialBuilder::new(Object::new())
+            .issuer(holder_document.id().to_url())
+            .type_("Endorsement")
+            .subject(
+                CredentialSubject::from_json_value(serde_json::json!({
+                    "id": holder_document.id().as_str(),
+                    "Content": "Awesome collaboration!"
+                }))
+                .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let credential_jwt = holder_document
+            .create_credential_jwt(
+                &credential,
+                &storage,
+                &issuing_fragment,
+                &JwsSignatureOptions::default(),
+                None,
+            )
+            .await
+            .unwrap();
+        let presentation = PresentationBuilder::new(holder_document.id().to_url().into(), Object::new())
+            .credential(credential_jwt)
+            .build()
+            .unwrap();
+        let presentation_jwt: Jwt = holder_document
+            .create_presentation_jwt(
+                &presentation,
+                &storage,
+                &presenting_fragment,
+                &JwsSignatureOptions::default(),
+                &JwtPresentationOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        // The document served to the world never carries the key the presentation was signed with,
+        // exactly as a `kid` naming a method that was never published behaves.
+        let presenting_method = holder_document
+            .id()
+            .to_url()
+            .join(format!("#{presenting_fragment}"))
+            .unwrap();
+        assert!(holder_document.remove_method(&presenting_method).is_some());
+
+        let presentation_url = format!("{}/linked-vp", mock_server.uri());
+        let linked_vp_service = identity_document::service::Service::builder(Default::default())
+            .id(format!("{holder_did}#linked-verifiable-presentation-service")
+                .parse()
+                .unwrap())
+            .type_("LinkedVerifiablePresentation")
+            .service_endpoint(presentation_url.parse::<identity_core::common::Url>().unwrap())
+            .build()
+            .unwrap();
+        holder_document.insert_service(linked_vp_service).unwrap();
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&holder_document))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/linked-vp"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(presentation_jwt.as_str()))
+            .mount(&mock_server)
+            .await;
+
+        let services = IdentityServices::default();
+        let validations = services
+            .fetch_linked_vp_validations(&[verified_linked_did(&holder_did)])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        // The presentation is unverifiable, and says so rather than blaming its credentials.
+        assert!(!validations[0].result.valid);
+        assert!(validations[0].result.error.is_some());
+        // The credential inside it is intact, independently verified against its issuer.
+        assert_eq!(validations[0].credentials.len(), 1);
+        assert!(validations[0].credentials[0].result.valid);
+        assert_eq!(validations[0].credentials[0].credential, Some(credential));
     }
 
     #[tokio::test]
