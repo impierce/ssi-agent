@@ -52,4 +52,3 @@ We chose **Option 1**:
 
 In the future, we may revisit:
 - Referencing a UniTrust Template URI for first-party/ecosystem verifiers that can leverage rich template display definitions.
-- Linking to hosted JSON Schemas or standardized credential display specifications (such as OID4VCI Credential Display Definitions or W3C rendering extensions) once public schema hosting and standardized display profiles are established.
