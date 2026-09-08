@@ -108,7 +108,12 @@ impl CredentialConfigurationProjection {
 
 /// Derives a `CredentialConfiguration` from a `Template`.
 ///
-/// The display name is taken from `template.display.name` if present, falling back to `template.title`.
+/// The display name is taken from `template.display.name` if set, falling back to `template.title`.
+/// An empty (or whitespace-only) `display.name` counts as unset: `Display.name` cannot currently
+/// express "not provided", so clients that submit a `display` object before a title is known (for
+/// instance when uploading a logo first) end up storing `""`. Resolving the fallback here rather
+/// than materializing it into the aggregate keeps the link live: as long as no explicit display
+/// name was given, later title updates keep flowing into the issuer metadata.
 /// When the format is "vc+sd-jwt", claims are derived from `schema.properties` merged with
 /// `schema_properties_attributes.selectivelyDisclosable`.
 ///
@@ -146,8 +151,13 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
                     alt_text: logo.alt_text.clone(),
                 })
             });
+            let name = if d.name.trim().is_empty() {
+                template.title.clone()
+            } else {
+                d.name.clone()
+            };
             vec![CredentialConfigurationsSupportedDisplay {
-                name: d.name.clone(),
+                name,
                 locale: None,
                 logo,
                 description: None,
@@ -392,7 +402,7 @@ impl Query<Template> for CredentialConfigurationProjection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_library::template::aggregate::{DataModel, Display};
+    use agent_library::template::aggregate::{DataModel, Display, Logo};
 
     #[test]
     fn test_v1_data_model_produces_jwt_vc_json_format() {
@@ -461,6 +471,33 @@ mod tests {
             .name
             .clone();
         assert_eq!(name, "My Title");
+    }
+
+    #[test]
+    fn test_title_used_as_fallback_when_display_name_is_empty() {
+        for name in ["", "   "] {
+            let template = Template {
+                template_id: "t6".to_string(),
+                display: Some(Display {
+                    name: name.to_string(),
+                    logo: Some(Logo {
+                        uri: "https://example.com/logo.png".to_string(),
+                        alt_text: None,
+                    }),
+                }),
+                title: "My Title".to_string(),
+                ..Default::default()
+            };
+            let config = credential_configuration_from_template(&template);
+            let display = config.credential_metadata.display.as_ref().unwrap().first().unwrap();
+
+            assert_eq!(display.name, "My Title");
+            // The rest of the display object is unaffected by the fallback.
+            assert_eq!(
+                display.logo.as_ref().map(|logo| logo.uri.to_string()),
+                Some("https://example.com/logo.png".to_string())
+            );
+        }
     }
 
     #[test]
