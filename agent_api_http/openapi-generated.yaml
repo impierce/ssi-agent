@@ -181,6 +181,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+  /v0/create-domain-linkage:
+    post:
+      tags:
+      - Identity
+      operationId: create_domain_linkage
+      responses:
+        '204':
+          description: Domain linkage created
+        '400':
+          description: No eligible signing DID
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: Service already exists
+  /v0/create-linked-verifiable-presentation:
+    post:
+      tags:
+      - Identity
+      operationId: create_linked_verifiable_presentation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkedVPEndpointRequest'
+        required: true
+      responses:
+        '204':
+          description: Linked presentation service created
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: Service already exists
   /v0/create-new-catalog:
     post:
       tags:
@@ -871,6 +907,50 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+  /v0/reissue-domain-linkage:
+    post:
+      tags:
+      - Identity
+      operationId: reissue_domain_linkage
+      responses:
+        '204':
+          description: Domain linkage credential reissued
+        '400':
+          description: No eligible signing DID
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: Service not found
+  /v0/remove-domain-linkage:
+    post:
+      tags:
+      - Identity
+      operationId: remove_domain_linkage
+      responses:
+        '204':
+          description: Domain linkage removed
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: Service not found
+  /v0/remove-linked-verifiable-presentation:
+    post:
+      tags:
+      - Identity
+      operationId: remove_linked_verifiable_presentation
+      responses:
+        '204':
+          description: Linked presentation service removed
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: Service not found
   /v0/remove-templates-from-catalog:
     post:
       tags:
@@ -943,6 +1023,22 @@ paths:
       responses:
         '204':
           description: Template updated successfully
+  /v0/verify-domain-linkage:
+    post:
+      tags:
+      - Identity
+      operationId: verify_domain_linkage
+      responses:
+        '200':
+          description: Domain linkage verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainLinkageVerification'
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
 components:
   schemas:
     AcceptConnectionChangesRequest:
@@ -1444,6 +1540,20 @@ components:
           format: uri
         result:
           $ref: '#/components/schemas/ValidationResult'
+    DomainLinkageVerification:
+      type: object
+      description: |-
+        The outcome of resolving UniCore's currently published domain linkage over the network and
+        validating it, mirroring what an external verifier would see.
+      required:
+      - valid
+      properties:
+        message:
+          type:
+          - string
+          - 'null'
+        valid:
+          type: boolean
     DuplicateTemplateEndpointRequest:
       type: object
       required:
@@ -1682,6 +1792,15 @@ components:
           description: |-
             Cryptographic and semantic validity against the credential's declared issuer DID. A valid
             result does not establish that the issuer is trusted or associated with a known domain.
+    LinkedVPEndpointRequest:
+      type: object
+      required:
+      - presentationIds
+      properties:
+        presentationIds:
+          type: array
+          items:
+            type: string
     LinkedVpValidation:
       type: object
       required:

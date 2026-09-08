@@ -57,7 +57,37 @@ impl IntoApiErrorExt for ProfileError {
 
 impl IntoApiErrorExt for ServiceError {
     fn into_api_error(self) -> ApiError {
-        // TODO: Implement appropriate Problem Details responses
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        let (status, title, kind) = match &self {
+            ServiceError::AlreadyExists => (StatusCode::CONFLICT, "Service already exists", "service-already-exists"),
+            ServiceError::NotFound => (StatusCode::NOT_FOUND, "Service not found", "service-not-found"),
+            ServiceError::EmptyLinkedDidsError => {
+                (StatusCode::BAD_REQUEST, "No eligible signing DID", "no-linked-dids")
+            }
+            // TODO: Implement appropriate Problem Details responses
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Service operation failed",
+                "service-operation-failed",
+            ),
+        };
+        ApiError::builder(status)
+            .title(title)
+            .type_url(type_url(&format!("identity#{kind}")))
+            .message(self.to_string())
+            .finish()
+    }
+}
+
+impl IntoApiErrorExt for agent_identity::service::lifecycle::ServiceManagementError {
+    fn into_api_error(self) -> ApiError {
+        use agent_identity::service::lifecycle::ServiceManagementError::*;
+        match self {
+            Authorization(error) => error.into_api_error(),
+            Command(error) => error.into_api_error(),
+            Infrastructure(error) => {
+                tracing::error!("Service management failed: {error:#}");
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
     }
 }

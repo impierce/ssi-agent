@@ -2,6 +2,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ServiceError {
+    #[error("Service already exists")]
+    AlreadyExists,
+    #[error("Service not found")]
+    NotFound,
     #[error("Verification Method with ID `{0}` is missing a fragment compnent")]
     MissingVerificationMethodFragment(String),
     #[error("Verification Method with ID `{0}` is missing an algorithm parameter")]

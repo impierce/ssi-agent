@@ -76,6 +76,7 @@ verification-authorization = { path = "../infrastructure/adapters/verification-a
 
 async-trait.workspace = true
 futures.workspace = true
+identity_document.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
@@ -84,6 +85,7 @@ oid4vc-manager.workspace = true
 rstest.workspace = true
 serde_urlencoded.workspace = true
 serial_test = "3.0"
+tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true
 tower-http.workspace = true
 tracing-test.workspace = true

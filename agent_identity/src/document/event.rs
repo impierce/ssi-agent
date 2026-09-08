@@ -16,6 +16,10 @@ pub enum DocumentEvent {
         with_fixed_algorithm: Option<Algorithm>,
         iota_metadata: Option<IotaMetadata>,
     },
+    DocumentIdentityChanged {
+        document_id: String,
+        document: CoreDocument,
+    },
     PublicKeyUpdated {
         document_id: String,
         document: CoreDocument,
@@ -25,6 +29,10 @@ pub enum DocumentEvent {
         status: Status,
     },
     ServiceAdded {
+        document_id: String,
+        document: CoreDocument,
+    },
+    ServiceRemoved {
         document_id: String,
         document: CoreDocument,
     },

@@ -28,7 +28,7 @@ use url::Url;
 
 use crate::{config::openapi::credential_metadata, error::SharedError, profile::ApplicationProfile};
 // Re-export
-pub use provisioned::load_provisioned_config;
+pub use provisioned::{load_provisioned_config, warn_deprecated_settings};
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
@@ -225,8 +225,6 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     #[config(default = "1000")]
     pub external_server_response_timeout_ms: u64,
-    #[config(default, production_default = "true")]
-    pub domain_linkage_enabled: bool,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
@@ -684,6 +682,8 @@ pub enum DocumentEvent {
     PublicKeyUpdated,
     DocumentStatusUpdated,
     ServiceAdded,
+    ServiceRemoved,
+    DocumentIdentityChanged,
     DocumentPublished,
 }
 
@@ -701,7 +701,9 @@ pub enum ProfileEvent {
 pub enum ServiceEvent {
     DomainLinkageServiceCreated,
     DomainLinkageServiceDeleted,
+    DomainLinkageServiceReissued,
     LinkedVerifiablePresentationServiceCreated,
+    LinkedVerifiablePresentationServiceDeleted,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -1061,7 +1063,6 @@ mod tests {
                     event_store:
                         type: "in_memory"
                     cors_enabled: true
-                    domain_linkage_enabled: true
                     secret_manager:
                         stronghold_password: "sup3rSecr3t"
                 "#,
@@ -1098,7 +1099,6 @@ mod tests {
                 }
               },
               "external_server_response_timeout_ms": 1000,
-              "domain_linkage_enabled": true,
               "credential_offer_by_value_enabled": false,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
@@ -1154,7 +1154,6 @@ mod tests {
                     "type": "in_memory"
                 },
                 "cors_enabled": true,
-                "domain_linkage_enabled": true,
                 "secret_manager": {
                     "stronghold_password": "<REDACTED>"
                 }
@@ -1524,9 +1523,6 @@ mod tests {
         assert!(config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
         assert!(config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled);
 
-        // Domain linkage is disabled
-        assert!(!config.domain_linkage_enabled);
-
         // Some display information is set
         assert_eq!(config.display.len(), 1);
     }
@@ -1555,8 +1551,6 @@ mod tests {
                     .unwrap();
                 let config =
                     ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
-
-                assert!(config.domain_linkage_enabled);
 
                 // Disable DID methods that do not support updates
                 assert!(!config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);

@@ -231,31 +231,7 @@ impl Aggregate for Document {
                         document.into()
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config().public_url.origin();
-
-                        info!("Origin: {}", &origin.ascii_serialization());
-
-                        let (_scheme, host, port) = match origin {
-                            url::Origin::Tuple(ref scheme, ref host, ref port) => (scheme, host, port),
-                            url::Origin::Opaque(_) => {
-                                return Err(OpaqueOriginError);
-                            }
-                        };
-
-                        // IP addresses are not allowed
-                        if matches!(host, url::Host::Ipv4(_) | url::Host::Ipv6(_)) {
-                            return Err(HostError);
-                        }
-
-                        // Omit default HTTPS port
-                        let host_port_encoded = match port {
-                            443 => host.to_string(),
-                            _ => urlencoding::encode(format!("{host}:{port}").as_str()).to_string(),
-                        };
-
-                        let controller = format!("did:web:{host_port_encoded}")
-                            .parse::<CoreDID>()
-                            .map_err(|err| InvalidDidError(err.to_string()))?;
+                        let controller = super::web::did_web(&services.public_url)?;
 
                         // Patch the generated DID document since it's not according to spec.
                         let properties = get_properties(MethodType::JSON_WEB_KEY_2020);
@@ -399,6 +375,24 @@ impl Aggregate for Document {
 
                 Ok(events)
             }
+            ReplaceWebIdentity { public_url } => {
+                if self.did_method != Some(SupportedDidMethod::Web) {
+                    return Err(InvalidDidError(
+                        "Only did:web supports deployment identity replacement".into(),
+                    ));
+                }
+                let document = self.document.clone().ok_or(MissingDocumentError)?;
+                let previous = document.id().clone();
+                let replacement = super::web::did_web(&public_url)?;
+                let remap = |did: CoreDID| -> Result<CoreDID, DocumentError> {
+                    Ok(if did == previous { replacement.clone() } else { did })
+                };
+                let document = document.try_map(remap, remap, remap, remap, ProduceDocumentError)?;
+                Ok(vec![DocumentIdentityChanged {
+                    document_id: self.document_id.clone(),
+                    document,
+                }])
+            }
             UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
                 document_id: self.document_id.clone(),
                 status,
@@ -425,6 +419,21 @@ impl Aggregate for Document {
                     .map_err(|err| AddServiceError(err.to_string()))?;
 
                 Ok(vec![ServiceAdded { document_id, document }])
+            }
+            RemoveService { service_id } => {
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                let id = document
+                    .id()
+                    .to_url()
+                    .join(format!("#{service_id}"))
+                    .map_err(|err| InvalidDidError(err.to_string()))?;
+                if document.remove_service(&id).is_none() {
+                    return Ok(());
+                }
+                Ok(vec![ServiceRemoved {
+                    document_id: self.document_id.clone(),
+                    document,
+                }])
             }
             PublishDocument => {
                 let mut document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
@@ -634,7 +643,7 @@ impl Aggregate for Document {
                 self.with_fixed_algorithm = with_fixed_algorithm;
                 self.iota_metadata = iota_metadata;
             }
-            PublicKeyUpdated { document_id, document } => {
+            PublicKeyUpdated { document_id, document } | DocumentIdentityChanged { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
@@ -642,7 +651,7 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.status = status;
             }
-            ServiceAdded { document_id, document } => {
+            ServiceAdded { document_id, document } | ServiceRemoved { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }

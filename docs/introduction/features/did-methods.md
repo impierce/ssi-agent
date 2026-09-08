@@ -76,8 +76,6 @@ did_methods:
   did_web:
     enabled: true
 
-domain_linkage_enabled: true
-
 signing_algorithms_supported:
   es256:
     preferred: true

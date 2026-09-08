@@ -14,6 +14,12 @@ impl View<Service> for Service {
                 service,
                 resource,
                 is_deleted,
+            }
+            | DomainLinkageServiceReissued {
+                service_id,
+                service,
+                resource,
+                is_deleted,
             } => {
                 self.service_id.clone_from(service_id);
                 self.service.replace(service.clone());
@@ -31,6 +37,13 @@ impl View<Service> for Service {
                 self.resource.clone_from(resource);
                 self.is_deleted.clone_from(is_deleted);
             }
+            LinkedVerifiablePresentationServiceDeleted { service_id } => {
+                self.service_id.clone_from(service_id);
+                self.service = None;
+                self.resource = None;
+                self.presentation_ids.clear();
+                self.is_deleted = true;
+            }
             LinkedVerifiablePresentationServiceCreated {
                 service_id,
                 presentation_ids,
@@ -38,6 +51,7 @@ impl View<Service> for Service {
             } => {
                 self.service_id.clone_from(service_id);
                 self.presentation_ids.clone_from(presentation_ids);
+                self.is_deleted = false;
                 self.service.replace(service.clone());
             }
         }

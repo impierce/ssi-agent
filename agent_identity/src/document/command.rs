@@ -13,6 +13,9 @@ pub enum DocumentCommand {
         did_method: SupportedDidMethod,
         with_fixed_algorithm: Option<Algorithm>,
     },
+    ReplaceWebIdentity {
+        public_url: url::Url,
+    },
     UpdateDocumentStatus {
         status: Status,
     },
@@ -22,6 +25,9 @@ pub enum DocumentCommand {
     AddService {
         service_id: String,
         service: Box<DocumentService>,
+    },
+    RemoveService {
+        service_id: String,
     },
     PublishDocument,
 }

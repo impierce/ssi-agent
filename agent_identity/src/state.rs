@@ -10,11 +10,9 @@ use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
-    service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
+    service::{aggregate::Service, views::ServiceView},
 };
-use agent_shared::config::{
-    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
-};
+use agent_shared::config::{config, config_mut, Display, SupportedDidMethod, ToggleOptions};
 use agent_shared::handlers::command_handler;
 use agent_shared::{application_state::CommandHandler, handlers::public_query_handler};
 use cqrs_es::persist::PersistenceError;
@@ -34,6 +32,8 @@ pub const PROFILE_ID: &str = "PROFILE-001";
 
 #[derive(Clone)]
 pub struct IdentityState {
+    pub services: Arc<crate::services::IdentityServices>,
+    pub service_lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
@@ -105,10 +105,9 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
     initialize_display(state).await?;
-    initialize_documents(state).await?;
-    initialize_domain_linkage(state).await?;
-    initialize_linked_verifiable_presentations(state).await?;
-    publish_decentrally_hosted_documents(state).await?;
+    let configuration = config().clone();
+    initialize_documents(state, &configuration).await?;
+    crate::service::lifecycle::maintain_services(state).await?;
 
     Ok(())
 }
@@ -377,27 +376,53 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Initializes or updates documents based on the current DID methods configuration.
-///
-/// This asynchronous function synchronizes document state with the configured DID methods by:
-///
-/// 1. Retrieving all DID methods along with their fixed algorithm information via
-///    `get_did_methods_with_or_without_fixed_algorithm()`.
-/// 2. Querying all existing documents using `query_all_documents`, thereby obtaining a map
-///    of document entries.
-/// 3. Iterating over each DID method:
-///    - If a document exists with the matching DID method and fixed algorithm flag and the DID method
-///      is disabled (i.e. `ToggleOptions.enabled` is `false`), the document's status is updated to
-///      `Disabled`.
-///    - If the DID method is enabled, a document is created (or updated) regardless of whether it
-///      already exists. If a document already exists, its `document_id` is reused; otherwise, a new
-///      one is generated.
-/// 4. For each generated document command, executing the command via `command_handler` and subsequently
-///    updating the document's public keys.
-async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
-    let did_methods_with_or_without_fixed_algorithm = get_did_methods_with_or_without_fixed_algorithm();
+/// Reuses the persisted deployment DID, replacing it (and restoring signing caches) if the
+/// configured public origin has drifted, and logs a warning when it does. `public_url` is
+/// provisioned per deployment and cannot change at runtime, so drift only happens across restarts
+/// with a deliberately reconfigured origin — never mid-session. Other DID methods retain their
+/// existing configuration-driven initialization.
+pub async fn initialize_documents(
+    state: &IdentityState,
+    configuration: &agent_shared::config::ApplicationConfiguration,
+) -> anyhow::Result<()> {
+    let did_methods_with_or_without_fixed_algorithm = get_did_methods_with_or_without_fixed_algorithm(configuration);
 
     let all_documents = query_all_documents(state, |_| true).await?;
+
+    // Check identity drift before dispatching any document mutations.
+    let expected = if configuration
+        .did_methods
+        .get(&SupportedDidMethod::Web)
+        .is_some_and(|options| options.enabled)
+    {
+        Some(crate::document::web::did_web(&configuration.public_url)?)
+    } else {
+        None
+    };
+    let mut identity_changed = false;
+    if let Some(expected) = &expected {
+        for document in all_documents
+            .values()
+            .filter(|document| document.did_method == Some(SupportedDidMethod::Web))
+        {
+            if let Some(persisted) = document.document.as_ref().filter(|document| document.id() != expected) {
+                warn!(
+                    "Replacing deployment identity {} with {}; signing keys are retained",
+                    persisted.id(),
+                    expected
+                );
+                agent_shared::handlers::public_command_handler(
+                    &document.document_id,
+                    &state.command.document,
+                    DocumentCommand::ReplaceWebIdentity {
+                        public_url: configuration.public_url.clone(),
+                    },
+                )
+                .await?;
+                identity_changed = true;
+            }
+        }
+    }
 
     for ((did_method, ToggleOptions { enabled, .. }), with_fixed_algorithm) in
         did_methods_with_or_without_fixed_algorithm
@@ -416,7 +441,19 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
                     status: Status::Disabled,
                 },
             )),
-            // If the DID method is enabled, then create the Document regardless of whether it already exists or not.
+            Some(document) if enabled && did_method == SupportedDidMethod::Web && document.document.is_some() => {
+                if document.status == Status::Disabled {
+                    Some((
+                        document.document_id.clone(),
+                        DocumentCommand::UpdateDocumentStatus {
+                            status: Status::SignAndValidate,
+                        },
+                    ))
+                } else {
+                    None
+                }
+            }
+            // Other DID methods retain their existing initialization behavior.
             document if enabled => {
                 let document_id = document
                     // Extract the `document_id` from the Document if it exists.
@@ -439,16 +476,10 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 
         // If a Document command was generated, then execute the command and update the Document's Public Keys.
         if let Some((document_id, command)) = document_id_and_command {
-            command_handler(
-                state.authorization_checker.clone(),
-                None,
-                &document_id,
-                &state.command.document,
-                command,
-            )
-            .await?;
+            let update_keys = !matches!(command, DocumentCommand::UpdateDocumentStatus { .. });
+            agent_shared::handlers::public_command_handler(&document_id, &state.command.document, command).await?;
 
-            if enabled {
+            if enabled && update_keys {
                 let command = DocumentCommand::UpdatePublicKeys {
                     public_key_jwks: vec![],
                 };
@@ -465,6 +496,30 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
         }
     }
 
+    // Signing caches are process-local, even when the DID document is reused.
+    for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
+        .await?
+        .values()
+    {
+        if let (Some(did_method), Some(core_document)) = (document.did_method, &document.document) {
+            for method in core_document.methods(None) {
+                if let Some(algorithm) = method.data().public_key_jwk().and_then(|jwk| jwk.alg()) {
+                    state
+                        .services
+                        .subject
+                        .insert_verification_method_id(
+                            agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
+                            method.id().clone(),
+                        )
+                        .await?;
+                }
+            }
+        }
+    }
+
+    if identity_changed {
+        crate::service::lifecycle::reissue_existing_domain_linkage(state).await?;
+    }
     Ok(())
 }
 
@@ -482,12 +537,18 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 /// - The second element is an `Option<Algorithm>`, where:
 ///   - `Some(algorithm)` indicates a fixed signing algorithm for non-update supporting DID methods.
 ///   - `None` indicates that the DID method supports updates and does not require a fixed algorithm.
-fn get_did_methods_with_or_without_fixed_algorithm() -> Vec<((SupportedDidMethod, ToggleOptions), Option<Algorithm>)> {
+fn get_did_methods_with_or_without_fixed_algorithm(
+    configuration: &agent_shared::config::ApplicationConfiguration,
+) -> Vec<((SupportedDidMethod, ToggleOptions), Option<Algorithm>)> {
     // Retrieve all the configured DID methods.
-    let did_methods = config().did_methods.clone();
+    let did_methods = configuration.did_methods.clone();
 
     // Retrieve all enabled signing algorithms, wrapping each in `Some`.
-    let enabled_algorithms = get_all_enabled_signing_algorithms_supported().into_iter().map(Some);
+    let enabled_algorithms = configuration
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, options)| options.enabled)
+        .map(|(algorithm, _)| Some(*algorithm));
 
     // Partition DID methods into those that support updates and those that do not.
     let (update_supporting_did_methods, non_update_supporting_did_methods): (Vec<_>, Vec<_>) = did_methods
@@ -503,152 +564,6 @@ fn get_did_methods_with_or_without_fixed_algorithm() -> Vec<((SupportedDidMethod
                 .map(|did_method| (did_method, None)),
         )
         .collect()
-}
-
-/// Initializes or disables the Domain Linkage Service based on the current configuration and document state.
-///
-/// This asynchronous function performs the following steps:
-///
-/// 1. Query Documents: It retrieves all documents that are not disabled and whose DID methods support updates.
-/// 2. Conditional Service Creation:
-///    - If domain linkage is enabled in the configuration and there exists at least one update-supporting document,
-///      it creates the Domain Linkage Service.
-///    - It then queries for the created service. If found, it adds the service to all update-supporting documents.
-/// 3. Service Deletion:
-///    - If domain linkage is disabled or no update-supporting documents exist, the function sends a command
-///      to disable the Domain Linkage Service.
-pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all the Documents that are not disabled and support updates.
-    let update_supporting_documents = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled
-            && document
-                .did_method
-                .as_ref()
-                .map(SupportedDidMethod::supports_update)
-                .unwrap_or_default()
-            && document
-                .iota_metadata
-                .as_ref()
-                .map(|iota_metadata| iota_metadata.is_funded || config().iota_sponsoring_service_url.is_some())
-                .unwrap_or(true)
-    })
-    .await?;
-
-    // Check whether Domain Linkage is enabled and whether there are any enabled update-supporting Documents.
-    if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
-        info!(
-            "Creating domain linkage service with documents: {:?}",
-            update_supporting_documents
-        );
-
-        // Collect all Verification Methods from update-supporting documents.
-        let verification_methods = update_supporting_documents
-            .values()
-            .filter_map(|document| document.document.as_ref())
-            .flat_map(|core_document| core_document.methods(None).into_iter().cloned())
-            .collect();
-
-        // Create the Domain Linkage Service.
-        let command = ServiceCommand::CreateDomainLinkageService {
-            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-            verification_methods,
-        };
-
-        command_handler(
-            state.authorization_checker.clone(),
-            None,
-            DOMAIN_LINKAGE_SERVICE_ID,
-            &state.command.service,
-            command,
-        )
-        .await?;
-
-        info!("Created Linked Domain service");
-
-        match public_query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
-            Ok(Some(Service {
-                service: Some(service), ..
-            })) => {
-                info!("Found Linked Domains service: {service}");
-
-                // Add the Domain Linkage service to all the enabled update supporting Documents.
-                for document_id in update_supporting_documents.keys() {
-                    let command = DocumentCommand::AddService {
-                        service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                        service: Box::new(service.clone()),
-                    };
-
-                    command_handler(
-                        state.authorization_checker.clone(),
-                        None,
-                        document_id,
-                        &state.command.document,
-                        command,
-                    )
-                    .await?;
-                }
-            }
-            _ => anyhow::bail!("Failed to retrieve Linked Domains service"),
-        };
-    } else {
-        // If Domain Linkage is disabled and/or there are no enabled update supporting Documents, then disable the Domain Linkage Service.
-        let command = ServiceCommand::DeleteDomainLinkageService {
-            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-        };
-
-        command_handler(
-            state.authorization_checker.clone(),
-            None,
-            DOMAIN_LINKAGE_SERVICE_ID,
-            &state.command.service,
-            command,
-        )
-        .await?;
-
-        info!("Disabled Domain Linkage service");
-    }
-
-    Ok(())
-}
-
-/// Initializes the Linked Verifiable Presentations service for DID Web Document.
-pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all documents that can be updated.
-    let documents = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled
-            && document
-                .did_method
-                .as_ref()
-                .map(SupportedDidMethod::supports_update)
-                .unwrap_or(false)
-    })
-    .await?;
-
-    if let Some(Service {
-        service: Some(service), ..
-    }) = public_query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
-    {
-        info!("Found Linked Verifiable Presentations service: {service}");
-
-        // Add the Linked Verifiable Presentations service to the DID Web Document.
-        for document_id in documents.keys() {
-            let command = DocumentCommand::AddService {
-                service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string(),
-                service: Box::new(service.clone()),
-            };
-
-            command_handler(
-                state.authorization_checker.clone(),
-                None,
-                document_id,
-                &state.command.document,
-                command,
-            )
-            .await?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Publishes all decentrally hosted documents.
@@ -673,9 +588,7 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
         // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
-        let _ = command_handler(
-            state.authorization_checker.clone(),
-            None,
+        let _ = agent_shared::handlers::public_command_handler(
             document_id,
             &state.command.document,
             DocumentCommand::PublishDocument,

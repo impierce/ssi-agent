@@ -1,53 +1,71 @@
 # Domain Linkage
 
-Domain Linkage is a mechanism within self-sovereign identity (SSI) systems that securely binds a digital
-identity — typically represented by a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/) — to a specific web
-domain. This binding is achieved by publishing cryptographic proofs or verifiable credentials on the domain, often in a
-standardized location (e.g., a `.well-known` URL). The result is a trusted association that allows any verifier to
-confidently confirm that the entity controlling the domain is the same one represented by the digital identity. This
-process is crucial for enhancing trust and ensuring secure interactions in SSI applications.
+Domain linkage proves that the controller of a DID also controls a web origin. UniCore publishes signed
+Domain Linkage Credentials at `/.well-known/did-configuration.json` and adds a `LinkedDomains`
+service to its enabled, update-supporting DID documents (`did:web` and funded or sponsored `did:iota`).
 
-:::note
+## Deployment identity
 
-Not all DID methods are suitable for Domain Linkage.
-Only methods that allow updating DID Documents can support this mechanism.
+UniCore derives its deployment `did:web` from the origin of `public_url`, which defaults to
+`application_url`. The public URL must be externally reachable. The scheme and application path
+are not part of the identifier. Default ports are omitted; non-default ports are percent encoded:
 
-| DID method | Domain Linkage supported |
-| ---------- | :----------------------: |
-| `did:iota` |            ✅            |
-| `did:jwk`  |            ❌            |
-| `did:key`  |            ❌            |
-| `did:web`  |            ✅            |
+| Public URL | Deployment DID |
+| --- | --- |
+| `https://example.org/unicore/` | `did:web:example.org` |
+| `http://example.org:80/` | `did:web:example.org` |
+| `https://example.org:8443/` | `did:web:example.org%3A8443` |
 
-:::
+HTTP normalization does not remove the protocols' HTTPS requirements for production verification.
+IP addresses cannot be used as `did:web` hosts.
 
-## Enabling Domain Linkage in UniCore
+The document is persisted at creation and reused on restart, including its keys and services.
+Enabling, renewing, or removing domain linkage never changes the DID or rotates its signing keys.
 
-To enable Domain Linkage in UniCore, follow these steps:
+If the configured origin would produce a different DID than the one persisted, startup replaces the
+deployment identity, retaining signing keys, and logs a warning with the old and new identifiers.
+`public_url` is provisioned per deployment and cannot change at runtime, so this only happens across
+a restart with a deliberately reconfigured origin. Existing credentials are not migrated to the new
+identifier.
 
-- **Environment Variable:**  
-  Set the `UNICORE__DOMAIN_LINKAGE_ENABLED` environment variable to `true`.
+## Runtime commands
 
-- **Configuration File:**  
-  Alternatively, set `domain_linkage_enabled` to `true` in the `config.yaml` file.
+Domain linkage is enabled through the API. It is not created or deleted by startup configuration.
+The former `domain_linkage_enabled` setting is ignored with a deprecation warning.
 
-When Domain Linkage is enabled, UniCore will generate and publish the necessary cryptographic proofs on the domain and
-create the appropriate DID Documents for the enabled DID methods.
+| Command | Effect |
+| --- | --- |
+| `POST /v0/create-domain-linkage` | Create linkage to the origin of `public_url`. No request body. |
+| `POST /v0/reissue-domain-linkage` | Immediately issue fresh linkage credentials. No request body. |
+| `POST /v0/remove-domain-linkage` | Remove linkage and its entries from DID documents. No request body. |
+| `POST /v0/verify-domain-linkage` | Resolve the linkage UniCore currently publishes and validate it externally. No request body. |
+| `POST /v0/create-linked-verifiable-presentation` | Add a linked presentation service; body: `{"presentationIds":["presentation-1"]}`. |
+| `POST /v0/remove-linked-verifiable-presentation` | Remove the linked presentation service, retaining the presentations themselves. No request body. |
 
-:::warning
+Commands return `204` on success, `409` when creating an existing service, and `404` when reissuing
+or removing a missing service. Creating linkage without an eligible signing DID returns `400`.
+`verify-domain-linkage` always returns `200` with `{"valid": boolean, "message": string | null}`:
+it fetches `/.well-known/did-configuration.json` from `public_url` exactly as an external verifier
+would (proving DNS, HTTPS, and hosting are reachable) and checks it against the DID(s) UniCore
+expects to have linked. `message` is `null` on success and otherwise describes what failed, e.g. an
+unreachable origin or a DID missing from the published configuration.
+Requests use the configured actor extraction and authorization checker. The old
+`POST /v0/services/linked-vp` endpoint has been removed. Service reads remain under `GET /v0/services`.
 
-Because the DID Configuration resource must reside at the domain root (see [DID Configuration
-Spec](https://identity.foundation/specs/did-configuration/#resource_location)), Domain Linkage in UniCore will not work
-if the `UNICORE__PUBLIC_URL` environment variable contains a path segment. For example, Domain Linkage will **not become active** for:
+Linkage credentials are valid for 365 days. UniCore checks at startup and hourly, renewing when
+30 days or less remain. Renewal uses the same DID and keys. Runtime maintenance failures are logged
+and retried on the next hourly check. Removed services are not renewed or restored on restart.
+Domain linkage can subsequently be created again through the API.
 
-```bash
-UNICORE__PUBLIC_URL=http://my-domain.com/unicore/
-```
+## Hosting with an application base path
 
-Instead, it must be configured as:
+Both `/.well-known/did.json` and `/.well-known/did-configuration.json` are served at the domain
+root, even when the application uses a base path. For example, with a `/unicore/` base path,
+commands are under `/unicore/v0/`, while the two identity resources remain under `/.well-known/`.
 
-```bash
-UNICORE__PUBLIC_URL=http://my-domain.com/
-```
+Configure the reverse proxy to forward these root paths to UniCore as well as the application path.
+The DID configuration endpoint returns `404` before linkage is created and after it is removed.
+Create and reissue operations update the published configuration without restarting.
 
-:::
+See the [DID Configuration specification](https://identity.foundation/well-known-did-configuration/resources/did-configuration/)
+and the [did:web method specification](https://w3c-ccg.github.io/did-method-web/).

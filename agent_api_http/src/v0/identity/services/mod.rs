@@ -1,4 +1,6 @@
+pub mod commands;
 pub mod linked_vp;
+pub mod verify;
 
 use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
@@ -46,3 +48,6 @@ pub(crate) async fn service(
     .map(|service_view| (StatusCode::OK, Json(service_view)).into_response())
     .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
+
+#[cfg(test)]
+mod tests;

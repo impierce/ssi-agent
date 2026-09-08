@@ -1,6 +1,5 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
 use crate::services::IdentityServices;
-use agent_shared::config::config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::{
@@ -35,6 +34,36 @@ pub struct Service {
     pub is_deleted: bool,
 }
 
+pub const DOMAIN_LINKAGE_VALIDITY_DAYS: u32 = 365;
+pub const DOMAIN_LINKAGE_RENEWAL_WINDOW_DAYS: i64 = 30;
+
+impl Service {
+    pub fn is_active(&self) -> bool {
+        self.service.is_some() && !self.is_deleted
+    }
+
+    pub fn needs_renewal(&self, now: Timestamp) -> bool {
+        if !self.is_active() {
+            return false;
+        }
+        let Some(ServiceResource::DomainLinkage(configuration)) = &self.resource else {
+            return false;
+        };
+        let threshold = now.to_unix() + DOMAIN_LINKAGE_RENEWAL_WINDOW_DAYS * 86400;
+        configuration.linked_dids().is_empty()
+            || configuration.linked_dids().iter().any(|jwt| {
+                let expiration = jwt
+                    .as_str()
+                    .split('.')
+                    .nth(1)
+                    .and_then(|payload| URL_SAFE_NO_PAD.decode(payload).ok())
+                    .and_then(|payload| serde_json::from_slice::<serde_json::Value>(&payload).ok())
+                    .and_then(|claims| claims.get("exp").and_then(serde_json::Value::as_i64));
+                expiration.is_none_or(|expiration| expiration <= threshold)
+            })
+    }
+}
+
 impl Aggregate for Service {
     type Command = ServiceCommand;
     type Event = ServiceEvent;
@@ -55,32 +84,43 @@ impl Aggregate for Service {
 
         info!("Handling command: {:?}", command);
 
+        let reissue = matches!(&command, ReissueDomainLinkageService { .. });
+        let only_if_expiring = matches!(
+            &command,
+            ReissueDomainLinkageService {
+                only_if_expiring: true,
+                ..
+            }
+        );
         let events: Vec<Self::Event> = match command {
             CreateDomainLinkageService {
                 service_id,
                 verification_methods,
+            }
+            | ReissueDomainLinkageService {
+                service_id,
+                verification_methods,
+                ..
             } => {
+                if reissue && !self.is_active() {
+                    return Err(NotFound);
+                }
+                if !reissue && self.is_active() {
+                    return Err(AlreadyExists);
+                }
+                if only_if_expiring && !self.needs_renewal((services.linkage_clock)()) {
+                    return Ok(());
+                }
                 let subject = &services.subject;
 
-                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
+                let origin = identity_core::common::Url::parse(services.public_url.origin().ascii_serialization())
                     .map_err(|err| InvalidUrlError(err.to_string()))?;
 
-                #[cfg(feature = "test_utils")]
-                let (issuance_date, expiration_date) = {
-                    let issuance_date = test_utils::issuance_date();
-                    let expiration_date = test_utils::expiration_date();
-                    (issuance_date, expiration_date)
-                };
-                #[cfg(not(feature = "test_utils"))]
-                let (issuance_date, expiration_date) = {
-                    let issuance_date = Timestamp::now_utc();
-                    let expiration_date = issuance_date
-                        // TODO: make this configurable
-                        .checked_add(Duration::days(365))
-                        .ok_or(InvalidTimestampError)?;
-
-                    (issuance_date, expiration_date)
-                };
+                let issuance_date = (services.linkage_clock)();
+                let expiration_date = issuance_date
+                    // TODO: make this configurable
+                    .checked_add(Duration::days(DOMAIN_LINKAGE_VALIDITY_DAYS))
+                    .ok_or(InvalidTimestampError)?;
 
                 let mut linked_dids = vec![];
 
@@ -163,25 +203,48 @@ impl Aggregate for Service {
                     .build()
                     .map_err(|err| ServiceBuilderError(err.to_string()))?;
 
-                Ok(vec![DomainLinkageServiceCreated {
-                    service_id,
-                    service,
-                    resource: ServiceResource::DomainLinkage(domain_linkage_configuration),
-                    is_deleted: false,
+                let resource = ServiceResource::DomainLinkage(domain_linkage_configuration);
+                Ok(vec![if reissue {
+                    DomainLinkageServiceReissued {
+                        service_id,
+                        service,
+                        resource,
+                        is_deleted: false,
+                    }
+                } else {
+                    DomainLinkageServiceCreated {
+                        service_id,
+                        service,
+                        resource,
+                        is_deleted: false,
+                    }
                 }])
             }
-            DeleteDomainLinkageService { service_id } => Ok(vec![DomainLinkageServiceDeleted {
-                service_id,
-                service: None,
-                resource: None,
-                is_deleted: true,
-            }]),
+            DeleteDomainLinkageService { service_id } => {
+                if !self.is_active() {
+                    return Err(NotFound);
+                }
+                Ok(vec![DomainLinkageServiceDeleted {
+                    service_id,
+                    service: None,
+                    resource: None,
+                    is_deleted: true,
+                }])
+            }
+            DeleteLinkedVerifiablePresentationService { service_id } => {
+                if !self.is_active() {
+                    return Err(NotFound);
+                }
+                Ok(vec![LinkedVerifiablePresentationServiceDeleted { service_id }])
+            }
             CreateLinkedVerifiablePresentationService {
                 service_id,
                 presentation_ids,
             } => {
-                let origin = identity_core::common::Url::parse(config().public_url.origin().ascii_serialization())
-                    .map_err(|err| InvalidUrlError(err.to_string()))?;
+                if self.is_active() {
+                    return Err(AlreadyExists);
+                }
+                let origin = &services.public_url;
 
                 let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
                     presentation_ids
@@ -234,6 +297,12 @@ impl Aggregate for Service {
                 service,
                 resource,
                 is_deleted,
+            }
+            | DomainLinkageServiceReissued {
+                service_id,
+                service,
+                resource,
+                is_deleted,
             } => {
                 self.service_id = service_id;
                 self.service.replace(service);
@@ -251,6 +320,13 @@ impl Aggregate for Service {
                 self.resource = resource;
                 self.is_deleted = is_deleted;
             }
+            LinkedVerifiablePresentationServiceDeleted { service_id } => {
+                self.service_id = service_id;
+                self.service = None;
+                self.resource = None;
+                self.presentation_ids.clear();
+                self.is_deleted = true;
+            }
             LinkedVerifiablePresentationServiceCreated {
                 service_id,
                 service,
@@ -258,6 +334,7 @@ impl Aggregate for Service {
             } => {
                 self.service_id = service_id;
                 self.presentation_ids = presentation_ids;
+                self.is_deleted = false;
                 self.service.replace(service);
             }
         }
@@ -348,6 +425,76 @@ pub mod service_tests {
     }
 }
 
+#[cfg(test)]
+mod replay_tests {
+    use super::*;
+    use cqrs_es::{EventEnvelope, View};
+
+    #[test]
+    fn persisted_service_events_rebuild_the_same_aggregate_and_projection() {
+        let created = ServiceEvent::DomainLinkageServiceCreated {
+            service_id: crate::state::DOMAIN_LINKAGE_SERVICE_ID.into(),
+            service: test_utils::domain_linkage_service(test_utils::domain_linkage_service_id()),
+            resource: test_utils::domain_linkage_resource(),
+            is_deleted: false,
+        };
+        let removed = ServiceEvent::DomainLinkageServiceDeleted {
+            service_id: crate::state::DOMAIN_LINKAGE_SERVICE_ID.into(),
+            service: None,
+            resource: None,
+            is_deleted: true,
+        };
+        let mut aggregate = Service::default();
+        let mut projection = Service::default();
+        for (index, event) in [created.clone(), removed, created].into_iter().enumerate() {
+            let persisted = serde_json::to_string(&event).unwrap();
+            let restored: ServiceEvent = serde_json::from_str(&persisted).unwrap();
+            aggregate.apply(restored.clone());
+            projection.update(&EventEnvelope {
+                aggregate_id: crate::state::DOMAIN_LINKAGE_SERVICE_ID.into(),
+                sequence: index + 1,
+                payload: restored,
+                metadata: Default::default(),
+            });
+            assert_eq!(
+                serde_json::to_value(&aggregate).unwrap(),
+                serde_json::to_value(&projection).unwrap()
+            );
+            assert_eq!(aggregate.is_active(), index != 1);
+        }
+    }
+
+    #[test]
+    fn linked_presentation_removal_and_recreation_replay_consistently() {
+        let created = ServiceEvent::LinkedVerifiablePresentationServiceCreated {
+            service_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
+            presentation_ids: vec!["presentation-1".into()],
+            service: test_utils::linked_verifiable_presentation_service(
+                test_utils::linked_verifiable_presentation_service_id(),
+            ),
+        };
+        let removed = ServiceEvent::LinkedVerifiablePresentationServiceDeleted {
+            service_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
+        };
+        let mut aggregate = Service::default();
+        let mut projection = Service::default();
+        for (index, event) in [created.clone(), removed, created].into_iter().enumerate() {
+            aggregate.apply(event.clone());
+            projection.update(&EventEnvelope {
+                aggregate_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
+                sequence: index + 1,
+                payload: event,
+                metadata: Default::default(),
+            });
+            assert_eq!(
+                serde_json::to_value(&aggregate).unwrap(),
+                serde_json::to_value(&projection).unwrap()
+            );
+            assert_eq!(aggregate.is_active(), index != 1);
+        }
+    }
+}
+
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
@@ -374,7 +521,7 @@ pub mod test_utils {
             .type_("LinkedDomains")
             .service_endpoint(
                 ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().public_url.clone()],
+                    "origins": ["https://my-domain.example.org/"],
                 }))
                 .unwrap(),
             )
@@ -386,7 +533,7 @@ pub mod test_utils {
     pub fn linked_verifiable_presentation_service(
         linked_verifiable_presentation_service_id: String,
     ) -> DocumentService {
-        let origin = config().public_url.origin().ascii_serialization();
+        let origin = "https://my-domain.example.org";
 
         Service::builder(Default::default())
             .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")
