@@ -682,6 +682,7 @@ fn build_unsigned_w3c_credential_data(
         .and_then(|display| display.first())
         .map(|d| d.name.clone());
 
+    // This defaults the name to the credential configuration name if no name is provided.
     if let Some(credential_name) = &credential_name {
         credential_data.insert_if_none(&["name"], json!(credential_name));
     }
