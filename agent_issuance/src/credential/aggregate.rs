@@ -673,6 +673,8 @@ fn build_unsigned_w3c_credential_data(
             "Failed to enter the id into the credential".to_string(),
         ))?;
 
+    // Embed display metadata (`name` and `logo`) from credential configuration if not already present.
+    // See `docs/adr/0005-embed-display-metadata-in-w3c-credentials.md` for context on Linked VPs and future considerations.
     let credential_name = credential_configuration
         .credential_metadata
         .as_ref()
@@ -680,7 +682,6 @@ fn build_unsigned_w3c_credential_data(
         .and_then(|display| display.first())
         .map(|d| d.name.clone());
 
-    // This defaults the name to the credential configuration name if no name is provided.
     if let Some(credential_name) = &credential_name {
         credential_data.insert_if_none(&["name"], json!(credential_name));
     }
