@@ -673,7 +673,7 @@ fn build_unsigned_w3c_credential_data(
             "Failed to enter the id into the credential".to_string(),
         ))?;
 
-    // Embed display metadata (`name` and `logo`) from credential configuration if not already present.
+    // Embed display metadata (`name` and `logo_uri`) from credential configuration if not already present.
     // See `docs/adr/0005-embed-display-metadata-in-w3c-credentials.md` for context on Linked VPs and future considerations.
     let credential_name = credential_configuration
         .credential_metadata
@@ -694,8 +694,12 @@ fn build_unsigned_w3c_credential_data(
         .and_then(|display| display.logo.as_ref());
 
     if let Some(credential_logo) = credential_logo {
-        credential_data.insert_if_none(&["logo"], json!(credential_logo));
+        credential_data.insert_if_none(&["logo_uri"], json!(credential_logo.uri));
     }
+
+    let display_context = json!({
+        "logo_uri": "https://www.iana.org/assignments/jwt#logo_uri"
+    });
 
     // Add issuer name reflecting the UniCore configuration
     let issuer_name = config()
@@ -738,13 +742,19 @@ fn build_unsigned_w3c_credential_data(
                     CredentialFormats::JwtVcJson(_)
                 ) {
                     credential_data
-                        .insert_if_none(&["@context"], json!(["https://www.w3.org/2018/credentials/v1"]))
+                        .insert_if_none(
+                            &["@context"],
+                            json!(["https://www.w3.org/2018/credentials/v1", display_context]),
+                        )
                         .ok_or(BuildCredentialError(
                             "Failed to enter the @context into the credential".to_string(),
                         ))?;
                 } else {
                     credential_data
-                        .insert_if_none(&["@context"], json!(["https://www.w3.org/ns/credentials/v2"]))
+                        .insert_if_none(
+                            &["@context"],
+                            json!(["https://www.w3.org/ns/credentials/v2", display_context]),
+                        )
                         .ok_or(BuildCredentialError(
                             "Failed to enter the @context into the credential".to_string(),
                         ))?;
@@ -769,7 +779,9 @@ fn build_unsigned_w3c_credential_data(
                         &["@context"],
                         json!([
                             "https://www.w3.org/ns/credentials/v2",
-                            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+                            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
+                            "https://purl.imsglobal.org/spec/ob/v3p0/extensions.json",
+                            display_context
                         ]),
                     )
                     .ok_or(BuildCredentialError(
@@ -811,7 +823,8 @@ fn build_unsigned_w3c_credential_data(
                         &["@context"],
                         json!([
                             "https://www.w3.org/2018/credentials/v1",
-                            "https://www.w3.org/ns/credentials/v2"
+                            "https://www.w3.org/ns/credentials/v2",
+                            display_context
                         ]),
                     )
                     .ok_or(BuildCredentialError(
@@ -1242,9 +1255,9 @@ pub mod test_utils {
         CREDENTIAL_ID.to_string()
     }
 
-    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIl0sImlkIjoidXJuOnV1aWQ6MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sIm5hbWUiOiJWZXJpZmlhYmxlIENyZWRlbnRpYWwiLCJsb2dvIjp7InVyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImFsdF90ZXh0IjoiSW1waWVyY2UgTG9nbyJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319fQ.2kuwwdb7tPEOyqRN2_DzhHup_lggePMK8zKwJvAJnHhjV9urtBzP9v8AAnHXZAkRLOlEAV4GeUlaATSl78IaCQ";
-    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwibG9nbyI6eyJ1cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJhbHRfdGV4dCI6IkltcGllcmNlIExvZ28ifSwiY3JlZGVudGlhbFN1YmplY3QiOnsidHlwZSI6WyJBY2hpZXZlbWVudFN1YmplY3QiXSwiYWNoaWV2ZW1lbnQiOnsiaWQiOiJodHRwczovL2V4YW1wbGUuY29tL2FjaGlldmVtZW50cy8yMXN0LWNlbnR1cnktc2tpbGxzL3RlYW13b3JrIiwidHlwZSI6IkFjaGlldmVtZW50IiwiY3JpdGVyaWEiOnsibmFycmF0aXZlIjoiVGVhbSBtZW1iZXJzIGFyZSBub21pbmF0ZWQgZm9yIHRoaXMgYmFkZ2UgYnkgdGhlaXIgcGVlcnMgYW5kIHJlY29nbml6ZWQgdXBvbiByZXZpZXcgYnkgRXhhbXBsZSBDb3JwIG1hbmFnZW1lbnQuIn0sImRlc2NyaXB0aW9uIjoiVGhpcyBiYWRnZSByZWNvZ25pemVzIHRoZSBkZXZlbG9wbWVudCBvZiB0aGUgY2FwYWNpdHkgdG8gY29sbGFib3JhdGUgd2l0aGluIGEgZ3JvdXAgZW52aXJvbm1lbnQuIiwibmFtZSI6IlRlYW13b3JrIn0sImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.9zwegKHBlhu1BSNpfxBFQt1jPdzlHHXDyolfs7y8msGgZvMs5l7eePfjGBlw4Qp_O5llYjD3AlgUbxB63DwWCw";
-    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIl0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJFdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsIl0sImlkIjoidXJuOnV1aWQ6MTIzZTQ1NjctZTg5Yi0xMmQzLWE0NTYtNDI2NjE0MTc0MDAwIiwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJuYW1lIjoiRXVyb3BlYW4gRGlnaXRhbCBDcmVkZW50aWFsIiwibG9nbyI6eyJ1cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJhbHRfdGV4dCI6IkltcGllcmNlIExvZ28ifSwiY3JlZGVudGlhbFByb2ZpbGVzIjp7fSwiZGlzcGxheVBhcmFtZXRlciI6eyJ0aXRsZSI6eyJlbiI6IkV1cm9wZWFuIERpZ2l0YWwgQ3JlZGVudGlhbCJ9LCJwcmltYXJ5TGFuZ3VhZ2UiOnt9LCJsYW5ndWFnZSI6e30sImluZGl2aWR1YWxEaXNwbGF5Ijp7Imxhbmd1YWdlIjp7fSwiZGlzcGxheURldGFpbCI6eyJwYWdlIjoxLCJpbWFnZSI6eyJjb250ZW50IjoiW1BMQUNFSE9MREVSXSIsImNvbnRlbnRFbmNvZGluZyI6e30sImNvbnRlbnRUeXBlIjp7fX19fX0sImNyZWRlbnRpYWxTY2hlbWEiOnsiaWQiOiJodHRwczovL2V1ZGl3Lm9yZy9jcmVkZW50aWFscy9zY2hlbWFzL0V1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWxWM18zLmpzb24iLCJ0eXBlIjoiSnNvblNjaGVtYSJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoiQ3JlZGVudGlhbFN0YXR1cyIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9LCJpc3N1ZWQiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.7opmXqsdjdG0cGHU2QTsppg5DPZjh18x0pAMeQBE7WUdX1kUCDnlxB3tOlJ11z-GK0I7mc-D584UNyjuPf0PDA";
+    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIix7ImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaWFuYS5vcmcvYXNzaWdubWVudHMvand0I2xvZ29fdXJpIn1dLCJpZCI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsiZmlyc3RfbmFtZSI6IkZlcnJpcyIsImxhc3RfbmFtZSI6IlJ1c3RhY2VhbiIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwibG9nb191cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319fQ.uU0eGuLR4Jqes54ajy1I9jh5nspgId1eE05GIpBTBWyleNhYz48UiFztMoqtHvDaqLSeZHKp6QsZD37g5LsOBw";
+    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvZXh0ZW5zaW9ucy5qc29uIix7ImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaWFuYS5vcmcvYXNzaWdubWVudHMvand0I2xvZ29fdXJpIn1dLCJpZCI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJPcGVuQmFkZ2VDcmVkZW50aWFsIl0sImlzc3VlciI6eyJ0eXBlIjoiUHJvZmlsZSIsIm5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJuYW1lIjoiVGVhbXdvcmsgQmFkZ2UiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7InR5cGUiOlsiQWNoaWV2ZW1lbnRTdWJqZWN0Il0sImFjaGlldmVtZW50Ijp7ImlkIjoiaHR0cHM6Ly9leGFtcGxlLmNvbS9hY2hpZXZlbWVudHMvMjFzdC1jZW50dXJ5LXNraWxscy90ZWFtd29yayIsInR5cGUiOiJBY2hpZXZlbWVudCIsImNyaXRlcmlhIjp7Im5hcnJhdGl2ZSI6IlRlYW0gbWVtYmVycyBhcmUgbm9taW5hdGVkIGZvciB0aGlzIGJhZGdlIGJ5IHRoZWlyIHBlZXJzIGFuZCByZWNvZ25pemVkIHVwb24gcmV2aWV3IGJ5IEV4YW1wbGUgQ29ycCBtYW5hZ2VtZW50LiJ9LCJkZXNjcmlwdGlvbiI6IlRoaXMgYmFkZ2UgcmVjb2duaXplcyB0aGUgZGV2ZWxvcG1lbnQgb2YgdGhlIGNhcGFjaXR5IHRvIGNvbGxhYm9yYXRlIHdpdGhpbiBhIGdyb3VwIGVudmlyb25tZW50LiIsIm5hbWUiOiJUZWFtd29yayJ9LCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.hm2WL8l0U4_fYHx2t-xg5J3TelFF5IBDey1NJ5-xo0hPR40frzRuBKXNjaQcnO8W2e7lKpliCy77vnWmAB7XAQ";
+    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIix7ImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaWFuYS5vcmcvYXNzaWdubWVudHMvand0I2xvZ29fdXJpIn1dLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiRXVyb3BlYW5EaWdpdGFsQ3JlZGVudGlhbCJdLCJpZCI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IkV1cm9wZWFuIERpZ2l0YWwgQ3JlZGVudGlhbCIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWxvZ28ucG5nIiwiY3JlZGVudGlhbFByb2ZpbGVzIjp7fSwiZGlzcGxheVBhcmFtZXRlciI6eyJ0aXRsZSI6eyJlbiI6IkV1cm9wZWFuIERpZ2l0YWwgQ3JlZGVudGlhbCJ9LCJwcmltYXJ5TGFuZ3VhZ2UiOnt9LCJsYW5ndWFnZSI6e30sImluZGl2aWR1YWxEaXNwbGF5Ijp7Imxhbmd1YWdlIjp7fSwiZGlzcGxheURldGFpbCI6eyJwYWdlIjoxLCJpbWFnZSI6eyJjb250ZW50IjoiW1BMQUNFSE9MREVSXSIsImNvbnRlbnRFbmNvZGluZyI6e30sImNvbnRlbnRUeXBlIjp7fX19fX0sImNyZWRlbnRpYWxTY2hlbWEiOnsiaWQiOiJodHRwczovL2V1ZGl3Lm9yZy9jcmVkZW50aWFscy9zY2hlbWFzL0V1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWxWM18zLmpzb24iLCJ0eXBlIjoiSnNvblNjaGVtYSJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoiQ3JlZGVudGlhbFN0YXR1cyIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9LCJpc3N1ZWQiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiJ9LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.vb9Tskkr2JB_dzY05V6bfFrhnxm0awJvHLyLT1Xmn3wboRxU9uV_kXCyxkDFbECM7ETHenUFw3u7jPrFYUM0BA";
 
     // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`
     //
@@ -1548,7 +1561,11 @@ pub mod test_utils {
         pub static ref UNSIGNED_OPENBADGE_CREDENTIAL: serde_json::Value = json!({
           "@context": [
             "https://www.w3.org/ns/credentials/v2",
-            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+            "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json",
+            "https://purl.imsglobal.org/spec/ob/v3p0/extensions.json",
+            {
+              "logo_uri": "https://www.iana.org/assignments/jwt#logo_uri"
+            }
           ],
           "id": format!("urn:uuid:{CREDENTIAL_ID}"),
           "type": ["VerifiableCredential", "OpenBadgeCredential"],
@@ -1557,14 +1574,16 @@ pub mod test_utils {
             "name": "UniCore"
           },
           "name": "Teamwork Badge",
-          "logo": {
-            "uri": "https://www.impierce.com/external/impierce-logo.png",
-            "alt_text": "Impierce Logo"
-          },
+          "logo_uri": "https://www.impierce.com/external/impierce-logo.png",
           "credentialSubject": OPENBADGE_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
         });
         pub static ref UNSIGNED_VC1_1_CREDENTIAL: serde_json::Value = json!({
-          "@context": [ "https://www.w3.org/2018/credentials/v1" ],
+          "@context": [
+            "https://www.w3.org/2018/credentials/v1",
+            {
+              "logo_uri": "https://www.iana.org/assignments/jwt#logo_uri"
+            }
+          ],
           "id": format!("urn:uuid:{CREDENTIAL_ID}"),
           "type": [ "VerifiableCredential" ],
           "credentialSubject": BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
@@ -1572,10 +1591,7 @@ pub mod test_utils {
             "name": "UniCore"
           },
           "name": "Verifiable Credential",
-          "logo": {
-            "uri": "https://www.impierce.com/external/impierce-logo.png",
-            "alt_text": "Impierce Logo"
-          }
+          "logo_uri": "https://www.impierce.com/external/impierce-logo.png"
         });
         pub static ref UNSIGNED_DC_SD_JWT_CREDENTIAL: serde_json::Value = json!({
             "vct": "http://localhost:3033/vct/U0QtSldU/0",
@@ -1583,7 +1599,12 @@ pub mod test_utils {
             "last_name": "Rustacean"
         });
         pub static ref UNSIGNED_VC2_SD_JWT_CREDENTIAL: serde_json::Value = json!({
-          "@context": [ "https://www.w3.org/ns/credentials/v2" ],
+          "@context": [
+            "https://www.w3.org/ns/credentials/v2",
+            {
+              "logo_uri": "https://www.iana.org/assignments/jwt#logo_uri"
+            }
+          ],
           "id": format!("urn:uuid:{CREDENTIAL_ID}"),
           "type": [ "VerifiableCredential" ],
           "credentialSubject": BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
@@ -1591,15 +1612,15 @@ pub mod test_utils {
             "name": "UniCore"
           },
           "name": "VCDM2.0 SD-JWT Credential",
-          "logo": {
-            "uri": "https://www.impierce.com/external/impierce-logo.png",
-            "alt_text": "Impierce Logo"
-          }
+          "logo_uri": "https://www.impierce.com/external/impierce-logo.png"
         });
         pub static ref UNSIGNED_ELM_CREDENTIAL: serde_json::Value = json!({
             "@context": [
                 "https://www.w3.org/2018/credentials/v1",
-                "https://www.w3.org/ns/credentials/v2"
+                "https://www.w3.org/ns/credentials/v2",
+                {
+                    "logo_uri": "https://www.iana.org/assignments/jwt#logo_uri"
+                }
             ],
             "type": [
                 "VerifiableCredential",
@@ -1614,10 +1635,7 @@ pub mod test_utils {
                 "name": "UniCore"
             },
             "name": "European Digital Credential",
-            "logo": {
-                "uri": "https://www.impierce.com/external/impierce-logo.png",
-                "alt_text": "Impierce Logo"
-            },
+            "logo_uri": "https://www.impierce.com/external/impierce-logo.png",
             "credentialProfiles": {},
             "displayParameter": {
                 "title": {
