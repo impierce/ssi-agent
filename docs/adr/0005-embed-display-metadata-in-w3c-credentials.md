@@ -27,7 +27,7 @@ Three main approaches were considered to address this:
 
 We chose **Option 1**: 
 - Embed `name` and `logo_uri` (URI string) directly at the root of W3C credentials (`jwt_vc_json` and `vc+sd-jwt`) during credential construction if defined in the credential configuration's display metadata and not already present in the credential payload.
-- Include a JSON-LD context object `{"logo_uri": "https://www.iana.org/assignments/jwt#logo_uri"}` in the `@context` array of all emitted W3C credentials to assign standard JSON-LD semantics to `logo_uri`.
+- Include a JSON-LD context object `{"logo_uri": {"@id": "https://www.iana.org/assignments/jwt#logo_uri", "@type": "@id"}}` in the `@context` array of all emitted W3C credentials to assign standard JSON-LD semantics and URI type coercion to `logo_uri`.
 
 ---
 
