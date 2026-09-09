@@ -45,12 +45,27 @@ pub(crate) async fn credentials(
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HolderCredentialsEndpointRequest {
+    /// Compact JWT-encoded verifiable credential to add to the holder.
+    #[schema(value_type = String)]
     pub credential: Jwt,
 }
 
+/// Store a credential in the organisation's wallet
+///
+/// Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+#[utoipa::path(
+    post,
+    path = "/holder/credentials",
+    operation_id = "create_holder_credential",
+    tags = ["Identity", "Holder"],
+    request_body = HolderCredentialsEndpointRequest,
+    responses(
+        (status = 201, description = "Credential stored successfully", body = Credential),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,

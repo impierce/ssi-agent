@@ -569,6 +569,26 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CredentialView'
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Store a credential in the organisation's wallet
+      description: Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+      operationId: create_holder_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HolderCredentialsEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Credential stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialView'
   /v0/holder/credentials/{holder_credential_id}:
     get:
       tags:
@@ -734,6 +754,30 @@ paths:
                 $ref: '#/components/schemas/PresentationView'
         '404':
           description: Presentation not found
+  /v0/holder/presentations/{presentation_id}/signed:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get a signed credential presentation
+      description: Retrieves the compact JWT representation of a stored credential presentation.
+      operationId: get_signed_holder_presentation
+      parameters:
+      - name: presentation_id
+        in: path
+        description: Credential presentation ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Signed credential presentation
+          content:
+            application/jwt:
+              schema:
+                type: string
+        '404':
+          description: Signed credential presentation not found
   /v0/list-all-templates:
     get:
       tags:
@@ -1661,6 +1705,14 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+    HolderCredentialsEndpointRequest:
+      type: object
+      required:
+      - credential
+      properties:
+        credential:
+          type: string
+          description: Compact JWT-encoded verifiable credential to add to the holder.
     HolderType:
       type: string
       enum:
