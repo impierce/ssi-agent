@@ -55,7 +55,7 @@ impl From<AuthorizationRequest> for AuthorizationRequestResponse {
     get,
     path = "/authorization_requests",
     operation_id = "list_authorization_requests",
-    tags = ["Verification"],
+    tags = ["Authorization Requests"],
     responses(
         (status = 200, description = "Authorization requests", body = [AuthorizationRequestResponse]),
     )
@@ -89,7 +89,7 @@ pub(crate) async fn all_authorization_requests(
     get,
     path = "/authorization_requests/{authorization_request_id}",
     operation_id = "get_authorization_request",
-    tags = ["Verification"],
+    tags = ["Authorization Requests"],
     params(
         ("authorization_request_id" = String, Path, description = "Authorization request ID"),
     ),
@@ -137,7 +137,7 @@ pub struct AuthorizationRequestsEndpointRequest {
     post,
     path = "/authorization_requests",
     operation_id = "create_authorization_request",
-    tags = ["Verification"],
+    tags = ["Authorization Requests"],
     request_body = AuthorizationRequestsEndpointRequest,
     responses(
         (
