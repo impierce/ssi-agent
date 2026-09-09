@@ -7,7 +7,7 @@ use utoipa::OpenApi;
 #[openapi(
     paths(all_authorization_requests, authorization_request, authorization_requests),
     tags(
-        (name = "Verification", description = "Manage requests for verifiable presentations and their responses."),
+        (name = "Authorization Requests", description = "Manage requests for verifiable presentations and their responses."),
     )
 )]
 pub struct VerificationApi;
