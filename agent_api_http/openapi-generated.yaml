@@ -953,6 +953,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+  /v0/services:
+    get:
+      tags:
+      - Identity
+      summary: List identity services
+      operationId: list_identity_services
+      responses:
+        '200':
+          description: Identity services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceResponse'
+  /v0/services/linked-vp:
+    post:
+      tags:
+      - Identity
+      summary: Create a linked verifiable presentation service
+      description: |-
+        Creates the linked verifiable presentation service and adds it to every enabled DID document
+        whose DID method supports updates. Returns the DID documents that were updated.
+      operationId: create_linked_verifiable_presentation_service
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - presentationIds
+              properties:
+                presentationIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Presentation IDs served by the linked verifiable presentation service.
+        required: true
+      responses:
+        '200':
+          description: Linked verifiable presentation service created and DID documents updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+        '404':
+          description: No DID documents found
+  /v0/services/{service_id}:
+    get:
+      tags:
+      - Identity
+      summary: Get an identity service
+      operationId: get_identity_service
+      parameters:
+      - name: service_id
+        in: path
+        description: Identity service ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Identity service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+        '404':
+          description: Identity service not found
   /v0/take-public-offer-offline:
     post:
       tags:
@@ -2138,6 +2209,28 @@ components:
           items:
             type: string
           default: []
+    ServiceResponse:
+      type: object
+      required:
+      - id
+      - presentation_ids
+      properties:
+        id:
+          type: string
+        presentation_ids:
+          type: array
+          items:
+            type: string
+        resource:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.'
+        service:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `identity_document::service::Service`.'
     Source:
       type: string
       enum:
