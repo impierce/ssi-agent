@@ -881,6 +881,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_template_defaults_empty_display_name_to_title() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let response = create_template(
+            State(state),
+            RequestActor(None),
+            Json(CreateNewTemplateRequestBody {
+                title: "Created Template".to_string(),
+                display: Some(Display {
+                    name: String::new(),
+                    logo: None,
+                }),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: None,
+                r#type: vec![],
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["display"]["name"], "Created Template");
+    }
+
+    #[tokio::test]
     async fn update_template_requires_id() {
         let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
 
@@ -998,6 +1033,109 @@ mod tests {
             template.r#type,
             vec!["VerifiableCredential".to_string(), "EmployeeCredential".to_string(),]
         );
+    }
+
+    #[tokio::test]
+    async fn update_template_defaults_empty_display_name_to_updated_title() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "template-to-update", Visibility::Private).await;
+
+        let response = update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: Some("Updated title".to_string()),
+                display: Some(Display {
+                    name: String::new(),
+                    logo: None,
+                }),
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.display.unwrap().name, "Updated title");
+    }
+
+    #[tokio::test]
+    async fn update_template_keeps_title_and_display_name_independent() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "template-to-update", Visibility::Private).await;
+
+        update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: None,
+                display: Some(Display {
+                    name: "Custom display name".to_string(),
+                    logo: None,
+                }),
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.title, "Source Template");
+        assert_eq!(template.display.unwrap().name, "Custom display name");
+
+        update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: Some("Updated title".to_string()),
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.title, "Updated title");
+        assert_eq!(template.display.unwrap().name, "Custom display name");
     }
 
     #[tokio::test]
