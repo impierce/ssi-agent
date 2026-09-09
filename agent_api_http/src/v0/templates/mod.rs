@@ -48,10 +48,24 @@ pub struct TemplateDto {
 
 impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
+        // An empty `display.name` means no explicit display name has been set: fall back to the
+        // current title so the API always surfaces a usable name, without baking the title into
+        // the stored template (which would stop later title updates from being reflected here).
+        let display = value.display.map(|display| {
+            if display.name.trim().is_empty() {
+                Display {
+                    name: value.title.clone(),
+                    logo: display.logo,
+                }
+            } else {
+                display
+            }
+        });
+
         Self {
             template_id: value.template_id,
             title: value.title,
-            display: value.display,
+            display,
             data_model: value.data_model,
             holder_type: value.holder_type,
             modified_at: value.modified_at,

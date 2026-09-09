@@ -222,8 +222,6 @@ impl Aggregate for Template {
                     return Err(TemplateError::MissingTitle);
                 }
 
-                let display = Box::new((*display).map(|display| default_empty_display_name(display, &title)));
-
                 // Normalize type (defaults, canonical order, dedup).
                 let r#type = normalize_and_validate_type(r#type, &data_model)?;
 
