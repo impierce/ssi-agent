@@ -20,7 +20,7 @@ use agent_shared::{application_state::CommandHandler, handlers::public_query_han
 use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,6 +31,34 @@ use tracing::{info, warn};
 /// This is for internal use only within the identity bounded context to ensure
 /// all operations consistently target the one and only profile.
 pub const PROFILE_ID: &str = "PROFILE-001";
+
+impl QueryOperation for ConnectionView {
+    const OPERATION_NAME: &'static str = "identity.connections.get";
+}
+
+impl QueryOperation for AllConnectionsView {
+    const OPERATION_NAME: &'static str = "identity.connections.list";
+}
+
+impl QueryOperation for DocumentView {
+    const OPERATION_NAME: &'static str = "identity.documents.get";
+}
+
+impl QueryOperation for AllDocumentsView {
+    const OPERATION_NAME: &'static str = "identity.documents.list";
+}
+
+impl QueryOperation for ProfileView {
+    const OPERATION_NAME: &'static str = "identity.profile.get";
+}
+
+impl QueryOperation for ServiceView {
+    const OPERATION_NAME: &'static str = "identity.services.get";
+}
+
+impl QueryOperation for AllServicesView {
+    const OPERATION_NAME: &'static str = "identity.services.list";
+}
 
 #[derive(Clone)]
 pub struct IdentityState {
@@ -198,7 +226,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -214,7 +242,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -230,7 +258,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -246,7 +274,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -260,7 +288,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                 command_handler(
                     state.authorization_checker.clone(),
-                    None,
+                    Caller::Internal,
                     PROFILE_ID,
                     &state.command.profile,
                     command,
@@ -285,7 +313,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                 command_handler(
                     state.authorization_checker.clone(),
-                    None,
+                    Caller::Internal,
                     PROFILE_ID,
                     &state.command.profile,
                     command,
@@ -310,7 +338,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -326,7 +354,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -342,7 +370,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         PROFILE_ID,
                         &state.command.profile,
                         command,
@@ -362,7 +390,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
                 command_handler(
                     state.authorization_checker.clone(),
-                    None,
+                    Caller::Internal,
                     PROFILE_ID,
                     &state.command.profile,
                     command,
@@ -441,7 +469,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
         if let Some((document_id, command)) = document_id_and_command {
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                Caller::Internal,
                 &document_id,
                 &state.command.document,
                 command,
@@ -455,7 +483,7 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 
                 command_handler(
                     state.authorization_checker.clone(),
-                    None,
+                    Caller::Internal,
                     &document_id,
                     &state.command.document,
                     command,
@@ -556,7 +584,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             DOMAIN_LINKAGE_SERVICE_ID,
             &state.command.service,
             command,
@@ -580,7 +608,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
                     command_handler(
                         state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         document_id,
                         &state.command.document,
                         command,
@@ -598,7 +626,7 @@ pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             DOMAIN_LINKAGE_SERVICE_ID,
             &state.command.service,
             command,
@@ -639,7 +667,7 @@ pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -
 
             command_handler(
                 state.authorization_checker.clone(),
-                None,
+                Caller::Internal,
                 document_id,
                 &state.command.document,
                 command,
@@ -675,7 +703,7 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
         // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
         let _ = command_handler(
             state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             document_id,
             &state.command.document,
             DocumentCommand::PublishDocument,

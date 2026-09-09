@@ -34,6 +34,7 @@ pub(crate) async fn offers(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_received_offers",
+        None,
         &state.query.all_received_offers,
     )
     .await?
@@ -71,6 +72,7 @@ pub(crate) async fn offer(
         state.authorization_checker.clone(),
         actor.clone(),
         &received_offer_id,
+        Some(&received_offer_id),
         &state.query.received_offer,
     )
     .await?

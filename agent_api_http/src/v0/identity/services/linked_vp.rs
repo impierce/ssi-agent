@@ -1,5 +1,5 @@
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_command_handler, internal_query_handler};
 use agent_identity::{
     document::{
         aggregate::{Document, Status},
@@ -47,6 +47,9 @@ pub(crate) async fn linked_vp(
     RequestActor(actor): RequestActor,
     Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    // Linked VP creation is one installation-wide operation. Its authorization covers discovering
+    // eligible DID documents, adding and publishing the service on them, and returning those
+    // documents. The fixed follow-up dispatches are trusted continuations of that operation.
     let service_id = "linked-verifiable-presentation-service".to_string();
 
     let command = ServiceCommand::CreateLinkedVerifiablePresentationService {
@@ -64,10 +67,10 @@ pub(crate) async fn linked_vp(
     )
     .await?;
 
-    let linked_verifiable_presentation_service = match query_handler(
+    let linked_verifiable_presentation_service = match internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &service_id,
+        Some(&service_id),
         &state.query.service,
     )
     .await?
@@ -81,10 +84,10 @@ pub(crate) async fn linked_vp(
     };
 
     // Query all DID Documents that require an update.
-    let document_ids: Vec<String> = query_handler(
+    let document_ids: Vec<String> = internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         "all_documents",
+        None,
         &state.query.all_documents,
     )
     .await?
@@ -111,9 +114,8 @@ pub(crate) async fn linked_vp(
             service: Box::new(linked_verifiable_presentation_service.clone()),
         };
 
-        command_handler(
+        internal_command_handler(
             state.authorization_checker.clone(),
-            actor.clone(),
             document_id,
             &state.command.document,
             command,
@@ -125,10 +127,10 @@ pub(crate) async fn linked_vp(
         .await
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         "all_documents",
+        None,
         &state.query.all_documents,
     )
     .await?

@@ -1,6 +1,7 @@
 use cqrs_es::{persist::PersistenceError, Aggregate, AggregateError, View};
 use shared_kernel::authorization::{
-    Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
+    AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
+    QueryOperation,
 };
 use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
@@ -41,18 +42,20 @@ pub enum QueryHandlerError {
 /// The `query_handler` function is used to query the view repository after authorization.
 pub async fn query_handler<A, V>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
-    actor: Option<Actor>,
+    caller: Caller,
     view_id: &str,
+    resource_id: Option<&str>,
     state: &Arc<dyn DynViewRepository<V, A>>,
 ) -> Result<Option<V>, QueryHandlerError>
 where
     A: Aggregate,
-    V: View<A>,
+    V: View<A> + QueryOperation,
 {
     let authorization_request = AuthorizationRequest {
-        actor,
+        caller,
         operation: AuthorizationOperation::Query {
-            query_type: std::any::type_name::<V>(),
+            resource_id: resource_id.map(str::to_owned),
+            operation_name: V::OPERATION_NAME,
         },
     };
 
@@ -80,22 +83,22 @@ where
 /// The `command_handler` function is used to execute a command on an aggregate.
 pub async fn command_handler<A>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
-    actor: Option<Actor>,
+    caller: Caller,
     aggregate_id: &str,
     state: &CommandHandler<A>,
     command: A::Command,
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
 {
+    let operation_name = command.operation_name();
     let authorization_request = AuthorizationRequest {
-        actor,
+        caller,
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
-            // TODO: Use command variant names when authorization needs finer-grained permissions.
-            command_type: std::any::type_name::<A::Command>(),
-            authorization: CommandAuthorization::ACTOR_REQUIRED,
+            resource_id: None,
+            operation_name,
         },
     };
 
@@ -137,11 +140,31 @@ mod tests {
     use async_trait::async_trait;
     use cqrs_es::{event_sink::EventSink, DomainEvent};
     use serde::{Deserialize, Serialize};
-    use shared_kernel::authorization::AllowAllAuthorizationChecker;
+    use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, Caller};
     use std::sync::Mutex;
 
     #[derive(Default, Debug, Serialize, Deserialize)]
     struct TestAggregate;
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    struct TestCommand(String);
+
+    impl CommandOperation for TestCommand {
+        fn operation_name(&self) -> &'static str {
+            "test.commands.emit"
+        }
+    }
+
+    #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+    struct TestView;
+
+    impl View<TestAggregate> for TestView {
+        fn update(&mut self, _event: &cqrs_es::EventEnvelope<TestAggregate>) {}
+    }
+
+    impl QueryOperation for TestView {
+        const OPERATION_NAME: &'static str = "test.queries.get";
+    }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     struct TestEvent;
@@ -161,7 +184,7 @@ mod tests {
     struct TestError;
 
     impl Aggregate for TestAggregate {
-        type Command = String;
+        type Command = TestCommand;
         type Event = TestEvent;
         type Error = TestError;
         type Services = ();
@@ -174,7 +197,7 @@ mod tests {
             _service: &Self::Services,
             sink: &EventSink<Self>,
         ) -> Result<(), Self::Error> {
-            if command == "emit" {
+            if command.0 == "emit" {
                 sink.write(TestEvent, self).await;
             }
 
@@ -192,7 +215,7 @@ mod tests {
     #[derive(Debug, PartialEq)]
     struct CapturedCommand {
         aggregate_id: String,
-        command: String,
+        command: TestCommand,
         metadata: HashMap<String, String>,
     }
 
@@ -201,7 +224,7 @@ mod tests {
         async fn execute_with_metadata(
             &self,
             aggregate_id: &str,
-            command: String,
+            command: TestCommand,
             metadata: HashMap<String, String>,
         ) -> Result<(), AggregateError<TestError>> {
             self.calls.lock().unwrap().push(CapturedCommand {
@@ -211,6 +234,30 @@ mod tests {
             });
 
             Ok(())
+        }
+    }
+
+    struct TestViewRepository;
+
+    #[async_trait]
+    impl DynViewRepository<TestView, TestAggregate> for TestViewRepository {
+        async fn load(&self, _view_id: &str) -> Result<Option<TestView>, PersistenceError> {
+            Ok(Some(TestView))
+        }
+
+        async fn load_with_context(
+            &self,
+            _view_id: &str,
+        ) -> Result<Option<(TestView, cqrs_es::persist::ViewContext)>, PersistenceError> {
+            unreachable!("query_handler only loads views")
+        }
+
+        async fn update_view(
+            &self,
+            _view: TestView,
+            _context: cqrs_es::persist::ViewContext,
+        ) -> Result<(), PersistenceError> {
+            unreachable!("query_handler only loads views")
         }
     }
 
@@ -243,10 +290,10 @@ mod tests {
 
         command_handler(
             authorization_checker,
-            None,
+            Caller::Anonymous,
             "aggregate-id",
             &handler_ref,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await
         .unwrap();
@@ -254,7 +301,7 @@ mod tests {
         let calls = handler.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].aggregate_id, "aggregate-id");
-        assert_eq!(calls[0].command, "emit");
+        assert_eq!(calls[0].command, TestCommand("emit".to_string()));
         assert!(calls[0].metadata.contains_key("timestamp"));
     }
 
@@ -265,10 +312,10 @@ mod tests {
 
         let result = command_handler(
             Arc::new(DenyAllAuthorizationChecker),
-            None,
+            Caller::Anonymous,
             "aggregate-id",
             &state,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await;
 
@@ -285,10 +332,10 @@ mod tests {
 
         let _ = command_handler(
             Arc::new(DenyAllAuthorizationChecker),
-            None,
+            Caller::Anonymous,
             "aggregate-id",
             &state,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await;
 
@@ -308,10 +355,10 @@ mod tests {
             Arc::new(CapturingAuthorizationChecker {
                 requests: Arc::clone(&requests),
             }),
-            Some(actor.clone()),
+            Caller::Actor(actor.clone()),
             "aggregate-id",
             &state,
-            "emit".to_string(),
+            TestCommand("emit".to_string()),
         )
         .await
         .unwrap();
@@ -319,11 +366,44 @@ mod tests {
         assert_eq!(
             requests.lock().unwrap().as_slice(),
             &[AuthorizationRequest {
-                actor: Some(actor),
+                caller: Caller::Actor(actor),
                 operation: AuthorizationOperation::Command {
                     aggregate_id: "aggregate-id".to_string(),
-                    command_type: std::any::type_name::<String>(),
-                    authorization: CommandAuthorization::ACTOR_REQUIRED,
+                    resource_id: None,
+                    operation_name: "test.commands.emit",
+                },
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn query_handler_sends_stable_operation_name() {
+        let state: Arc<dyn DynViewRepository<TestView, TestAggregate>> = Arc::new(TestViewRepository);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+
+        let view = query_handler(
+            Arc::new(CapturingAuthorizationChecker {
+                requests: Arc::clone(&requests),
+            }),
+            Caller::Actor(actor.clone()),
+            "view-id",
+            Some("resource-id"),
+            &state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(view, Some(TestView));
+        assert_eq!(
+            requests.lock().unwrap().as_slice(),
+            &[AuthorizationRequest {
+                caller: Caller::Actor(actor),
+                operation: AuthorizationOperation::Query {
+                    resource_id: Some("resource-id".to_string()),
+                    operation_name: "test.queries.get",
                 },
             }]
         );

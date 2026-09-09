@@ -1,11 +1,19 @@
 use agent_shared::application_state::CommandHandler;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 use crate::authorization_request::aggregate::AuthorizationRequest;
 use crate::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use crate::authorization_request::views::AuthorizationRequestView;
+
+impl QueryOperation for AuthorizationRequestView {
+    const OPERATION_NAME: &'static str = "verification.authorization_requests.get";
+}
+
+impl QueryOperation for AllAuthorizationRequestsView {
+    const OPERATION_NAME: &'static str = "verification.authorization_requests.list";
+}
 
 #[derive(Clone)]
 pub struct VerificationState {

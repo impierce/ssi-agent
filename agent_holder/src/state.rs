@@ -1,5 +1,5 @@
 use agent_shared::application_state::CommandHandler;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -12,6 +12,30 @@ use crate::offer::queries::ReceivedOfferView;
 use crate::presentation::aggregate::Presentation;
 use crate::presentation::views::all_presentations::AllPresentationsView;
 use crate::presentation::views::PresentationView;
+
+impl QueryOperation for HolderCredentialView {
+    const OPERATION_NAME: &'static str = "holder.credentials.get";
+}
+
+impl QueryOperation for AllHolderCredentialsView {
+    const OPERATION_NAME: &'static str = "holder.credentials.list";
+}
+
+impl QueryOperation for PresentationView {
+    const OPERATION_NAME: &'static str = "holder.presentations.get";
+}
+
+impl QueryOperation for AllPresentationsView {
+    const OPERATION_NAME: &'static str = "holder.presentations.list";
+}
+
+impl QueryOperation for ReceivedOfferView {
+    const OPERATION_NAME: &'static str = "holder.offers.get";
+}
+
+impl QueryOperation for AllReceivedOffersView {
+    const OPERATION_NAME: &'static str = "holder.offers.list";
+}
 
 #[derive(Clone)]
 pub struct HolderState {

@@ -1,6 +1,6 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -176,10 +176,10 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -232,6 +232,7 @@ pub(crate) async fn duplicate_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &source_template_id,
+        Some(&source_template_id),
         &state.query.template,
     )
     .await?
@@ -266,10 +267,10 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = query_handler(
+    let new_template = internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &new_template_id,
+        Some(&new_template_id),
         &state.query.template,
     )
     .await?
@@ -344,6 +345,7 @@ pub(crate) async fn update_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -542,6 +544,7 @@ pub(crate) async fn get_templates(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_templates",
+        None,
         &state.query.all_templates,
     )
     .await?
@@ -588,6 +591,7 @@ pub(crate) async fn get_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -635,6 +639,7 @@ pub(crate) async fn delete_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
