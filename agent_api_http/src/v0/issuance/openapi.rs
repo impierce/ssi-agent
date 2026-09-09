@@ -1,6 +1,8 @@
-use crate::v0::issuance::credentials::{__path_all_credentials, __path_credential, __path_credentials};
+use crate::v0::issuance::credentials::{
+    __path_all_credentials, __path_credential, __path_credentials, __path_patch_credential,
+};
 use crate::v0::issuance::offers::{
-    __path_all_offers, __path_offer,
+    __path_all_offers, __path_offer, __path_offers,
     send::{__path_individual_offer, __path_organization_offer},
 };
 use crate::v0::issuance::public_offers::{
@@ -15,8 +17,10 @@ use utoipa::OpenApi;
         all_credentials,
         credential,
         credentials,
+        patch_credential,
         all_offers,
         offer,
+        offers,
         individual_offer,
         organization_offer,
         all_public_offers,

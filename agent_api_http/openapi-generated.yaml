@@ -46,6 +46,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+  /v0/authorization_requests:
+    get:
+      tags:
+      - Verification
+      summary: List authorization requests
+      operationId: list_authorization_requests
+      responses:
+        '200':
+          description: Authorization requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuthorizationRequestResponse'
+    post:
+      tags:
+      - Verification
+      summary: Create an authorization request
+      description: Creates and signs an OpenID authorization request. The returned form-encoded deep link can be opened by a wallet.
+      operationId: create_authorization_request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequestsEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Authorization request created
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Path of the created authorization request
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+  /v0/authorization_requests/{authorization_request_id}:
+    get:
+      tags:
+      - Verification
+      summary: Get an authorization request
+      operationId: get_authorization_request
+      parameters:
+      - name: authorization_request_id
+        in: path
+        description: Authorization request ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Authorization request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationRequestResponse'
+        '404':
+          description: Authorization request not found
   /v0/change-catalog-appearance:
     post:
       tags:
@@ -67,6 +128,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+  /v0/configuration:
+    get:
+      tags:
+      - Configuration
+      summary: Get application configuration
+      description: |-
+        Returns the current application configuration. Set `provisioned=true` to return only values
+        explicitly configured at startup; defaults are omitted from that response.
+      operationId: get_application_configuration
+      parameters:
+      - name: provisioned
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      responses:
+        '200':
+          description: Application configuration
+          content:
+            application/json:
+              schema:
+                type: object
   /v0/connections:
     get:
       tags:
@@ -326,6 +411,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+    patch:
+      tags:
+      - Issuance
+      summary: Update credential status
+      description: Updates a credential's status according to the IETF OAuth Token Status List specification.
+      operationId: update_credential_status
+      parameters:
+      - name: credential_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchCredentialEndpointRequest'
+            example:
+              credentialStatus: INVALID
+        required: true
+      responses:
+        '204':
+          description: Credential status updated successfully
+        '404':
+          description: Credential not found
   /v0/delete-catalog:
     post:
       tags:
@@ -544,6 +654,26 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CredentialView'
+    post:
+      tags:
+      - Identity
+      - Holder
+      summary: Store a credential in the organisation's wallet
+      description: Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+      operationId: create_holder_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HolderCredentialsEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Credential stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialView'
   /v0/holder/credentials/{holder_credential_id}:
     get:
       tags:
@@ -709,6 +839,30 @@ paths:
                 $ref: '#/components/schemas/PresentationView'
         '404':
           description: Presentation not found
+  /v0/holder/presentations/{presentation_id}/signed:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get a signed credential presentation
+      description: Retrieves the compact JWT representation of a stored credential presentation.
+      operationId: get_signed_holder_presentation
+      parameters:
+      - name: presentation_id
+        in: path
+        description: Credential presentation ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Signed credential presentation
+          content:
+            application/jwt:
+              schema:
+                type: string
+        '404':
+          description: Signed credential presentation not found
   /v0/list-all-templates:
     get:
       tags:
@@ -784,6 +938,42 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Offer'
+    post:
+      tags:
+      - Issuance
+      summary: Create a credential offer
+      description: |-
+        Creates and returns an OpenID4VCI credential offer advertising the credential configurations
+        derived from one or more published templates. `templateIds` is required because an offer must
+        tell the wallet which credential types it may request. It does not create credential instances
+        or contain their claim data; credentials may be attached beforehand or supplied just in time
+        after the wallet starts the issuance flow.
+
+        If an offer with the given `offerId` already exists, the existing encoded offer is returned
+        unchanged.
+      operationId: create_offer
+      requestBody:
+        description: Identifies the offer and the published templates whose derived credential configurations it advertises.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffersEndpointRequest'
+            example:
+              offerId: c86289fa-b105-4ec3-9326-a02436788f11
+              templateIds:
+              - w3c_vc_credential
+        required: true
+      responses:
+        '200':
+          description: Credential offer created successfully
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+        '400':
+          description: Template IDs are missing or invalid
+        '422':
+          description: A template was not found or is not published
   /v0/offers/send-offer-to-individual:
     post:
       tags:
@@ -892,6 +1082,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+  /v0/services:
+    get:
+      tags:
+      - Identity
+      summary: List identity services
+      operationId: list_identity_services
+      responses:
+        '200':
+          description: Identity services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceResponse'
+  /v0/services/linked-vp:
+    post:
+      tags:
+      - Identity
+      summary: Create a linked verifiable presentation service
+      description: |-
+        Creates the linked verifiable presentation service and adds it to every enabled DID document
+        whose DID method supports updates. Returns the DID documents that were updated.
+      operationId: create_linked_verifiable_presentation_service
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - presentationIds
+              properties:
+                presentationIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Presentation IDs served by the linked verifiable presentation service.
+        required: true
+      responses:
+        '200':
+          description: Linked verifiable presentation service created and DID documents updated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+        '404':
+          description: No DID documents found
+  /v0/services/{service_id}:
+    get:
+      tags:
+      - Identity
+      summary: Get an identity service
+      operationId: get_identity_service
+      parameters:
+      - name: service_id
+        in: path
+        description: Identity service ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Identity service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+        '404':
+          description: Identity service not found
   /v0/take-public-offer-offline:
     post:
       tags:
@@ -970,6 +1231,52 @@ components:
           items:
             type: string
           default: []
+    AuthorizationRequestResponse:
+      type: object
+      required:
+      - validated
+      properties:
+        authorization_request:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with schemas for the supported OpenID authorization request types.'
+        form_url_encoded_authorization_request:
+          type:
+          - string
+          - 'null'
+        id_token:
+          type:
+          - string
+          - 'null'
+        signed_authorization_request_object:
+          type:
+          - string
+          - 'null'
+        state:
+          type:
+          - string
+          - 'null'
+        validated:
+          type: boolean
+        vp_token:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `DecodedVpToken`.'
+    AuthorizationRequestsEndpointRequest:
+      type: object
+      properties:
+        dcql_query:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `DcqlQuery`.'
+        state:
+          type:
+          - string
+          - 'null'
+          description: Optional caller-provided identifier for the authorization request. A random value is generated when omitted.
     Catalog:
       type: object
       description: Data transfer object for Catalogs.
@@ -1529,6 +1836,14 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+    HolderCredentialsEndpointRequest:
+      type: object
+      required:
+      - credential
+      properties:
+        credential:
+          type: string
+          description: Compact JWT-encoded verifiable credential to add to the holder.
     HolderType:
       type: string
       enum:
@@ -1857,6 +2172,41 @@ components:
           type:
           - object
           - 'null'
+    OffersEndpointRequest:
+      type: object
+      required:
+      - offerId
+      - templateIds
+      properties:
+        deliveryOptions:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DeliveryOptions'
+            description: Optional delivery settings associated with the offer.
+        offerId:
+          type: string
+          description: Unique identifier of the offer to create or retrieve.
+        templateIds:
+          type: array
+          items:
+            type: string
+          description: |-
+            Published templates whose derived credential configurations are advertised by the offer.
+
+            At least one template ID is required. These IDs select the credential types a wallet may
+            request; they do not identify credential instances or provide credential claim data.
+    PatchCredentialEndpointRequest:
+      type: object
+      required:
+      - credentialStatus
+      properties:
+        credentialStatus:
+          type: string
+          enum:
+          - VALID
+          - INVALID
+          - SUSPENDED
+          - UNDEFINED
     PatchProfileEndpointRequest:
       type: object
       properties:
@@ -2042,6 +2392,28 @@ components:
           items:
             type: string
           default: []
+    ServiceResponse:
+      type: object
+      required:
+      - id
+      - presentation_ids
+      properties:
+        id:
+          type: string
+        presentation_ids:
+          type: array
+          items:
+            type: string
+        resource:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.'
+        service:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `identity_document::service::Service`.'
     Source:
       type: string
       enum:
@@ -2290,6 +2662,8 @@ components:
       - private
       - public
 tags:
+- name: Configuration
+  description: Inspect UniCore application configuration.
 - name: Identity
   description: Manage all aspects of your organisational identity.
 - name: Holder
@@ -2308,6 +2682,8 @@ tags:
   description: Create and manage templates which provide the structure for credentials to be issued.
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
+- name: Verification
+  description: Manage requests for verifiable presentations and their responses.
 - name: Public
   description: Endpoints that are publicly reachable without authentication, used to expose publicly available information or communicate with external systems.
 externalDocs:

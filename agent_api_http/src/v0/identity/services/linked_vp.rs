@@ -1,7 +1,10 @@
 use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use agent_identity::{
-    document::{aggregate::Status, command::DocumentCommand},
+    document::{
+        aggregate::{Document, Status},
+        command::DocumentCommand,
+    },
     service::{aggregate::Service, command::ServiceCommand},
     state::{publish_decentrally_hosted_documents, IdentityState},
 };
@@ -16,12 +19,28 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedVPEndpointRequest {
+    /// Presentation IDs served by the linked verifiable presentation service.
     pub presentation_ids: Vec<String>,
 }
 
+/// Create a linked verifiable presentation service
+///
+/// Creates the linked verifiable presentation service and adds it to every enabled DID document
+/// whose DID method supports updates. Returns the DID documents that were updated.
+#[utoipa::path(
+    post,
+    path = "/services/linked-vp",
+    operation_id = "create_linked_verifiable_presentation_service",
+    tags = ["Identity"],
+    request_body = inline(LinkedVPEndpointRequest),
+    responses(
+        (status = 200, description = "Linked verifiable presentation service created and DID documents updated", body = [Document]),
+        (status = 404, description = "No DID documents found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn linked_vp(
     State(state): State<Arc<IdentityState>>,

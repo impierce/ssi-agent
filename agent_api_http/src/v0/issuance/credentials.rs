@@ -403,13 +403,30 @@ pub(crate) async fn all_credentials(
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchCredentialEndpointRequest {
+    #[schema(schema_with = agent_issuance::credential::openapi::status_type)]
     pub credential_status: StatusType,
 }
 
-/// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
+/// Update credential status
+///
+/// Updates a credential's status according to the IETF OAuth Token Status List specification.
+#[utoipa::path(
+    patch,
+    path = "/credentials/{credential_id}",
+    operation_id = "update_credential_status",
+    tags = ["Issuance"],
+    request_body(
+        content = PatchCredentialEndpointRequest,
+        example = json!({ "credentialStatus": "INVALID" })
+    ),
+    responses(
+        (status = 204, description = "Credential status updated successfully"),
+        (status = 404, description = "Credential not found"),
+    )
+)]
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
