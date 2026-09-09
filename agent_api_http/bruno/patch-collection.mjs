@@ -191,6 +191,6 @@ for (const line of applied) console.log('  ' + line);
 
 const unmatched = [...rulesByKey.keys()].filter((k) => !matchedKeys.has(k));
 if (unmatched.length > 0) {
-  console.warn(`\n${unmatched.length} rule(s) did not match any generated request (path likely changed or removed in openapi-generated.yaml):`);
+  console.warn(`\n${unmatched.length} rule(s) did not match any generated request (path likely changed or removed in openapi.yaml):`);
   for (const key of unmatched) console.warn('  ' + key);
 }
