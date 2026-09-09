@@ -128,6 +128,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+  /v0/configuration:
+    get:
+      tags:
+      - Configuration
+      summary: Get application configuration
+      description: |-
+        Returns the current application configuration. Set `provisioned=true` to return only values
+        explicitly configured at startup; defaults are omitted from that response.
+      operationId: get_application_configuration
+      parameters:
+      - name: provisioned
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      responses:
+        '200':
+          description: Application configuration
+          content:
+            application/json:
+              schema:
+                type: object
   /v0/connections:
     get:
       tags:
@@ -2638,6 +2662,8 @@ components:
       - private
       - public
 tags:
+- name: Configuration
+  description: Inspect UniCore application configuration.
 - name: Identity
   description: Manage all aspects of your organisational identity.
 - name: Holder

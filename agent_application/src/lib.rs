@@ -375,7 +375,10 @@ where
 
 /// Builds the application configuration router without the API version prefix.
 pub fn configuration_router() -> axum::Router {
-    axum::Router::new().route("/configuration", axum::routing::get(metadata::config::configuration))
+    axum::Router::new().route(
+        "/configuration",
+        axum::routing::get(agent_api_http::v0::configuration::configuration),
+    )
 }
 
 fn verify_persisted_events(
