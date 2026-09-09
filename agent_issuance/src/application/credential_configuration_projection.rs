@@ -151,11 +151,13 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
                     alt_text: logo.alt_text.clone(),
                 })
             });
+
             let name = if d.name.trim().is_empty() {
                 template.title.clone()
             } else {
                 d.name.clone()
             };
+
             vec![CredentialConfigurationsSupportedDisplay {
                 name,
                 locale: None,
