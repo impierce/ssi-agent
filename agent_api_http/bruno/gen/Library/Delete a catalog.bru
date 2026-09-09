@@ -1,0 +1,55 @@
+meta {
+  name: Delete a catalog
+  type: http
+  seq: 5
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/delete-catalog
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": ""
+  }
+}
+
+docs {
+  Deletes a catalog.
+}
+
+example {
+  name: 204 Response
+  description: Catalog deleted
+  
+  request: {
+    url: {{BASE_URL}}/v0/delete-catalog
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

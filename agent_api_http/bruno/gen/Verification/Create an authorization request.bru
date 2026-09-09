@@ -1,0 +1,60 @@
+meta {
+  name: Create an authorization request
+  type: http
+  seq: 2
+  tags: [
+    Verification
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/authorization_requests
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "dcql_query": "",
+    "state": ""
+  }
+}
+
+docs {
+  Creates and signs an OpenID authorization request. The returned form-encoded deep link can be opened by a wallet.
+}
+
+example {
+  name: 201 Response
+  description: Authorization request created
+  
+  request: {
+    url: {{BASE_URL}}/v0/authorization_requests
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "dcql_query": "",
+        "state": ""
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/x-www-form-urlencoded
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

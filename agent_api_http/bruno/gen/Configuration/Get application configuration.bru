@@ -1,0 +1,55 @@
+meta {
+  name: Get application configuration
+  type: http
+  seq: 1
+  tags: [
+    Configuration
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/configuration
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~provisioned: 
+}
+
+docs {
+  Returns the current application configuration. Set `provisioned=true` to return only values
+  explicitly configured at startup; defaults are omitted from that response.
+}
+
+example {
+  name: 200 Response
+  description: Application configuration
+  
+  request: {
+    url: {{BASE_URL}}/v0/configuration
+    method: GET
+    mode: none
+    params:query: {
+      ~provisioned: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {}
+      '''
+    }
+  }
+}

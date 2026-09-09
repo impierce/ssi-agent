@@ -1,0 +1,60 @@
+meta {
+  name: List all Catalogs
+  type: http
+  seq: 8
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/get-all-catalogs
+  body: none
+  auth: inherit
+}
+
+docs {
+  List all available Catalogs.
+}
+
+example {
+  name: 200 Response
+  description: All catalogs retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/get-all-catalogs
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "display": {
+              "description": "",
+              "icon": "",
+              "name": ""
+            },
+            "id": "",
+            "modified_at": "",
+            "template_ids": [],
+            "visibility": "Public"
+          }
+        ]
+      '''
+    }
+  }
+}
