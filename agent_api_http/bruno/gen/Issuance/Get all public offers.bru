@@ -1,0 +1,50 @@
+meta {
+  name: Get all public offers
+  type: http
+  seq: 6
+  tags: [
+    Issuance
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/get-all-public-offers
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Public offers retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/get-all-public-offers
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "amountIssued": 0,
+            "id": "",
+            "status": "Active",
+            "templateId": ""
+          }
+        ]
+      '''
+    }
+  }
+}

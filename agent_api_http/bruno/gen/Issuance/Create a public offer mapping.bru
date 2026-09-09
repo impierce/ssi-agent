@@ -1,0 +1,114 @@
+meta {
+  name: Create a public offer mapping
+  type: http
+  seq: 1
+  tags: [
+    Issuance
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/create-public-offer
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "offerId": "",
+    "templateId": ""
+  }
+}
+
+example {
+  name: 201 Response
+  description: Public offer created successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-public-offer
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": "",
+        "templateId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Template schema invalid for public offers
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-public-offer
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": "",
+        "templateId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Template or offer not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-public-offer
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": "",
+        "templateId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -1,5 +1,6 @@
 // Endpoint handlers
 pub mod authorization_requests;
+pub mod openapi;
 pub mod relying_party;
 
 pub mod error;

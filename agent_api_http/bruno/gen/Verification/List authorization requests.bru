@@ -1,0 +1,53 @@
+meta {
+  name: List authorization requests
+  type: http
+  seq: 1
+  tags: [
+    Verification
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/authorization_requests
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Authorization requests
+  
+  request: {
+    url: {{BASE_URL}}/v0/authorization_requests
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "authorization_request": "",
+            "form_url_encoded_authorization_request": "",
+            "id_token": "",
+            "signed_authorization_request_object": "",
+            "state": "",
+            "validated": false,
+            "vp_token": ""
+          }
+        ]
+      '''
+    }
+  }
+}

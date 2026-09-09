@@ -1,0 +1,80 @@
+meta {
+  name: Delete a public offer
+  type: http
+  seq: 5
+  tags: [
+    Issuance
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/delete-public-offer
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "offerId": ""
+  }
+}
+
+example {
+  name: 204 Response
+  description: Public offer deleted successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/delete-public-offer
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Public offer not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/delete-public-offer
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -1,0 +1,87 @@
+meta {
+  name: Get an authorization request
+  type: http
+  seq: 3
+  tags: [
+    Verification
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/authorization_requests/:authorization_request_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  @description('Authorization request ID')
+  authorization_request_id: 
+}
+
+example {
+  name: 200 Response
+  description: Authorization request
+  
+  request: {
+    url: {{BASE_URL}}/v0/authorization_requests/:authorization_request_id
+    method: GET
+    mode: none
+    params:path: {
+      authorization_request_id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "authorization_request": "",
+          "form_url_encoded_authorization_request": "",
+          "id_token": "",
+          "signed_authorization_request_object": "",
+          "state": "",
+          "validated": false,
+          "vp_token": ""
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Authorization request not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/authorization_requests/:authorization_request_id
+    method: GET
+    mode: none
+    params:path: {
+      authorization_request_id: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

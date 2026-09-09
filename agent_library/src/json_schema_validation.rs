@@ -93,19 +93,21 @@ impl CredentialTypeVersion {
 
 impl CredentialType {
     fn get_version(&self, data: &Value) -> Result<CredentialTypeVersion, JsonSchemaError> {
-        let context_array = serde_json::from_value::<Vec<String>>(data["@context"].clone())
-            .map_err(|e| JsonSchemaError::InvalidJsonData(e.to_string()))?;
+        let context_array = data["@context"]
+            .as_array()
+            .ok_or_else(|| JsonSchemaError::InvalidJsonData("`@context` is missing or not an array".to_string()))?;
 
         match self {
             CredentialType::OpenBadgeCredential => {
-                match context_array
-                    .get(1)
-                    .ok_or(JsonSchemaError::GetCredentialTypeError(
-                        "Invalid Credential Format: Second context element missing from OpenBadge Credential"
-                            .to_string(),
-                    ))?
-                    .as_str()
-                {
+                let second_context =
+                    context_array
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .ok_or(JsonSchemaError::GetCredentialTypeError(
+                            "Invalid Credential Format: Second context element missing from OpenBadge Credential"
+                                .to_string(),
+                        ))?;
+                match second_context {
                     context
                         if context.starts_with("https://purl.imsglobal.org/spec/ob/v3p0/context-")
                             && context.ends_with(".json") =>
@@ -119,14 +121,15 @@ impl CredentialType {
                 }
             }
             CredentialType::VerifiableCredential => {
-                match context_array
-                    .first()
-                    .ok_or(JsonSchemaError::GetCredentialTypeError(
+                let first_context =
+                    context_array
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .ok_or(JsonSchemaError::GetCredentialTypeError(
                         "Invalid Credential Format: Required first context element missing from Verifiable Credential"
                             .to_string(),
-                    ))?
-                    .as_str()
-                {
+                    ))?;
+                match first_context {
                     "https://www.w3.org/2018/credentials/v1" => Ok(CredentialTypeVersion::VerifiableCredentialV1_1),
                     "https://www.w3.org/ns/credentials/v2" => Ok(CredentialTypeVersion::VerifiableCredentialV2),
                     _ => Err(JsonSchemaError::GetCredentialTypeError(

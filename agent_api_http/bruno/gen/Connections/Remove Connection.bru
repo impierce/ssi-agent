@@ -1,0 +1,53 @@
+meta {
+  name: Remove Connection
+  type: http
+  seq: 4
+  tags: [
+    Connections
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/connections/remove-connection
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": ""
+  }
+}
+
+docs {
+  Removes a connection by its ID.
+}
+
+example {
+  name: 200 Response
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections/remove-connection
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "id": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

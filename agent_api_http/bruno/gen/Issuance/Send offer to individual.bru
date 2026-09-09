@@ -1,0 +1,56 @@
+meta {
+  name: Send offer to individual
+  type: http
+  seq: 9
+  tags: [
+    Issuance
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/offers/send-offer-to-individual
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "offerId": "",
+    "recipientEmail": ""
+  }
+}
+
+docs {
+  Sends a credential offer to an individual's email.
+}
+
+example {
+  name: 200 Response
+  description: Offer sent successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/offers/send-offer-to-individual
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": "",
+        "recipientEmail": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

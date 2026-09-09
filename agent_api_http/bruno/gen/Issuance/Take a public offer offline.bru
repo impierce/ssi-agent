@@ -1,0 +1,80 @@
+meta {
+  name: Take a public offer offline
+  type: http
+  seq: 12
+  tags: [
+    Issuance
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/take-public-offer-offline
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "offerId": ""
+  }
+}
+
+example {
+  name: 204 Response
+  description: Public offer taken offline successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/take-public-offer-offline
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Public offer not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/take-public-offer-offline
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

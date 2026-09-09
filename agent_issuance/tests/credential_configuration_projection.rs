@@ -873,3 +873,129 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
         .expect("claim should be present after schema attribute update");
     assert!(!claim.mandatory);
 }
+
+#[tokio::test]
+async fn test_logo_first_draft_then_title_then_publish_uses_title_as_display_name() {
+    let (issuance, library_for_query, projection) = setup().await;
+
+    let template_id = "logo-first-template";
+    let logo = agent_library::template::aggregate::Logo {
+        uri: "https://example.com/logo.png".to_string(),
+        alt_text: None,
+    };
+
+    // 1. Uploading the logo creates a Draft template with an as-yet-unknown display name.
+    command_handler(
+        template_id,
+        &library_for_query.command.template,
+        TemplateCommand::CreateNewTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Placeholder".to_string(),
+            display: Box::new(Some(Display {
+                name: String::new(),
+                logo: Some(logo.clone()),
+            })),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        },
+    )
+    .await
+    .unwrap();
+    let create_event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Placeholder".to_string(),
+        Some(Display {
+            name: String::new(),
+            logo: Some(logo.clone()),
+        }),
+        Status::Draft,
+    );
+    projection.dispatch(template_id, &[create_event]).await;
+
+    // 2. The user enters the actual title. `display.name` is left untouched by the UI.
+    command_handler(
+        template_id,
+        &library_for_query.command.template,
+        TemplateCommand::UpdateTitle {
+            template_id: template_id.to_string(),
+            title: "Cooking Course 101".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+    projection
+        .dispatch(
+            template_id,
+            &[EventEnvelope {
+                aggregate_id: template_id.to_string(),
+                sequence: 2,
+                payload: TemplateEvent::TitleUpdated {
+                    template_id: template_id.to_string(),
+                    title: "Cooking Course 101".to_string(),
+                    modified_at: "2024-01-01T00:01:00Z".to_string(),
+                },
+                metadata: HashMap::new(),
+            }],
+        )
+        .await;
+
+    // 3. Publishing registers the credential configuration in the issuer metadata.
+    command_handler(
+        template_id,
+        &library_for_query.command.template,
+        TemplateCommand::UpdateStatus {
+            template_id: template_id.to_string(),
+            status: Status::Published,
+        },
+    )
+    .await
+    .unwrap();
+    projection
+        .dispatch(
+            template_id,
+            &[EventEnvelope {
+                aggregate_id: template_id.to_string(),
+                sequence: 3,
+                payload: TemplateEvent::StatusUpdated {
+                    template_id: template_id.to_string(),
+                    status: Status::Published,
+                    modified_at: "2024-01-01T00:02:00Z".to_string(),
+                },
+                metadata: HashMap::new(),
+            }],
+        )
+        .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let display = config_obj
+        .credential_metadata
+        .as_ref()
+        .unwrap()
+        .display
+        .as_ref()
+        .unwrap()
+        .first()
+        .unwrap();
+
+    assert_eq!(display.name, "Cooking Course 101");
+    assert_eq!(
+        display.logo.as_ref().map(|logo| logo.uri.to_string()),
+        Some("https://example.com/logo.png".to_string())
+    );
+}

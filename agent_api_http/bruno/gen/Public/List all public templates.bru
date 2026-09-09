@@ -1,0 +1,61 @@
+meta {
+  name: List all public templates
+  type: http
+  seq: 1
+  tags: [
+    Public
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/public/templates
+  body: none
+  auth: inherit
+}
+
+docs {
+  Lists every template that is publicly visible and published. No authentication is required.
+}
+
+example {
+  name: 200 Response
+  description: All public templates retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/public/templates
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "credentialExpiration": "",
+            "dataModel": "w3c_vc_data_model_v1-1",
+            "description": "",
+            "display": "",
+            "holderType": "individual",
+            "modifiedAt": "",
+            "schema": "",
+            "schemaPropertiesAttributes": "",
+            "tags": "",
+            "title": "",
+            "type": []
+          }
+        ]
+      '''
+    }
+  }
+}

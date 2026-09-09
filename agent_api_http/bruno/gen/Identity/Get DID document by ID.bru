@@ -1,0 +1,89 @@
+meta {
+  name: Get DID document by ID
+  type: http
+  seq: 2
+  tags: [
+    Identity
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/documents/:document_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  document_id: {{DOCUMENT_ID}}
+}
+
+docs {
+  Retrieves a DID document of your organisation by its ID.
+}
+
+example {
+  name: 200 Response
+  description: Document retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/documents/:document_id
+    method: GET
+    mode: none
+    params:path: {
+      document_id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "did_method": "",
+          "document": {},
+          "id": "",
+          "iota_metadata": "",
+          "status": "SignAndValidate",
+          "with_fixed_algorithm": "ES256"
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Document not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/documents/:document_id
+    method: GET
+    mode: none
+    params:path: {
+      document_id: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

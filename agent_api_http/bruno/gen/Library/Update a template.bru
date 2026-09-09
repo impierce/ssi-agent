@@ -1,0 +1,77 @@
+meta {
+  name: Update a template
+  type: http
+  seq: 15
+  tags: [
+    Library
+    Templates
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/update-template
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "credentialExpiration": "",
+    "description": "",
+    "display": "",
+    "holderAuthorization": "",
+    "id": "",
+    "schema": "",
+    "schemaPropertiesAttributes": "",
+    "status": "",
+    "tags": "",
+    "title": "",
+    "type": "",
+    "visibility": ""
+  }
+}
+
+docs {
+  Updates an existing template with the provided content.
+}
+
+example {
+  name: 204 Response
+  description: Template updated successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/update-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "credentialExpiration": "",
+        "description": "",
+        "display": "",
+        "holderAuthorization": "",
+        "id": "",
+        "schema": "",
+        "schemaPropertiesAttributes": "",
+        "status": "",
+        "tags": "",
+        "title": "",
+        "type": "",
+        "visibility": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

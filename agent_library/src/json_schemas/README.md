@@ -8,7 +8,7 @@ This folder contains the JSON Schemas of the digital credential data formats sup
   JSON Schema source: https://www.imsglobal.org/spec/ob/v3p0#achievementcredential-0
 - [European Digital Credential](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model)
   JSON Schema source: https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
-  - [Verifiable Credentials Data Model v1.1](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model) EDC builds upon the VC DM 1.1 but on a different JSON Schema as defined by the European Publication Office: https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model
+  - [Verifiable Credentials Data Model v1.1](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model) EDC builds upon the VC DM 1.1 but on a different JSON Schema as defined by the European Publication Office: https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/snb-model (Note: we fixed the `@context` definition in `EDC_VerifiableCredentialV1_1.json` to allow embedded context objects, as permitted by the [W3C VC Data Model v1.1 Contexts specification](https://www.w3.org/TR/vc-data-model-1.1/#contexts)).
 
 \
 \

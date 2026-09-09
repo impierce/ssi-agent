@@ -12,6 +12,7 @@ use std::sync::Arc;
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedVPEndpointRequest {
+    /// Presentation IDs served by the linked verifiable presentation service.
     pub presentation_ids: Vec<String>,
 }
 
