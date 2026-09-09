@@ -4,7 +4,11 @@ use crate::{
     API_VERSION,
 };
 use agent_shared::generate_random_string;
-use agent_verification::{authorization_request::command::AuthorizationRequestCommand, state::VerificationState};
+use agent_verification::{
+    authorization_request::{aggregate::AuthorizationRequest, command::AuthorizationRequestCommand},
+    generic_oid4vc::GenericAuthorizationRequest,
+    state::VerificationState,
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -13,10 +17,49 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oid4vp::dcql::dcql_query::DcqlQuery;
+use oid4vp::{dcql::dcql_query::DcqlQuery, token::vp_token_validator::DecodedVpToken};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+#[derive(Serialize, utoipa::ToSchema)]
+struct AuthorizationRequestResponse {
+    /// TODO: Replace this generic object schema with schemas for the supported OpenID authorization request types.
+    #[schema(value_type = Option<Object>)]
+    authorization_request: Option<GenericAuthorizationRequest>,
+    form_url_encoded_authorization_request: Option<String>,
+    signed_authorization_request_object: Option<String>,
+    id_token: Option<String>,
+    /// TODO: Replace this generic object schema with a schema for `DecodedVpToken`.
+    #[schema(value_type = Option<Object>)]
+    vp_token: Option<DecodedVpToken>,
+    state: Option<String>,
+    validated: bool,
+}
+
+impl From<AuthorizationRequest> for AuthorizationRequestResponse {
+    fn from(authorization_request: AuthorizationRequest) -> Self {
+        Self {
+            authorization_request: authorization_request.authorization_request,
+            form_url_encoded_authorization_request: authorization_request.form_url_encoded_authorization_request,
+            signed_authorization_request_object: authorization_request.signed_authorization_request_object,
+            id_token: authorization_request.id_token,
+            vp_token: authorization_request.vp_token,
+            state: authorization_request.state,
+            validated: authorization_request.validated,
+        }
+    }
+}
+
+/// List authorization requests
+#[utoipa::path(
+    get,
+    path = "/authorization_requests",
+    operation_id = "list_authorization_requests",
+    tags = ["Verification"],
+    responses(
+        (status = 200, description = "Authorization requests", body = [AuthorizationRequestResponse]),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_authorization_requests(
     State(state): State<Arc<VerificationState>>,
@@ -33,6 +76,7 @@ pub(crate) async fn all_authorization_requests(
         all_authorization_requests_view
             .authorization_requests
             .into_values()
+            .map(AuthorizationRequestResponse::from)
             .collect::<Vec<_>>()
     })
     .unwrap_or_default();
@@ -40,6 +84,20 @@ pub(crate) async fn all_authorization_requests(
     Ok((StatusCode::OK, Json(all_authorization_requests)).into_response())
 }
 
+/// Get an authorization request
+#[utoipa::path(
+    get,
+    path = "/authorization_requests/{authorization_request_id}",
+    operation_id = "get_authorization_request",
+    tags = ["Verification"],
+    params(
+        ("authorization_request_id" = String, Path, description = "Authorization request ID"),
+    ),
+    responses(
+        (status = 200, description = "Authorization request", body = AuthorizationRequestResponse),
+        (status = 404, description = "Authorization request not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
@@ -53,16 +111,44 @@ pub(crate) async fn authorization_request(
         &state.query.authorization_request,
     )
     .await?
-    .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
+    .map(|authorization_request_view| {
+        (
+            StatusCode::OK,
+            Json(AuthorizationRequestResponse::from(authorization_request_view)),
+        )
+            .into_response()
+    })
     .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 pub struct AuthorizationRequestsEndpointRequest {
+    /// Optional caller-provided identifier for the authorization request. A random value is generated when omitted.
     pub state: Option<String>,
+    /// TODO: Replace this generic object schema with a schema for `DcqlQuery`.
+    #[schema(value_type = Option<Object>)]
     pub dcql_query: Option<DcqlQuery>,
 }
 
+/// Create an authorization request
+///
+/// Creates and signs an OpenID authorization request. The returned form-encoded deep link can be opened by a wallet.
+#[utoipa::path(
+    post,
+    path = "/authorization_requests",
+    operation_id = "create_authorization_request",
+    tags = ["Verification"],
+    request_body = AuthorizationRequestsEndpointRequest,
+    responses(
+        (
+            status = 201,
+            description = "Authorization request created",
+            headers(("Location", description = "Path of the created authorization request")),
+            body = String,
+            content_type = "application/x-www-form-urlencoded"
+        ),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<Arc<VerificationState>>,

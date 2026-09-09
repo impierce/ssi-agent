@@ -46,6 +46,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+  /v0/authorization_requests:
+    get:
+      tags:
+      - Verification
+      summary: List authorization requests
+      operationId: list_authorization_requests
+      responses:
+        '200':
+          description: Authorization requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuthorizationRequestResponse'
+    post:
+      tags:
+      - Verification
+      summary: Create an authorization request
+      description: Creates and signs an OpenID authorization request. The returned form-encoded deep link can be opened by a wallet.
+      operationId: create_authorization_request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequestsEndpointRequest'
+        required: true
+      responses:
+        '201':
+          description: Authorization request created
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Path of the created authorization request
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+  /v0/authorization_requests/{authorization_request_id}:
+    get:
+      tags:
+      - Verification
+      summary: Get an authorization request
+      operationId: get_authorization_request
+      parameters:
+      - name: authorization_request_id
+        in: path
+        description: Authorization request ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Authorization request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationRequestResponse'
+        '404':
+          description: Authorization request not found
   /v0/change-catalog-appearance:
     post:
       tags:
@@ -1146,6 +1207,52 @@ components:
           items:
             type: string
           default: []
+    AuthorizationRequestResponse:
+      type: object
+      required:
+      - validated
+      properties:
+        authorization_request:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with schemas for the supported OpenID authorization request types.'
+        form_url_encoded_authorization_request:
+          type:
+          - string
+          - 'null'
+        id_token:
+          type:
+          - string
+          - 'null'
+        signed_authorization_request_object:
+          type:
+          - string
+          - 'null'
+        state:
+          type:
+          - string
+          - 'null'
+        validated:
+          type: boolean
+        vp_token:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `DecodedVpToken`.'
+    AuthorizationRequestsEndpointRequest:
+      type: object
+      properties:
+        dcql_query:
+          type:
+          - object
+          - 'null'
+          description: 'TODO: Replace this generic object schema with a schema for `DcqlQuery`.'
+        state:
+          type:
+          - string
+          - 'null'
+          description: Optional caller-provided identifier for the authorization request. A random value is generated when omitted.
     Catalog:
       type: object
       description: Data transfer object for Catalogs.
@@ -2549,6 +2656,8 @@ tags:
   description: Create and manage templates which provide the structure for credentials to be issued.
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
+- name: Verification
+  description: Manage requests for verifiable presentations and their responses.
 - name: Public
   description: Endpoints that are publicly reachable without authentication, used to expose publicly available information or communicate with external systems.
 externalDocs:
