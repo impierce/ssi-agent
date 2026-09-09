@@ -16,7 +16,7 @@ pub enum ServiceEvent {
         resource: ServiceResource,
         is_deleted: bool,
     },
-    DomainLinkageServiceReissued {
+    DomainLinkageCredentialsRenewed {
         service_id: String,
         service: DocumentService,
         #[derivative(PartialEq = "ignore")]

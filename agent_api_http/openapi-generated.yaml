@@ -907,22 +907,6 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
-  /v0/reissue-domain-linkage:
-    post:
-      tags:
-      - Identity
-      operationId: reissue_domain_linkage
-      responses:
-        '204':
-          description: Domain linkage credential reissued
-        '400':
-          description: No eligible signing DID
-        '401':
-          description: Authentication required
-        '403':
-          description: Operation forbidden
-        '404':
-          description: Service not found
   /v0/remove-domain-linkage:
     post:
       tags:
@@ -1024,7 +1008,7 @@ paths:
         '204':
           description: Template updated successfully
   /v0/verify-domain-linkage:
-    post:
+    get:
       tags:
       - Identity
       operationId: verify_domain_linkage

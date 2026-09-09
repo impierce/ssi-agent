@@ -24,7 +24,10 @@ impl View<Document> for Document {
                 self.with_fixed_algorithm.clone_from(signing_algorithm);
                 self.iota_metadata.clone_from(iota_metadata);
             }
-            PublicKeyUpdated { document_id, document } | DocumentIdentityChanged { document_id, document } => {
+            PublicKeyUpdated { document_id, document }
+            | DocumentDidWebOverwritten {
+                document_id, document, ..
+            } => {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }

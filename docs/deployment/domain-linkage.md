@@ -21,12 +21,30 @@ IP addresses cannot be used as `did:web` hosts.
 
 The document is persisted at creation and reused on restart, including its keys and services.
 Enabling, renewing, or removing domain linkage never changes the DID or rotates its signing keys.
+After creation, the persisted DID is the source of truth for the deployment identity.
 
-If the configured origin would produce a different DID than the one persisted, startup replaces the
-deployment identity, retaining signing keys, and logs a warning with the old and new identifiers.
-`public_url` is provisioned per deployment and cannot change at runtime, so this only happens across
-a restart with a deliberately reconfigured origin. Existing credentials are not migrated to the new
-identifier.
+If the configured origin would produce a different DID than the one persisted, startup fails and
+reports the persisted DID and the newly configured origin. This prevents an ordinary deployment
+configuration change from silently invalidating the identity referenced by issued credentials.
+
+A deliberate migration requires `overwrite_previous_did_web` to exactly match the persisted DID
+while `public_url` identifies the new origin:
+
+```yaml
+public_url: https://new.example.org
+overwrite_previous_did_web: did:web:old.example.org
+```
+
+The equivalent environment variable is
+`UNICORE__OVERWRITE_PREVIOUS_DID_WEB=did:web:old.example.org`. On the next startup UniCore records a
+`DocumentDidWebOverwritten` event, retains the existing keys and services, renews active Domain
+Linkage credentials for the new origin, and logs the old and new identifiers. Remove the override
+after that successful startup; a stale value cannot authorize another migration because it no
+longer matches the persisted DID.
+
+Overwriting the DID does not migrate previously issued credentials. They still reference the old
+DID, so the operator must keep the old DID document resolvable at its old origin for as long as
+those credentials must remain verifiable.
 
 ## Runtime commands
 
@@ -36,14 +54,13 @@ The former `domain_linkage_enabled` setting is ignored with a deprecation warnin
 | Command | Effect |
 | --- | --- |
 | `POST /v0/create-domain-linkage` | Create linkage to the origin of `public_url`. No request body. |
-| `POST /v0/reissue-domain-linkage` | Immediately issue fresh linkage credentials. No request body. |
 | `POST /v0/remove-domain-linkage` | Remove linkage and its entries from DID documents. No request body. |
-| `POST /v0/verify-domain-linkage` | Resolve the linkage UniCore currently publishes and validate it externally. No request body. |
+| `GET /v0/verify-domain-linkage` | Resolve the linkage UniCore currently publishes and validate it externally. |
 | `POST /v0/create-linked-verifiable-presentation` | Add a linked presentation service; body: `{"presentationIds":["presentation-1"]}`. |
 | `POST /v0/remove-linked-verifiable-presentation` | Remove the linked presentation service, retaining the presentations themselves. No request body. |
 
-Commands return `204` on success, `409` when creating an existing service, and `404` when reissuing
-or removing a missing service. Creating linkage without an eligible signing DID returns `400`.
+Commands return `204` on success, `409` when creating an existing service, and `404` when removing
+a missing service. Creating linkage without an eligible signing DID returns `400`.
 `verify-domain-linkage` always returns `200` with `{"valid": boolean, "message": string | null}`:
 it fetches `/.well-known/did-configuration.json` from `public_url` exactly as an external verifier
 would (proving DNS, HTTPS, and hosting are reachable) and checks it against the DID(s) UniCore
@@ -65,7 +82,7 @@ commands are under `/unicore/v0/`, while the two identity resources remain under
 
 Configure the reverse proxy to forward these root paths to UniCore as well as the application path.
 The DID configuration endpoint returns `404` before linkage is created and after it is removed.
-Create and reissue operations update the published configuration without restarting.
+Creating domain linkage updates the published configuration without restarting.
 
 See the [DID Configuration specification](https://identity.foundation/well-known-did-configuration/resources/did-configuration/)
 and the [did:web method specification](https://w3c-ccg.github.io/did-method-web/).

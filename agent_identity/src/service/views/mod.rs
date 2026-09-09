@@ -15,7 +15,7 @@ impl View<Service> for Service {
                 resource,
                 is_deleted,
             }
-            | DomainLinkageServiceReissued {
+            | DomainLinkageCredentialsRenewed {
                 service_id,
                 service,
                 resource,

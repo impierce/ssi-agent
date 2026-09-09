@@ -8,7 +8,7 @@ pub enum ServiceCommand {
         service_id: String,
         verification_methods: Vec<VerificationMethod>,
     },
-    ReissueDomainLinkageService {
+    RenewDomainLinkageCredentials {
         service_id: String,
         verification_methods: Vec<VerificationMethod>,
         only_if_expiring: bool,
@@ -29,7 +29,7 @@ impl ServiceCommand {
     pub fn operation(&self) -> &'static str {
         match self {
             Self::CreateDomainLinkageService { .. } => "identity.services.domain_linkage.create",
-            Self::ReissueDomainLinkageService { .. } => "identity.services.domain_linkage.reissue",
+            Self::RenewDomainLinkageCredentials { .. } => "identity.services.domain_linkage.renew",
             Self::DeleteDomainLinkageService { .. } => "identity.services.domain_linkage.delete",
             Self::CreateLinkedVerifiablePresentationService { .. } => {
                 "identity.services.linked_verifiable_presentation.create"
@@ -43,7 +43,7 @@ impl ServiceCommand {
     pub fn service_id(&self) -> &str {
         match self {
             Self::CreateDomainLinkageService { service_id, .. }
-            | Self::ReissueDomainLinkageService { service_id, .. }
+            | Self::RenewDomainLinkageCredentials { service_id, .. }
             | Self::DeleteDomainLinkageService { service_id }
             | Self::CreateLinkedVerifiablePresentationService { service_id, .. }
             | Self::DeleteLinkedVerifiablePresentationService { service_id } => service_id,

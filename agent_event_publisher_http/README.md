@@ -88,7 +88,7 @@ PublicKeyUpdated
 DocumentStatusUpdated
 ServiceAdded
 ServiceRemoved
-DocumentIdentityChanged
+DocumentDidWebOverwritten
 DocumentPublished
 ```
 
@@ -108,7 +108,7 @@ SourceUpdated,
 ```
 DomainLinkageServiceCreated
 DomainLinkageServiceDeleted
-DomainLinkageServiceReissued
+DomainLinkageCredentialsRenewed
 LinkedVerifiablePresentationServiceCreated
 LinkedVerifiablePresentationServiceDeleted
 ```

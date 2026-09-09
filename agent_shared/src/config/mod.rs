@@ -108,6 +108,8 @@ pub struct ApplicationConfiguration {
         transform_with = "into_directory"
     )]
     pub public_url: Url,
+    #[config(default)]
+    pub overwrite_previous_did_web: Option<String>,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
@@ -683,7 +685,7 @@ pub enum DocumentEvent {
     DocumentStatusUpdated,
     ServiceAdded,
     ServiceRemoved,
-    DocumentIdentityChanged,
+    DocumentDidWebOverwritten,
     DocumentPublished,
 }
 
@@ -701,7 +703,7 @@ pub enum ProfileEvent {
 pub enum ServiceEvent {
     DomainLinkageServiceCreated,
     DomainLinkageServiceDeleted,
-    DomainLinkageServiceReissued,
+    DomainLinkageCredentialsRenewed,
     LinkedVerifiablePresentationServiceCreated,
     LinkedVerifiablePresentationServiceDeleted,
 }
@@ -1571,6 +1573,25 @@ mod tests {
 
         // Assert that the public URL is set to the application URL
         assert_eq!(config.public_url, config.application_url);
+    }
+
+    #[test]
+    #[serial]
+    fn test_did_web_overwrite_authorization_is_loaded_from_environment() {
+        temp_env::with_var(
+            "UNICORE__OVERWRITE_PREVIOUS_DID_WEB",
+            Some("did:web:old.example.org"),
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+                assert_eq!(
+                    config.overwrite_previous_did_web.as_deref(),
+                    Some("did:web:old.example.org")
+                );
+            },
+        );
     }
 
     #[test]

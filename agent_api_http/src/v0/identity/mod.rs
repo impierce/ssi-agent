@@ -18,10 +18,9 @@ use connections::{
 };
 use documents::{get_document, get_documents};
 use services::{
-    commands::*,
+    domain_linkage::{create_domain_linkage, remove_domain_linkage, verify_domain_linkage},
     linked_vp::{create_linked_verifiable_presentation, remove_linked_verifiable_presentation},
     service, services,
-    verify::verify_domain_linkage,
 };
 use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
@@ -51,9 +50,8 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
                     post(create_linked_verifiable_presentation),
                 )
                 .route("/create-domain-linkage", post(create_domain_linkage))
-                .route("/reissue-domain-linkage", post(reissue_domain_linkage))
                 .route("/remove-domain-linkage", post(remove_domain_linkage))
-                .route("/verify-domain-linkage", post(verify_domain_linkage))
+                .route("/verify-domain-linkage", get(verify_domain_linkage))
                 .route(
                     "/remove-linked-verifiable-presentation",
                     post(remove_linked_verifiable_presentation),

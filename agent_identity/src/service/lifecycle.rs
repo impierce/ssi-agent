@@ -65,7 +65,7 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
         ServiceCommand::CreateDomainLinkageService {
             verification_methods, ..
         }
-        | ServiceCommand::ReissueDomainLinkageService {
+        | ServiceCommand::RenewDomainLinkageCredentials {
             verification_methods, ..
         } => {
             *verification_methods = documents
@@ -159,10 +159,8 @@ pub async fn verify(
         .authorization_checker
         .is_authorized(&AuthorizationRequest {
             actor,
-            operation: AuthorizationOperation::Command {
-                aggregate_id: DOMAIN_LINKAGE_SERVICE_ID.to_owned(),
-                command_type: "identity.services.domain_linkage.verify",
-                authorization: CommandAuthorization::ACTOR_REQUIRED,
+            operation: AuthorizationOperation::Query {
+                query_type: std::any::type_name::<DomainLinkageVerification>(),
             },
         })
         .await?;
@@ -219,16 +217,16 @@ pub async fn verify(
     }
 }
 
-pub async fn reissue_existing_domain_linkage(state: &IdentityState) -> anyhow::Result<()> {
+pub async fn renew_existing_domain_linkage_credentials(state: &IdentityState) -> anyhow::Result<()> {
     let _guard = state.service_lifecycle_lock.lock().await;
     if domain_linkage(state).await?.is_some_and(|service| service.is_active()) {
-        execute_locked(state, reissue_command(false)).await?;
+        execute_locked(state, renewal_command(false)).await?;
     }
     Ok(())
 }
 
-fn reissue_command(only_if_expiring: bool) -> ServiceCommand {
-    ServiceCommand::ReissueDomainLinkageService {
+fn renewal_command(only_if_expiring: bool) -> ServiceCommand {
+    ServiceCommand::RenewDomainLinkageCredentials {
         service_id: DOMAIN_LINKAGE_SERVICE_ID.into(),
         verification_methods: vec![],
         only_if_expiring,
@@ -246,7 +244,7 @@ pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
         if eligible_documents.is_empty() {
             warn!("Domain linkage needs renewal, but no eligible signing DID is enabled");
         } else {
-            execute_locked(state, reissue_command(true)).await?;
+            execute_locked(state, renewal_command(true)).await?;
             return Ok(());
         }
     }

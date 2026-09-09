@@ -376,11 +376,9 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Reuses the persisted deployment DID, replacing it (and restoring signing caches) if the
-/// configured public origin has drifted, and logs a warning when it does. `public_url` is
-/// provisioned per deployment and cannot change at runtime, so drift only happens across restarts
-/// with a deliberately reconfigured origin — never mid-session. Other DID methods retain their
-/// existing configuration-driven initialization.
+/// Reuses the persisted deployment DID and refuses to start on public-origin drift unless the
+/// configured one-shot overwrite authorization exactly names the persisted DID. Other DID
+/// methods retain their existing configuration-driven initialization.
 pub async fn initialize_documents(
     state: &IdentityState,
     configuration: &agent_shared::config::ApplicationConfiguration,
@@ -399,27 +397,76 @@ pub async fn initialize_documents(
     } else {
         None
     };
-    let mut identity_changed = false;
+    let mut did_web_overwritten = false;
     if let Some(expected) = &expected {
-        for document in all_documents
+        let persisted_documents: Vec<_> = all_documents
             .values()
             .filter(|document| document.did_method == Some(SupportedDidMethod::Web))
-        {
-            if let Some(persisted) = document.document.as_ref().filter(|document| document.id() != expected) {
-                warn!(
-                    "Replacing deployment identity {} with {}; signing keys are retained",
-                    persisted.id(),
-                    expected
+            .filter_map(|document| {
+                document
+                    .document
+                    .as_ref()
+                    .map(|persisted| (document.document_id.clone(), persisted.id().clone()))
+            })
+            .collect();
+        let drifted_documents: Vec<_> = persisted_documents
+            .iter()
+            .filter(|(_, persisted)| persisted != expected)
+            .cloned()
+            .collect();
+
+        if !drifted_documents.is_empty() {
+            let persisted_dids = drifted_documents
+                .iter()
+                .map(|(_, persisted)| persisted.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let configured_origin = configuration.public_url.origin().ascii_serialization();
+            let previous_did = configuration.overwrite_previous_did_web.as_deref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Configured public origin '{configured_origin}' would change persisted deployment DID(s) \
+                     [{persisted_dids}] to '{expected}'. Refusing to start without explicit overwrite authorization; \
+                     set `overwrite_previous_did_web` to the persisted DID"
+                )
+            })?;
+            let authorized_did = previous_did.parse::<identity_did::CoreDID>().map_err(|error| {
+                anyhow::anyhow!("Invalid `overwrite_previous_did_web` value '{previous_did}': {error}")
+            })?;
+            if drifted_documents
+                .iter()
+                .any(|(_, persisted)| persisted != &authorized_did)
+            {
+                anyhow::bail!(
+                    "Overwrite authorization '{authorized_did}' does not match persisted deployment DID(s) \
+                     [{persisted_dids}]; refusing to change identity for configured origin '{configured_origin}'"
                 );
+            }
+
+            warn!(
+                persisted_did = %authorized_did,
+                configured_did = %expected,
+                configured_origin,
+                "Explicitly overwriting the deployment did:web; existing credentials are not migrated"
+            );
+            for (document_id, persisted_did) in drifted_documents {
                 agent_shared::handlers::public_command_handler(
-                    &document.document_id,
+                    &document_id,
                     &state.command.document,
-                    DocumentCommand::ReplaceWebIdentity {
+                    DocumentCommand::OverwritePreviousDidWeb {
+                        previous_did: persisted_did,
                         public_url: configuration.public_url.clone(),
                     },
                 )
                 .await?;
-                identity_changed = true;
+            }
+            did_web_overwritten = true;
+        } else if !persisted_documents.is_empty() {
+            if let Some(previous_did) = &configuration.overwrite_previous_did_web {
+                warn!(
+                    overwrite_previous_did_web = previous_did,
+                    current_did = %expected,
+                    "DID overwrite authorization is no longer needed and should be removed from configuration"
+                );
             }
         }
     }
@@ -517,8 +564,8 @@ pub async fn initialize_documents(
         }
     }
 
-    if identity_changed {
-        crate::service::lifecycle::reissue_existing_domain_linkage(state).await?;
+    if did_web_overwritten {
+        crate::service::lifecycle::renew_existing_domain_linkage_credentials(state).await?;
     }
     Ok(())
 }

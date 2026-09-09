@@ -84,10 +84,10 @@ impl Aggregate for Service {
 
         info!("Handling command: {:?}", command);
 
-        let reissue = matches!(&command, ReissueDomainLinkageService { .. });
+        let renewal = matches!(&command, RenewDomainLinkageCredentials { .. });
         let only_if_expiring = matches!(
             &command,
-            ReissueDomainLinkageService {
+            RenewDomainLinkageCredentials {
                 only_if_expiring: true,
                 ..
             }
@@ -97,15 +97,15 @@ impl Aggregate for Service {
                 service_id,
                 verification_methods,
             }
-            | ReissueDomainLinkageService {
+            | RenewDomainLinkageCredentials {
                 service_id,
                 verification_methods,
                 ..
             } => {
-                if reissue && !self.is_active() {
+                if renewal && !self.is_active() {
                     return Err(NotFound);
                 }
-                if !reissue && self.is_active() {
+                if !renewal && self.is_active() {
                     return Err(AlreadyExists);
                 }
                 if only_if_expiring && !self.needs_renewal((services.linkage_clock)()) {
@@ -204,8 +204,8 @@ impl Aggregate for Service {
                     .map_err(|err| ServiceBuilderError(err.to_string()))?;
 
                 let resource = ServiceResource::DomainLinkage(domain_linkage_configuration);
-                Ok(vec![if reissue {
-                    DomainLinkageServiceReissued {
+                Ok(vec![if renewal {
+                    DomainLinkageCredentialsRenewed {
                         service_id,
                         service,
                         resource,
@@ -298,7 +298,7 @@ impl Aggregate for Service {
                 resource,
                 is_deleted,
             }
-            | DomainLinkageServiceReissued {
+            | DomainLinkageCredentialsRenewed {
                 service_id,
                 service,
                 resource,

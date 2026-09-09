@@ -375,21 +375,30 @@ impl Aggregate for Document {
 
                 Ok(events)
             }
-            ReplaceWebIdentity { public_url } => {
+            OverwritePreviousDidWeb {
+                previous_did,
+                public_url,
+            } => {
                 if self.did_method != Some(SupportedDidMethod::Web) {
                     return Err(InvalidDidError(
-                        "Only did:web supports deployment identity replacement".into(),
+                        "Only did:web supports overwriting the deployment identity".into(),
                     ));
                 }
                 let document = self.document.clone().ok_or(MissingDocumentError)?;
                 let previous = document.id().clone();
+                if previous != previous_did {
+                    return Err(InvalidDidError(format!(
+                        "Overwrite authorization for {previous_did} does not match the current DID {previous}"
+                    )));
+                }
                 let replacement = super::web::did_web(&public_url)?;
                 let remap = |did: CoreDID| -> Result<CoreDID, DocumentError> {
                     Ok(if did == previous { replacement.clone() } else { did })
                 };
                 let document = document.try_map(remap, remap, remap, remap, ProduceDocumentError)?;
-                Ok(vec![DocumentIdentityChanged {
+                Ok(vec![DocumentDidWebOverwritten {
                     document_id: self.document_id.clone(),
+                    previous_did: previous,
                     document,
                 }])
             }
@@ -643,7 +652,10 @@ impl Aggregate for Document {
                 self.with_fixed_algorithm = with_fixed_algorithm;
                 self.iota_metadata = iota_metadata;
             }
-            PublicKeyUpdated { document_id, document } | DocumentIdentityChanged { document_id, document } => {
+            PublicKeyUpdated { document_id, document }
+            | DocumentDidWebOverwritten {
+                document_id, document, ..
+            } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
@@ -1005,6 +1017,32 @@ pub mod document_tests {
                 document_id,
                 status: Status::Disabled,
             }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn overwrite_rejects_an_authorization_for_another_did(
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![DocumentEvent::DocumentCreated {
+                document_id,
+                did_method,
+                document,
+                status: Status::SignAndValidate,
+                with_fixed_algorithm: None,
+                iota_metadata: None,
+            }])
+            .when(DocumentCommand::OverwritePreviousDidWeb {
+                previous_did: "did:web:other.example".parse().unwrap(),
+                public_url: "https://new.example".parse().unwrap(),
+            })
+            .then_expect_error_message(
+                "Invalid DID: Overwrite authorization for did:web:other.example does not match the current DID \
+                 did:web:my-domain.example.org",
+            )
     }
 }
 
