@@ -1,0 +1,79 @@
+meta {
+  name: List all templates
+  type: http
+  seq: 11
+  tags: [
+    Library
+    Templates
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/list-all-templates
+  body: none
+  auth: inherit
+}
+
+docs {
+  List all available templates.
+}
+
+example {
+  name: 200 Response
+  description: All templates retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/list-all-templates
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "credentialExpiration": "",
+            "dataModel": "w3c_vc_data_model_v1-1",
+            "description": "",
+            "display": "",
+            "holderAuthorization": {
+              "pre_authorized": false,
+              "tx_code_constraints": ""
+            },
+            "holderType": "individual",
+            "id": "",
+            "modifiedAt": "",
+            "schema": "",
+            "schemaPropertiesAttributes": "",
+            "status": "draft",
+            "tags": "",
+            "title": "",
+            "type": [],
+            "visibility": "private"
+          }
+        ]
+      '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const lastId = items[items.length - 1]?.id;
+    if (lastId) {
+      bru.setVar('TEMPLATE_ID', lastId);
+    }
+  }
+}

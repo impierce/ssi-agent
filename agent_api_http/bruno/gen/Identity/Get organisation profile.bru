@@ -1,0 +1,79 @@
+meta {
+  name: Get organisation profile
+  type: http
+  seq: 14
+  tags: [
+    Identity
+    Profile
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/profile
+  body: none
+  auth: inherit
+}
+
+docs {
+  Retrieves the profile information of your organisation.
+}
+
+example {
+  name: 200 Response
+  description: Profile retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/profile
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "country": "",
+          "description": "",
+          "displayName": "",
+          "logo": "",
+          "source": "Provisioned"
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Profile not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/profile
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

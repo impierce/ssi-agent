@@ -1,0 +1,71 @@
+meta {
+  name: Create a new catalog
+  type: http
+  seq: 3
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/create-new-catalog
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "display": "",
+    "visibility": ""
+  }
+}
+
+docs {
+  Creates a new catalog with the provided display information.
+}
+
+example {
+  name: 201 Response
+  description: Catalog created successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-catalog
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "display": "",
+        "visibility": ""
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

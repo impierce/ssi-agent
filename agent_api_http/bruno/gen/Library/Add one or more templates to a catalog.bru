@@ -1,0 +1,71 @@
+meta {
+  name: Add one or more templates to a catalog
+  type: http
+  seq: 1
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/add-templates-to-catalog
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": "",
+    "templateIds": []
+  }
+}
+
+docs {
+  Adds one or more templates to a catalog by their IDs.
+}
+
+example {
+  name: 200 Response
+  description: Catalog updated successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-templates-to-catalog
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": "",
+        "templateIds": []
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

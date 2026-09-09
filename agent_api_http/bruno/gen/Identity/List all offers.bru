@@ -1,0 +1,72 @@
+meta {
+  name: List all offers
+  type: http
+  seq: 6
+  tags: [
+    Identity
+    Holder
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/holder/offers
+  body: none
+  auth: inherit
+}
+
+docs {
+  Retrieves all offers received by your organisation.
+}
+
+example {
+  name: 200 Response
+  description: All offers retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/holder/offers
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "credential_configurations": "",
+            "credential_offer": "",
+            "credentials": [
+              {
+                "credential": "",
+                "holder_credential_id": ""
+              }
+            ],
+            "id": "",
+            "status": "Pending",
+            "token_response": ""
+          }
+        ]
+      '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const lastId = items[items.length - 1]?.id;
+    if (lastId) {
+      bru.setVar('RECEIVED_OFFER_ID', lastId);
+    }
+  }
+}
