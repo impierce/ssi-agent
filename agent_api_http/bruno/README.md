@@ -1,7 +1,7 @@
 # UniCore Bruno collection
 
 This directory contains the tooling used to generate a [Bruno](https://www.usebruno.com/)
-collection from `../openapi-generated.yaml`.
+collection from `../openapi.yaml`.
 
 ## Open the collection
 

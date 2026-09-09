@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerates the Bruno collection in ./gen from ../openapi-generated.yaml.
+# Regenerates the Bruno collection in ./gen from ../openapi.yaml.
 #
 # Run manually whenever the spec changes:
 #   agent_api_http/bruno/generate.sh
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SPEC_FILE="$SCRIPT_DIR/../openapi-generated.yaml"
+SPEC_FILE="$SCRIPT_DIR/../openapi.yaml"
 GENERATED_DIR="$SCRIPT_DIR/gen"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT

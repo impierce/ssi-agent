@@ -40,6 +40,6 @@ mod tests {
     fn generate_openapi_spec() {
         let openapi = patch_generated_openapi(ApiDoc::openapi());
         let yaml = openapi.to_yaml().unwrap();
-        std::fs::write("openapi-generated.yaml", yaml).unwrap();
+        std::fs::write("openapi.yaml", yaml).unwrap();
     }
 }
