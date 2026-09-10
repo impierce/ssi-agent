@@ -14,6 +14,8 @@ pub enum ServiceError {
     UnsupportedVerificationMethodAlgorithm(String),
     #[error("At least one linked DID is required, but none were generated.")]
     EmptyLinkedDidsError,
+    #[error("At least one origin is required.")]
+    EmptyOriginsError,
     #[error("Invalid URL: {0}")]
     InvalidUrlError(String),
     #[error("Invalid DID: {0}")]

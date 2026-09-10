@@ -106,9 +106,9 @@ SourceUpdated,
 #### `service`
 
 ```
-DomainLinkageServiceCreated
-DomainLinkageServiceDeleted
-DomainLinkageCredentialsRenewed
+LinkedDomainsAdded
+LinkedDomainsRemoved
+LinkedDomainsCredentialsRenewed
 LinkedVerifiablePresentationServiceCreated
 LinkedVerifiablePresentationServiceDeleted
 ```

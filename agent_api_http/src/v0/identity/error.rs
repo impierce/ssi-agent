@@ -36,8 +36,27 @@ impl IntoApiErrorExt for ConnectionError {
 
 impl IntoApiErrorExt for DocumentError {
     fn into_api_error(self) -> ApiError {
-        // TODO: Implement appropriate Problem Details responses
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        use DocumentError::*;
+
+        match self {
+            OpaqueOriginError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Opaque Origin Not Supported")
+                .type_url(type_url("identity#opaque-origin"))
+                .message(self.to_string())
+                .finish(),
+            HostError => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Host Must Be A Domain Name")
+                .type_url(type_url("identity#invalid-host"))
+                .message(self.to_string())
+                .finish(),
+            InvalidOriginError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Domain Or Origin")
+                .type_url(type_url("identity#invalid-origin"))
+                .message(self.to_string())
+                .finish(),
+            // TODO: Implement appropriate Problem Details responses
+            _ => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+        }
     }
 }
 
@@ -63,6 +82,7 @@ impl IntoApiErrorExt for ServiceError {
             ServiceError::EmptyLinkedDidsError => {
                 (StatusCode::BAD_REQUEST, "No eligible signing DID", "no-linked-dids")
             }
+            ServiceError::EmptyOriginsError => (StatusCode::BAD_REQUEST, "No Origins Given", "no-origins"),
             // TODO: Implement appropriate Problem Details responses
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

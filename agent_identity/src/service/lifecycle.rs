@@ -3,13 +3,14 @@ use super::{
     command::ServiceCommand,
     error::ServiceError,
 };
+use crate::dns::CnameCheck;
 use crate::{
     document::{
         aggregate::{Document, Status},
         command::DocumentCommand,
     },
-    services::extract_linked_dids,
-    state::{publish_decentrally_hosted_documents, query_all_documents, IdentityState, DOMAIN_LINKAGE_SERVICE_ID},
+    services::linked_dids_by_origin,
+    state::{publish_decentrally_hosted_documents, query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID},
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
 use identity_did::DID as _;
@@ -19,6 +20,7 @@ use shared_kernel::authorization::{
 };
 use std::sync::{Arc, Weak};
 use tracing::warn;
+use url::Url;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceManagementError {
@@ -62,10 +64,12 @@ fn can_link(document: &Document) -> bool {
 async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> Result<(), ServiceManagementError> {
     let documents = query_all_documents(state, |_| true).await?;
     match &mut command {
-        ServiceCommand::CreateDomainLinkageService {
+        // Unlinking deliberately needs no verification methods: it keeps the remaining origins'
+        // existing credentials rather than re-signing, so it still works once signing keys are gone.
+        ServiceCommand::AddLinkedDomains {
             verification_methods, ..
         }
-        | ServiceCommand::RenewDomainLinkageCredentials {
+        | ServiceCommand::RenewLinkedDomainsCredentials {
             verification_methods, ..
         } => {
             *verification_methods = documents
@@ -125,109 +129,163 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
     publish_decentrally_hosted_documents(state).await
 }
 
-async fn domain_linkage(state: &IdentityState) -> anyhow::Result<Option<Service>> {
-    Ok(public_query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await?)
+async fn linked_domains(state: &IdentityState) -> anyhow::Result<Option<Service>> {
+    Ok(public_query_handler(LINKED_DOMAINS_SERVICE_ID, &state.query.service).await?)
 }
 
-/// The outcome of resolving UniCore's currently published domain linkage over the network and
-/// validating it, mirroring what an external verifier would see.
+/// The outcome of verifying every linked domain, mirroring what an external verifier would see.
 #[derive(Debug, Clone, PartialEq, Serialize, utoipa::ToSchema)]
-pub struct DomainLinkageVerification {
+pub struct LinkedDomainsVerification {
+    /// Whether every linked domain verified.
     pub valid: bool,
+    /// Why verification could not be attempted at all, e.g. because no domain is linked. `None` when
+    /// the per-origin results below carry the outcome.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    pub origins: Vec<LinkedDomainVerification>,
 }
 
-impl DomainLinkageVerification {
+impl LinkedDomainsVerification {
     fn failure(message: impl Into<String>) -> Self {
         Self {
             valid: false,
             message: Some(message.into()),
+            origins: Vec::new(),
         }
     }
 }
 
-/// Authorizes, then resolves the domain linkage configuration UniCore currently publishes at its
-/// own `public_url` and validates it against the DID(s) it expects to have linked, i.e. the ones
-/// recorded in the persisted `DomainLinkageConfiguration`. This proves that DNS, HTTPS, and the
-/// `/.well-known/` hosting are actually reachable and correctly configured from the outside,
-/// rather than merely checking internal consistency.
+/// The outcome of verifying one linked domain.
+#[derive(Debug, Clone, PartialEq, Serialize, utoipa::ToSchema)]
+pub struct LinkedDomainVerification {
+    #[schema(value_type = String, example = "https://example.org")]
+    pub origin: Url,
+    /// Whether an external verifier resolving this origin would accept the linkage. This is the
+    /// authoritative result; `dns` is a diagnostic, because a domain can be served correctly without
+    /// a `CNAME` record — an apex domain cannot have one.
+    pub valid: bool,
+    /// Whether this origin's published configuration validates against the DIDs UniCore linked to it.
+    pub linkage_valid: bool,
+    /// Whether this origin's DNS points at the deployment.
+    pub dns: CnameCheck,
+    /// What went wrong, or `None` when this origin verified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Authorizes, then verifies every linked domain the way an external verifier would: for each origin
+/// it resolves that origin's `/.well-known/did-configuration.json` over the network and validates it
+/// against the DIDs UniCore linked to *that* origin, proving DNS, HTTPS and the `/.well-known/`
+/// hosting are genuinely reachable rather than merely internally consistent.
+///
+/// Each origin's `CNAME` record is resolved fresh alongside it. That check cannot be authoritative —
+/// apex domains have no `CNAME` — so it only explains a failure rather than causing one.
 pub async fn verify(
     state: &IdentityState,
     actor: Option<Actor>,
-) -> Result<DomainLinkageVerification, ServiceManagementError> {
+) -> Result<LinkedDomainsVerification, ServiceManagementError> {
     state
         .authorization_checker
         .is_authorized(&AuthorizationRequest {
             actor,
             operation: AuthorizationOperation::Query {
-                query_type: std::any::type_name::<DomainLinkageVerification>(),
+                query_type: std::any::type_name::<LinkedDomainsVerification>(),
             },
         })
         .await?;
 
     let Some(Service {
         is_deleted: false,
-        resource: Some(ServiceResource::DomainLinkage(config)),
+        resource: Some(ServiceResource::LinkedDomains(config)),
+        origins,
         ..
-    }) = domain_linkage(state).await?
+    }) = linked_domains(state).await?
     else {
-        return Ok(DomainLinkageVerification::failure(
-            "Domain linkage has not been created.",
-        ));
+        return Ok(LinkedDomainsVerification::failure("No domains are linked."));
     };
 
-    let expected = extract_linked_dids(&config);
+    // Which DIDs UniCore published for which origin. Each credential claims exactly one origin, so
+    // coverage has to be checked per (origin, DID) pair rather than per DID.
+    let expected = linked_dids_by_origin(&config);
     if expected.is_empty() {
-        return Ok(DomainLinkageVerification::failure("No linked DIDs are configured."));
+        return Ok(LinkedDomainsVerification::failure("No linked DIDs are configured."));
     }
 
-    let actual = match state.services.fetch_linked_dids(&state.services.public_url).await {
-        Ok(actual) => actual,
-        Err(error) => {
-            return Ok(DomainLinkageVerification::failure(format!(
-                "Failed to fetch the published domain linkage configuration: {error}"
-            )));
+    let deployment = state.services.public_url.clone();
+    let mut results = Vec::with_capacity(origins.len());
+
+    for origin in origins {
+        let dns = CnameCheck::resolve(&state.services.cname_resolver, &origin, &deployment).await;
+        let expected_dids = expected.get(&origin).cloned().unwrap_or_default();
+
+        let (linkage_valid, mut problems) = if expected_dids.is_empty() {
+            (
+                false,
+                vec!["no Domain Linkage Credential was issued for this origin".to_string()],
+            )
+        } else {
+            match state.services.fetch_linked_dids(&origin).await {
+                Ok(actual) => {
+                    let problems: Vec<String> = expected_dids
+                        .iter()
+                        .filter_map(|did| match actual.iter().find(|linked| linked.did.did() == did.did()) {
+                            Some(linked) if linked.domain_linkage_valid => None,
+                            Some(linked) => Some(format!(
+                                "{did}: {}",
+                                linked
+                                    .domain_linkage_error
+                                    .clone()
+                                    .unwrap_or_else(|| "domain linkage is invalid".to_string())
+                            )),
+                            None => Some(format!(
+                                "{did}: not found in the published domain linkage configuration"
+                            )),
+                        })
+                        .collect();
+                    (problems.is_empty(), problems)
+                }
+                Err(error) => (
+                    false,
+                    vec![format!(
+                        "Failed to fetch the published domain linkage configuration: {error}"
+                    )],
+                ),
+            }
+        };
+
+        // A missing or misdirected CNAME is usually *why* the fetch failed, so it is reported
+        // alongside the failure to make it actionable.
+        if !linkage_valid {
+            problems.extend(dns.failure(&deployment));
         }
-    };
 
-    let problems: Vec<String> = expected
-        .iter()
-        .filter_map(|did| match actual.iter().find(|linked| linked.did.did() == did.did()) {
-            Some(linked) if linked.domain_linkage_valid => None,
-            Some(linked) => Some(format!(
-                "{did}: {}",
-                linked
-                    .domain_linkage_error
-                    .clone()
-                    .unwrap_or_else(|| "domain linkage is invalid".to_string())
-            )),
-            None => Some(format!(
-                "{did}: not found in the published domain linkage configuration"
-            )),
-        })
-        .collect();
-
-    if problems.is_empty() {
-        Ok(DomainLinkageVerification {
-            valid: true,
-            message: None,
-        })
-    } else {
-        Ok(DomainLinkageVerification::failure(problems.join("; ")))
+        results.push(LinkedDomainVerification {
+            origin,
+            valid: linkage_valid,
+            linkage_valid,
+            dns,
+            message: (!problems.is_empty()).then(|| problems.join("; ")),
+        });
     }
+
+    Ok(LinkedDomainsVerification {
+        valid: results.iter().all(|result| result.valid),
+        message: None,
+        origins: results,
+    })
 }
 
-pub async fn renew_existing_domain_linkage_credentials(state: &IdentityState) -> anyhow::Result<()> {
+pub async fn renew_existing_linked_domains_credentials(state: &IdentityState) -> anyhow::Result<()> {
     let _guard = state.service_lifecycle_lock.lock().await;
-    if domain_linkage(state).await?.is_some_and(|service| service.is_active()) {
+    if linked_domains(state).await?.is_some_and(|service| service.is_active()) {
         execute_locked(state, renewal_command(false)).await?;
     }
     Ok(())
 }
 
 fn renewal_command(only_if_expiring: bool) -> ServiceCommand {
-    ServiceCommand::RenewDomainLinkageCredentials {
-        service_id: DOMAIN_LINKAGE_SERVICE_ID.into(),
+    ServiceCommand::RenewLinkedDomainsCredentials {
+        service_id: LINKED_DOMAINS_SERVICE_ID.into(),
         verification_methods: vec![],
         only_if_expiring,
     }
@@ -236,13 +294,13 @@ fn renewal_command(only_if_expiring: bool) -> ServiceCommand {
 /// Startup and runtime share the same renewal policy. Deleted services are never renewed.
 pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
     let _guard = state.service_lifecycle_lock.lock().await;
-    if domain_linkage(state)
+    if linked_domains(state)
         .await?
         .is_some_and(|service| service.needs_renewal((state.services.linkage_clock)()))
     {
         let eligible_documents = query_all_documents(state, |(_, document)| can_link(document)).await?;
         if eligible_documents.is_empty() {
-            warn!("Domain linkage needs renewal, but no eligible signing DID is enabled");
+            warn!("Linked domains need renewal, but no eligible signing DID is enabled");
         } else {
             execute_locked(state, renewal_command(true)).await?;
             return Ok(());

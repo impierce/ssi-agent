@@ -55,6 +55,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.5.0"
 derivative = "2.2"
 futures = "0.3"
+hickory-resolver = "0.26"
 mockall = "0.14"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [

@@ -701,9 +701,9 @@ pub enum ProfileEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServiceEvent {
-    DomainLinkageServiceCreated,
-    DomainLinkageServiceDeleted,
-    DomainLinkageCredentialsRenewed,
+    LinkedDomainsAdded,
+    LinkedDomainsRemoved,
+    LinkedDomainsCredentialsRenewed,
     LinkedVerifiablePresentationServiceCreated,
     LinkedVerifiablePresentationServiceDeleted,
 }

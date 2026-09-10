@@ -884,7 +884,7 @@ pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::V
 
 #[cfg(test)]
 pub mod document_tests {
-    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use crate::state::LINKED_DOMAINS_SERVICE_ID;
 
     use super::test_utils::*;
     use super::*;
@@ -953,9 +953,9 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        domain_linkage_service: Service,
+        linked_domains_service: Service,
         document_with_multiple_verification_methods: CoreDocument,
-        document_with_domain_linkage_service: CoreDocument,
+        document_with_linked_domains_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![
@@ -973,12 +973,12 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::AddService {
-                service: Box::new(domain_linkage_service),
-                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                service: Box::new(linked_domains_service),
+                service_id: LINKED_DOMAINS_SERVICE_ID.to_string(),
             })
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
                 document_id: document_id.clone(),
-                document: document_with_domain_linkage_service,
+                document: document_with_linked_domains_service,
             }])
     }
 
@@ -989,7 +989,7 @@ pub mod document_tests {
         did_method: SupportedDidMethod,
         document: CoreDocument,
         document_with_multiple_verification_methods: CoreDocument,
-        document_with_domain_linkage_service: CoreDocument,
+        document_with_linked_domains_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![
@@ -1007,7 +1007,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::ServiceAdded {
                     document_id: document_id.clone(),
-                    document: document_with_domain_linkage_service,
+                    document: document_with_linked_domains_service,
                 },
             ])
             .when(DocumentCommand::UpdateDocumentStatus {
@@ -1049,7 +1049,7 @@ pub mod document_tests {
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::get_properties;
-    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use crate::state::LINKED_DOMAINS_SERVICE_ID;
     use agent_shared::config::{config, SupportedDidMethod};
     use identity_core::convert::FromJson;
     use identity_did::CoreDID;
@@ -1203,9 +1203,9 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn domain_linkage_service() -> Service {
+    pub fn linked_domains_service() -> Service {
         Service::builder(Default::default())
-            .id(format!("did:web:my-domain.example.org#{DOMAIN_LINKAGE_SERVICE_ID}")
+            .id(format!("did:web:my-domain.example.org#{LINKED_DOMAINS_SERVICE_ID}")
                 .parse()
                 .unwrap())
             .type_("LinkedDomains")
@@ -1220,12 +1220,12 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_domain_linkage_service(
+    pub fn document_with_linked_domains_service(
         mut document_with_multiple_verification_methods: CoreDocument,
-        domain_linkage_service: Service,
+        linked_domains_service: Service,
     ) -> CoreDocument {
         document_with_multiple_verification_methods
-            .insert_service(domain_linkage_service)
+            .insert_service(linked_domains_service)
             .unwrap();
 
         document_with_multiple_verification_methods

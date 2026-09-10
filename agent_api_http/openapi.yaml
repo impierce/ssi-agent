@@ -25,6 +25,43 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PublicTemplate'
+  /v0/add-linked-domains:
+    post:
+      tags:
+      - Identity
+      summary: Link domains
+      description: |-
+        Publishes a Domain Linkage Credential for each given origin, in addition to any already linked.
+        Linking an origin that is already linked is a no-op.
+      operationId: add_linked_domains
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |-
+                The origins to link or unlink, each either a bare host (`example.org`) or a full origin
+                (`https://example.org`). Independent of the deployment's own DID.
+              required:
+              - origins
+              properties:
+                origins:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                  - example.org
+                  - https://foo.example.org
+        required: true
+      responses:
+        '204':
+          description: Domains linked
+        '400':
+          description: No eligible signing DID, or an invalid origin
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
   /v0/add-templates-to-catalog:
     post:
       tags:
@@ -266,22 +303,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
-  /v0/create-domain-linkage:
-    post:
-      tags:
-      - Identity
-      operationId: create_domain_linkage
-      responses:
-        '204':
-          description: Domain linkage created
-        '400':
-          description: No eligible signing DID
-        '401':
-          description: Authentication required
-        '403':
-          description: Operation forbidden
-        '409':
-          description: Service already exists
   /v0/create-linked-verifiable-presentation:
     post:
       tags:
@@ -1097,20 +1118,43 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
-  /v0/remove-domain-linkage:
+  /v0/remove-linked-domains:
     post:
       tags:
       - Identity
-      operationId: remove_domain_linkage
+      summary: Unlink domains
+      description: |-
+        Withdraws the Domain Linkage Credentials for each given origin. Unlinking an origin that is not
+        linked is a no-op, and unlinking the last remaining origin removes the service entirely.
+      operationId: remove_linked_domains
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |-
+                The origins to link or unlink, each either a bare host (`example.org`) or a full origin
+                (`https://example.org`). Independent of the deployment's own DID.
+              required:
+              - origins
+              properties:
+                origins:
+                  type: array
+                  items:
+                    type: string
+                  example:
+                  - example.org
+                  - https://foo.example.org
+        required: true
       responses:
         '204':
-          description: Domain linkage removed
+          description: Domains unlinked
+        '400':
+          description: An invalid origin
         '401':
           description: Authentication required
         '403':
           description: Operation forbidden
-        '404':
-          description: Service not found
   /v0/remove-linked-verifiable-presentation:
     post:
       tags:
@@ -1234,18 +1278,23 @@ paths:
       responses:
         '204':
           description: Template updated successfully
-  /v0/verify-domain-linkage:
+  /v0/verify-linked-domains:
     get:
       tags:
       - Identity
-      operationId: verify_domain_linkage
+      summary: Verify linked domains
+      description: |-
+        Checks every linked domain the way an external verifier would: resolves each origin's published
+        DID configuration over the network and validates it, alongside a freshly resolved `CNAME` lookup
+        showing whether the domain points at this deployment.
+      operationId: verify_linked_domains
       responses:
         '200':
-          description: Domain linkage verification result
+          description: Verification result per linked domain
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DomainLinkageVerification'
+                $ref: '#/components/schemas/LinkedDomainsVerification'
         '401':
           description: Authentication required
         '403':
@@ -1378,6 +1427,26 @@ components:
             name: ''
             description: ''
             icon: null
+    CnameCheck:
+      type: object
+      description: The outcome of checking one origin's DNS against the deployment's own host.
+      required:
+      - points_here
+      - chain
+      properties:
+        chain:
+          type: array
+          items:
+            type: string
+          description: The canonical names the origin points at, for diagnosing a failed check.
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why the chain could not be resolved at all, as opposed to resolving but not matching.
+        points_here:
+          type: boolean
+          description: Whether a `CNAME` record for the origin leads to the deployment.
     Connection:
       type: object
       required:
@@ -1797,20 +1866,6 @@ components:
           format: uri
         result:
           $ref: '#/components/schemas/ValidationResult'
-    DomainLinkageVerification:
-      type: object
-      description: |-
-        The outcome of resolving UniCore's currently published domain linkage over the network and
-        validating it, mirroring what an external verifier would see.
-      required:
-      - valid
-      properties:
-        message:
-          type:
-          - string
-          - 'null'
-        valid:
-          type: boolean
     DuplicateTemplateEndpointRequest:
       type: object
       required:
@@ -2057,6 +2112,56 @@ components:
           description: |-
             Cryptographic and semantic validity against the credential's declared issuer DID. A valid
             result does not establish that the issuer is trusted or associated with a known domain.
+    LinkedDomainVerification:
+      type: object
+      description: The outcome of verifying one linked domain.
+      required:
+      - origin
+      - valid
+      - linkage_valid
+      - dns
+      properties:
+        dns:
+          $ref: '#/components/schemas/CnameCheck'
+          description: Whether this origin's DNS points at the deployment.
+        linkage_valid:
+          type: boolean
+          description: Whether this origin's published configuration validates against the DIDs UniCore linked to it.
+        message:
+          type:
+          - string
+          - 'null'
+          description: What went wrong, or `None` when this origin verified.
+        origin:
+          type: string
+          example: https://example.org
+        valid:
+          type: boolean
+          description: |-
+            Whether an external verifier resolving this origin would accept the linkage. This is the
+            authoritative result; `dns` is a diagnostic, because a domain can be served correctly without
+            a `CNAME` record — an apex domain cannot have one.
+    LinkedDomainsVerification:
+      type: object
+      description: The outcome of verifying every linked domain, mirroring what an external verifier would see.
+      required:
+      - valid
+      - origins
+      properties:
+        message:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Why verification could not be attempted at all, e.g. because no domain is linked. `None` when
+            the per-origin results below carry the outcome.
+        origins:
+          type: array
+          items:
+            $ref: '#/components/schemas/LinkedDomainVerification'
+        valid:
+          type: boolean
+          description: Whether every linked domain verified.
     LinkedVPEndpointRequest:
       type: object
       required:

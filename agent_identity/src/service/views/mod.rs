@@ -9,33 +9,38 @@ impl View<Service> for Service {
         use crate::service::event::ServiceEvent::*;
 
         match &event.payload {
-            DomainLinkageServiceCreated {
+            LinkedDomainsAdded {
                 service_id,
                 service,
                 resource,
                 is_deleted,
+                origins,
             }
-            | DomainLinkageCredentialsRenewed {
+            | LinkedDomainsCredentialsRenewed {
                 service_id,
                 service,
                 resource,
                 is_deleted,
+                origins,
             } => {
                 self.service_id.clone_from(service_id);
                 self.service.replace(service.clone());
                 self.resource.replace(resource.clone());
                 self.is_deleted.clone_from(is_deleted);
+                self.origins.clone_from(origins);
             }
-            DomainLinkageServiceDeleted {
+            LinkedDomainsRemoved {
                 service_id,
                 service,
                 resource,
                 is_deleted,
+                origins,
             } => {
                 self.service_id.clone_from(service_id);
                 self.service.clone_from(service);
                 self.resource.clone_from(resource);
                 self.is_deleted.clone_from(is_deleted);
+                self.origins.clone_from(origins);
             }
             LinkedVerifiablePresentationServiceDeleted { service_id } => {
                 self.service_id.clone_from(service_id);

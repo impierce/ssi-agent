@@ -18,7 +18,7 @@ use connections::{
 };
 use documents::{get_document, get_documents};
 use services::{
-    domain_linkage::{create_domain_linkage, remove_domain_linkage, verify_domain_linkage},
+    linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
     linked_vp::{create_linked_verifiable_presentation, remove_linked_verifiable_presentation},
     service, services,
 };
@@ -49,9 +49,9 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
                     "/create-linked-verifiable-presentation",
                     post(create_linked_verifiable_presentation),
                 )
-                .route("/create-domain-linkage", post(create_domain_linkage))
-                .route("/remove-domain-linkage", post(remove_domain_linkage))
-                .route("/verify-domain-linkage", get(verify_domain_linkage))
+                .route("/add-linked-domains", post(add_linked_domains))
+                .route("/remove-linked-domains", post(remove_linked_domains))
+                .route("/verify-linked-domains", get(verify_linked_domains))
                 .route(
                     "/remove-linked-verifiable-presentation",
                     post(remove_linked_verifiable_presentation),

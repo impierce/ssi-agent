@@ -94,8 +94,9 @@ impl Clone for Queries {
     }
 }
 
-/// The unique identifier for the linked domain service.
-pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
+/// The unique identifier for the `LinkedDomains` service. Also becomes the service's fragment in
+/// every published DID document.
+pub const LINKED_DOMAINS_SERVICE_ID: &str = "linked-domains-service";
 
 /// The unique identifier for the linked verifiable presentation service.
 pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
@@ -565,7 +566,7 @@ pub async fn initialize_documents(
     }
 
     if did_web_overwritten {
-        crate::service::lifecycle::renew_existing_domain_linkage_credentials(state).await?;
+        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
     }
     Ok(())
 }
