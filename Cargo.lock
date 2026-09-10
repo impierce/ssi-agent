@@ -311,6 +311,7 @@ dependencies = [
  "did-jwk",
  "did-method-key",
  "futures",
+ "hickory-resolver",
  "identity_core",
  "identity_credential",
  "identity_did",

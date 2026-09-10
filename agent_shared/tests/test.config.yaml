@@ -22,8 +22,6 @@ did_methods:
   did_web:
     enabled: false
 
-domain_linkage_enabled: true
-
 credential_offer_by_value_enabled: true
 
 signing_algorithms_supported:

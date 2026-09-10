@@ -2,6 +2,7 @@ use crate::connection::{
     aggregate::{LinkedCredentialValidation, LinkedVpValidation, ValidationResult},
     error::ConnectionError,
 };
+use crate::dns::CnameResolver;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
@@ -18,6 +19,7 @@ use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::{redirect, Client};
+use std::collections::{BTreeSet, HashMap};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
@@ -51,6 +53,10 @@ impl LinkedDid {
 /// Identity services.
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
+    pub public_url: Url,
+    pub linkage_clock: Arc<dyn Fn() -> identity_core::common::Timestamp + Send + Sync>,
+    /// Resolves a linked domain's `CNAME` chain when verifying that it points at this deployment.
+    pub cname_resolver: Arc<dyn CnameResolver>,
     pub client: Client,
     /// Whether linked VP endpoints on the local network may use `http`. Only `true` in local
     /// development builds; public HTTP and sensitive address ranges remain blocked. See
@@ -62,6 +68,9 @@ impl IdentityServices {
     pub fn new(subject: Arc<Subject>) -> Self {
         Self {
             subject,
+            public_url: agent_shared::config::config().public_url.clone(),
+            linkage_clock: Arc::new(identity_core::common::Timestamp::now_utc),
+            cname_resolver: crate::dns::system_resolver(),
             client: Client::new(),
             allow_local_network_vp_endpoints: cfg!(feature = "allow-localhost"),
         }
@@ -79,6 +88,7 @@ impl IdentityServices {
         // policy rejects by default.
         Arc::new(Self {
             allow_local_network_vp_endpoints: true,
+            linkage_clock: Arc::new(crate::service::aggregate::test_utils::issuance_date),
             ..Self::new(Arc::new(subject))
         })
     }
@@ -110,9 +120,10 @@ impl IdentityServices {
     }
 
     pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
-        // TODO: This essentially disables domain linkage fetching because HTTPS is strictly
-        // required by `DomainLinkageConfiguration::from_json_value`. When running locally
-        // with HTTP, the fetch fails and we gracefully default to no linked DIDs.
+        // TODO: This essentially disables domain linkage fetching when running locally, where there
+        // is usually nothing published to fetch and `DomainLinkageConfiguration::from_json_value`
+        // rejects the empty `linked_dids` list. The failure is swallowed and treated as no linked
+        // DIDs, rather than failing the whole connection flow.
         // See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md` for more context and the future plan
         // to use `rcgen`.
         #[cfg(feature = "allow-localhost")]
@@ -123,19 +134,7 @@ impl IdentityServices {
 
         #[cfg(not(feature = "allow-localhost"))]
         let config = self.fetch_domain_linkage_configuration(url).await?;
-        let linked_dids: Vec<DIDUrl> = config
-            .linked_dids()
-            .iter()
-            .filter_map(|jwt| {
-                let jwt_value = jwt.to_json_value().ok()?;
-                let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
-                let did_str = claims
-                    .get("sub")
-                    .or_else(|| claims.get("iss"))
-                    .and_then(|v| v.as_str())?;
-                did_str.parse::<DIDUrl>().ok()
-            })
-            .collect();
+        let linked_dids = extract_linked_dids(&config);
 
         if linked_dids.is_empty() {
             info!("No linked DIDs found in configuration");
@@ -470,6 +469,61 @@ fn unverified_credential(credential_jwt: &Jwt) -> Option<Credential> {
     }
 
     Credential::from_json_value(serde_json::Value::Object(credential)).ok()
+}
+
+/// Extracts the subject DID of every linked-DID JWT in a domain linkage configuration, without
+/// verifying their signatures. Used both to discover DIDs to validate and, for self-verification,
+/// to compare a fetched configuration against the DIDs UniCore expects to have published.
+///
+/// Deduplicated: a configuration linking one DID to several origins carries one credential per
+/// origin, and every caller here is interested in the distinct DIDs rather than in the credentials.
+pub(crate) fn extract_linked_dids(config: &DomainLinkageConfiguration) -> Vec<DIDUrl> {
+    let mut dids: Vec<DIDUrl> = Vec::new();
+    for did in config.linked_dids().iter().filter_map(linked_did_subject) {
+        if !dids.iter().any(|seen| seen.did() == did.did()) {
+            dids.push(did);
+        }
+    }
+    dids
+}
+
+/// Groups the DIDs a domain linkage configuration links by the origin each credential claims.
+///
+/// Each Domain Linkage Credential claims exactly one origin, so this is what says which DIDs UniCore
+/// published *for a given origin* — the unit a verifier of that origin actually checks.
+pub(crate) fn linked_dids_by_origin(config: &DomainLinkageConfiguration) -> HashMap<Url, BTreeSet<DIDUrl>> {
+    let mut by_origin: HashMap<Url, BTreeSet<DIDUrl>> = HashMap::new();
+    for jwt in config.linked_dids() {
+        let Some(did) = linked_did_subject(jwt) else { continue };
+        let Some(origin) = credential_origin(jwt) else { continue };
+        by_origin.entry(origin).or_default().insert(did);
+    }
+    by_origin
+}
+
+/// The subject DID a linked-DID JWT names, read **without verifying its signature**.
+fn linked_did_subject(jwt: &Jwt) -> Option<DIDUrl> {
+    let jwt_value = jwt.to_json_value().ok()?;
+    let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
+    claims
+        .get("sub")
+        .or_else(|| claims.get("iss"))
+        .and_then(|value| value.as_str())?
+        .parse()
+        .ok()
+}
+
+/// The origin a linked-DID JWT claims, read **without verifying its signature**.
+fn credential_origin(jwt: &Jwt) -> Option<Url> {
+    let jwt_value = jwt.to_json_value().ok()?;
+    let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
+    claims
+        .get("vc")?
+        .get("credentialSubject")?
+        .get("origin")?
+        .as_str()?
+        .parse()
+        .ok()
 }
 
 /// Renders a numeric JWT timestamp claim as the RFC 3339 string a credential expects.

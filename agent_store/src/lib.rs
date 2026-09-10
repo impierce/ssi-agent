@@ -212,6 +212,8 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         .await;
 
     IdentityState {
+        services,
+        service_lifecycle_lock: Default::default(),
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: agent_identity::state::CommandHandlers {
             connection: connection_command_handler,

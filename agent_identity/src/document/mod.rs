@@ -4,3 +4,5 @@ pub mod error;
 pub mod event;
 pub mod openapi;
 pub mod views;
+
+pub mod web;

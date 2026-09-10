@@ -1,6 +1,7 @@
 use super::aggregate::{IotaMetadata, Status};
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
+use identity_did::CoreDID;
 use identity_document::document::CoreDocument;
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,11 @@ pub enum DocumentEvent {
         with_fixed_algorithm: Option<Algorithm>,
         iota_metadata: Option<IotaMetadata>,
     },
+    DocumentDidWebOverwritten {
+        document_id: String,
+        previous_did: CoreDID,
+        document: CoreDocument,
+    },
     PublicKeyUpdated {
         document_id: String,
         document: CoreDocument,
@@ -25,6 +31,10 @@ pub enum DocumentEvent {
         status: Status,
     },
     ServiceAdded {
+        document_id: String,
+        document: CoreDocument,
+    },
+    ServiceRemoved {
         document_id: String,
         document: CoreDocument,
     },
