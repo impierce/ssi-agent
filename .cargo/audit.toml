@@ -13,7 +13,10 @@ ignore = [
     #   - rsa@0.6.1 via ssi-jwk (pinned git dep): used for RSA JWK signing/verification only,
     #     not for PKCS#1 v1.5 decryption, which is the primary Marvin Attack vector.
     #   - rsa@0.8.2 via fastcrypto → IOTA identity SDK: deep internal SDK dependency.
-    #   - rsa@0.9.10: no dependents in the normal runtime dependency graph (dev/build only).
+    #   - rsa@0.9.10 via stronghold_ext → identity_stronghold_ext (did-manager): backs the
+    #     `RS256` support added in did-manager v1.0.0-beta.9. Used for RSASSA-PKCS1-v1_5 signing
+    #     only, never for decryption, which is the primary Marvin Attack vector. Not currently
+    #     reachable either: `Subject` in agent_secret_manager only handles `EdDSA` and `ES256`.
     # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
     "RUSTSEC-2023-0071",
 

@@ -2354,7 +2354,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 [[package]]
 name = "consumer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -3197,7 +3197,7 @@ dependencies = [
 [[package]]
 name = "did_iota"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "anyhow",
  "identity_iota",
@@ -3212,7 +3212,7 @@ dependencies = [
 [[package]]
 name = "did_jwk"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "did-jwk",
  "identity_iota",
@@ -3229,7 +3229,7 @@ dependencies = [
 [[package]]
 name = "did_key"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "did-method-key",
  "identity_iota",
@@ -3247,7 +3247,7 @@ dependencies = [
 [[package]]
 name = "did_manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "consumer",
  "producer",
@@ -3285,7 +3285,7 @@ dependencies = [
 [[package]]
 name = "did_web"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "did-web",
  "identity_iota",
@@ -5325,7 +5325,7 @@ dependencies = [
 [[package]]
 name = "identity_stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "async-trait",
  "elliptic-curve 0.13.8",
@@ -5336,6 +5336,7 @@ dependencies = [
  "k256",
  "log",
  "p256 0.13.2",
+ "rsa 0.9.10",
  "secret-storage",
  "serde_json",
  "stronghold_ext",
@@ -9691,7 +9692,7 @@ dependencies = [
 [[package]]
 name = "producer"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "did_iota",
  "did_jwk",
@@ -10594,6 +10595,7 @@ dependencies = [
  "pkcs1 0.7.5",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
+ "sha2 0.10.9",
  "signature 2.2.0",
  "spki 0.7.3",
  "subtle",
@@ -11536,7 +11538,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?rev=cbf2993#cbf299350391d47d1f4858f46b539b8f4e85870c"
+source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
 dependencies = [
  "identity_iota",
  "identity_storage",
@@ -12402,15 +12404,17 @@ dependencies = [
 [[package]]
 name = "stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/stronghold_ext.git#c3fa9c1cff0eaa8cd518b9a758cb8df76b899bf8"
+source = "git+https://github.com/impierce/stronghold_ext.git?rev=64f2f52#64f2f52758eb0defa3b549751ae6b58bd8cdfff2"
 dependencies = [
  "ecdsa 0.16.9",
  "iota_stronghold",
  "k256",
  "p256 0.13.2",
  "rand 0.8.6",
+ "rsa 0.9.10",
  "serde",
  "sha2 0.10.9",
+ "signature 2.2.0",
  "stronghold-utils",
  "stronghold_engine",
  "thiserror 1.0.69",
