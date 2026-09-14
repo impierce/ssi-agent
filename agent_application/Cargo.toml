@@ -23,7 +23,7 @@ verification-authorization = { path = "../infrastructure/adapters/verification-a
 anyhow.workspace = true
 axum.workspace = true
 chrono.workspace = true
-did_manager = { git = "https://github.com/impierce/did-manager", rev = "cbf2993" }
+did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9" }
 opentelemetry.workspace = true
 opentelemetry-appender-tracing = "0.31"
 opentelemetry-otlp = { version = "0.31", features = [
