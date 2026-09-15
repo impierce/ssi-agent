@@ -397,7 +397,7 @@ pub(crate) async fn all_credentials(
         &state.query.all_credentials,
     )
     .await?
-    .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+    .map(|all_credentials_view| crate::utils::newest_first(all_credentials_view.credentials).collect::<Vec<_>>())
     .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())

@@ -556,8 +556,14 @@ pub(crate) async fn get_templates(
             .map(TemplateDto::from)
             .collect();
 
-        // Sort by most recently modified first (RFC 3339 strings are lexicographically comparable).
-        filtered_templates.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        filtered_templates.sort_by(|left, right| {
+            crate::utils::compare_rfc3339_newest_first(
+                left.modified_at.as_deref(),
+                &left.template_id,
+                right.modified_at.as_deref(),
+                &right.template_id,
+            )
+        });
 
         filtered_templates
     })

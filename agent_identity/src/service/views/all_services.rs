@@ -1,13 +1,13 @@
 use super::ServiceView;
 use crate::service::aggregate::Service;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllServicesView {
     #[serde(flatten)]
-    pub services: HashMap<String, ServiceView>,
+    pub services: IndexMap<String, ServiceView>,
 }
 
 impl View<Service> for AllServicesView {

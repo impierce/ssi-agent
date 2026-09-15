@@ -154,7 +154,7 @@ pub(crate) async fn all_public_offers(
 
     let mut offers = Vec::with_capacity(all_offers.offers.len());
 
-    for public_offer in all_offers.offers.values() {
+    for public_offer in crate::utils::newest_first_ref(&all_offers.offers) {
         let mut dto = PublicOfferStatusDto::from(public_offer);
         if let Some(offer_view) = query_handler(
             issuance_state.authorization_checker.clone(),

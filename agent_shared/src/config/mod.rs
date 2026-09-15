@@ -93,6 +93,7 @@ pub struct ApplicationConfiguration {
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
             type_: EventStoreType::InMemory,
+            views: ViewStorage::InMemory,
             connection_string: None
         }")]
     pub event_store: EventStoreConfig,
@@ -459,8 +460,18 @@ pub enum LogFormat {
 pub struct EventStoreConfig {
     #[serde(rename = "type", default)]
     pub type_: EventStoreType,
+    #[serde(default)]
+    pub views: ViewStorage,
     #[serde(serialize_with = "redact")]
     pub connection_string: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, Eq, PartialEq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewStorage {
+    InMemory,
+    #[default]
+    Persisted,
 }
 
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq, Default, Serialize)]
@@ -1032,11 +1043,15 @@ mod tests {
     fn test_redact_custom_serializer_overwrites_value() {
         let value = EventStoreConfig {
             type_: EventStoreType::Postgres,
+            views: ViewStorage::Persisted,
             connection_string: Some("postgres://localhost:5432".to_string()),
         };
 
         let json = serde_json::to_value(&value).unwrap();
-        assert_eq!(json, json!({"type": "postgres", "connection_string": "<REDACTED>"}));
+        assert_eq!(
+            json,
+            json!({"type": "postgres", "views": "persisted", "connection_string": "<REDACTED>"})
+        );
     }
 
     #[test]
@@ -1044,11 +1059,12 @@ mod tests {
     fn test_redact_custom_serializer_ignores_none() {
         let value = EventStoreConfig {
             type_: EventStoreType::InMemory,
+            views: ViewStorage::InMemory,
             connection_string: None,
         };
 
         let json = serde_json::to_value(&value).unwrap();
-        assert_eq!(json, json!({"type": "in_memory"}));
+        assert_eq!(json, json!({"type": "in_memory", "views": "in_memory"}));
     }
 
     #[test]
@@ -1077,7 +1093,8 @@ mod tests {
             json!({
               "log_format": "text",
               "event_store": {
-                "type": "in_memory"
+                "type": "in_memory",
+                "views": "persisted"
               },
               "application_url": "http://localhost:3033/",
               "public_url": "http://localhost:3033/",

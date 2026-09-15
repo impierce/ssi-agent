@@ -16,6 +16,7 @@ async-trait.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
 jsonwebtoken.workspace = true
+indexmap.workspace = true
 mockall = { workspace = true, optional = true }
 oid4vci.workspace = true
 oid4vc-core.workspace = true

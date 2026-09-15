@@ -5,6 +5,8 @@ pub mod error;
 pub mod extractors;
 pub mod handlers;
 pub mod metrics;
+#[cfg(test)]
+pub mod projection_sizes;
 pub mod utils;
 
 use agent_authorization::state::AuthorizationState;

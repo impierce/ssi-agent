@@ -48,9 +48,7 @@ pub(crate) async fn get_documents(
     )
     .await?
     .map(|all_documents_view| {
-        let filtered_documents: Vec<_> = all_documents_view
-            .documents
-            .into_values()
+        let filtered_documents: Vec<_> = crate::utils::newest_first(all_documents_view.documents)
             .filter(|document| {
                 did_method
                     .as_ref()

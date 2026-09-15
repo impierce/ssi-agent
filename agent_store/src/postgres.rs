@@ -1,12 +1,31 @@
 use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
-use crate::{AggregateHandler, CqrsComponentBuilder};
+use crate::{
+    custom_queries::{modify_via_store, MutableViewRepository},
+    AggregateHandler, CqrsComponentBuilder,
+};
 use agent_shared::{application_state::Command, config::config};
-use cqrs_es::persist::PersistedEventStore;
+use async_trait::async_trait;
+use cqrs_es::persist::{PersistedEventStore, PersistenceError};
 use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
 use shared_kernel::view_repository::DynViewRepository;
 use sqlx::{Pool, Row};
 use std::sync::Arc;
+
+#[async_trait]
+impl<V, A> MutableViewRepository<V, A> for PostgresViewRepository<V, A>
+where
+    V: View<A>,
+    A: Aggregate,
+{
+    async fn modify(
+        &self,
+        view_id: &str,
+        update: &mut (dyn for<'view> FnMut(&'view mut V) + Send),
+    ) -> Result<(), PersistenceError> {
+        modify_via_store(self, view_id, update).await
+    }
+}
 
 impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
 where
@@ -15,6 +34,7 @@ where
     fn new(pool: Pool<sqlx::Postgres>, services: A::Services) -> Self {
         Self {
             cqrs: postgres_es::postgres_cqrs(pool, vec![], services),
+            execution: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 }
@@ -28,7 +48,11 @@ impl Postgres {
         let connection_string = config().event_store.connection_string.clone().expect(
             "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
         );
-        let pool = default_postgress_pool(&connection_string).await;
+        Self::connect(&connection_string).await
+    }
+
+    async fn connect(connection_string: &str) -> Self {
+        let pool = default_postgress_pool(connection_string).await;
         Self { pool }
     }
     // TODO: Run [Pool::close] during graceful shutdown to close all open connections.
@@ -72,7 +96,7 @@ impl Postgres {
 }
 
 impl CqrsComponentBuilder for Postgres {
-    async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+    async fn commands_and_queries<V: View<A> + Clone + 'static, A: Aggregate + 'static, AV: View<A> + Clone + 'static>(
         &self,
         services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
@@ -104,5 +128,89 @@ impl CqrsComponentBuilder for Postgres {
             aggregate,
             all_aggregates,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cqrs_es::{event_sink::EventSink, DomainEvent};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Default, Deserialize, Serialize)]
+    struct TestAggregate;
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct TestEvent;
+
+    impl DomainEvent for TestEvent {
+        fn event_type(&self) -> String {
+            "test".to_string()
+        }
+
+        fn event_version(&self) -> String {
+            "1".to_string()
+        }
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("test aggregate error")]
+    struct TestError;
+
+    impl Aggregate for TestAggregate {
+        const TYPE: &'static str = "postgres_mutable_view_test";
+        type Command = ();
+        type Event = TestEvent;
+        type Error = TestError;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            _command: Self::Command,
+            _service: &Self::Services,
+            _sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn apply(&mut self, _event: Self::Event) {}
+    }
+
+    #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+    struct TestView(usize);
+
+    impl View<TestAggregate> for TestView {
+        fn update(&mut self, _event: &cqrs_es::EventEnvelope<TestAggregate>) {
+            self.0 += 1;
+        }
+    }
+
+    #[tokio::test]
+    async fn mutable_view_round_trips_through_postgres() {
+        let Ok(connection_string) = std::env::var("SSI_AGENT_TEST_POSTGRES_URI") else {
+            return;
+        };
+        let store = Postgres::connect(&connection_string).await;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS postgres_mutable_view_test (
+                view_id text PRIMARY KEY,
+                version bigint NOT NULL CHECK (version >= 0),
+                payload json NOT NULL
+            )",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        sqlx::query("TRUNCATE TABLE postgres_mutable_view_test")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+
+        let repository =
+            PostgresViewRepository::<TestView, TestAggregate>::new("postgres_mutable_view_test", store.pool.clone());
+        repository.modify("all", &mut |view| view.0 += 3).await.unwrap();
+
+        assert_eq!(repository.load("all").await.unwrap().unwrap().0, 3);
+        store.pool.close().await;
     }
 }

@@ -19,6 +19,7 @@ chrono.workspace = true
 derivative.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
+indexmap.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
 oauth_tsl.workspace = true
