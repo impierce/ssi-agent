@@ -1,0 +1,98 @@
+meta {
+  name: Create a linked verifiable presentation service
+  type: http
+  seq: 17
+  tags: [
+    Identity
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/services/linked-vp
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "presentationIds": []
+  }
+}
+
+docs {
+  Creates the linked verifiable presentation service and adds it to every enabled DID document
+  whose DID method supports updates. Returns the DID documents that were updated.
+}
+
+example {
+  name: 200 Response
+  description: Linked verifiable presentation service created and DID documents updated
+  
+  request: {
+    url: {{BASE_URL}}/v0/services/linked-vp
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "did_method": "",
+            "document": {},
+            "id": "",
+            "iota_metadata": "",
+            "status": "SignAndValidate",
+            "with_fixed_algorithm": "ES256"
+          }
+        ]
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: No DID documents found
+  
+  request: {
+    url: {{BASE_URL}}/v0/services/linked-vp
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

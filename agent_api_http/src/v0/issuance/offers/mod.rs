@@ -25,15 +25,55 @@ use oid4vci::credential_offer::GrantType;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OffersEndpointRequest {
+    /// Unique identifier of the offer to create or retrieve.
     pub offer_id: String,
+    /// Published templates whose derived credential configurations are advertised by the offer.
+    ///
+    /// At least one template ID is required. These IDs select the credential types a wallet may
+    /// request; they do not identify credential instances or provide credential claim data.
     pub template_ids: Vec<String>,
+    /// Optional delivery settings associated with the offer.
     #[serde(default)]
     pub delivery_options: Option<DeliveryOptions>,
 }
 
+/// Create a credential offer
+///
+/// Creates and returns an OpenID4VCI credential offer advertising the credential configurations
+/// derived from one or more published templates. `templateIds` is required because an offer must
+/// tell the wallet which credential types it may request. It does not create credential instances
+/// or contain their claim data; credentials may be attached beforehand or supplied just in time
+/// after the wallet starts the issuance flow.
+///
+/// If an offer with the given `offerId` already exists, the existing encoded offer is returned
+/// unchanged.
+#[utoipa::path(
+    post,
+    path = "/offers",
+    operation_id = "create_offer",
+    tags = ["Issuance"],
+    request_body(
+        content = OffersEndpointRequest,
+        description = "Identifies the offer and the published templates whose derived credential configurations it advertises.",
+        example = json!({
+            "offerId": "c86289fa-b105-4ec3-9326-a02436788f11",
+            "templateIds": ["w3c_vc_credential"]
+        })
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Credential offer created successfully",
+            body = String,
+            content_type = "application/x-www-form-urlencoded"
+        ),
+        (status = 400, description = "Template IDs are missing or invalid"),
+        (status = 422, description = "A template was not found or is not published"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn offers(
     State(state): State<Arc<IssuanceState>>,

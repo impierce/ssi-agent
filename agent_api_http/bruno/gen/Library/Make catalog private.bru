@@ -1,0 +1,69 @@
+meta {
+  name: Make catalog private
+  type: http
+  seq: 12
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/make-catalog-private
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": ""
+  }
+}
+
+docs {
+  Updates a catalog's visibility to private. If not otherwise specified, the default visibility is private.
+}
+
+example {
+  name: 200 Response
+  description: Catalog made private successfully.
+  
+  request: {
+    url: {{BASE_URL}}/v0/make-catalog-private
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

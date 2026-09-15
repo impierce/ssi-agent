@@ -403,13 +403,30 @@ pub(crate) async fn all_credentials(
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchCredentialEndpointRequest {
+    #[schema(schema_with = agent_issuance::credential::openapi::status_type)]
     pub credential_status: StatusType,
 }
 
-/// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
+/// Update credential status
+///
+/// Updates a credential's status according to the IETF OAuth Token Status List specification.
+#[utoipa::path(
+    patch,
+    path = "/credentials/{credential_id}",
+    operation_id = "update_credential_status",
+    tags = ["Issuance"],
+    request_body(
+        content = PatchCredentialEndpointRequest,
+        example = json!({ "credentialStatus": "INVALID" })
+    ),
+    responses(
+        (status = 204, description = "Credential status updated successfully"),
+        (status = 404, description = "Credential not found"),
+    )
+)]
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
@@ -640,7 +657,15 @@ pub mod tests {
         // Please look at the comments in agent_issuance/src/credential/aggregate.rs `SignCredential` for more information.
         pub static ref VC_DM_1_1_CREDENTIAL: serde_json::Value = json!({
             "id": "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
-            "@context": [ "https://www.w3.org/2018/credentials/v1" ],
+            "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                {
+                    "logo_uri": {
+                        "@id": "https://www.iana.org/assignments/jwt#logo_uri",
+                        "@type": "@id"
+                    }
+                }
+            ],
             "type": [ "VerifiableCredential" ],
             "name": "Verifiable Credential",
             "issuer": {

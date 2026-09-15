@@ -6,7 +6,7 @@ use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::convert::ToJson;
 use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions};
 use jsonwebtoken::Header;
-use oid4vc_core::Subject as _;
+use oid4vc_core::{Sign as _, Subject as _};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -79,12 +79,23 @@ impl Aggregate for Presentation {
                     .serialize_jwt(&options)
                     .map_err(|err| SerializationError(err.to_string()))?;
 
+                // The `kid` must name a verification method the DID Document actually carries, so
+                // that a verifier resolving the holder's DID can find the key this is signed with.
+                // It is the same lookup `identifier` above makes, kept whole instead of truncated
+                // to its DID.
+                let kid = holder
+                    .key_id(
+                        get_preferred_did_method().to_string().as_ref(),
+                        get_preferred_signing_algorithm(),
+                    )
+                    .await
+                    .ok_or(KeyIdError)?;
+
                 // Compose JWT
                 let header = Header {
                     alg: get_preferred_signing_algorithm(),
                     typ: Some("JWT".to_string()),
-                    // TODO: make dynamic
-                    kid: Some(format!("{subject_did}#key-0")),
+                    kid: Some(kid),
                     ..Default::default()
                 };
 
@@ -184,8 +195,11 @@ pub mod test_utils {
         "presentation-id".to_string()
     }
 
+    /// The `kid` names the holder's verification method as the DID Document carries it, so a
+    /// verifier can resolve the key this is signed with. A `kid` that resolves to nothing fails
+    /// VP validation; decodable embedded credentials remain available as unverified data.
     #[fixture]
     pub fn signed_presentation() -> Jwt {
-        Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I2tleS0wIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MCwidnAiOnsiQGNvbnRleHQiOiJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsInR5cGUiOiJWZXJpZmlhYmxlUHJlc2VudGF0aW9uIiwidmVyaWZpYWJsZUNyZWRlbnRpYWwiOlsiZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSTNvMlRXdG5SVGcwVGtOTmNFMWxRWGc1YWtzNVkyWTFWelJIT0dkaldqbDRkWGRLZGtjeFpUZDNUbXM0UzBObmRDSjkuZXlKcGMzTWlPaUprYVdRNmEyVjVPbm8yVFd0blJUZzBUa05OY0UxbFFYZzVha3M1WTJZMVZ6UkhPR2RqV2psNGRYZEtka2N4WlRkM1RtczRTME5uZENJc0luTjFZaUk2SW1ScFpEcHJaWGs2ZWtSdVlXVlNkMVEwWnpaQldrTkllbmgyVGt3M1JFeHFjVlJoVkRnNFlXMDBXRkkyVkZWSGNrdHlOa1JZYWpaVWVpSXNJbTVpWmlJNk1USTJNak13TkRBd01Dd2lhV0YwSWpveE1qWXlNekEwTURBd0xDSjJZeUk2ZXlKQVkyOXVkR1Y0ZENJNld5Sm9kSFJ3Y3pvdkwzZDNkeTUzTXk1dmNtY3ZNakF4T0M5amNtVmtaVzUwYVdGc2N5OTJNU0pkTENKMGVYQmxJanBiSWxabGNtbG1hV0ZpYkdWRGNtVmtaVzUwYVdGc0lsMHNJbU55WldSbGJuUnBZV3hUZFdKcVpXTjBJanA3SW1sa0lqb2laR2xrT210bGVUcDZSRzVoWlZKM1ZEUm5Oa0ZhUTBoNmVIWk9URGRFVEdweFZHRlVPRGhoYlRSWVVqWlVWVWR5UzNJMlJGaHFObFI2SWl3aVpHVm5jbVZsSWpwN0luUjVjR1VpT2lKTllYTjBaWEpFWldkeVpXVWlMQ0p1WVcxbElqb2lUV0Z6ZEdWeUlHOW1JRTlqWldGdWIyZHlZWEJvZVNKOUxDSm1hWEp6ZEY5dVlXMWxJam9pUm1WeWNtbHpJaXdpYkdGemRGOXVZVzFsSWpvaVVuVnpkR0ZqWldGdUluMHNJbWx6YzNWbGNpSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSWl3aWFYTnpkV0Z1WTJWRVlYUmxJam9pTWpBeE1DMHdNUzB3TVZRd01Eb3dNRG93TUZvaUxDSmpjbVZrWlc1MGFXRnNVM1JoZEhWeklqcDdJbWxrSWpvaWFIUjBjSE02THk5dGVTMWtiMjFoYVc0dVpYaGhiWEJzWlM1dmNtY3ZhV1YwWmkxdllYVjBhQzEwYjJ0bGJpMXpkR0YwZFhNdGJHbHpkQzh3SWl3aWRIbHdaU0k2SW5OMFlYUjFjMnhwYzNRcmFuZDBJaXdpYVdSNElqb3hNak1zSW5WeWFTSTZJbWgwZEhCek9pOHZiWGt0Wkc5dFlXbHVMbVY0WVcxd2JHVXViM0puTDJsbGRHWXRiMkYxZEdndGRHOXJaVzR0YzNSaGRIVnpMV3hwYzNRdk1DSjlmU3dpYzNSaGRIVnpJanA3SW5OMFlYUjFjMTlzYVhOMElqcDdJbWxrZUNJNk1USXpMQ0oxY21raU9pSm9kSFJ3Y3pvdkwyMTVMV1J2YldGcGJpNWxlR0Z0Y0d4bExtOXlaeTlwWlhSbUxXOWhkWFJvTFhSdmEyVnVMWE4wWVhSMWN5MXNhWE4wTHpBaWZYMTkuNm9WamZOMDZkelFtZDJvQ1ZCbTlsZ09raEwwbUxJSG4tSTh2VUIwT1gzbjdNYmpoSVdqamZBXzZTU3Zjb2ZHR0xqLUJGdDFmTUNEVXkxVnJpQ3ZpQUEiXX19.yC9j8CGnspTVL-wPBHaTw5s9wZ1d-bDyScPbXziAkPQkxHpjsbSkGe5bnWQp3yaZZkEs1EdKRb5wkx_3VMn2CA".to_string())
+        Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MCwidnAiOnsiQGNvbnRleHQiOiJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsInR5cGUiOiJWZXJpZmlhYmxlUHJlc2VudGF0aW9uIiwidmVyaWZpYWJsZUNyZWRlbnRpYWwiOlsiZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSTNvMlRXdG5SVGcwVGtOTmNFMWxRWGc1YWtzNVkyWTFWelJIT0dkaldqbDRkWGRLZGtjeFpUZDNUbXM0UzBObmRDSjkuZXlKcGMzTWlPaUprYVdRNmEyVjVPbm8yVFd0blJUZzBUa05OY0UxbFFYZzVha3M1WTJZMVZ6UkhPR2RqV2psNGRYZEtka2N4WlRkM1RtczRTME5uZENJc0luTjFZaUk2SW1ScFpEcHJaWGs2ZWtSdVlXVlNkMVEwWnpaQldrTkllbmgyVGt3M1JFeHFjVlJoVkRnNFlXMDBXRkkyVkZWSGNrdHlOa1JZYWpaVWVpSXNJbTVpWmlJNk1USTJNak13TkRBd01Dd2lhV0YwSWpveE1qWXlNekEwTURBd0xDSjJZeUk2ZXlKQVkyOXVkR1Y0ZENJNld5Sm9kSFJ3Y3pvdkwzZDNkeTUzTXk1dmNtY3ZNakF4T0M5amNtVmtaVzUwYVdGc2N5OTJNU0pkTENKMGVYQmxJanBiSWxabGNtbG1hV0ZpYkdWRGNtVmtaVzUwYVdGc0lsMHNJbU55WldSbGJuUnBZV3hUZFdKcVpXTjBJanA3SW1sa0lqb2laR2xrT210bGVUcDZSRzVoWlZKM1ZEUm5Oa0ZhUTBoNmVIWk9URGRFVEdweFZHRlVPRGhoYlRSWVVqWlVWVWR5UzNJMlJGaHFObFI2SWl3aVpHVm5jbVZsSWpwN0luUjVjR1VpT2lKTllYTjBaWEpFWldkeVpXVWlMQ0p1WVcxbElqb2lUV0Z6ZEdWeUlHOW1JRTlqWldGdWIyZHlZWEJvZVNKOUxDSm1hWEp6ZEY5dVlXMWxJam9pUm1WeWNtbHpJaXdpYkdGemRGOXVZVzFsSWpvaVVuVnpkR0ZqWldGdUluMHNJbWx6YzNWbGNpSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSWl3aWFYTnpkV0Z1WTJWRVlYUmxJam9pTWpBeE1DMHdNUzB3TVZRd01Eb3dNRG93TUZvaUxDSmpjbVZrWlc1MGFXRnNVM1JoZEhWeklqcDdJbWxrSWpvaWFIUjBjSE02THk5dGVTMWtiMjFoYVc0dVpYaGhiWEJzWlM1dmNtY3ZhV1YwWmkxdllYVjBhQzEwYjJ0bGJpMXpkR0YwZFhNdGJHbHpkQzh3SWl3aWRIbHdaU0k2SW5OMFlYUjFjMnhwYzNRcmFuZDBJaXdpYVdSNElqb3hNak1zSW5WeWFTSTZJbWgwZEhCek9pOHZiWGt0Wkc5dFlXbHVMbVY0WVcxd2JHVXViM0puTDJsbGRHWXRiMkYxZEdndGRHOXJaVzR0YzNSaGRIVnpMV3hwYzNRdk1DSjlmU3dpYzNSaGRIVnpJanA3SW5OMFlYUjFjMTlzYVhOMElqcDdJbWxrZUNJNk1USXpMQ0oxY21raU9pSm9kSFJ3Y3pvdkwyMTVMV1J2YldGcGJpNWxlR0Z0Y0d4bExtOXlaeTlwWlhSbUxXOWhkWFJvTFhSdmEyVnVMWE4wWVhSMWN5MXNhWE4wTHpBaWZYMTkuNm9WamZOMDZkelFtZDJvQ1ZCbTlsZ09raEwwbUxJSG4tSTh2VUIwT1gzbjdNYmpoSVdqamZBXzZTU3Zjb2ZHR0xqLUJGdDFmTUNEVXkxVnJpQ3ZpQUEiXX19.zJ6ieLFJ1LWozlV7y8LuYTF1EtWR1rtaHEqpBFaj2gkW9hDU7ha9nhJiuOwUKwK5Jl-H4SsyYEmavnSmsasYDQ".to_string())
     }
 }

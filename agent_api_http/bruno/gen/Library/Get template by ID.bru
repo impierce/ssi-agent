@@ -1,0 +1,74 @@
+meta {
+  name: Get template by ID
+  type: http
+  seq: 10
+  tags: [
+    Library
+    Templates
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/get-template-by-id/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: {{TEMPLATE_ID}}
+}
+
+docs {
+  Retrieve a specific template by its ID.
+}
+
+example {
+  name: 200 Response
+  description: Template retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/get-template-by-id/:id
+    method: GET
+    mode: none
+    params:path: {
+      id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "credentialExpiration": "",
+          "dataModel": "w3c_vc_data_model_v1-1",
+          "description": "",
+          "display": "",
+          "holderAuthorization": {
+            "pre_authorized": false,
+            "tx_code_constraints": ""
+          },
+          "holderType": "individual",
+          "id": "",
+          "modifiedAt": "",
+          "schema": "",
+          "schemaPropertiesAttributes": "",
+          "status": "draft",
+          "tags": "",
+          "title": "",
+          "type": [],
+          "visibility": "private"
+        }
+      '''
+    }
+  }
+}

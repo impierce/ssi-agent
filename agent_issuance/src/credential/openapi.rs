@@ -1,6 +1,6 @@
 use utoipa::openapi::{schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, SchemaFormat, Type};
 
-pub(crate) fn status_type() -> Object {
+pub fn status_type() -> Object {
     ObjectBuilder::new()
         .schema_type(SchemaType::Type(Type::String))
         .enum_values(Some(["VALID", "INVALID", "SUSPENDED", "UNDEFINED"]))

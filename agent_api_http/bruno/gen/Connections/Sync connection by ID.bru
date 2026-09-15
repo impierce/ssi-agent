@@ -1,0 +1,53 @@
+meta {
+  name: Sync connection by ID
+  type: http
+  seq: 5
+  tags: [
+    Connections
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/connections/sync-connection
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": ""
+  }
+}
+
+docs {
+  Sync the latest version of a connection by its unique identifier.
+}
+
+example {
+  name: 200 Response
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections/sync-connection
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "id": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

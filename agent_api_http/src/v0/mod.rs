@@ -1,4 +1,5 @@
 pub mod authorization;
+pub mod configuration;
 pub mod events;
 pub mod holder;
 pub mod identity;

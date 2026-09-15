@@ -170,7 +170,7 @@ cargo fmt --all -- --check && \
   cargo test --workspace && \
   git diff --exit-code
 
-# If git diff fails, code generation files changed (check agent_api_http openapi-generated.yaml)
+# If git diff fails, code generation files changed (check agent_api_http openapi.yaml)
 ```
 
 **If tests timeout or panic**: Check for stack-related issues in test output (search for "stack" or "overflow"). All known stack-intensive tests are already wrapped; report new cases.

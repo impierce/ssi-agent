@@ -1,0 +1,56 @@
+meta {
+  name: Send offer to organization
+  type: http
+  seq: 10
+  tags: [
+    Issuance
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/offers/send-offer-to-organization
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "offerId": "",
+    "targetUrl": ""
+  }
+}
+
+docs {
+  Sends a credential offer to an organization's URL.
+}
+
+example {
+  name: 200 Response
+  description: Offer sent successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/offers/send-offer-to-organization
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "offerId": "",
+        "targetUrl": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -1,0 +1,71 @@
+meta {
+  name: Remove one or more templates from a catalog
+  type: http
+  seq: 14
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/remove-templates-from-catalog
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": "",
+    "templateIds": []
+  }
+}
+
+docs {
+  Removes one or more templates from a catalog by their ID.
+}
+
+example {
+  name: 200 Response
+  description: Template(s) removed successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/remove-templates-from-catalog
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": "",
+        "templateIds": []
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

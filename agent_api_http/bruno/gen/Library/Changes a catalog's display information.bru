@@ -1,0 +1,71 @@
+meta {
+  name: Changes a catalog's display information
+  type: http
+  seq: 2
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/change-catalog-appearance
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": "",
+    "display": ""
+  }
+}
+
+docs {
+  Changes a catalog's display information such as name, description, and icon.
+}
+
+example {
+  name: 200 Response
+  description: Catalog appearance updated successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/change-catalog-appearance
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": "",
+        "display": ""
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

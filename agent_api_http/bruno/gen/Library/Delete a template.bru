@@ -1,0 +1,55 @@
+meta {
+  name: Delete a template
+  type: http
+  seq: 6
+  tags: [
+    Library
+    Templates
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/delete-template
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": ""
+  }
+}
+
+docs {
+  Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+}
+
+example {
+  name: 204 Response
+  description: Template deleted successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/delete-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "id": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

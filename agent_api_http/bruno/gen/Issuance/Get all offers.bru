@@ -1,0 +1,64 @@
+meta {
+  name: Get all offers
+  type: http
+  seq: 7
+  tags: [
+    Issuance
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/offers
+  body: none
+  auth: inherit
+}
+
+docs {
+  List all credential offers.
+}
+
+example {
+  name: 200 Response
+  description: All offers retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/offers
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "credential_ids": [],
+            "credential_offer": "",
+            "credential_offer_uri": "",
+            "credential_response": "",
+            "delivery_options": "",
+            "form_url_encoded_credential_offer": "",
+            "grant_types": [],
+            "id": "",
+            "offer_link": "",
+            "pre_authorized_code": "",
+            "status": "Created",
+            "subject_id": "",
+            "successful_issuances": 0,
+            "tx_code": ""
+          }
+        ]
+      '''
+    }
+  }
+}

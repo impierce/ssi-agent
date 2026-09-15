@@ -1,0 +1,108 @@
+meta {
+  name: Duplicate existing template
+  type: http
+  seq: 7
+  tags: [
+    Library
+    Templates
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/duplicate-template
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca"
+  }
+}
+
+docs {
+  Creates a duplicate of an existing template.
+}
+
+example {
+  name: 201 Response
+  description: Duplicate created successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/duplicate-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca"
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "credentialExpiration": "",
+          "dataModel": "w3c_vc_data_model_v1-1",
+          "description": "",
+          "display": "",
+          "holderAuthorization": {
+            "pre_authorized": false,
+            "tx_code_constraints": ""
+          },
+          "holderType": "individual",
+          "id": "",
+          "modifiedAt": "",
+          "schema": "",
+          "schemaPropertiesAttributes": "",
+          "status": "draft",
+          "tags": "",
+          "title": "",
+          "type": [],
+          "visibility": "private"
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response
+  description: Source Template Not Found
+  
+  request: {
+    url: {{BASE_URL}}/v0/duplicate-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

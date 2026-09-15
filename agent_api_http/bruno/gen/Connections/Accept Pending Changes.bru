@@ -1,0 +1,53 @@
+meta {
+  name: Accept Pending Changes
+  type: http
+  seq: 3
+  tags: [
+    Connections
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/connections/accept-pending-changes
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "id": ""
+  }
+}
+
+docs {
+  Accept pending changes to a connection.
+}
+
+example {
+  name: 200 Response
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections/accept-pending-changes
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "id": ""
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -1,0 +1,63 @@
+meta {
+  name: Get connection by ID
+  type: http
+  seq: 6
+  tags: [
+    Connections
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/connections/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: {{CONNECTION_ID}}
+}
+
+docs {
+  Retrieve a specific connection by its unique identifier.
+}
+
+example {
+  name: 200 Response
+  description: Connection retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections/:id
+    method: GET
+    mode: none
+    params:path: {
+      id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "dids": [],
+          "display": "",
+          "first_interacted_at": "",
+          "id": "",
+          "last_interacted_at": "",
+          "pending_changes": "",
+          "url": "",
+          "validations": []
+        }
+      '''
+    }
+  }
+}

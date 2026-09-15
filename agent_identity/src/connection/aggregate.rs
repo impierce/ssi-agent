@@ -1,14 +1,15 @@
-use crate::services::IdentityServices;
+use crate::services::{IdentityServices, LinkedDid};
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Url;
+use identity_credential::credential::Credential;
 use identity_did::DIDUrl;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
+use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent, openapi::credential};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Connection {
@@ -36,12 +37,41 @@ pub enum Validation {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct LinkedVpValidation {
-    // TODO: add validation!
+    pub url: Url,
+    /// The linked DID whose DID Document advertised this presentation.
+    pub did: String,
+    /// Whether `did` is verifiably linked to the connection's domain. When `false` the
+    /// presentation is still fetched, validated and returned, but nothing ties it to the domain.
+    /// The corresponding [`DomainLinkageValidation`] contains the linkage error.
+    pub domain_linkage_valid: bool,
+    /// Outcome of validating the presentation itself. `valid` is `true` only when the
+    /// presentation's signature verified *and* every embedded credential validated.
+    pub result: ValidationResult,
+    /// Every credential embedded in the presentation, each with its own validation outcome.
+    /// Credentials that failed validation are still returned, flagged as invalid.
+    pub credentials: Vec<LinkedCredentialValidation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct LinkedCredentialValidation {
+    /// The credential. Decoded from the JWT *without* verifying its signature when
+    /// `result.valid` is `false`, and `None` when it could not be decoded at all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(schema_with = credential)]
+    pub credential: Option<Credential>,
+    /// The raw credential JWT exactly as it appeared in the presentation.
+    pub jwt: String,
+    /// Cryptographic and semantic validity against the credential's declared issuer DID. A valid
+    /// result does not establish that the issuer is trusted or associated with a known domain.
+    pub result: ValidationResult,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct DomainLinkageValidation {
     pub domain: Url,
+    /// The linked DID this result applies to, or `None` when the result covers the domain as a
+    /// whole (e.g. no linked DIDs could be extracted from its DID configuration).
+    pub did: Option<String>,
     pub result: ValidationResult,
 }
 
@@ -96,17 +126,18 @@ impl Aggregate for Connection {
             AddConnection { connection_id, url } => {
                 let metadata = services.fetch_credential_issuer_metadata(&url).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
-                let (dids, domain_linkage_valid) = services.fetch_linked_dids(&url).await?;
+                let linked_dids = services.fetch_linked_dids(&url).await?;
                 let now = services.now();
+                let dids: Vec<DIDUrl> = linked_dids.iter().map(|linked| linked.did.clone()).collect();
 
-                let validations = vec![Validation::DomainLinkage(DomainLinkageValidation {
-                    domain: url.clone(),
-                    result: ValidationResult {
-                        valid: domain_linkage_valid,
-                        error: None,
-                        last_validated_at: now,
-                    },
-                })];
+                let mut validations = domain_linkage_validations(&url, &linked_dids, now);
+                validations.extend(
+                    services
+                        .fetch_linked_vp_validations(&linked_dids)
+                        .await
+                        .into_iter()
+                        .map(Validation::LinkedVp),
+                );
 
                 Ok(vec![ConnectionAdded {
                     connection_id,
@@ -127,17 +158,18 @@ impl Aggregate for Connection {
 
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
                 let new_display = get_display_from_metadata(metadata.clone());
-                let (new_dids, domain_linkage_valid) = services.fetch_linked_dids(domain_ref).await?;
+                let linked_dids = services.fetch_linked_dids(domain_ref).await?;
                 let now = services.now();
+                let new_dids: Vec<DIDUrl> = linked_dids.iter().map(|linked| linked.did.clone()).collect();
 
-                let validations = vec![Validation::DomainLinkage(DomainLinkageValidation {
-                    domain: domain_ref.clone(),
-                    result: ValidationResult {
-                        valid: domain_linkage_valid,
-                        error: None,
-                        last_validated_at: now,
-                    },
-                })];
+                let mut validations = domain_linkage_validations(domain_ref, &linked_dids, now);
+                validations.extend(
+                    services
+                        .fetch_linked_vp_validations(&linked_dids)
+                        .await
+                        .into_iter()
+                        .map(Validation::LinkedVp),
+                );
 
                 let proposed = PendingChanges {
                     dids: Some(new_dids),
@@ -239,6 +271,40 @@ impl Aggregate for Connection {
 
 // HELPERS
 
+/// Builds one [`DomainLinkageValidation`] per linked DID, so a consumer can tell exactly which DID
+/// failed verification instead of only seeing an aggregate boolean.
+///
+/// When no linked DIDs could be extracted at all there is nothing to report per DID, so a single
+/// domain-level result is emitted instead.
+fn domain_linkage_validations(domain: &Url, linked_dids: &[LinkedDid], now: DateTime<Utc>) -> Vec<Validation> {
+    if linked_dids.is_empty() {
+        return vec![Validation::DomainLinkage(DomainLinkageValidation {
+            domain: domain.clone(),
+            did: None,
+            result: ValidationResult {
+                valid: false,
+                error: Some("No linked DIDs found in the domain's DID configuration".to_string()),
+                last_validated_at: now,
+            },
+        })];
+    }
+
+    linked_dids
+        .iter()
+        .map(|linked| {
+            Validation::DomainLinkage(DomainLinkageValidation {
+                domain: domain.clone(),
+                did: Some(linked.did.to_string()),
+                result: ValidationResult {
+                    valid: linked.domain_linkage_valid,
+                    error: linked.domain_linkage_error.clone(),
+                    last_validated_at: now,
+                },
+            })
+        })
+        .collect()
+}
+
 fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<ConnectionDisplayProperties> {
     metadata
         .display
@@ -272,6 +338,9 @@ pub mod document_tests {
 
     const LINKED_DID_JWT: &str = "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNI3o2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSJ9.eyJleHAiOjE3NjQ4NzkxMzksImlzcyI6ImRpZDprZXk6ejZNa29USHNnTk5yYnk4SnpDTlExaVJMeVc1UVE2UjhYdXU2QUE4aWdHck1WUFVNIiwibmJmIjoxNjA3MTEyNzM5LCJzdWIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly9pZGVudGl0eS5mb3VuZGF0aW9uLy53ZWxsLWtub3duL2RpZC1jb25maWd1cmF0aW9uL3YxIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6Nk1rb1RIc2dOTnJieThKekNOUTFpUkx5VzVRUTZSOFh1dTZBQThpZ0dyTVZQVU0iLCJvcmlnaW4iOiJpZGVudGl0eS5mb3VuZGF0aW9uIn0sImV4cGlyYXRpb25EYXRlIjoiMjAyNS0xMi0wNFQxNDoxMjoxOS0wNjowMCIsImlzc3VhbmNlRGF0ZSI6IjIwMjAtMTItMDRUMTQ6MTI6MTktMDY6MDAiLCJpc3N1ZXIiOiJkaWQ6a2V5Ono2TWtvVEhzZ05OcmJ5OEp6Q05RMWlSTHlXNVFRNlI4WHV1NkFBOGlnR3JNVlBVTSIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiLCJEb21haW5MaW5rYWdlQ3JlZGVudGlhbCJdfX0.aUFNReA4R5rcX_oYm3sPXqWtso_gjPHnWZsB6pWcGv6m3K8-4JIAvFov3ZTM8HxPOrOL17Qf4vBFdY9oK0HeCQ";
     const TEST_DID: &str = "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM";
+    /// `LINKED_DID_JWT` attests the origin `identity.foundation`, which never matches the mock
+    /// server the tests point at, so domain linkage always fails with this message.
+    const EXPECTED_LINKAGE_ERROR: &str = "Domain linkage verification failed: one or more validations failed";
 
     // TODO: Test domain_linkage_validation properly. Currently we exclude these, hence the default to false.
     #[test]
@@ -334,10 +403,11 @@ pub mod document_tests {
                 url: mock_issuer.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
                 validations: vec![Validation::DomainLinkage(DomainLinkageValidation {
+                    did: Some(TEST_DID.to_string()),
                     domain: mock_issuer,
                     result: ValidationResult {
                         valid: false,
-                        error: None,
+                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -401,10 +471,11 @@ pub mod document_tests {
                 url: mock_issuer.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
                 validations: vec![Validation::DomainLinkage(DomainLinkageValidation {
+                    did: Some(TEST_DID.to_string()),
                     domain: mock_issuer.clone(),
                     result: ValidationResult {
                         valid: false,
-                        error: None,
+                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -417,10 +488,11 @@ pub mod document_tests {
             .then_expect_events(vec![ConnectionEvent::ConnectionSynced {
                 connection_id: "abcd-123".to_string(),
                 validations: vec![Validation::DomainLinkage(DomainLinkageValidation {
+                    did: Some(TEST_DID.to_string()),
                     domain: mock_issuer,
                     result: ValidationResult {
                         valid: false,
-                        error: None,
+                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -449,10 +521,11 @@ pub mod document_tests {
             .given(vec![ConnectionEvent::ConnectionSynced {
                 connection_id: "abcd1234".to_string(),
                 validations: vec![Validation::DomainLinkage(DomainLinkageValidation {
+                    did: Some(TEST_DID.to_string()),
                     domain: mock_issuer,
                     result: ValidationResult {
                         valid: false,
-                        error: None,
+                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -508,10 +581,11 @@ pub mod document_tests {
                 url: mock_issuer.clone(),
                 dids: vec![TEST_DID.parse().unwrap()],
                 validations: vec![Validation::DomainLinkage(DomainLinkageValidation {
+                    did: Some(TEST_DID.to_string()),
                     domain: mock_issuer.clone(),
                     result: ValidationResult {
                         valid: false,
-                        error: None,
+                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
                         last_validated_at: mock_time,
                     },
                 })],

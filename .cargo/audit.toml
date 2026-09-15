@@ -13,7 +13,10 @@ ignore = [
     #   - rsa@0.6.1 via ssi-jwk (pinned git dep): used for RSA JWK signing/verification only,
     #     not for PKCS#1 v1.5 decryption, which is the primary Marvin Attack vector.
     #   - rsa@0.8.2 via fastcrypto → IOTA identity SDK: deep internal SDK dependency.
-    #   - rsa@0.9.10: no dependents in the normal runtime dependency graph (dev/build only).
+    #   - rsa@0.9.10 via stronghold_ext → identity_stronghold_ext (did-manager): backs the
+    #     `RS256` support added in did-manager v1.0.0-beta.9. Used for RSASSA-PKCS1-v1_5 signing
+    #     only, never for decryption, which is the primary Marvin Attack vector. Not currently
+    #     reachable either: `Subject` in agent_secret_manager only handles `EdDSA` and `ES256`.
     # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
     "RUSTSEC-2023-0071",
 
@@ -76,4 +79,17 @@ ignore = [
     # client directly, so the NsReader path is not reachable from ssi-agent application code.
     # TODO: revisit once the IOTA SDK upgrades quick-xml to >= 0.41.0.
     "RUSTSEC-2026-0195",
+
+    # RUSTSEC-2026-0258: h2 0.3.27 — unbounded empty DATA frames (low severity DoS)
+    # The vulnerable h2 instance is selected by reqwest 0.11.27 through hyper 0.14.32. Its
+    # workspace paths include did-web 0.2.2, iota-sdk 1.1.5, and the OpenID4VC crates. These are
+    # outbound clients, so a malicious or compromised remote HTTP/2 peer can trigger the issue.
+    # Connection commands request CommandAuthorization::ACTOR_REQUIRED, which limits exposure when
+    # enforced by the configured authorization checker but is not, by itself, a reason to consider
+    # every outbound path trusted. The public Axum listener and direct reqwest 0.12 clients use the
+    # patched h2 0.4.18 instance. Tests assert both the lockfile paths and command authorization
+    # marker so this global ignore is revisited if either boundary changes.
+    # No patched release for the remaining transitive dependency paths is available yet.
+    # TODO: revisit once a patched release becomes available upstream.
+    "RUSTSEC-2026-0258",
 ]

@@ -1,0 +1,79 @@
+meta {
+  name: List all connections
+  type: http
+  seq: 1
+  tags: [
+    Connections
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/connections
+  body: formUrlEncoded
+  auth: inherit
+}
+
+body:form-urlencoded {
+  did: 
+  display: 
+  url: 
+}
+
+docs {
+  List all available connections.
+}
+
+example {
+  name: 200 Response
+  description: All connections retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections
+    method: GET
+    mode: formUrlEncoded
+    body:form-urlencoded: {
+      did: 
+      display: 
+      url: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "dids": [],
+            "display": "",
+            "first_interacted_at": "",
+            "id": "",
+            "last_interacted_at": "",
+            "pending_changes": "",
+            "url": "",
+            "validations": []
+          }
+        ]
+      '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const lastId = items[items.length - 1]?.id;
+    if (lastId) {
+      bru.setVar('CONNECTION_ID', lastId);
+    }
+  }
+}

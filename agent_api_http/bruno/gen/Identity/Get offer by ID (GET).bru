@@ -1,0 +1,95 @@
+meta {
+  name: Get offer by ID (GET)
+  type: http
+  seq: 9
+  tags: [
+    Identity
+    Holder
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/holder/offers/:received_offer_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  received_offer_id: {{RECEIVED_OFFER_ID}}
+}
+
+docs {
+  Retrieves an offer received by your organisation by its ID.
+}
+
+example {
+  name: 200 Response
+  description: Offer retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/holder/offers/:received_offer_id
+    method: GET
+    mode: none
+    params:path: {
+      received_offer_id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "credential_configurations": "",
+          "credential_offer": "",
+          "credentials": [
+            {
+              "credential": "",
+              "holder_credential_id": ""
+            }
+          ],
+          "id": "",
+          "status": "Pending",
+          "token_response": ""
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Offer not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/holder/offers/:received_offer_id
+    method: GET
+    mode: none
+    params:path: {
+      received_offer_id: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

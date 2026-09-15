@@ -1,0 +1,84 @@
+meta {
+  name: Get an identity service
+  type: http
+  seq: 18
+  tags: [
+    Identity
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/services/:service_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  @description('Identity service ID')
+  service_id: 
+}
+
+example {
+  name: 200 Response
+  description: Identity service
+  
+  request: {
+    url: {{BASE_URL}}/v0/services/:service_id
+    method: GET
+    mode: none
+    params:path: {
+      service_id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "id": "",
+          "presentation_ids": [],
+          "resource": "",
+          "service": ""
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Identity service not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/services/:service_id
+    method: GET
+    mode: none
+    params:path: {
+      service_id: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -1,0 +1,67 @@
+meta {
+  name: Add a Connection
+  type: http
+  seq: 2
+  tags: [
+    Connections
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/connections
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": ""
+  }
+}
+
+docs {
+  Adds a new connection based on the provided url.
+}
+
+example {
+  name: 201 Response
+  description: Connection added successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "url": ""
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "dids": [],
+          "display": "",
+          "first_interacted_at": "",
+          "id": "",
+          "last_interacted_at": "",
+          "pending_changes": "",
+          "url": "",
+          "validations": []
+        }
+      '''
+    }
+  }
+}

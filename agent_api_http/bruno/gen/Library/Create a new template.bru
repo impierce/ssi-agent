@@ -1,0 +1,165 @@
+meta {
+  name: Create a new template
+  type: http
+  seq: 4
+  tags: [
+    Library
+    Templates
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/create-new-template
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "title": "OpenBadges template",
+    "dataModel": "open_badges_3-0",
+    "holderType": "individual",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "achievement.name": {
+          "type": "string"
+        },
+        "achievement.description": {
+          "type": "string"
+        },
+        "achievement.criteria.narrative": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
+
+docs {
+  Creates a new template which can be used to issue credentials.
+}
+
+example {
+  name: 201 Response (OpenBadges template)
+  description: New template created successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "title": "OpenBadges template",
+        "dataModel": "open_badges_3-0",
+        "holderType": "individual",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "achievement.name": {
+              "type": "string"
+            },
+            "achievement.description": {
+              "type": "string"
+            },
+            "achievement.criteria.narrative": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "credentialExpiration": "",
+          "dataModel": "w3c_vc_data_model_v1-1",
+          "description": "",
+          "display": "",
+          "holderAuthorization": {
+            "pre_authorized": false,
+            "tx_code_constraints": ""
+          },
+          "holderType": "individual",
+          "id": "",
+          "modifiedAt": "",
+          "schema": "",
+          "schemaPropertiesAttributes": "",
+          "status": "draft",
+          "tags": "",
+          "title": "",
+          "type": [],
+          "visibility": "private"
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 201 Response (Standard template)
+  description: New template created successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "title": "Standard template",
+        "dataModel": "w3c_vc_data_model_v1-1",
+        "holderType": "individual"
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 201
+      text: Created
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "credentialExpiration": "",
+          "dataModel": "w3c_vc_data_model_v1-1",
+          "description": "",
+          "display": "",
+          "holderAuthorization": {
+            "pre_authorized": false,
+            "tx_code_constraints": ""
+          },
+          "holderType": "individual",
+          "id": "",
+          "modifiedAt": "",
+          "schema": "",
+          "schemaPropertiesAttributes": "",
+          "status": "draft",
+          "tags": "",
+          "title": "",
+          "type": [],
+          "visibility": "private"
+        }
+      '''
+    }
+  }
+}

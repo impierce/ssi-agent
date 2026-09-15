@@ -1,0 +1,97 @@
+meta {
+  name: Get offer by ID
+  type: http
+  seq: 11
+  tags: [
+    Issuance
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/offers/:offer_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  offer_id: 
+}
+
+docs {
+  Retrieves a credential offer by its ID.
+}
+
+example {
+  name: 200 Response
+  description: Offer retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/offers/:offer_id
+    method: GET
+    mode: none
+    params:path: {
+      offer_id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "credential_ids": [],
+          "credential_offer": "",
+          "credential_offer_uri": "",
+          "credential_response": "",
+          "delivery_options": "",
+          "form_url_encoded_credential_offer": "",
+          "grant_types": [],
+          "id": "",
+          "offer_link": "",
+          "pre_authorized_code": "",
+          "status": "Created",
+          "subject_id": "",
+          "successful_issuances": 0,
+          "tx_code": ""
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Offer not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/offers/:offer_id
+    method: GET
+    mode: none
+    params:path: {
+      offer_id: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

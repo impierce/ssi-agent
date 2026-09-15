@@ -1,0 +1,50 @@
+meta {
+  name: List identity services
+  type: http
+  seq: 16
+  tags: [
+    Identity
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/services
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Identity services
+  
+  request: {
+    url: {{BASE_URL}}/v0/services
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "id": "",
+            "presentation_ids": [],
+            "resource": "",
+            "service": ""
+          }
+        ]
+      '''
+    }
+  }
+}

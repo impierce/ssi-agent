@@ -1,0 +1,73 @@
+meta {
+  name: List DID documents
+  type: http
+  seq: 1
+  tags: [
+    Identity
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/documents
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~did_method: 
+}
+
+docs {
+  Retrieves the list of DID documents in use by your organisation.
+}
+
+example {
+  name: 200 Response
+  description: Documents retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/documents
+    method: GET
+    mode: none
+    params:query: {
+      ~did_method: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "did_method": "",
+            "document": {},
+            "id": "",
+            "iota_metadata": "",
+            "status": "SignAndValidate",
+            "with_fixed_algorithm": "ES256"
+          }
+        ]
+      '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const lastId = items[items.length - 1]?.id;
+    if (lastId) {
+      bru.setVar('DOCUMENT_ID', lastId);
+    }
+  }
+}

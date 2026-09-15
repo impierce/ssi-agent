@@ -1,0 +1,65 @@
+meta {
+  name: Get catalog by ID
+  type: http
+  seq: 9
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/get-catalog-by-id/:catalog_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  catalog_id: 
+}
+
+docs {
+  Retrieve a specific catalog by its ID.
+}
+
+example {
+  name: 200 Response
+  description: Catalog retrieved successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/get-catalog-by-id/:catalog_id
+    method: GET
+    mode: none
+    params:path: {
+      catalog_id: 
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

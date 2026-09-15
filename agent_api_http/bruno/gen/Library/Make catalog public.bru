@@ -1,0 +1,69 @@
+meta {
+  name: Make catalog public
+  type: http
+  seq: 13
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/make-catalog-public
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": ""
+  }
+}
+
+docs {
+  Updates a catalog's visibility to public.
+}
+
+example {
+  name: 200 Response
+  description: Catalog make public successfully
+  
+  request: {
+    url: {{BASE_URL}}/v0/make-catalog-public
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+  
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+  
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}

@@ -343,6 +343,8 @@ impl Aggregate for Template {
             UpdateDisplay { template_id, display } => {
                 ensure_template_editable(&self.status)?;
 
+                let display = default_empty_display_name(display, &self.title);
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -865,6 +867,13 @@ fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
     } else {
         Some(normalized)
     }
+}
+
+fn default_empty_display_name(mut display: Display, title: &str) -> Display {
+    if display.name.trim().is_empty() {
+        display.name = title.to_string();
+    }
+    display
 }
 
 fn ensure_template_editable(status: &Status) -> Result<(), TemplateError> {
