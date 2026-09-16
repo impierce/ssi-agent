@@ -1,13 +1,13 @@
 use super::TemplateView;
 use crate::template::views::Template;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllTemplatesView {
     #[serde(flatten)]
-    pub templates: HashMap<String, TemplateView>,
+    pub templates: IndexMap<String, TemplateView>,
 }
 
 impl View<Template> for AllTemplatesView {

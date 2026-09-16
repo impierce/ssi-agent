@@ -77,6 +77,7 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
     "stronghold",
 ] }
 iso8601 = "0.6"
+indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
