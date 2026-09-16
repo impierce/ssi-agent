@@ -1,13 +1,13 @@
 use super::AuthorizationCode;
 use super::AuthorizationCodeView;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllAuthorizationCodesView {
     #[serde(flatten)]
-    pub authorization_codes: HashMap<String, AuthorizationCodeView>,
+    pub authorization_codes: IndexMap<String, AuthorizationCodeView>,
 }
 
 impl View<AuthorizationCode> for AllAuthorizationCodesView {
