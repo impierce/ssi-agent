@@ -1,55 +1,19 @@
 use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{
-    custom_queries::{modify_via_store, MutableViewRepository},
     in_memory::InMemoryViewRepository,
     mongodb_lease::{LeasedMongoEventRepository, WriterLease},
     replay::{ReplayError, ReplayJob, ReplayProgress, ReplayProjection, ReplayReport},
     AggregateHandler, CqrsComponentBuilder,
 };
-use agent_shared::{
-    application_state::Command,
-    config::{config, ViewStorage},
-};
-use async_trait::async_trait;
-use cqrs_es::persist::{PersistedEventStore, PersistenceError};
+use agent_shared::{application_state::Command, config::config};
+use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
-use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
+use mongo_es::{default_mongo_client, Client};
 use mongodb::bson::{self, doc, Document};
 use mongodb::{options::FindOptions, Cursor, IndexModel};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::{Arc, Mutex};
-
-#[async_trait]
-impl<V, A> MutableViewRepository<V, A> for MongoViewRepository<V, A>
-where
-    V: View<A>,
-    A: Aggregate,
-{
-    async fn modify(
-        &self,
-        view_id: &str,
-        update: &mut (dyn for<'view> FnMut(&'view mut V) + Send),
-    ) -> Result<(), PersistenceError> {
-        modify_via_store(self, view_id, update).await
-    }
-}
-
-impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
-where
-    A: Aggregate,
-{
-    async fn new(client: Client, services: A::Services) -> Self {
-        let repo = MongoEventRepository::new(client)
-            .await
-            .expect("Failed to create MongoEventRepository");
-        let store = PersistedEventStore::new_event_store(repo);
-        Self {
-            cqrs: CqrsFramework::new(store, vec![], services),
-            execution: Arc::new(tokio::sync::Mutex::new(())),
-        }
-    }
-}
 
 impl<A> AggregateHandler<A, PersistedEventStore<LeasedMongoEventRepository, A>>
 where
@@ -69,7 +33,6 @@ where
 
 pub struct MongoDB {
     pub client: Client,
-    view_storage: ViewStorage,
     replay_jobs: Mutex<Vec<Arc<dyn ReplayJob>>>,
     writer_lease: Arc<WriterLease>,
 }
@@ -95,41 +58,25 @@ impl MongoDB {
         let writer_lease = WriterLease::new(client.clone());
         Self {
             client,
-            view_storage: config().event_store.views,
             replay_jobs: Mutex::new(Vec::new()),
             writer_lease,
         }
     }
-    // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
-
     pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
         self.verify_events_with(event_verification::core_event_verifiers())
             .await
     }
 
-    pub fn uses_in_memory_views(&self) -> bool {
-        self.view_storage == ViewStorage::InMemory
-    }
-
     pub async fn acquire_writer_lease(&self) -> Result<(), mongodb::error::Error> {
-        if self.uses_in_memory_views() {
-            self.writer_lease.acquire().await?;
-        }
-        Ok(())
+        self.writer_lease.acquire().await
     }
 
     pub async fn writer_lease_lost(&self) {
-        if self.uses_in_memory_views() {
-            self.writer_lease.lost().await;
-        } else {
-            std::future::pending().await
-        }
+        self.writer_lease.lost().await;
     }
 
     pub async fn shutdown(&self) {
-        if self.uses_in_memory_views() {
-            self.writer_lease.release().await;
-        }
+        self.writer_lease.release().await;
         self.client.clone().shutdown().await;
     }
 
@@ -250,109 +197,30 @@ impl CqrsComponentBuilder for MongoDB {
     {
         let all_aggregates_name = format!("all_{}s", A::TYPE);
 
-        match self.view_storage {
-            ViewStorage::Persisted => {
-                let aggregate: Arc<MongoViewRepository<V, A>> =
-                    Arc::new(MongoViewRepository::new(A::TYPE, self.client.clone()));
-                let all_aggregates: Arc<MongoViewRepository<AV, A>> =
-                    Arc::new(MongoViewRepository::new(&all_aggregates_name, self.client.clone()));
+        let aggregate: Arc<InMemoryViewRepository<V, A>> = Arc::new(InMemoryViewRepository::default());
+        let all_aggregates: Arc<InMemoryViewRepository<AV, A>> = Arc::new(InMemoryViewRepository::default());
+        self.replay_jobs
+            .lock()
+            .expect("replay jobs lock poisoned")
+            .push(Arc::new(ReplayProjection::new(
+                aggregate.clone(),
+                all_aggregates.clone(),
+                all_aggregates_name.clone(),
+            )));
 
-                (
-                    Arc::new(
-                        AggregateHandler::new(self.client.clone(), services)
-                            .await
-                            .with_parameters(
-                                aggregate.clone(),
-                                all_aggregates.clone(),
-                                event_publishers,
-                                &all_aggregates_name,
-                            ),
-                    ),
-                    aggregate,
-                    all_aggregates,
-                )
-            }
-            ViewStorage::InMemory => {
-                let aggregate: Arc<InMemoryViewRepository<V, A>> = Arc::new(InMemoryViewRepository::default());
-                let all_aggregates: Arc<InMemoryViewRepository<AV, A>> = Arc::new(InMemoryViewRepository::default());
-                self.replay_jobs
-                    .lock()
-                    .expect("replay jobs lock poisoned")
-                    .push(Arc::new(ReplayProjection::new(
+        (
+            Arc::new(
+                AggregateHandler::new_leased(self.client.clone(), self.writer_lease.clone(), services)
+                    .await
+                    .with_parameters(
                         aggregate.clone(),
                         all_aggregates.clone(),
-                        all_aggregates_name.clone(),
-                    )));
-
-                (
-                    Arc::new(
-                        AggregateHandler::new_leased(self.client.clone(), self.writer_lease.clone(), services)
-                            .await
-                            .with_parameters(
-                                aggregate.clone(),
-                                all_aggregates.clone(),
-                                event_publishers,
-                                &all_aggregates_name,
-                            ),
+                        event_publishers,
+                        &all_aggregates_name,
                     ),
-                    aggregate,
-                    all_aggregates,
-                )
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_identity::connection::{
-        aggregate::Connection,
-        views::{all_connections::AllConnectionsView, ConnectionView},
-    };
-    #[tokio::test]
-    async fn index_map_loads_legacy_bson_document_in_field_order() {
-        let Ok(connection_string) = std::env::var("SSI_AGENT_TEST_MONGODB_URI") else {
-            return;
-        };
-        let client = default_mongo_client(&connection_string).await;
-        let collection = client
-            .default_database()
-            .unwrap()
-            .collection::<Document>("all_connections_order_test");
-        let view_id = uuid::Uuid::new_v4().to_string();
-        let older = ConnectionView {
-            connection_id: "older".to_string(),
-            ..Default::default()
-        };
-        let newer = ConnectionView {
-            connection_id: "newer".to_string(),
-            ..Default::default()
-        };
-        collection
-            .insert_one(doc! {
-                "view_id": &view_id,
-                "version": 1_i64,
-                "payload": {
-                    "older": bson::to_bson(&older).unwrap(),
-                    "newer": bson::to_bson(&newer).unwrap(),
-                },
-            })
-            .await
-            .unwrap();
-
-        let repository =
-            MongoViewRepository::<AllConnectionsView, Connection>::new("all_connections_order_test", client.clone());
-        let view = cqrs_es::persist::ViewRepository::load(&repository, &view_id)
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            view.connections.keys().map(String::as_str).collect::<Vec<_>>(),
-            vec!["older", "newer"]
-        );
-        collection.delete_one(doc! { "view_id": view_id }).await.unwrap();
-        client.shutdown().await;
+            ),
+            aggregate,
+            all_aggregates,
+        )
     }
 }

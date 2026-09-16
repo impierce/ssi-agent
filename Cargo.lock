@@ -526,6 +526,7 @@ dependencies = [
  "agent_verification",
  "async-trait",
  "cqrs-es",
+ "futures",
  "mongo-es",
  "mongodb 3.7.0",
  "postgres-es",

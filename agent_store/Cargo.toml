@@ -17,6 +17,7 @@ shared-kernel.workspace = true
 
 async-trait.workspace = true
 cqrs-es.workspace = true
+futures.workspace = true
 mongodb = "3.7"
 mongo-es.workspace = true
 postgres-es = "0.5.0"

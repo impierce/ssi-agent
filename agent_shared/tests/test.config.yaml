@@ -4,7 +4,6 @@ log_format: json
 
 event_store:
   type: postgres
-  views: persisted
   # connection_string: <defined in .env.test>
 
 application_url: https://my-domain.example.org

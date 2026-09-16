@@ -1,4 +1,4 @@
-# ADR 0006: Rebuild MongoDB Projections in Memory
+# ADR 0006: Rebuild Projections in Memory
 
 **Status**: Accepted
 **Date**: 2026-09-15
@@ -19,18 +19,18 @@ All `all_*` projections use `IndexMap`, and list endpoints expose newest-created
 reversing insertion order. Template endpoints retain their separate most-recently-modified order,
 using parsed RFC 3339 timestamps and an identifier tie-breaker.
 
-MongoDB gains an opt-in `event_store.views: in_memory` mode. In that mode only events are persisted;
-typed projections are held behind in-process read/write locks and rebuilt by streaming events at
-startup. Replay updates view structs directly and never passes historical events through the CQRS
-query pipeline, so it cannot republish events or execute commands.
+Only events are persisted. Typed projections are held behind in-process read/write locks and
+rebuilt from the configured MongoDB or PostgreSQL event store at startup. Replay updates view
+structs directly and never passes historical events through the CQRS query pipeline, so it cannot
+republish events or execute commands.
 
-One active application writer per MongoDB database is enforced with a renewable lease. Every event
-append checks the lease owner, a monotonically increasing fencing token, and the server-time expiry
-inside the event transaction. Losing the lease makes the process unready and triggers graceful
-shutdown. Persisted-view mode retains its existing multi-replica behavior.
+One active application writer per event-store database is enforced with a database-backed lease.
+Every event append checks the lease owner and a monotonically increasing fencing token inside the
+event transaction. Losing the lease makes the process unready and triggers graceful shutdown.
 
-The setting defaults to `persisted` for an opt-in release. Postgres continues to use persisted
-views.
+Projection storage is not configurable. `event_store.type` chooses where the event log lives, not
+where views live. If external projection stores are introduced later, they will be configured as
+independent query-side adapters so different projections can target different technologies.
 
 ## Constraints
 
@@ -39,27 +39,25 @@ There are no event upcasters today, so stored payloads are deserialized directly
 event type. A future metadata-dependent view or upcaster must be added to both the command and
 startup replay paths before it is deployed.
 
-MongoDB in-memory mode requires transactions and therefore a replica set or sharded cluster.
-Startup fails before initialization if events are incompatible, sequences contain gaps, or a view
-cannot be rebuilt.
+MongoDB requires transactions and therefore a replica set or sharded cluster. PostgreSQL uses an
+advisory-lock-backed lease and fences event appends transactionally. Startup fails before
+initialization if events are incompatible, sequences contain gaps, or a view cannot be rebuilt.
 
-Global insertion order is derived from MongoDB ObjectId order. Replay buffers events when a legacy
-multi-writer history contains per-aggregate ObjectIds out of sequence, then applies each aggregate
-in sequence order. ObjectIds do not provide a durable incremental checkpoint, so tail catch-up is
-outside this decision.
+Replay buffers events when legacy history is not read in per-aggregate sequence order, then applies
+each aggregate in sequence order. The current event-store ordering does not provide a durable
+incremental checkpoint, so tail catch-up is outside this decision.
 
 ## Consequences
 
-Projection writes are constant-time and no longer rewrite a growing BSON document. Projection
+Projection writes are constant-time and no longer rewrite growing database documents. Projection
 memory and startup time grow with the event stream and projected data. The API cannot scale by
-running multiple in-memory writers; deployments needing multiple replicas must retain persisted
-views until a durable synchronized projection consumer exists.
+running multiple active writers until a durable synchronized projection consumer exists.
 
 The process binds probe endpoints before state construction. Readiness stays false during lease
 waiting and replay. Graceful SIGTERM handling drains requests and releases the lease.
 
-Persisted views are not updated in in-memory mode. They remain useful for rollback during the
-opt-in release but must be rebuilt before switching back after new events have been written.
+Legacy persisted views are no longer updated. They can help compare a first rollout but must be
+rebuilt before rolling back to an older version after new events have been written.
 
 This facility enables the dedicated `PublicTemplatesView` proposed in ADR 0004 without exposing an
 event repository through the domain state or replaying events through publishers.

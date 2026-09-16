@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use cqrs_es::{
-    persist::{PersistenceError, ViewContext, ViewRepository},
+    persist::{PersistenceError, ViewRepository},
     Aggregate, EventEnvelope, Query, View,
 };
 use std::{marker::PhantomData, sync::Arc};
@@ -17,33 +17,6 @@ where
         view_id: &str,
         update: &mut (dyn for<'view> FnMut(&'view mut V) + Send),
     ) -> Result<(), PersistenceError>;
-}
-
-pub(crate) async fn modify_via_store<R, V, A>(
-    repository: &R,
-    view_id: &str,
-    update: &mut (dyn for<'view> FnMut(&'view mut V) + Send),
-) -> Result<(), PersistenceError>
-where
-    R: ViewRepository<V, A>,
-    V: View<A>,
-    A: Aggregate,
-{
-    const MAX_OPTIMISTIC_LOCK_RETRIES: usize = 8;
-
-    for attempt in 0..=MAX_OPTIMISTIC_LOCK_RETRIES {
-        let (mut view, context) = repository
-            .load_with_context(view_id)
-            .await?
-            .unwrap_or_else(|| (V::default(), ViewContext::new(view_id.to_string(), 0)));
-        update(&mut view);
-        match repository.update_view(view, context).await {
-            Err(PersistenceError::OptimisticLockError) if attempt < MAX_OPTIMISTIC_LOCK_RETRIES => continue,
-            result => return result,
-        }
-    }
-
-    unreachable!("bounded optimistic-lock retry loop always returns")
 }
 
 pub struct MutableQuery<R, V, A>
@@ -147,7 +120,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cqrs_es::DomainEvent;
+    use cqrs_es::{persist::ViewContext, DomainEvent};
     use serde::{Deserialize, Serialize};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::sync::Mutex;
@@ -203,7 +176,6 @@ mod tests {
     #[derive(Default)]
     struct CountingRepository {
         view: Mutex<Option<CountView>>,
-        conflicts: AtomicUsize,
         loads: AtomicUsize,
         stores: AtomicUsize,
     }
@@ -226,15 +198,6 @@ mod tests {
 
         async fn update_view(&self, view: CountView, _context: ViewContext) -> Result<(), PersistenceError> {
             self.stores.fetch_add(1, Ordering::Relaxed);
-            if self
-                .conflicts
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |remaining| {
-                    remaining.checked_sub(1)
-                })
-                .is_ok()
-            {
-                return Err(PersistenceError::OptimisticLockError);
-            }
             *self.view.lock().await = Some(view);
             Ok(())
         }
@@ -244,10 +207,15 @@ mod tests {
     impl MutableViewRepository<CountView, TestAggregate> for CountingRepository {
         async fn modify(
             &self,
-            view_id: &str,
+            _view_id: &str,
             update: &mut (dyn for<'view> FnMut(&'view mut CountView) + Send),
         ) -> Result<(), PersistenceError> {
-            modify_via_store(self, view_id, update).await
+            self.loads.fetch_add(1, Ordering::Relaxed);
+            let mut stored_view = self.view.lock().await;
+            let view = stored_view.get_or_insert_default();
+            update(view);
+            self.stores.fetch_add(1, Ordering::Relaxed);
+            Ok(())
         }
     }
 
@@ -270,20 +238,5 @@ mod tests {
         assert_eq!(repository.loads.load(Ordering::Relaxed), 1);
         assert_eq!(repository.stores.load(Ordering::Relaxed), 1);
         assert_eq!(repository.view.lock().await.as_ref().unwrap().0, 3);
-    }
-
-    #[tokio::test]
-    async fn retries_a_concurrent_persisted_view_update() {
-        let repository = Arc::new(CountingRepository {
-            conflicts: AtomicUsize::new(1),
-            ..Default::default()
-        });
-        let query = ListAllQuery::new(repository.clone(), "all_tests");
-
-        query.apply_events(&[event(1)]).await.unwrap();
-
-        assert_eq!(repository.loads.load(Ordering::Relaxed), 2);
-        assert_eq!(repository.stores.load(Ordering::Relaxed), 2);
-        assert_eq!(repository.view.lock().await.as_ref().unwrap().0, 1);
     }
 }

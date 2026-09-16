@@ -93,14 +93,15 @@ impl EventVerification {
     async fn writer_lease_lost(&self) {
         match self {
             Self::MongoDb(store) => store.writer_lease_lost().await,
-            Self::Postgres(_) | Self::InMemory => std::future::pending().await,
+            Self::Postgres(store) => store.writer_lease_lost().await,
+            Self::InMemory => std::future::pending().await,
         }
     }
 
     async fn shutdown(&self) {
         match self {
             Self::MongoDb(store) => store.shutdown().await,
-            Self::Postgres(store) => store.pool.close().await,
+            Self::Postgres(store) => store.shutdown().await,
             Self::InMemory => {}
         }
     }
@@ -143,7 +144,7 @@ pub async fn run() -> io::Result<()> {
     let shutdown = async move {
         tokio::select! {
             () = sigterm() => info!("SIGTERM received; starting graceful shutdown"),
-            () = shutdown_runtime.writer_lease_lost() => error!("MongoDB writer lease lost; terminating process"),
+            () = shutdown_runtime.writer_lease_lost() => error!("Event-store writer lease lost; terminating process"),
         }
         shutdown_readiness.mark_not_ready();
     };
@@ -258,6 +259,16 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
                     verification_state,
                 );
+                builder.acquire_writer_lease().await.map_err(io::Error::other)?;
+
+                let reports = match builder.replay_views().await {
+                    Ok(reports) => reports,
+                    Err(replay_error) => {
+                        builder.shutdown().await;
+                        return Err(io::Error::other(replay_error));
+                    }
+                };
+                log_replay_reports(reports);
                 event_verification = EventVerification::Postgres(builder);
                 states
             }
@@ -308,26 +319,16 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
                     verification_state,
                 );
-                if builder.uses_in_memory_views() {
-                    builder.acquire_writer_lease().await.map_err(io::Error::other)?;
+                builder.acquire_writer_lease().await.map_err(io::Error::other)?;
 
-                    let reports = match builder.replay_views().await {
-                        Ok(reports) => reports,
-                        Err(replay_error) => {
-                            builder.shutdown().await;
-                            return Err(io::Error::other(replay_error));
-                        }
-                    };
-                    for report in reports {
-                        info!(
-                            aggregate_type = report.aggregate_type,
-                            events_replayed = report.events_replayed,
-                            aggregates_replayed = report.aggregates_replayed,
-                            duration_ms = report.duration.as_millis(),
-                            "Replayed in-memory projections"
-                        );
+                let reports = match builder.replay_views().await {
+                    Ok(reports) => reports,
+                    Err(replay_error) => {
+                        builder.shutdown().await;
+                        return Err(io::Error::other(replay_error));
                     }
-                }
+                };
+                log_replay_reports(reports);
                 event_verification = EventVerification::MongoDb(builder);
                 states
             }
@@ -410,7 +411,7 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
     };
     if matches!(
         application_state.event_verification.as_ref(),
-        EventVerification::MongoDb(store) if store.uses_in_memory_views()
+        EventVerification::MongoDb(_) | EventVerification::Postgres(_)
     ) {
         application_state.mark_ready();
     } else {
@@ -418,6 +419,18 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
     }
 
     Ok(application_state)
+}
+
+fn log_replay_reports(reports: Vec<agent_store::replay::ReplayReport>) {
+    for report in reports {
+        info!(
+            aggregate_type = report.aggregate_type,
+            events_replayed = report.events_replayed,
+            aggregates_replayed = report.aggregates_replayed,
+            duration_ms = report.duration.as_millis(),
+            "Replayed in-memory projections"
+        );
+    }
 }
 
 /// Builds the full core SSI agent Router (app + metadata + probes).

@@ -243,7 +243,6 @@ The event store is used to persist events and serves as UniCore's persistence la
 | Environment variable                      | `config.yaml`                   |
 | ----------------------------------------- | ------------------------------- |
 | `UNICORE__EVENT_STORE__TYPE`              | `event_store.type`              |
-| `UNICORE__EVENT_STORE__VIEWS`             | `event_store.views`             |
 | `UNICORE__EVENT_STORE__CONNECTION_STRING` | `event_store.connection_string` |
 
 #### Values
@@ -257,24 +256,19 @@ The event store is used to persist events and serves as UniCore's persistence la
 ##### `connection_string`
 
 Required when `type` is `mongodb` or `postgres`. A MongoDB connection string must include a
-database name. MongoDB in-memory projection mode additionally requires a replica set or sharded
-cluster because event appends use transactions.
+database name. MongoDB additionally requires a replica set or sharded cluster because event
+appends use transactions.
 
-##### `views`
-
-- `persisted` _(default)_ stores projections in the configured database and supports multiple
-  application replicas.
-- `in_memory` rebuilds projections from MongoDB events during startup. It is supported only when
-  `type` is `mongodb`, and enforces one active application writer per database with a renewable,
-  transactionally fenced lease. See [In-memory projections](../deployment/in-memory-projections.md)
-  before enabling it.
+The event-store setting selects where immutable events are persisted. Query projections are always
+held in application memory and rebuilt from those events at startup; projection storage is not an
+event-store configuration option. See [In-memory projections](../deployment/in-memory-projections.md)
+for the resulting deployment constraints.
 
 #### Example
 
 ```yaml
 event_store:
   type: postgres
-  views: persisted
   connection_string: postgresql://user:password@database:5432/demo
 ```
 
