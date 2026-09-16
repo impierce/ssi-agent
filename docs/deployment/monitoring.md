@@ -6,8 +6,10 @@ UniCore offers a variety of monitoring options to ensure a healthy deployment an
 
 UniCore implements conventional probe endpoints to monitor the availability and health of the service. [Standard Kubernetes probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/) are served at the following endpoints:
 
-- `/healthz`: Liveness probe
-<!-- - `/readyz`: Readiness probe -->
+- `/livez`: Liveness probe
+- `/healthz`: Backwards-compatible alias for the liveness probe
+- `/readyz`: Readiness probe. It returns `503 Service Unavailable` while the application is
+  starting, replaying projections, waiting for a writer lease, or shutting down.
 
 ## Metadata
 

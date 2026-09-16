@@ -255,7 +255,14 @@ The event store is used to persist events and serves as UniCore's persistence la
 
 ##### `connection_string`
 
-Only required when `type` is `postgres`.
+Required when `type` is `mongodb` or `postgres`. A MongoDB connection string must include a
+database name. MongoDB additionally requires a replica set or sharded cluster because event
+appends use transactions.
+
+The event-store setting selects where immutable events are persisted. Query projections are always
+held in application memory and rebuilt from those events at startup; projection storage is not an
+event-store configuration option. See [In-memory projections](../deployment/in-memory-projections.md)
+for the resulting deployment constraints.
 
 #### Example
 

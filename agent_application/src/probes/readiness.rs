@@ -15,7 +15,11 @@ impl ReadinessState {
         self.ready.store(true, Ordering::Release);
     }
 
-    fn is_ready(&self) -> bool {
+    pub fn mark_not_ready(&self) {
+        self.ready.store(false, Ordering::Release);
+    }
+
+    pub fn is_ready(&self) -> bool {
         self.ready.load(Ordering::Acquire)
     }
 }
@@ -45,5 +49,12 @@ mod tests {
         readiness.mark_ready();
 
         assert_eq!(readyz(State(clone)).await.into_response().status(), StatusCode::OK);
+
+        readiness.mark_not_ready();
+
+        assert_eq!(
+            readyz(State(readiness)).await.into_response().status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
     }
 }

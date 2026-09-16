@@ -50,6 +50,20 @@ impl EventVerificationReport {
     pub fn is_compatible(&self) -> bool {
         self.incompatible.is_empty()
     }
+
+    pub(crate) fn verify_event(&mut self, event: RawStoredEvent, verifiers: &[EventVerifier]) {
+        self.checked += 1;
+
+        let Some(verifier) = event_verifier_for(verifiers, &event.aggregate_type) else {
+            self.incompatible
+                .push(incompatible_event(event, "unknown aggregate type"));
+            return;
+        };
+
+        if let Err(reason) = verifier.verify(&event) {
+            self.incompatible.push(incompatible_event(event, reason));
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -108,18 +122,7 @@ pub fn verify_events_with(
     let mut report = EventVerificationReport::default();
 
     for event in events {
-        report.checked += 1;
-
-        let Some(verifier) = event_verifier_for(verifiers, &event.aggregate_type) else {
-            report
-                .incompatible
-                .push(incompatible_event(event, "unknown aggregate type"));
-            continue;
-        };
-
-        if let Err(reason) = verifier.verify(&event) {
-            report.incompatible.push(incompatible_event(event, reason));
-        }
+        report.verify_event(event, verifiers);
     }
 
     report

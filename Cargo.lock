@@ -158,6 +158,7 @@ dependencies = [
  "serde_with 3.21.0",
  "shared-kernel",
  "tokio",
+ "tower 0.4.13",
  "tower-http 0.6.11",
  "tracing",
  "tracing-opentelemetry",
@@ -525,6 +526,7 @@ dependencies = [
  "agent_verification",
  "async-trait",
  "cqrs-es",
+ "futures",
  "mongo-es",
  "mongodb 3.7.0",
  "postgres-es",
@@ -534,6 +536,8 @@ dependencies = [
  "sqlx",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
