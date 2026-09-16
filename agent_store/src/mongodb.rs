@@ -2,7 +2,7 @@ use crate::event_verification::{self, EventVerificationError, EventVerificationR
 use crate::{
     in_memory::InMemoryViewRepository,
     mongodb_lease::{LeasedMongoEventRepository, WriterLease},
-    replay::{ReplayError, ReplayJob, ReplayProgress, ReplayProjection, ReplayReport},
+    replay::{ReplayError, ReplayJob, ReplayProgress, ReplayProjection, ReplaySummary},
     AggregateHandler, CqrsComponentBuilder,
 };
 use agent_shared::{application_state::Command, config::config};
@@ -13,6 +13,7 @@ use mongo_es::{default_mongo_client, Client};
 use mongodb::bson::{self, doc, Document};
 use mongodb::{options::FindOptions, Cursor, IndexModel};
 use shared_kernel::view_repository::DynViewRepository;
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 impl<A> AggregateHandler<A, PersistedEventStore<LeasedMongoEventRepository, A>>
@@ -80,7 +81,7 @@ impl MongoDB {
         self.client.clone().shutdown().await;
     }
 
-    pub async fn replay_views(&self) -> Result<Vec<ReplayReport>, ReplayError> {
+    pub async fn replay_views(&self) -> Result<ReplaySummary, ReplayError> {
         let jobs = self.replay_jobs.lock().expect("replay jobs lock poisoned").clone();
         let jobs_by_type = jobs
             .iter()
@@ -90,6 +91,7 @@ impl MongoDB {
             .iter()
             .map(|job| (job.aggregate_type(), ReplayProgress::default()))
             .collect::<std::collections::HashMap<_, _>>();
+        let mut skipped: BTreeMap<String, usize> = BTreeMap::new();
         let mut cursor = self
             .raw_event_cursor(doc! {}, doc! { "aggregate_type": 1, "_id": 1 })
             .await?;
@@ -97,11 +99,9 @@ impl MongoDB {
         while cursor.advance().await.map_err(EventVerificationError::from)? {
             let document = cursor.deserialize_current().map_err(EventVerificationError::from)?;
             let raw = Self::raw_stored_event(document)?;
-            let job = jobs_by_type
-                .get(raw.aggregate_type.as_str())
-                .ok_or_else(|| ReplayError::UnknownAggregate {
-                    aggregate_type: raw.aggregate_type.clone(),
-                })?;
+            let Some(job) = crate::replay::resolve_job(&jobs_by_type, &raw.aggregate_type, &mut skipped) else {
+                continue;
+            };
             progress
                 .get_mut(job.aggregate_type())
                 .expect("registered replay job has progress")
@@ -118,7 +118,7 @@ impl MongoDB {
                     .finish(job.aggregate_type())?,
             );
         }
-        Ok(reports)
+        Ok(ReplaySummary { reports, skipped })
     }
 
     pub async fn verify_events_with(

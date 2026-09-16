@@ -19,6 +19,20 @@ pub struct ReplayReport {
     pub duration: Duration,
 }
 
+/// Outcome of one replay pass: the projections that were rebuilt, plus the aggregate types that
+/// were deliberately left alone.
+///
+/// An aggregate type with no registered replay job belongs to a downstream crate that owns its own
+/// projections, so the core has nothing to rebuild for it. Its events are counted and skipped
+/// rather than aborting startup — mirroring how [`crate::event_verification::EventVerifier`] lets
+/// downstream crates extend verification instead of failing on unrecognised aggregates.
+#[derive(Debug, Default)]
+pub struct ReplaySummary {
+    pub reports: Vec<ReplayReport>,
+    /// Number of events skipped, keyed by aggregate type.
+    pub skipped: BTreeMap<String, usize>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ReplayError {
     #[error(transparent)]
@@ -61,8 +75,22 @@ pub enum ReplayError {
     },
     #[error("failed to update replayed projection: {0}")]
     Projection(#[from] cqrs_es::persist::PersistenceError),
-    #[error("no replay projection is registered for aggregate type `{aggregate_type}`")]
-    UnknownAggregate { aggregate_type: String },
+}
+
+/// Resolves the replay job for an event's aggregate type.
+///
+/// Returns `None` for aggregate types with no registered job — those belong to downstream crates
+/// that own their own projections — recording the skip in `skipped` so startup can report it.
+pub(crate) fn resolve_job<'a>(
+    jobs_by_type: &'a HashMap<&'static str, Arc<dyn ReplayJob>>,
+    aggregate_type: &str,
+    skipped: &mut BTreeMap<String, usize>,
+) -> Option<&'a Arc<dyn ReplayJob>> {
+    let job = jobs_by_type.get(aggregate_type);
+    if job.is_none() {
+        *skipped.entry(aggregate_type.to_string()).or_default() += 1;
+    }
+    job
 }
 
 #[async_trait]
@@ -304,6 +332,21 @@ mod tests {
             event_version: "1".to_string(),
             payload: serde_json::to_value(TestEvent { value }).unwrap(),
         }
+    }
+
+    #[test]
+    fn events_of_an_unregistered_aggregate_are_skipped_and_counted() {
+        // Downstream crates (e.g. ssi-agent-ext's `iam`) own aggregates the core does not project.
+        // Their events must not abort startup.
+        let jobs: HashMap<&'static str, Arc<dyn ReplayJob>> = HashMap::new();
+        let mut skipped = BTreeMap::new();
+
+        assert!(resolve_job(&jobs, "iam", &mut skipped).is_none());
+        assert!(resolve_job(&jobs, "iam", &mut skipped).is_none());
+        assert!(resolve_job(&jobs, "other", &mut skipped).is_none());
+
+        assert_eq!(skipped.get("iam"), Some(&2));
+        assert_eq!(skipped.get("other"), Some(&1));
     }
 
     #[tokio::test]

@@ -30,7 +30,7 @@ use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::{io, sync::oneshot};
 use tower_http::cors::CorsLayer;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use verification_authorization::VerificationAuthorizationAdapter;
 
 // Re-export states
@@ -264,6 +264,7 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
                 let reports = match builder.replay_views().await {
                     Ok(reports) => reports,
                     Err(replay_error) => {
+                        error!(error = %replay_error, "Failed to replay in-memory projections; terminating startup");
                         builder.shutdown().await;
                         return Err(io::Error::other(replay_error));
                     }
@@ -324,6 +325,7 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
                 let reports = match builder.replay_views().await {
                     Ok(reports) => reports,
                     Err(replay_error) => {
+                        error!(error = %replay_error, "Failed to replay in-memory projections; terminating startup");
                         builder.shutdown().await;
                         return Err(io::Error::other(replay_error));
                     }
@@ -421,8 +423,18 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
     Ok(application_state)
 }
 
-fn log_replay_reports(reports: Vec<agent_store::replay::ReplayReport>) {
-    for report in reports {
+fn log_replay_reports(summary: agent_store::replay::ReplaySummary) {
+    for (aggregate_type, events_skipped) in summary.skipped {
+        warn!(
+            aggregate_type = %aggregate_type,
+            events_skipped,
+            "No replay projection is registered for this aggregate type; its events were skipped. \
+             This is expected for aggregates owned by downstream crates, and a bug if this type is \
+             projected by the core."
+        );
+    }
+
+    for report in summary.reports {
         info!(
             aggregate_type = report.aggregate_type,
             events_replayed = report.events_replayed,
