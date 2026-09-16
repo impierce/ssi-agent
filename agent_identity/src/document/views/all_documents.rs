@@ -1,13 +1,13 @@
 use super::DocumentView;
 use crate::document::aggregate::Document;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllDocumentsView {
     #[serde(flatten)]
-    pub documents: HashMap<String, DocumentView>,
+    pub documents: IndexMap<String, DocumentView>,
 }
 
 impl View<Document> for AllDocumentsView {

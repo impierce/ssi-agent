@@ -64,9 +64,7 @@ pub(crate) async fn services(
     )
     .await?
     .map(|all_services_view| {
-        all_services_view
-            .services
-            .into_values()
+        crate::utils::newest_first(all_services_view.services)
             .filter(|service| !service.is_deleted)
             .map(ServiceResponse::from)
             .collect::<Vec<_>>()

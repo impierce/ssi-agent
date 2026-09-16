@@ -1,13 +1,13 @@
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::status_list::{aggregate::StatusListAggregate, views::StatusListView};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllStatusListsView {
     #[serde(flatten)]
-    pub status_lists: HashMap<String, StatusListView>,
+    pub status_lists: IndexMap<String, StatusListView>,
 }
 
 impl View<StatusListAggregate> for AllStatusListsView {

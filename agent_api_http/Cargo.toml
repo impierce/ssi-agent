@@ -32,6 +32,7 @@ identity_core.workspace = true
 identity_credential.workspace = true
 identity_did.workspace = true
 identity_document.workspace = true
+indexmap.workspace = true
 iso8601.workspace = true
 jsonschema.workspace = true
 oauth_tsl.workspace = true

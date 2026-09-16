@@ -1,13 +1,13 @@
 use super::AccessToken;
 use super::AccessTokenView;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllAccessTokensView {
     #[serde(flatten)]
-    pub tokens: HashMap<String, AccessTokenView>,
+    pub tokens: IndexMap<String, AccessTokenView>,
 }
 
 impl View<AccessToken> for AllAccessTokensView {

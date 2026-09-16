@@ -24,6 +24,7 @@ identity_did.workspace = true
 identity_document.workspace = true
 identity_storage.workspace = true
 identity_iota.workspace = true
+indexmap.workspace = true
 iota-sdk.workspace = true
 itertools = "0.14"
 jsonwebtoken.workspace = true

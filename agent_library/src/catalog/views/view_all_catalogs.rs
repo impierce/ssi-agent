@@ -1,13 +1,13 @@
 use crate::catalog::aggregate::Catalog;
 use crate::catalog::views::CatalogView;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllCatalogsView {
     #[serde(flatten)]
-    pub catalogs: HashMap<String, CatalogView>,
+    pub catalogs: IndexMap<String, CatalogView>,
 }
 
 impl View<Catalog> for AllCatalogsView {
@@ -21,7 +21,7 @@ impl View<Catalog> for AllCatalogsView {
         // update the view with the event
         view.update(event);
         if view.deleted {
-            self.catalogs.remove(&event.aggregate_id);
+            self.catalogs.shift_remove(&event.aggregate_id);
         }
     }
 }
