@@ -54,24 +54,27 @@ use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
 use agent_library::template::views::all_templates::AllTemplatesView;
 use agent_shared::application_state::Command;
-use agent_shared::custom_queries::ListAllQuery;
-use agent_shared::generic_query::generic_query;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use agent_verification::authorization_request::views::all_authorization_requests::AllAuthorizationRequestsView;
 use agent_verification::services::VerificationServices;
 use agent_verification::state::VerificationState;
 use async_trait::async_trait;
-use cqrs_es::persist::ViewRepository;
 use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
 use shared_kernel::authorization::AllowAllAuthorizationChecker;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod custom_queries;
 pub mod event_verification;
 pub mod in_memory;
 pub mod mongodb;
+mod mongodb_lease;
 pub mod postgres;
+mod postgres_lease;
+pub mod replay;
+
+use custom_queries::{ListAllQuery, MutableQuery, MutableViewRepository};
 
 /// A generic command handler for a specific aggregate.
 ///
@@ -83,6 +86,7 @@ where
     CCB: EventStore<A> + Send + Sync + 'static,
 {
     pub cqrs: CqrsFramework<A, CCB>,
+    execution: Arc<tokio::sync::Mutex<()>>,
 }
 
 /// Implements the `Command` trait to allow the handler to execute commands.
@@ -102,6 +106,7 @@ where
         command: A::Command,
         metadata: HashMap<String, String>,
     ) -> Result<(), cqrs_es::AggregateError<A::Error>> {
+        let _guard = self.execution.lock().await;
         self.cqrs.execute_with_metadata(aggregate_id, command, metadata).await
     }
 }
@@ -121,6 +126,7 @@ where
     {
         Self {
             cqrs: self.cqrs.append_query(Box::new(query)),
+            execution: self.execution,
         }
     }
 
@@ -128,6 +134,7 @@ where
     fn append_event_publisher(self, query: Box<dyn Query<A>>) -> Self {
         Self {
             cqrs: self.cqrs.append_query(query),
+            execution: self.execution,
         }
     }
 
@@ -145,12 +152,12 @@ where
     where
         V: View<A> + 'static,
         AV: View<A> + 'static,
-        VR1: ViewRepository<V, A> + 'static,
-        VR2: ViewRepository<AV, A> + 'static,
+        VR1: MutableViewRepository<V, A> + 'static,
+        VR2: MutableViewRepository<AV, A> + 'static,
     {
         event_publishers.into_iter().fold(
             self.append_query(SimpleLoggingQuery {})
-                .append_query(generic_query(aggregate.clone()))
+                .append_query(MutableQuery::new(aggregate.clone()))
                 .append_query(ListAllQuery::new(all_aggregates.clone(), all_aggregates_name)),
             |aggregate_handler, event_publisher| aggregate_handler.append_event_publisher(event_publisher),
         )
@@ -173,7 +180,7 @@ pub type CqrsComponents<A, V, AV> = (
 /// for creating the full set of components needed to interact with an aggregate,
 /// including the command handler and view repositories.
 pub trait CqrsComponentBuilder {
-    fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+    fn commands_and_queries<V: View<A> + Clone + 'static, A: Aggregate + 'static, AV: View<A> + Clone + 'static>(
         &self,
         identity_services: A::Services,
         event_publishers: Vec<Box<dyn Query<A>>>,
