@@ -1,7 +1,6 @@
 use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{
     in_memory::InMemoryViewRepository,
-    postgres_lease::{LeasedPostgresEventRepository, WriterLease},
     replay::{ReplayError, ReplayJob, ReplayProgress, ReplayProjection, ReplaySummary},
     AggregateHandler, CqrsComponentBuilder,
 };
@@ -9,19 +8,19 @@ use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, CqrsFramework, Query, View};
 use futures::TryStreamExt;
-use postgres_es::default_postgress_pool;
+use postgres_es::{default_postgress_pool, PostgresEventRepository};
 use shared_kernel::view_repository::DynViewRepository;
 use sqlx::postgres::PgRow;
 use sqlx::{Pool, Row};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-impl<A> AggregateHandler<A, PersistedEventStore<LeasedPostgresEventRepository, A>>
+impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
 where
     A: Aggregate,
 {
-    fn new_leased(pool: Pool<sqlx::Postgres>, lease: Arc<WriterLease>, services: A::Services) -> Self {
-        let repository = LeasedPostgresEventRepository::new(pool, lease);
+    fn new(pool: Pool<sqlx::Postgres>, services: A::Services) -> Self {
+        let repository = PostgresEventRepository::new(pool);
         Self {
             cqrs: CqrsFramework::new(PersistedEventStore::new_event_store(repository), vec![], services),
             execution: Arc::new(tokio::sync::Mutex::new(())),
@@ -32,7 +31,6 @@ where
 pub struct Postgres {
     pub pool: Pool<sqlx::Postgres>,
     replay_jobs: Mutex<Vec<Arc<dyn ReplayJob>>>,
-    writer_lease: Arc<WriterLease>,
 }
 
 impl Postgres {
@@ -45,11 +43,9 @@ impl Postgres {
 
     async fn connect(connection_string: &str) -> Self {
         let pool = default_postgress_pool(connection_string).await;
-        let writer_lease = WriterLease::new(pool.clone());
         Self {
             pool,
             replay_jobs: Mutex::new(Vec::new()),
-            writer_lease,
         }
     }
     pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
@@ -57,16 +53,7 @@ impl Postgres {
             .await
     }
 
-    pub async fn acquire_writer_lease(&self) -> Result<(), sqlx::Error> {
-        self.writer_lease.acquire().await
-    }
-
-    pub async fn writer_lease_lost(&self) {
-        self.writer_lease.lost().await;
-    }
-
     pub async fn shutdown(&self) {
-        self.writer_lease.release().await;
         self.pool.close().await;
     }
 
@@ -174,14 +161,12 @@ impl CqrsComponentBuilder for Postgres {
             )));
 
         (
-            Arc::new(
-                AggregateHandler::new_leased(self.pool.clone(), self.writer_lease.clone(), services).with_parameters(
-                    aggregate.clone(),
-                    all_aggregates.clone(),
-                    event_publishers,
-                    &all_aggregates_name,
-                ),
-            ),
+            Arc::new(AggregateHandler::new(self.pool.clone(), services).with_parameters(
+                aggregate.clone(),
+                all_aggregates.clone(),
+                event_publishers,
+                &all_aggregates_name,
+            )),
             aggregate,
             all_aggregates,
         )

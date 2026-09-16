@@ -1,7 +1,6 @@
 use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{
     in_memory::InMemoryViewRepository,
-    mongodb_lease::{LeasedMongoEventRepository, WriterLease},
     replay::{ReplayError, ReplayJob, ReplayProgress, ReplayProjection, ReplaySummary},
     AggregateHandler, CqrsComponentBuilder,
 };
@@ -9,21 +8,21 @@ use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
-use mongo_es::{default_mongo_client, Client};
+use mongo_es::{default_mongo_client, Client, MongoEventRepository};
 use mongodb::bson::{self, doc, Document};
 use mongodb::{options::FindOptions, Cursor, IndexModel};
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-impl<A> AggregateHandler<A, PersistedEventStore<LeasedMongoEventRepository, A>>
+impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
 where
     A: Aggregate,
 {
-    async fn new_leased(client: Client, lease: Arc<WriterLease>, services: A::Services) -> Self {
-        let repo = LeasedMongoEventRepository::new(client, lease)
+    async fn new(client: Client, services: A::Services) -> Self {
+        let repo = MongoEventRepository::new(client)
             .await
-            .expect("Failed to create leased MongoDB event repository");
+            .expect("Failed to create MongoEventRepository");
         let store = PersistedEventStore::new_event_store(repo);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
@@ -35,7 +34,6 @@ where
 pub struct MongoDB {
     pub client: Client,
     replay_jobs: Mutex<Vec<Arc<dyn ReplayJob>>>,
-    writer_lease: Arc<WriterLease>,
 }
 
 impl MongoDB {
@@ -56,11 +54,9 @@ impl MongoDB {
             )
             .await
             .expect("Failed to create event replay index");
-        let writer_lease = WriterLease::new(client.clone());
         Self {
             client,
             replay_jobs: Mutex::new(Vec::new()),
-            writer_lease,
         }
     }
     pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
@@ -68,16 +64,7 @@ impl MongoDB {
             .await
     }
 
-    pub async fn acquire_writer_lease(&self) -> Result<(), mongodb::error::Error> {
-        self.writer_lease.acquire().await
-    }
-
-    pub async fn writer_lease_lost(&self) {
-        self.writer_lease.lost().await;
-    }
-
     pub async fn shutdown(&self) {
-        self.writer_lease.release().await;
         self.client.clone().shutdown().await;
     }
 
@@ -211,7 +198,7 @@ impl CqrsComponentBuilder for MongoDB {
 
         (
             Arc::new(
-                AggregateHandler::new_leased(self.client.clone(), self.writer_lease.clone(), services)
+                AggregateHandler::new(self.client.clone(), services)
                     .await
                     .with_parameters(
                         aggregate.clone(),

@@ -69,9 +69,7 @@ pub mod custom_queries;
 pub mod event_verification;
 pub mod in_memory;
 pub mod mongodb;
-mod mongodb_lease;
 pub mod postgres;
-mod postgres_lease;
 pub mod replay;
 
 use custom_queries::{ListAllQuery, MutableQuery, MutableViewRepository};
