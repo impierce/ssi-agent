@@ -90,6 +90,14 @@ impl EventVerification {
         }
     }
 
+    async fn writer_lease_lost(&self) {
+        match self {
+            Self::MongoDb(store) => store.writer_lease_lost().await,
+            Self::Postgres(store) => store.writer_lease_lost().await,
+            Self::InMemory => std::future::pending().await,
+        }
+    }
+
     async fn shutdown(&self) {
         match self {
             Self::MongoDb(store) => store.shutdown().await,
@@ -131,10 +139,13 @@ pub async fn run() -> io::Result<()> {
     let state = state_result?;
 
     let runtime = state.event_verification.clone();
+    let shutdown_runtime = runtime.clone();
     let shutdown_readiness = readiness.clone();
     let shutdown = async move {
-        sigterm().await;
-        info!("SIGTERM received; starting graceful shutdown");
+        tokio::select! {
+            () = sigterm() => info!("SIGTERM received; starting graceful shutdown"),
+            () = shutdown_runtime.writer_lease_lost() => error!("Event-store writer lease lost; terminating process"),
+        }
         shutdown_readiness.mark_not_ready();
     };
 
@@ -264,6 +275,8 @@ async fn state_with_readiness(
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
                     verification_state,
                 );
+                builder.acquire_writer_lease().await.map_err(io::Error::other)?;
+
                 let reports = match builder.replay_views(external_aggregates).await {
                     Ok(reports) => reports,
                     Err(replay_error) => {
@@ -323,6 +336,8 @@ async fn state_with_readiness(
                     Arc::new(agent_store::holder_state(&builder, holder_services, holder_event_publishers).await),
                     verification_state,
                 );
+                builder.acquire_writer_lease().await.map_err(io::Error::other)?;
+
                 let reports = match builder.replay_views(external_aggregates).await {
                     Ok(reports) => reports,
                     Err(replay_error) => {
