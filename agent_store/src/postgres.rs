@@ -70,7 +70,7 @@ impl Postgres {
         self.pool.close().await;
     }
 
-    pub async fn replay_views(&self) -> Result<ReplaySummary, ReplayError> {
+    pub async fn replay_views(&self, external: &[&str]) -> Result<ReplaySummary, ReplayError> {
         let jobs = self.replay_jobs.lock().expect("replay jobs lock poisoned").clone();
         let jobs_by_type = jobs
             .iter()
@@ -90,7 +90,8 @@ impl Postgres {
         .fetch(&self.pool);
         while let Some(row) = rows.try_next().await.map_err(EventVerificationError::from)? {
             let raw = raw_stored_event(row);
-            let Some(job) = crate::replay::resolve_job(&jobs_by_type, &raw.aggregate_type, &mut skipped) else {
+            let Some(job) = crate::replay::resolve_job(&jobs_by_type, &raw.aggregate_type, external, &mut skipped)?
+            else {
                 continue;
             };
             progress

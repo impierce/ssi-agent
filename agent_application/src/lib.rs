@@ -30,7 +30,7 @@ use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::{io, sync::oneshot};
 use tower_http::cors::CorsLayer;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use verification_authorization::VerificationAuthorizationAdapter;
 
 // Re-export states
@@ -133,7 +133,7 @@ pub async fn run() -> io::Result<()> {
     });
 
     let subject = Arc::new(Subject::new().await);
-    let state_result = state_with_readiness(subject, readiness.clone()).await;
+    let state_result = state_with_readiness(subject, readiness.clone(), &[]).await;
     let _ = bootstrap_shutdown.send(());
     bootstrap_server.await.map_err(io::Error::other)??;
     let state = state_result?;
@@ -160,10 +160,26 @@ pub async fn run() -> io::Result<()> {
 }
 
 pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
-    state_with_readiness(subject, ReadinessState::default()).await
+    state_with_readiness(subject, ReadinessState::default(), &[]).await
 }
 
-async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) -> io::Result<ApplicationState> {
+/// Builds application state, declaring aggregate types whose projections are owned and persisted by
+/// a downstream crate rather than rebuilt from events by the core.
+///
+/// Events of a declared type are skipped during replay. Undeclared types with no registered replay
+/// job abort startup — the core must never rebuild a projection it has silently lost.
+pub async fn state_with_external_aggregates(
+    subject: Arc<Subject>,
+    external_aggregates: &[&str],
+) -> io::Result<ApplicationState> {
+    state_with_readiness(subject, ReadinessState::default(), external_aggregates).await
+}
+
+async fn state_with_readiness(
+    subject: Arc<Subject>,
+    readiness: ReadinessState,
+    external_aggregates: &[&str],
+) -> io::Result<ApplicationState> {
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
@@ -261,7 +277,7 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
                 );
                 builder.acquire_writer_lease().await.map_err(io::Error::other)?;
 
-                let reports = match builder.replay_views().await {
+                let reports = match builder.replay_views(external_aggregates).await {
                     Ok(reports) => reports,
                     Err(replay_error) => {
                         error!(error = %replay_error, "Failed to replay in-memory projections; terminating startup");
@@ -322,7 +338,7 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
                 );
                 builder.acquire_writer_lease().await.map_err(io::Error::other)?;
 
-                let reports = match builder.replay_views().await {
+                let reports = match builder.replay_views(external_aggregates).await {
                     Ok(reports) => reports,
                     Err(replay_error) => {
                         error!(error = %replay_error, "Failed to replay in-memory projections; terminating startup");
@@ -425,12 +441,10 @@ async fn state_with_readiness(subject: Arc<Subject>, readiness: ReadinessState) 
 
 fn log_replay_reports(summary: agent_store::replay::ReplaySummary) {
     for (aggregate_type, events_skipped) in summary.skipped {
-        warn!(
+        info!(
             aggregate_type = %aggregate_type,
             events_skipped,
-            "No replay projection is registered for this aggregate type; its events were skipped. \
-             This is expected for aggregates owned by downstream crates, and a bug if this type is \
-             projected by the core."
+            "Skipped replay for an externally owned aggregate type; the downstream crate persists this projection itself"
         );
     }
 

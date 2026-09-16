@@ -81,7 +81,7 @@ impl MongoDB {
         self.client.clone().shutdown().await;
     }
 
-    pub async fn replay_views(&self) -> Result<ReplaySummary, ReplayError> {
+    pub async fn replay_views(&self, external: &[&str]) -> Result<ReplaySummary, ReplayError> {
         let jobs = self.replay_jobs.lock().expect("replay jobs lock poisoned").clone();
         let jobs_by_type = jobs
             .iter()
@@ -99,7 +99,8 @@ impl MongoDB {
         while cursor.advance().await.map_err(EventVerificationError::from)? {
             let document = cursor.deserialize_current().map_err(EventVerificationError::from)?;
             let raw = Self::raw_stored_event(document)?;
-            let Some(job) = crate::replay::resolve_job(&jobs_by_type, &raw.aggregate_type, &mut skipped) else {
+            let Some(job) = crate::replay::resolve_job(&jobs_by_type, &raw.aggregate_type, external, &mut skipped)?
+            else {
                 continue;
             };
             progress

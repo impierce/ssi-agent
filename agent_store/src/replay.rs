@@ -75,22 +75,35 @@ pub enum ReplayError {
     },
     #[error("failed to update replayed projection: {0}")]
     Projection(#[from] cqrs_es::persist::PersistenceError),
+    #[error("no replay projection is registered for aggregate type `{aggregate_type}`, and it is not declared as externally owned")]
+    UnknownAggregate { aggregate_type: String },
 }
 
 /// Resolves the replay job for an event's aggregate type.
 ///
-/// Returns `None` for aggregate types with no registered job — those belong to downstream crates
-/// that own their own projections — recording the skip in `skipped` so startup can report it.
+/// Ownership must be declared, never inferred. An aggregate type with no registered job is only
+/// skipped when the caller listed it in `external` — meaning a downstream crate owns and persists
+/// that projection itself (as ssi-agent-ext does for `iam` via its own view repository). Anything
+/// else is a registration the core lost, which would otherwise rebuild an empty projection and
+/// silently serve empty lists over intact events.
 pub(crate) fn resolve_job<'a>(
     jobs_by_type: &'a HashMap<&'static str, Arc<dyn ReplayJob>>,
     aggregate_type: &str,
+    external: &[&str],
     skipped: &mut BTreeMap<String, usize>,
-) -> Option<&'a Arc<dyn ReplayJob>> {
-    let job = jobs_by_type.get(aggregate_type);
-    if job.is_none() {
-        *skipped.entry(aggregate_type.to_string()).or_default() += 1;
+) -> Result<Option<&'a Arc<dyn ReplayJob>>, ReplayError> {
+    if let Some(job) = jobs_by_type.get(aggregate_type) {
+        return Ok(Some(job));
     }
-    job
+
+    if external.contains(&aggregate_type) {
+        *skipped.entry(aggregate_type.to_string()).or_default() += 1;
+        return Ok(None);
+    }
+
+    Err(ReplayError::UnknownAggregate {
+        aggregate_type: aggregate_type.to_string(),
+    })
 }
 
 #[async_trait]
@@ -335,18 +348,35 @@ mod tests {
     }
 
     #[test]
-    fn events_of_an_unregistered_aggregate_are_skipped_and_counted() {
-        // Downstream crates (e.g. ssi-agent-ext's `iam`) own aggregates the core does not project.
-        // Their events must not abort startup.
+    fn events_of_a_declared_external_aggregate_are_skipped_and_counted() {
+        // Downstream crates (ssi-agent-ext's `iam`) persist their own projections, so the core has
+        // nothing to rebuild. Declared types must not abort startup.
         let jobs: HashMap<&'static str, Arc<dyn ReplayJob>> = HashMap::new();
         let mut skipped = BTreeMap::new();
 
-        assert!(resolve_job(&jobs, "iam", &mut skipped).is_none());
-        assert!(resolve_job(&jobs, "iam", &mut skipped).is_none());
-        assert!(resolve_job(&jobs, "other", &mut skipped).is_none());
+        assert!(resolve_job(&jobs, "iam", &["iam"], &mut skipped).unwrap().is_none());
+        assert!(resolve_job(&jobs, "iam", &["iam"], &mut skipped).unwrap().is_none());
 
         assert_eq!(skipped.get("iam"), Some(&2));
-        assert_eq!(skipped.get("other"), Some(&1));
+    }
+
+    #[test]
+    fn an_undeclared_unregistered_aggregate_aborts_replay() {
+        // A core aggregate that lost its registration must fail loudly rather than rebuild an empty
+        // projection and serve empty lists over intact events.
+        let jobs: HashMap<&'static str, Arc<dyn ReplayJob>> = HashMap::new();
+        let mut skipped = BTreeMap::new();
+
+        let error = match resolve_job(&jobs, "credential", &["iam"], &mut skipped) {
+            Err(error) => error,
+            Ok(_) => panic!("an undeclared, unregistered aggregate type must abort replay"),
+        };
+
+        assert!(matches!(
+            error,
+            ReplayError::UnknownAggregate { ref aggregate_type } if aggregate_type == "credential"
+        ));
+        assert!(skipped.is_empty());
     }
 
     #[tokio::test]
