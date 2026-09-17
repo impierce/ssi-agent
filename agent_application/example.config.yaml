@@ -14,8 +14,6 @@ did_methods:
   did_web:
     enabled: false
 
-domain_linkage_enabled: false
-
 enable_interactive_authorization_flow: true
 
 signing_algorithms_supported:

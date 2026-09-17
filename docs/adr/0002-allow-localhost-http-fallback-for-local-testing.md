@@ -8,7 +8,7 @@
 
 ## Context
 
-When testing identity services locally, protocols such as DID Configuration and OIDC specifically require the use of HTTPS for security reasons. For example, `DomainLinkageConfiguration::from_json_value` strictly mandates that fetched documents conform to these secure protocols. 
+When testing identity services locally, protocols such as DID Configuration and OIDC specifically require the use of HTTPS for security reasons. Locally there is also typically nothing published to fetch, and `DomainLinkageConfiguration::from_json_value` rejects a configuration whose `linked_dids` list is empty. 
 
 However, during local development and automated E2E testing, running a full TLS server stack and managing certificates is burdensome. We needed a simple way to boot the application locally on HTTP (`http://localhost`) and still have tests run without failing due to strict HTTPS checks.
 
@@ -17,7 +17,7 @@ However, during local development and automated E2E testing, running a full TLS 
 ## Decision
 
 We introduced an `allow-localhost` feature flag that disables strict HTTPS checks for `localhost` URLs. 
-Specifically, in `fetch_linked_dids`, when the `allow-localhost` feature is active, we attempt to fetch the domain linkage configuration via HTTP. Since `DomainLinkageConfiguration::from_json_value` strictly requires HTTPS, this fetch inevitably fails. We gracefully catch this error and default to returning no linked DIDs `(vec![], false)`, rather than causing the entire connection flow to panic or fail.
+Specifically, in `fetch_linked_dids`, when the `allow-localhost` feature is active, we attempt to fetch the domain linkage configuration via HTTP. When that fetch fails — most often because nothing is published at that address, leaving `from_json_value` to reject the empty `linked_dids` list — we gracefully catch the error and default to returning no linked DIDs `(vec![], false)`, rather than causing the entire connection flow to panic or fail.
 
 ---
 

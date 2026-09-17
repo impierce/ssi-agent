@@ -18,6 +18,7 @@ cqrs-es.workspace = true
 derivative.workspace = true
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
 did-key-extern = { version = "0.2.2", package = "did-method-key" }
+hickory-resolver.workspace = true
 identity_credential.workspace = true
 identity_core.workspace = true
 identity_did.workspace = true

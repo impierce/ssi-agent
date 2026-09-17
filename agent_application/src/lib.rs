@@ -103,6 +103,7 @@ pub async fn run() -> io::Result<()> {
 }
 
 pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
+    agent_shared::config::warn_deprecated_settings();
     let identity_services = Arc::new(IdentityServices::new(subject.clone()));
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
@@ -314,7 +315,10 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     agent_authorization::state::initialize(&authorization_state)
         .await
         .unwrap();
-    agent_identity::state::initialize(&identity_state).await.unwrap();
+    agent_identity::state::initialize(&identity_state)
+        .await
+        .map_err(io::Error::other)?;
+    agent_identity::service::lifecycle::spawn_maintenance(&identity_state);
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
     Ok(ApplicationState {
