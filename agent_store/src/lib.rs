@@ -64,14 +64,18 @@ use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
 use cqrs_es::{Aggregate, CqrsFramework, EventStore, Query, View};
 use shared_kernel::authorization::AllowAllAuthorizationChecker;
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub mod event_source;
 pub mod event_verification;
 pub mod in_memory;
 pub mod mongodb;
 pub mod postgres;
+
+pub use event_source::MongoEventSource;
 
 /// A generic command handler for a specific aggregate.
 ///
@@ -185,15 +189,20 @@ pub trait CqrsComponentBuilder {
 pub async fn identity_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<IdentityServices>,
+    event_bus: &EventBusHandle,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> IdentityState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
-        connection_event_publishers,
-        document_event_publishers,
-        service_event_publishers,
+        mut connection_event_publishers,
+        mut document_event_publishers,
+        mut service_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
+
+    connection_event_publishers.push(event_bus.query());
+    document_event_publishers.push(event_bus.query());
+    service_event_publishers.push(event_bus.query());
 
     let (connection_command_handler, connection, all_connections) = builder
         .commands_and_queries::<ConnectionView, Connection, AllConnectionsView>(
@@ -205,7 +214,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), document_event_publishers)
         .await;
     let (profile_command_handler, profile, _all_profiles) = builder
-        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![])
+        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![event_bus.query()])
         .await;
     let (service_command_handler, service, all_services) = builder
         .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), service_event_publishers)
@@ -233,6 +242,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
 
 pub async fn library_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
+    event_bus: &EventBusHandle,
     event_publishers: Vec<Box<dyn EventPublisher>>,
     template_queries: Vec<Box<dyn Query<Template>>>,
 ) -> LibraryState {
@@ -242,6 +252,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
         ..
     } = partition_event_publishers(event_publishers);
 
+    queries.push(event_bus.query());
     for query in template_queries {
         queries.push(query);
     }
@@ -255,7 +266,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
     });
 
     let (catalog_command_handler, catalog, all_catalogs) = builder
-        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![])
+        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![event_bus.query()])
         .await;
 
     LibraryState {
@@ -276,17 +287,23 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
 pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<AuthorizationServices>,
+    event_bus: &EventBusHandle,
     event_publishers: Vec<Box<dyn EventPublisher>>,
     oauth2_authorization_request_domain_services: OAuth2AuthorizationRequestDomainServices,
 ) -> AuthorizationState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
-        authorization_code_event_publishers,
-        client_event_publishers,
-        oauth2_authorization_request_event_publishers,
-        access_token_event_publishers: token_event_publishers,
+        mut authorization_code_event_publishers,
+        mut client_event_publishers,
+        mut oauth2_authorization_request_event_publishers,
+        access_token_event_publishers: mut token_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
+
+    authorization_code_event_publishers.push(event_bus.query());
+    client_event_publishers.push(event_bus.query());
+    oauth2_authorization_request_event_publishers.push(event_bus.query());
+    token_event_publishers.push(event_bus.query());
 
     let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
         .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
@@ -332,18 +349,26 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
 pub async fn issuance_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<agent_issuance::services::IssuanceServices>,
+    event_bus: &EventBusHandle,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> agent_issuance::state::IssuanceState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
-        credential_event_publishers,
-        offer_event_publishers,
-        public_offer_event_publishers,
-        server_config_event_publishers,
-        nonce_event_publishers,
-        status_list_event_publishers,
+        mut credential_event_publishers,
+        mut offer_event_publishers,
+        mut public_offer_event_publishers,
+        mut server_config_event_publishers,
+        mut nonce_event_publishers,
+        mut status_list_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
+
+    credential_event_publishers.push(event_bus.query());
+    offer_event_publishers.push(event_bus.query());
+    public_offer_event_publishers.push(event_bus.query());
+    server_config_event_publishers.push(event_bus.query());
+    nonce_event_publishers.push(event_bus.query());
+    status_list_event_publishers.push(event_bus.query());
 
     let (credential_command_handler, credential, all_credentials) = builder
         .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
@@ -405,13 +430,16 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
 pub async fn verification_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<VerificationServices>,
+    event_bus: &EventBusHandle,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> VerificationState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
-        authorization_request_event_publishers,
+        mut authorization_request_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
+
+    authorization_request_event_publishers.push(event_bus.query());
 
     let (authorization_request_command_handler, authorization_request, all_authorization_requests) = builder
         .commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
@@ -435,15 +463,20 @@ pub async fn verification_state<CCB: CqrsComponentBuilder>(
 pub async fn holder_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<HolderServices>,
+    event_bus: &EventBusHandle,
     event_publishers: Vec<Box<dyn EventPublisher>>,
 ) -> HolderState {
     // Partition the event_publishers into the different aggregates.
     let Partitions {
-        holder_credential_event_publishers: holder_credential_publisher,
-        presentation_event_publishers,
-        received_offer_event_publishers,
+        holder_credential_event_publishers: mut holder_credential_publisher,
+        mut presentation_event_publishers,
+        mut received_offer_event_publishers,
         ..
     } = partition_event_publishers(event_publishers);
+
+    holder_credential_publisher.push(event_bus.query());
+    presentation_event_publishers.push(event_bus.query());
+    received_offer_event_publishers.push(event_bus.query());
 
     let (holder_credential_command_handler, holder_credential, all_holder_credential) = builder
         .commands_and_queries::<HolderCredential, HolderCredential, AllHolderCredentialsView>(
