@@ -65,3 +65,17 @@ The following commands can be used to assert code quality:
 - `cargo test generate_openapi_spec` (generate the OpenAPI specification by executing a test)
 - `cargo test --workspace` (run all tests)
 - `cargo llvm-cov clean --workspace && cargo llvm-cov --all-features --workspace --json --output-path coverage.raw.json` (generate code coverage report)
+
+## Agent skills
+
+### Issue tracker
+
+Skill-generated issues and specs live as markdown files under `.scratch/<feature-slug>/`. See [docs/agents/issue-tracker.md](./docs/agents/issue-tracker.md).
+
+### Triage labels
+
+The five canonical triage roles are used verbatim, recorded as a `Status:` line in each issue file. See [docs/agents/triage-labels.md](./docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See [docs/agents/domain.md](./docs/agents/domain.md).
