@@ -106,6 +106,18 @@ the host of `public_url`:
 example.org.  CNAME  your-deployment.example.net.
 ```
 
+That record only decides where the request goes. The reverse proxy or ingress in front of UniCore
+must also accept the linked hostname and terminate TLS for it with a certificate covering that name.
+UniCore serves `/.well-known/did-configuration.json` independently of the request's `Host`, so it
+needs no configuration of its own — but a hostname the proxy does not recognize never reaches
+UniCore, and a verifier whose TLS handshake fails never sends the request at all. Both surface as an
+unverifiable linkage rather than as a routing or certificate error, so provision the certificate at
+the same time as the route.
+
+Obtaining that certificate is the deployer's responsibility. An ACME `http-01` challenge is
+sufficient and works as soon as the `CNAME` resolves, since the challenge is then served from the
+address the record points at.
+
 ### Verifying
 
 `GET /v0/verify-linked-domains` returns `200` with a result per linked domain:
@@ -142,6 +154,12 @@ provider's `ALIAS`/`ANAME` or CNAME-flattening instead. The DNS result is report
 usually the reason a linkage check failed, and it names what to fix. Top-level `valid` is `true` only
 when every linked domain verified; when nothing is linked at all, it is `false` with a `message` and an
 empty `origins` list.
+
+`dns.points_here` is also the signal to automate against. A deployment that provisions its edge
+programmatically — adding the route and requesting the certificate when a tenant links a domain —
+should gate that work on `dns.points_here` rather than on `valid`. It turns `true` as soon as the
+tenant's DNS is correct, which is exactly when the certificate can be obtained, whereas `valid`
+cannot turn `true` until that edge work is already done.
 
 Credentials are valid for 365 days. UniCore checks at startup and hourly, renewing when 30 days or less
 remain. Renewal re-signs the linked set without changing it, reusing the same DID and keys. Runtime

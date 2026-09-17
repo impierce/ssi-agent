@@ -17,6 +17,7 @@ use hyper::StatusCode;
 use identity_document::service::Service as DocumentService;
 use serde::Serialize;
 use std::sync::Arc;
+use url::Url;
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct ServiceResponse {
@@ -29,6 +30,11 @@ struct ServiceResponse {
     /// TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.
     #[schema(value_type = Option<Object>)]
     resource: Option<ServiceResource>,
+    /// The origins this service links, sorted and deduplicated, or empty for a service that links
+    /// none. Reported alongside `service`, whose `serviceEndpoint` carries the same origins in
+    /// either of the specification's two shapes. This field is the one to read.
+    #[schema(value_type = Vec<String>, example = json!(["https://example.org/"]))]
+    origins: Vec<Url>,
 }
 
 impl From<Service> for ServiceResponse {
@@ -38,6 +44,7 @@ impl From<Service> for ServiceResponse {
             service: service.service,
             presentation_ids: service.presentation_ids,
             resource: service.resource,
+            origins: service.origins,
         }
     }
 }

@@ -2572,9 +2572,20 @@ components:
       required:
       - id
       - presentation_ids
+      - origins
       properties:
         id:
           type: string
+        origins:
+          type: array
+          items:
+            type: string
+          description: |-
+            The origins this service links, sorted and deduplicated, or empty for a service that links
+            none. Reported alongside `service`, whose `serviceEndpoint` carries the same origins in
+            either of the specification's two shapes. This field is the one to read.
+          example:
+          - https://example.org/
         presentation_ids:
           type: array
           items:
