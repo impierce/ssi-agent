@@ -2,7 +2,7 @@ use agent_shared::application_state::CommandHandler;
 use agent_shared::handlers::{command_handler, public_query_handler};
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
-use shared_kernel::authorization::AuthorizationChecker;
+use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -16,6 +16,22 @@ use crate::domain::client::command::ClientCommand;
 use crate::domain::client::views::ClientView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
+
+impl QueryOperation for ClientView {
+    const OPERATION_NAME: &'static str = "authorization.clients.get";
+}
+
+impl QueryOperation for OAuth2AuthorizationRequestView {
+    const OPERATION_NAME: &'static str = "authorization.oauth2_authorization_requests.get";
+}
+
+impl QueryOperation for AuthorizationCodeView {
+    const OPERATION_NAME: &'static str = "authorization.authorization_codes.get";
+}
+
+impl QueryOperation for AccessTokenView {
+    const OPERATION_NAME: &'static str = "authorization.access_tokens.get";
+}
 
 // TODO: usually in traditional OAuth2/OIDC apps the client_id is provided by the authorization server
 // when registering the app. For now we are hardcoding it here, but in the future we should provide a way to configure it.
@@ -113,7 +129,7 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
 
         command_handler(
             state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             UNIME_CLIENT_ID,
             &state.command.client,
             command,

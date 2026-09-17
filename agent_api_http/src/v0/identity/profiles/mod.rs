@@ -159,6 +159,7 @@ pub(crate) async fn get_profile(
         state.authorization_checker.clone(),
         actor.clone(),
         PROFILE_ID,
+        Some(PROFILE_ID),
         &state.query.profile,
     )
     .await?

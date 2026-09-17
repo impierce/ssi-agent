@@ -33,6 +33,7 @@ pub(crate) async fn get_catalog_by_id(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
