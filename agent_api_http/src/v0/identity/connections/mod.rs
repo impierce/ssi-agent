@@ -124,9 +124,7 @@ pub(crate) async fn get_connections(
     )
     .await?
     .map(|all_connections_view| {
-        let filtered_connections: Vec<_> = all_connections_view
-            .connections
-            .into_values()
+        let filtered_connections: Vec<_> = crate::utils::newest_first(all_connections_view.connections)
             .filter(|connection| {
                 display
                     .as_ref()
@@ -328,6 +326,10 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
 pub mod tests {
     use super::*;
 
+    use agent_identity::services::IdentityServices;
+    use agent_store::{identity_state, in_memory::InMemory};
+    use cqrs_es::persist::ViewContext;
+
     #[test]
     #[cfg(not(feature = "allow-localhost"))]
     fn test_parsing_with_http_prefix_upgrades_to_https() {
@@ -359,6 +361,34 @@ pub mod tests {
         let parsed = parse_url(input_string).unwrap();
 
         assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
+    }
+
+    #[tokio::test]
+    async fn removed_connection_stays_hidden_after_repository_round_trip() {
+        let event_bus = shared_kernel::EventBusHandle::default();
+        let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &event_bus, vec![]).await);
+        let connection_id = "removed-connection";
+
+        state
+            .query
+            .connection
+            .update_view(
+                ConnectionView {
+                    connection_id: connection_id.to_string(),
+                    deleted: true,
+                    ..Default::default()
+                },
+                ViewContext::new(connection_id.to_string(), 0),
+            )
+            .await
+            .unwrap();
+
+        let response = get_connection(State(state), RequestActor(None), Path(connection_id.to_string()))
+            .await
+            .unwrap_err()
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[test]

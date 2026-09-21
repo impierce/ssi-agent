@@ -1,13 +1,13 @@
 use super::Client;
 use super::ClientView;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllClientsView {
     #[serde(flatten)]
-    pub clients: HashMap<String, ClientView>,
+    pub clients: IndexMap<String, ClientView>,
 }
 
 impl View<Client> for AllClientsView {

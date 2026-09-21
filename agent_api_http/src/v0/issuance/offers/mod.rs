@@ -215,7 +215,7 @@ pub(crate) async fn all_offers(
         &state.query.all_offers,
     )
     .await?
-    .map(|all_offers_view| all_offers_view.offers.into_values().collect::<Vec<_>>())
+    .map(|all_offers_view| crate::utils::newest_first(all_offers_view.offers).collect::<Vec<_>>())
     .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_offers)).into_response())

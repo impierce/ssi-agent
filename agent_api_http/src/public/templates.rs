@@ -87,8 +87,14 @@ pub(crate) async fn get_public_templates(State(state): State<Arc<LibraryState>>)
                 .filter(|template| template.visibility == Visibility::Public && template.status == Status::Published)
                 .collect();
 
-            // Sort by most recently modified first (RFC 3339 strings are lexicographically comparable).
-            public_templates.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+            public_templates.sort_by(|left, right| {
+                crate::utils::compare_rfc3339_newest_first(
+                    left.modified_at.as_deref(),
+                    &left.template_id,
+                    right.modified_at.as_deref(),
+                    &right.template_id,
+                )
+            });
 
             public_templates
                 .into_iter()

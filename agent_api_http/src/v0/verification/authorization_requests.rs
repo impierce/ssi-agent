@@ -73,9 +73,7 @@ pub(crate) async fn all_authorization_requests(
     )
     .await?
     .map(|all_authorization_requests_view| {
-        all_authorization_requests_view
-            .authorization_requests
-            .into_values()
+        crate::utils::newest_first(all_authorization_requests_view.authorization_requests)
             .map(AuthorizationRequestResponse::from)
             .collect::<Vec<_>>()
     })
