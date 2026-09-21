@@ -2505,6 +2505,7 @@ components:
       type: object
       required:
       - title
+      - display
       - dataModel
       - holderType
       - type
@@ -2519,9 +2520,7 @@ components:
           - string
           - 'null'
         display:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Display'
+          $ref: '#/components/schemas/Display'
         holderType:
           $ref: '#/components/schemas/HolderType'
         modifiedAt:
@@ -2655,6 +2654,7 @@ components:
       required:
       - id
       - title
+      - display
       - dataModel
       - holderType
       - status
@@ -2672,9 +2672,7 @@ components:
           - string
           - 'null'
         display:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Display'
+          $ref: '#/components/schemas/Display'
         holderAuthorization:
           $ref: '#/components/schemas/HolderAuthorization'
         holderType:

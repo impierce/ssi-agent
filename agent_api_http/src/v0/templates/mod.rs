@@ -30,7 +30,7 @@ pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
     pub title: String,
-    pub display: Option<Display>,
+    pub display: Display,
     pub data_model: DataModel,
     pub holder_type: HolderType,
     pub modified_at: Option<String>,
@@ -48,19 +48,11 @@ pub struct TemplateDto {
 
 impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
-        // An empty `display.name` means no explicit display name has been set: fall back to the
-        // current title so the API always surfaces a usable name, without baking the title into
-        // the stored template (which would stop later title updates from being reflected here).
-        let display = value.display.map(|display| {
-            if display.name.trim().is_empty() {
-                Display {
-                    name: value.title.clone(),
-                    logo: display.logo,
-                }
-            } else {
-                display
-            }
-        });
+        // An empty `display.name` — or no stored `display` at all — means no explicit display name
+        // has been set: fall back to the current title so the API always surfaces a usable name,
+        // without baking the title into the stored template (which would stop later title updates
+        // from being reflected here).
+        let display = Display::resolve(value.display, &value.title);
 
         Self {
             template_id: value.template_id,
@@ -779,6 +771,36 @@ mod tests {
     }
 
     #[test]
+    fn template_dto_always_carries_a_display_object() {
+        // Wallets and verifiers render a name (and logo) from `display` unconditionally, so a
+        // template that never stored one still gets an object derived from its title.
+        let dto = TemplateDto::from(Template {
+            template_id: "template-id".to_string(),
+            source_template_id: None,
+            title: "Template".to_string(),
+            display: None,
+            data_model: DataModel::W3CVcDataModelV1_1,
+            holder_type: HolderType::Individual,
+            modified_at: Some("2024-01-01T00:00:00Z".to_string()),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::Never,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        });
+
+        assert_eq!(dto.display.name, "Template");
+        assert!(dto.display.logo.is_none());
+
+        let serialized = serde_json::to_value(dto).unwrap();
+        assert_eq!(serialized["display"]["name"], "Template");
+    }
+
+    #[test]
     fn template_dto_hides_internal_source_template_id() {
         let dto = TemplateDto::from(Template {
             template_id: "template-id".to_string(),
@@ -1056,7 +1078,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_template_defaults_empty_display_name_to_updated_title() {
+    async fn update_template_keeps_empty_display_name_and_resolves_it_on_read() {
         let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
@@ -1090,7 +1112,38 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(template.display.unwrap().name, "Updated title");
+
+        // The stored display keeps `""` — the encoding of "no explicit display name" — so that a
+        // later title update still reaches every reader.
+        assert_eq!(template.display.as_ref().unwrap().name, "");
+        assert_eq!(TemplateDto::from(template).display.name, "Updated title");
+
+        update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: Some("Renamed title".to_string()),
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(TemplateDto::from(template).display.name, "Renamed title");
     }
 
     #[tokio::test]

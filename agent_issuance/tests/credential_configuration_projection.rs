@@ -999,3 +999,131 @@ async fn test_logo_first_draft_then_title_then_publish_uses_title_as_display_nam
         Some("https://example.com/logo.png".to_string())
     );
 }
+
+/// `UpdateDisplay` with an empty name must not bake the title into the stored display: a later
+/// title-only edit has to keep flowing into the issuer metadata.
+#[tokio::test]
+async fn test_display_update_with_empty_name_then_title_update_uses_new_title() {
+    let (issuance, library_for_query, projection) = setup().await;
+
+    let template_id = "empty-display-name-template";
+    let logo = agent_library::template::aggregate::Logo {
+        uri: "https://example.com/logo.png".to_string(),
+        alt_text: None,
+    };
+
+    // 1. A published template titled `Diploma`, without an explicit display name.
+    command_handler(
+        template_id,
+        &library_for_query.command.template,
+        TemplateCommand::CreateNewTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Diploma".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        },
+    )
+    .await
+    .unwrap();
+    let create_event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Diploma".to_string(),
+        None,
+        Status::Published,
+    );
+    projection.dispatch(template_id, &[create_event]).await;
+
+    // 2. Uploading a logo submits a display without a name.
+    command_handler(
+        template_id,
+        &library_for_query.command.template,
+        TemplateCommand::UpdateDisplay {
+            template_id: template_id.to_string(),
+            display: Display {
+                name: String::new(),
+                logo: Some(logo.clone()),
+            },
+        },
+    )
+    .await
+    .unwrap();
+    projection
+        .dispatch(
+            template_id,
+            &[EventEnvelope {
+                aggregate_id: template_id.to_string(),
+                sequence: 2,
+                payload: TemplateEvent::DisplayUpdated {
+                    template_id: template_id.to_string(),
+                    display: Display {
+                        name: String::new(),
+                        logo: Some(logo.clone()),
+                    },
+                    modified_at: "2024-01-01T00:01:00Z".to_string(),
+                },
+                metadata: HashMap::new(),
+            }],
+        )
+        .await;
+
+    // 3. Renaming the template must reach the issuer metadata.
+    command_handler(
+        template_id,
+        &library_for_query.command.template,
+        TemplateCommand::UpdateTitle {
+            template_id: template_id.to_string(),
+            title: "Bachelor Diploma".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+    projection
+        .dispatch(
+            template_id,
+            &[EventEnvelope {
+                aggregate_id: template_id.to_string(),
+                sequence: 3,
+                payload: TemplateEvent::TitleUpdated {
+                    template_id: template_id.to_string(),
+                    title: "Bachelor Diploma".to_string(),
+                    modified_at: "2024-01-01T00:02:00Z".to_string(),
+                },
+                metadata: HashMap::new(),
+            }],
+        )
+        .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let display = config_obj
+        .credential_metadata
+        .as_ref()
+        .unwrap()
+        .display
+        .as_ref()
+        .unwrap()
+        .first()
+        .unwrap();
+
+    assert_eq!(display.name, "Bachelor Diploma");
+    assert_eq!(
+        display.logo.as_ref().map(|logo| logo.uri.to_string()),
+        Some("https://example.com/logo.png".to_string())
+    );
+}
