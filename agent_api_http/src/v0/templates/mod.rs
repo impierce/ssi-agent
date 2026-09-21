@@ -1113,8 +1113,6 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // The stored display keeps `""` — the encoding of "no explicit display name" — so that a
-        // later title update still reaches every reader.
         assert_eq!(template.display.as_ref().unwrap().name, "");
         assert_eq!(TemplateDto::from(template).display.name, "Updated title");
 

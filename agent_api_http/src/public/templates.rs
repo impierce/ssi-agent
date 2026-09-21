@@ -43,8 +43,6 @@ pub struct PublicTemplateDto {
 
 impl From<agent_library::template::views::TemplateView> for PublicTemplateDto {
     fn from(value: agent_library::template::views::TemplateView) -> Self {
-        // As in `TemplateDto`, resolve the display against the current title so public readers
-        // always get an object carrying a usable name.
         let display = Display::resolve(value.display, &value.title);
 
         Self {
@@ -293,7 +291,6 @@ mod tests {
         // `modifiedAt` is deliberately public: it is the only freshness signal a reader has.
         assert_eq!(template["modifiedAt"], "2026-01-01T00:00:00Z");
         assert_eq!(template["title"], "Title of public-published");
-        // This fixture stores no `display`; readers still get one, derived from the title.
         assert_eq!(template["display"]["name"], "Title of public-published");
         assert_eq!(template["description"], "A description");
         assert_eq!(template["type"], serde_json::json!(["VerifiableCredential"]));
