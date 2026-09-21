@@ -229,6 +229,7 @@ mod tests {
                 configuration.public_url.clone(),
                 configuration.iota_sponsoring_service_url.is_some(),
             );
+            services.allow_local_network_outbound = true;
             services.cname_resolver = cname.clone();
             services.linkage_clock = {
                 let clock = clock.clone();
