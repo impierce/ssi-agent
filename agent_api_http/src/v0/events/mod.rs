@@ -95,7 +95,7 @@ pub async fn events_sse_handler(
     let catchup_result = event_bus.history_ascending(&filter, last_event_id.as_deref(), limit);
 
     let catchup_events = catchup_result.events;
-    let mut seen_ids: std::collections::HashSet<String> = catchup_events.iter().map(|e| e.id.clone()).collect();
+    let mut seen_ids = std::collections::HashSet::new();
 
     let mut catchup_items = Vec::new();
     if catchup_result.gap_detected {
@@ -104,6 +104,9 @@ pub async fn events_sse_handler(
             .data(json!({ "warning": "Last-Event-ID evicted from history" }).to_string())));
     }
     for cloud_event in catchup_events {
+        if !seen_ids.insert(cloud_event.id.clone()) {
+            continue;
+        }
         let event_type = cloud_event.event_type.clone();
         let event_id = cloud_event.id.clone();
         catchup_items.push(match serde_json::to_string(&cloud_event) {

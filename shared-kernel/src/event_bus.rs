@@ -217,15 +217,25 @@ pub struct HistoryAscendingResult {
 
 impl EventBusHandle {
     /// Publishes a [`CloudEvent`] to all active subscribers and synchronously appends it to the in-memory ring-buffer.
+    ///
+    /// If an event with the same ID is already present in the history buffer, it is dropped as a duplicate.
     pub fn publish(&self, event: CloudEvent) {
-        let _ = self.sender.send(Arc::new(event.clone()));
+        let mut lock = match self.history.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
 
-        if let Ok(mut lock) = self.history.write() {
-            if lock.len() >= self.history_capacity {
-                lock.pop_front();
-            }
-            lock.push_back(event);
+        if lock.iter().rev().any(|e| e.id == event.id) {
+            return;
         }
+
+        if lock.len() >= self.history_capacity {
+            lock.pop_front();
+        }
+        lock.push_back(event.clone());
+        drop(lock);
+
+        let _ = self.sender.send(Arc::new(event));
     }
 
     /// Queries the most recent historical events matching `filter` in descending order up to `limit`.
@@ -267,18 +277,19 @@ impl EventBusHandle {
                 lock.iter()
                     .skip(pos + 1)
                     .filter(|e| filter.matches(e))
+                    .take(limit)
                     .cloned()
                     .collect()
             } else {
                 gap_detected = true;
-                let count = lock.len();
-                let skip = count.saturating_sub(limit);
-                lock.iter().skip(skip).filter(|e| filter.matches(e)).cloned().collect()
+                let matching: Vec<&CloudEvent> = lock.iter().filter(|e| filter.matches(e)).collect();
+                let skip = matching.len().saturating_sub(limit);
+                matching.into_iter().skip(skip).cloned().collect()
             }
         } else {
-            let count = lock.len();
-            let skip = count.saturating_sub(limit);
-            lock.iter().skip(skip).filter(|e| filter.matches(e)).cloned().collect()
+            let matching: Vec<&CloudEvent> = lock.iter().filter(|e| filter.matches(e)).collect();
+            let skip = matching.len().saturating_sub(limit);
+            matching.into_iter().skip(skip).cloned().collect()
         };
 
         HistoryAscendingResult { events, gap_detected }
@@ -465,5 +476,73 @@ mod tests {
 
         let received = stream.next().await.unwrap().unwrap();
         assert_eq!(received.subject, Some("abc".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_publish_deduplication() {
+        let handle = EventBusHandle::new(16);
+        let mut stream = handle.subscribe(EventFilter::default());
+
+        let event = build_cloud_event(
+            "offer",
+            "abc",
+            1,
+            "OfferCreated",
+            serde_json::json!({"id": "abc"}),
+            Some(Utc::now()),
+        );
+
+        handle.publish(event.clone());
+        handle.publish(event.clone());
+
+        let history = handle.history(&EventFilter::default(), 10);
+        assert_eq!(history.len(), 1);
+
+        let received = stream.next().await.unwrap().unwrap();
+        assert_eq!(received.id, event.id);
+
+        // Ensure second event was not published to subscribers
+        tokio::select! {
+            _ = stream.next() => panic!("Duplicate event should not be sent on subscriber stream"),
+            () = tokio::time::sleep(std::time::Duration::from_millis(50)) => {}
+        }
+    }
+
+    #[test]
+    fn test_history_ascending_filter_with_limit() {
+        let handle = EventBusHandle::new(16);
+
+        // Publish an offer event, followed by several other events
+        let target_event = build_cloud_event(
+            "target",
+            "1",
+            1,
+            "TargetCreated",
+            serde_json::json!({}),
+            Some(Utc::now()),
+        );
+        handle.publish(target_event.clone());
+
+        for i in 2..=10 {
+            let filler = build_cloud_event(
+                "filler",
+                &i.to_string(),
+                1,
+                "FillerCreated",
+                serde_json::json!({}),
+                Some(Utc::now()),
+            );
+            handle.publish(filler);
+        }
+
+        let filter = EventFilter {
+            sources: vec!["/services/target".to_string()],
+            ..Default::default()
+        };
+
+        // Query with limit 5 (less than total 10 events, but greater than matching 1 target event)
+        let result = handle.history_ascending(&filter, None, 5);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].id, target_event.id);
     }
 }

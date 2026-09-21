@@ -899,7 +899,15 @@ mod tests {
 
     #[tokio::test]
     async fn create_template_defaults_empty_display_name_to_title() {
-        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let state = Arc::new(
+            library_state(
+                &InMemory,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         let response = create_template(
             State(state),
@@ -1057,7 +1065,15 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_defaults_empty_display_name_to_updated_title() {
-        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let state = Arc::new(
+            library_state(
+                &InMemory,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         let response = update_template(
@@ -1095,7 +1111,15 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_keeps_title_and_display_name_independent() {
-        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let state = Arc::new(
+            library_state(
+                &InMemory,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         update_template(
@@ -1223,7 +1247,15 @@ mod tests {
         // is preserved end-to-end: create template → retrieve via get endpoint → field still present.
         use agent_library::template::aggregate::FormFieldType;
 
-        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        let state = Arc::new(
+            library_state(
+                &InMemory,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         let response = create_template(
             State(state.clone()),
