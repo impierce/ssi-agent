@@ -14,3 +14,19 @@ This error indicates that a connection is missing a required `domain` value. The
 ## DID Configurations Could Not Be Resolved
 
 This error occurs when the system fails to resolve or fetch DID Configurations from the Connection's `/.well-known/did-configuration.json` domain endpoint.
+
+## Opaque Origin Not Supported
+
+This error occurs when an origin supplied to `add-linked-domains` or `remove-linked-domains` has no host at all, such as a `data:` URL. A linked domain must identify a public host.
+
+## Host Must Be A Domain Name
+
+This error occurs when an origin supplied to `add-linked-domains` or `remove-linked-domains` is an IP address. Domain linkage requires a domain name, not an IP address.
+
+## Invalid Domain Or Origin
+
+This error occurs when an origin supplied to `add-linked-domains` or `remove-linked-domains` could not be parsed as a bare host (e.g. `example.org`) or a full origin (e.g. `https://example.org`). A single invalid entry rejects the whole request.
+
+## No Origins Given
+
+This error occurs when `add-linked-domains` or `remove-linked-domains` is called with an empty `origins` array. At least one origin is required; there is no request that links or unlinks nothing.

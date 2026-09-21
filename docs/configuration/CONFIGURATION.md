@@ -89,6 +89,29 @@ The `UNICORE__PUBLIC_URL` may also include a path segment, which will be treated
 public_url: https://my-domain.example.test
 ```
 
+#### Changing the deployment `did:web`
+
+After the deployment DID has been created, changing `UNICORE__PUBLIC_URL` to an origin that would
+produce a different `did:web` causes startup to fail. The persisted DID is the deployment identity;
+changing a URL setting alone cannot replace it.
+
+To authorize a deliberate identity migration, set the new public URL and name the currently
+persisted DID exactly:
+
+| Environment variable                       | `config.yaml`                |
+| ------------------------------------------ | ---------------------------- |
+| `UNICORE__OVERWRITE_PREVIOUS_DID_WEB`      | `overwrite_previous_did_web` |
+
+```yaml
+public_url: https://new.example.test
+overwrite_previous_did_web: did:web:old.example.test
+```
+
+This setting is a one-time guard, not a permanent toggle. Remove it after the successful migration.
+Existing credentials continue to reference the old DID, so its DID document must remain resolvable
+at the old origin for as long as those credentials need to verify. See
+[ADR 0005](../adr/0005-explicit-did-web-overwrite.md) for the decision and operational consequences.
+
 <!-- TODO: We should add a better explanation to describe the difference between the `UNICORE__APPLICATION_URL` and the `UNICORE__PUBLIC_URL`, possibly with some diagrams. Is this the right place for that? -->
 
 ### Token Endpoint
@@ -274,7 +297,6 @@ event_store:
 | `UNICORE__CORS_ENABLED`                                 | Enable CORS (permissive). Only required for browser-based access. | `false`       | boolean         |
 | `UNICORE__DID_METHODS__DID_WEB__ENABLED`                | Create and host a `did:web` DID document.                         | `false`       | boolean         |
 | `UNICORE__SIGNING_ALGORITHMS_SUPPORTED__EDDSA__ENABLED` | Toggles the algorithm allowed for cryptographic operations.       | `true`        | boolean         |
-| `UNICORE__DOMAIN_LINKAGE_ENABLED`                       | Enable domain linkage (only works with `did:web`).                | -             | boolean         |
 | `UNICORE__EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS`          | The timeout for external server responses (in milliseconds).      | `1000`        | integer         |
 -->
 

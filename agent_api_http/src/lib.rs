@@ -50,7 +50,15 @@ pub struct ApiState {
 /// installs actor extraction middleware, and attaches request tracing/logging.
 /// When the configured application URL includes a non-root base path, the
 /// router is nested under that path.
-pub fn app<E>(
+pub fn app<E>(state: ApiState, actor_extractor: Arc<E>) -> Router
+where
+    E: ActorExtractor,
+{
+    let application_base_path = config().application_url.path().to_owned();
+    app_with_base_path(state, actor_extractor, &application_base_path)
+}
+
+pub(crate) fn app_with_base_path<E>(
     ApiState {
         identity_state,
         library_state,
@@ -60,10 +68,15 @@ pub fn app<E>(
         verification_state,
     }: ApiState,
     actor_extractor: Arc<E>,
+    application_base_path: &str,
 ) -> Router
 where
     E: ActorExtractor,
 {
+    let well_known = identity_state
+        .clone()
+        .map(v0::identity::well_known_router)
+        .unwrap_or_default();
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
@@ -84,7 +97,14 @@ where
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(public::router(library_state))
+        .merge(public::router(library_state));
+
+    let app = if application_base_path == "/" {
+        app
+    } else {
+        Router::new().nest(application_base_path.trim_end_matches('/'), app)
+    };
+    app.merge(well_known)
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
         // Trace layers
         .layer(
@@ -118,18 +138,7 @@ where
                         }),
                 )
                 .layer(middleware::from_fn(log_request_body)),
-        );
-
-    let application_base_path = config().application_url.path().to_string();
-
-    // Note: since version 0.8 axum does not allow nesting routers with an empty base path. We must explicitly check
-    // for an empty base path before nesting.
-    if application_base_path == "/" {
-        app
-    } else {
-        // TODO: This breaks Domain Linkage. We need to fix this.
-        Router::new().nest(&application_base_path, app)
-    }
+        )
 }
 
 // This middleware logs the request body before passing it on.

@@ -231,31 +231,7 @@ impl Aggregate for Document {
                         document.into()
                     }
                     SupportedDidMethod::Web => {
-                        let origin = config().public_url.origin();
-
-                        info!("Origin: {}", &origin.ascii_serialization());
-
-                        let (_scheme, host, port) = match origin {
-                            url::Origin::Tuple(ref scheme, ref host, ref port) => (scheme, host, port),
-                            url::Origin::Opaque(_) => {
-                                return Err(OpaqueOriginError);
-                            }
-                        };
-
-                        // IP addresses are not allowed
-                        if matches!(host, url::Host::Ipv4(_) | url::Host::Ipv6(_)) {
-                            return Err(HostError);
-                        }
-
-                        // Omit default HTTPS port
-                        let host_port_encoded = match port {
-                            443 => host.to_string(),
-                            _ => urlencoding::encode(format!("{host}:{port}").as_str()).to_string(),
-                        };
-
-                        let controller = format!("did:web:{host_port_encoded}")
-                            .parse::<CoreDID>()
-                            .map_err(|err| InvalidDidError(err.to_string()))?;
+                        let controller = super::web::did_web(&services.public_url)?;
 
                         // Patch the generated DID document since it's not according to spec.
                         let properties = get_properties(MethodType::JSON_WEB_KEY_2020);
@@ -399,6 +375,33 @@ impl Aggregate for Document {
 
                 Ok(events)
             }
+            OverwritePreviousDidWeb {
+                previous_did,
+                public_url,
+            } => {
+                if self.did_method != Some(SupportedDidMethod::Web) {
+                    return Err(InvalidDidError(
+                        "Only did:web supports overwriting the deployment identity".into(),
+                    ));
+                }
+                let document = self.document.clone().ok_or(MissingDocumentError)?;
+                let previous = document.id().clone();
+                if previous != previous_did {
+                    return Err(InvalidDidError(format!(
+                        "Overwrite authorization for {previous_did} does not match the current DID {previous}"
+                    )));
+                }
+                let replacement = super::web::did_web(&public_url)?;
+                let remap = |did: CoreDID| -> Result<CoreDID, DocumentError> {
+                    Ok(if did == previous { replacement.clone() } else { did })
+                };
+                let document = document.try_map(remap, remap, remap, remap, ProduceDocumentError)?;
+                Ok(vec![DocumentDidWebOverwritten {
+                    document_id: self.document_id.clone(),
+                    previous_did: previous,
+                    document,
+                }])
+            }
             UpdateDocumentStatus { status } => Ok(vec![DocumentStatusUpdated {
                 document_id: self.document_id.clone(),
                 status,
@@ -425,6 +428,21 @@ impl Aggregate for Document {
                     .map_err(|err| AddServiceError(err.to_string()))?;
 
                 Ok(vec![ServiceAdded { document_id, document }])
+            }
+            RemoveService { service_id } => {
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                let id = document
+                    .id()
+                    .to_url()
+                    .join(format!("#{service_id}"))
+                    .map_err(|err| InvalidDidError(err.to_string()))?;
+                if document.remove_service(&id).is_none() {
+                    return Ok(());
+                }
+                Ok(vec![ServiceRemoved {
+                    document_id: self.document_id.clone(),
+                    document,
+                }])
             }
             PublishDocument => {
                 let mut document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
@@ -634,7 +652,10 @@ impl Aggregate for Document {
                 self.with_fixed_algorithm = with_fixed_algorithm;
                 self.iota_metadata = iota_metadata;
             }
-            PublicKeyUpdated { document_id, document } => {
+            PublicKeyUpdated { document_id, document }
+            | DocumentDidWebOverwritten {
+                document_id, document, ..
+            } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
@@ -642,7 +663,7 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.status = status;
             }
-            ServiceAdded { document_id, document } => {
+            ServiceAdded { document_id, document } | ServiceRemoved { document_id, document } => {
                 self.document_id = document_id;
                 self.document.replace(document);
             }
@@ -863,7 +884,7 @@ pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::V
 
 #[cfg(test)]
 pub mod document_tests {
-    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use crate::state::LINKED_DOMAINS_SERVICE_ID;
 
     use super::test_utils::*;
     use super::*;
@@ -932,9 +953,9 @@ pub mod document_tests {
         document_id: String,
         did_method: SupportedDidMethod,
         document: CoreDocument,
-        domain_linkage_service: Service,
+        linked_domains_service: Service,
         document_with_multiple_verification_methods: CoreDocument,
-        document_with_domain_linkage_service: CoreDocument,
+        document_with_linked_domains_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![
@@ -952,12 +973,12 @@ pub mod document_tests {
                 },
             ])
             .when(DocumentCommand::AddService {
-                service: Box::new(domain_linkage_service),
-                service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
+                service: Box::new(linked_domains_service),
+                service_id: LINKED_DOMAINS_SERVICE_ID.to_string(),
             })
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
                 document_id: document_id.clone(),
-                document: document_with_domain_linkage_service,
+                document: document_with_linked_domains_service,
             }])
     }
 
@@ -968,7 +989,7 @@ pub mod document_tests {
         did_method: SupportedDidMethod,
         document: CoreDocument,
         document_with_multiple_verification_methods: CoreDocument,
-        document_with_domain_linkage_service: CoreDocument,
+        document_with_linked_domains_service: CoreDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![
@@ -986,7 +1007,7 @@ pub mod document_tests {
                 },
                 DocumentEvent::ServiceAdded {
                     document_id: document_id.clone(),
-                    document: document_with_domain_linkage_service,
+                    document: document_with_linked_domains_service,
                 },
             ])
             .when(DocumentCommand::UpdateDocumentStatus {
@@ -997,12 +1018,38 @@ pub mod document_tests {
                 status: Status::Disabled,
             }])
     }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn overwrite_rejects_an_authorization_for_another_did(
+        document_id: String,
+        did_method: SupportedDidMethod,
+        document: CoreDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![DocumentEvent::DocumentCreated {
+                document_id,
+                did_method,
+                document,
+                status: Status::SignAndValidate,
+                with_fixed_algorithm: None,
+                iota_metadata: None,
+            }])
+            .when(DocumentCommand::OverwritePreviousDidWeb {
+                previous_did: "did:web:other.example".parse().unwrap(),
+                public_url: "https://new.example".parse().unwrap(),
+            })
+            .then_expect_error_message(
+                "Invalid DID: Overwrite authorization for did:web:other.example does not match the current DID \
+                 did:web:my-domain.example.org",
+            )
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::get_properties;
-    use crate::state::DOMAIN_LINKAGE_SERVICE_ID;
+    use crate::state::LINKED_DOMAINS_SERVICE_ID;
     use agent_shared::config::{config, SupportedDidMethod};
     use identity_core::convert::FromJson;
     use identity_did::CoreDID;
@@ -1156,9 +1203,9 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn domain_linkage_service() -> Service {
+    pub fn linked_domains_service() -> Service {
         Service::builder(Default::default())
-            .id(format!("did:web:my-domain.example.org#{DOMAIN_LINKAGE_SERVICE_ID}")
+            .id(format!("did:web:my-domain.example.org#{LINKED_DOMAINS_SERVICE_ID}")
                 .parse()
                 .unwrap())
             .type_("LinkedDomains")
@@ -1173,12 +1220,12 @@ pub mod test_utils {
     }
 
     #[fixture]
-    pub fn document_with_domain_linkage_service(
+    pub fn document_with_linked_domains_service(
         mut document_with_multiple_verification_methods: CoreDocument,
-        domain_linkage_service: Service,
+        linked_domains_service: Service,
     ) -> CoreDocument {
         document_with_multiple_verification_methods
-            .insert_service(domain_linkage_service)
+            .insert_service(linked_domains_service)
             .unwrap();
 
         document_with_multiple_verification_methods

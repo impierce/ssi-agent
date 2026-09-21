@@ -2,6 +2,7 @@ use crate::connection::{
     aggregate::{LinkedCredentialValidation, LinkedVpValidation, ValidationResult},
     error::ConnectionError,
 };
+use crate::dns::CnameResolver;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
@@ -18,6 +19,7 @@ use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::{redirect, Client};
+use std::collections::{BTreeSet, HashMap};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
@@ -25,8 +27,9 @@ use tokio::net::lookup_host;
 use tracing::{info, warn};
 use url::{Host, Url};
 
-const LINKED_VP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const OUTBOUND_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const LINKED_VP_RESPONSE_LIMIT: usize = 5 * 1024 * 1024;
+const DID_CONFIGURATION_RESPONSE_LIMIT: usize = 1024 * 1024;
 
 /// A DID extracted from a domain's DID configuration, together with the outcome of its domain
 /// linkage verification.
@@ -51,19 +54,28 @@ impl LinkedDid {
 /// Identity services.
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
+    pub public_url: Url,
+    pub linkage_clock: Arc<dyn Fn() -> identity_core::common::Timestamp + Send + Sync>,
+    /// Resolves a linked domain's `CNAME` chain when verifying that it points at this deployment.
+    pub cname_resolver: Arc<dyn CnameResolver>,
     pub client: Client,
-    /// Whether linked VP endpoints on the local network may use `http`. Only `true` in local
-    /// development builds; public HTTP and sensitive address ranges remain blocked. See
+    /// Whether outbound identity resources on the local network may use `http`. Only `true` in
+    /// local development builds; public HTTP and sensitive address ranges remain blocked. See
     /// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
-    pub allow_local_network_vp_endpoints: bool,
+    pub allow_local_network_outbound: bool,
+    pub iota_sponsoring_enabled: bool,
 }
 
 impl IdentityServices {
-    pub fn new(subject: Arc<Subject>) -> Self {
+    pub fn new(subject: Arc<Subject>, public_url: Url, iota_sponsoring_enabled: bool) -> Self {
         Self {
             subject,
+            public_url,
+            linkage_clock: Arc::new(identity_core::common::Timestamp::now_utc),
+            cname_resolver: crate::dns::system_resolver(),
             client: Client::new(),
-            allow_local_network_vp_endpoints: cfg!(feature = "allow-localhost"),
+            allow_local_network_outbound: cfg!(feature = "allow-localhost"),
+            iota_sponsoring_enabled,
         }
     }
 
@@ -75,11 +87,16 @@ impl IdentityServices {
     {
         let subject = futures::executor::block_on(async { Subject::new().await });
 
-        // Tests drive linked VP endpoints from a mock server on `127.0.0.1`, which the outbound
-        // policy rejects by default.
+        // Tests drive outbound identity resources from mock servers on `127.0.0.1`, which the
+        // production policy rejects.
         Arc::new(Self {
-            allow_local_network_vp_endpoints: true,
-            ..Self::new(Arc::new(subject))
+            allow_local_network_outbound: true,
+            linkage_clock: Arc::new(crate::service::aggregate::test_utils::issuance_date),
+            ..Self::new(
+                Arc::new(subject),
+                "https://my-domain.example.org/".parse().unwrap(),
+                false,
+            )
         })
     }
 
@@ -110,32 +127,32 @@ impl IdentityServices {
     }
 
     pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
-        // TODO: This essentially disables domain linkage fetching because HTTPS is strictly
-        // required by `DomainLinkageConfiguration::from_json_value`. When running locally
-        // with HTTP, the fetch fails and we gracefully default to no linked DIDs.
+        // TODO: This essentially disables domain linkage fetching when running locally, where there
+        // is usually nothing published to fetch and `DomainLinkageConfiguration::from_json_value`
+        // rejects the empty `linked_dids` list. The failure is swallowed and treated as no linked
+        // DIDs, rather than failing the whole connection flow.
         // See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md` for more context and the future plan
         // to use `rcgen`.
         #[cfg(feature = "allow-localhost")]
-        let config = match self.fetch_domain_linkage_configuration(url).await {
-            Ok(config) => config,
-            Err(_) => return Ok(vec![]),
-        };
+        {
+            match self.fetch_linked_dids_strict(url).await {
+                Ok(linked_dids) => Ok(linked_dids),
+                Err(_) => Ok(vec![]),
+            }
+        }
 
         #[cfg(not(feature = "allow-localhost"))]
+        {
+            self.fetch_linked_dids_strict(url).await
+        }
+    }
+
+    /// Fetches and validates linked DIDs without the local-development fallback used by connection
+    /// discovery. Runtime self-verification must retain fetch failures so callers can distinguish a
+    /// missing deployment route from a published configuration that simply lacks a DID.
+    pub(crate) async fn fetch_linked_dids_strict(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
         let config = self.fetch_domain_linkage_configuration(url).await?;
-        let linked_dids: Vec<DIDUrl> = config
-            .linked_dids()
-            .iter()
-            .filter_map(|jwt| {
-                let jwt_value = jwt.to_json_value().ok()?;
-                let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
-                let did_str = claims
-                    .get("sub")
-                    .or_else(|| claims.get("iss"))
-                    .and_then(|v| v.as_str())?;
-                did_str.parse::<DIDUrl>().ok()
-            })
-            .collect();
+        let linked_dids = extract_linked_dids(&config);
 
         if linked_dids.is_empty() {
             info!("No linked DIDs found in configuration");
@@ -360,10 +377,10 @@ impl IdentityServices {
     /// behalf (SSRF). Redirects are not followed, and the vetted DNS results are pinned to the
     /// request so they cannot change between validation and connection.
     async fn fetch_linked_verifiable_presentation(&self, url: &Url) -> anyhow::Result<String> {
-        let addresses = resolve_outbound_url(url, self.allow_local_network_vp_endpoints)
+        let addresses = resolve_outbound_url(url, self.allow_local_network_outbound)
             .await
             .map_err(|error| anyhow::anyhow!("Refused to fetch linked VP from '{url}': {error}"))?;
-        let client = linked_vp_client(url, &addresses)?;
+        let client = pinned_outbound_client(url, &addresses)?;
 
         let response = client.get(url.as_str()).send().await?;
         if response.status().is_redirection() {
@@ -372,7 +389,8 @@ impl IdentityServices {
             );
         }
 
-        read_limited_linked_vp(response.error_for_status()?).await
+        let body = read_limited_response(response.error_for_status()?, LINKED_VP_RESPONSE_LIMIT, "Linked VP").await?;
+        String::from_utf8(body).map_err(|error| anyhow::anyhow!("Linked VP response is not valid UTF-8: {error}"))
     }
 
     async fn fetch_domain_linkage_configuration(
@@ -384,16 +402,33 @@ impl IdentityServices {
 
         info!("Fetching DID configuration from: {url}");
 
-        // Fetch the resource and parse to JSON value (mutable)
-        let mut response: serde_json::Value = self
-            .client
+        let addresses = resolve_outbound_url(&url, self.allow_local_network_outbound)
+            .await
+            .map_err(|error| {
+                ConnectionError::DIDResolutionFailed(format!(
+                    "Refused to fetch DID configuration from '{url}': {error}"
+                ))
+            })?;
+        let client = pinned_outbound_client(&url, &addresses)
+            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+        let response = client
             .get(url.as_str())
             .send()
             .await
-            .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?
-            .json()
+            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+        if response.status().is_redirection() {
+            return Err(ConnectionError::DIDResolutionFailed(format!(
+                "DID configuration endpoint '{url}' responded with a redirect, which is not followed for security reasons"
+            )));
+        }
+        let response = response
+            .error_for_status()
+            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+        let response = read_limited_response(response, DID_CONFIGURATION_RESPONSE_LIMIT, "DID configuration")
             .await
-            .map_err(|e| ConnectionError::DIDResolutionFailed(e.to_string()))?;
+            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+        let mut response: serde_json::Value = serde_json::from_slice(&response)
+            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
 
         // Remove all non-string values from `linked_dids` (JSON-LD)
         if let serde_json::Value::Object(ref mut root) = response {
@@ -472,6 +507,61 @@ fn unverified_credential(credential_jwt: &Jwt) -> Option<Credential> {
     Credential::from_json_value(serde_json::Value::Object(credential)).ok()
 }
 
+/// Extracts the subject DID of every linked-DID JWT in a domain linkage configuration, without
+/// verifying their signatures. Used both to discover DIDs to validate and, for self-verification,
+/// to compare a fetched configuration against the DIDs UniCore expects to have published.
+///
+/// Deduplicated: a configuration linking one DID to several origins carries one credential per
+/// origin, and every caller here is interested in the distinct DIDs rather than in the credentials.
+pub(crate) fn extract_linked_dids(config: &DomainLinkageConfiguration) -> Vec<DIDUrl> {
+    let mut dids: Vec<DIDUrl> = Vec::new();
+    for did in config.linked_dids().iter().filter_map(linked_did_subject) {
+        if !dids.iter().any(|seen| seen.did() == did.did()) {
+            dids.push(did);
+        }
+    }
+    dids
+}
+
+/// Groups the DIDs a domain linkage configuration links by the origin each credential claims.
+///
+/// Each Domain Linkage Credential claims exactly one origin, so this is what says which DIDs UniCore
+/// published *for a given origin* — the unit a verifier of that origin actually checks.
+pub(crate) fn linked_dids_by_origin(config: &DomainLinkageConfiguration) -> HashMap<Url, BTreeSet<DIDUrl>> {
+    let mut by_origin: HashMap<Url, BTreeSet<DIDUrl>> = HashMap::new();
+    for jwt in config.linked_dids() {
+        let Some(did) = linked_did_subject(jwt) else { continue };
+        let Some(origin) = credential_origin(jwt) else { continue };
+        by_origin.entry(origin).or_default().insert(did);
+    }
+    by_origin
+}
+
+/// The subject DID a linked-DID JWT names, read **without verifying its signature**.
+fn linked_did_subject(jwt: &Jwt) -> Option<DIDUrl> {
+    let jwt_value = jwt.to_json_value().ok()?;
+    let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
+    claims
+        .get("sub")
+        .or_else(|| claims.get("iss"))
+        .and_then(|value| value.as_str())?
+        .parse()
+        .ok()
+}
+
+/// The origin a linked-DID JWT claims, read **without verifying its signature**.
+fn credential_origin(jwt: &Jwt) -> Option<Url> {
+    let jwt_value = jwt.to_json_value().ok()?;
+    let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
+    claims
+        .get("vc")?
+        .get("credentialSubject")?
+        .get("origin")?
+        .as_str()?
+        .parse()
+        .ok()
+}
+
 /// Renders a numeric JWT timestamp claim as the RFC 3339 string a credential expects.
 fn rfc3339_claim(claim: &serde_json::Value) -> Option<serde_json::Value> {
     let timestamp = DateTime::from_timestamp(claim.as_i64()?, 0)?;
@@ -480,7 +570,7 @@ fn rfc3339_claim(claim: &serde_json::Value) -> Option<serde_json::Value> {
     ))
 }
 
-/// Resolves and vets every address that may be used to fetch a linked verifiable presentation.
+/// Resolves and vets every address that may be used for an outbound identity-resource request.
 async fn resolve_outbound_url(url: &Url, allow_local_network: bool) -> Result<Vec<SocketAddr>, String> {
     if !matches!(url.scheme(), "https" | "http") {
         return Err(format!("scheme '{}' is not permitted", url.scheme()));
@@ -523,10 +613,10 @@ async fn resolve_outbound_url(url: &Url, allow_local_network: bool) -> Result<Ve
 }
 
 /// Builds a per-request client whose resolver is pinned to addresses that passed policy checks.
-fn linked_vp_client(url: &Url, addresses: &[SocketAddr]) -> anyhow::Result<Client> {
+fn pinned_outbound_client(url: &Url, addresses: &[SocketAddr]) -> anyhow::Result<Client> {
     let mut builder = Client::builder()
         .redirect(redirect::Policy::none())
-        .timeout(LINKED_VP_REQUEST_TIMEOUT)
+        .timeout(OUTBOUND_REQUEST_TIMEOUT)
         // A configured proxy would resolve the target independently and bypass the pinned result.
         .no_proxy();
 
@@ -537,23 +627,24 @@ fn linked_vp_client(url: &Url, addresses: &[SocketAddr]) -> anyhow::Result<Clien
     builder.build().map_err(Into::into)
 }
 
-async fn read_limited_linked_vp(mut response: reqwest::Response) -> anyhow::Result<String> {
-    if response
-        .content_length()
-        .is_some_and(|length| length > LINKED_VP_RESPONSE_LIMIT as u64)
-    {
-        anyhow::bail!("Linked VP response exceeds the {LINKED_VP_RESPONSE_LIMIT}-byte limit");
+async fn read_limited_response(
+    mut response: reqwest::Response,
+    limit: usize,
+    resource: &str,
+) -> anyhow::Result<Vec<u8>> {
+    if response.content_length().is_some_and(|length| length > limit as u64) {
+        anyhow::bail!("{resource} response exceeds the {limit}-byte limit");
     }
 
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await? {
-        if body.len().saturating_add(chunk.len()) > LINKED_VP_RESPONSE_LIMIT {
-            anyhow::bail!("Linked VP response exceeds the {LINKED_VP_RESPONSE_LIMIT}-byte limit");
+        if body.len().saturating_add(chunk.len()) > limit {
+            anyhow::bail!("{resource} response exceeds the {limit}-byte limit");
         }
         body.extend_from_slice(&chunk);
     }
 
-    String::from_utf8(body).map_err(|error| anyhow::anyhow!("Linked VP response is not valid UTF-8: {error}"))
+    Ok(body)
 }
 
 /// Whether `ip` is a public address, i.e. not one that could reach the agent's own host or network.
@@ -1116,7 +1207,8 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let services = IdentityServices::new(subject);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        services.allow_local_network_outbound = true;
 
         let issuer_url: Url = mock_server.uri().parse().unwrap();
         let dids = services.fetch_linked_dids(&issuer_url).await.unwrap();
@@ -1144,7 +1236,8 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let services = IdentityServices::new(subject);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        services.allow_local_network_outbound = true;
 
         let issuer_url: Url = mock_server.uri().parse().unwrap();
         let result = services.fetch_linked_dids(&issuer_url).await;
@@ -1170,6 +1263,88 @@ mod tests {
                 "expected '{url}' to be rejected"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn domain_linkage_fetch_rejects_local_destinations_by_default() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": []
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let subject = Arc::new(Subject::new().await);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        services.allow_local_network_outbound = false;
+        let origin: Url = mock_server.uri().replace("127.0.0.1", "localhost").parse().unwrap();
+
+        let error = services.fetch_domain_linkage_configuration(&origin).await.unwrap_err();
+
+        assert!(matches!(
+            error,
+            ConnectionError::DIDResolutionFailed(message)
+                if message.contains("Refused to fetch DID configuration")
+        ));
+        assert!(mock_server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn domain_linkage_redirects_are_not_followed() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(302).insert_header("Location", "/redirected"))
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/redirected"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "@context": "https://identity.foundation/.well-known/did-configuration/v1",
+                "linked_dids": []
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let subject = Arc::new(Subject::new().await);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        services.allow_local_network_outbound = true;
+        let origin: Url = mock_server.uri().parse().unwrap();
+
+        let error = services.fetch_domain_linkage_configuration(&origin).await.unwrap_err();
+
+        assert!(matches!(
+            error,
+            ConnectionError::DIDResolutionFailed(message)
+                if message.contains("responded with a redirect")
+        ));
+        assert_eq!(mock_server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn domain_linkage_response_size_is_limited() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![b'a'; DID_CONFIGURATION_RESPONSE_LIMIT + 1]))
+            .mount(&mock_server)
+            .await;
+
+        let subject = Arc::new(Subject::new().await);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        services.allow_local_network_outbound = true;
+        let origin: Url = mock_server.uri().parse().unwrap();
+
+        let error = services.fetch_domain_linkage_configuration(&origin).await.unwrap_err();
+
+        assert!(matches!(
+            error,
+            ConnectionError::DIDResolutionFailed(message)
+                if message.contains("response exceeds")
+        ));
     }
 
     #[tokio::test]
@@ -1223,10 +1398,13 @@ mod tests {
         let url: Url = format!("http://linked-vp.invalid:{}/linked-vp", mock_server.address().port())
             .parse()
             .unwrap();
-        let client = linked_vp_client(&url, &[*mock_server.address()]).unwrap();
+        let client = pinned_outbound_client(&url, &[*mock_server.address()]).unwrap();
         let response = client.get(url).send().await.unwrap();
 
-        assert_eq!(read_limited_linked_vp(response).await.unwrap(), "presentation");
+        let body = read_limited_response(response, LINKED_VP_RESPONSE_LIMIT, "Linked VP")
+            .await
+            .unwrap();
+        assert_eq!(body, b"presentation");
     }
 
     #[tokio::test]
@@ -1340,7 +1518,7 @@ mod tests {
                 .await;
 
             let subject = Arc::new(Subject::new().await);
-            let services = IdentityServices::new(subject);
+            let services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
 
             let issuer_url: Url = mock_server.uri().parse().unwrap();
             let result = services.fetch_linked_dids(&issuer_url).await;

@@ -1,19 +1,9 @@
-use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::{error::IntoApiErrorExt, extractors::RequestActor};
 use agent_identity::{
-    document::{
-        aggregate::{Document, Status},
-        command::DocumentCommand,
-    },
-    service::{aggregate::Service, command::ServiceCommand},
-    state::{publish_decentrally_hosted_documents, IdentityState},
+    service::{command::ServiceCommand, lifecycle},
+    state::{IdentityState, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID},
 };
-use agent_shared::config::SupportedDidMethod;
-use axum::{
-    extract::State,
-    response::{IntoResponse, Response},
-    Json,
-};
+use axum::{extract::State, Json};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -26,127 +16,61 @@ pub struct LinkedVPEndpointRequest {
     pub presentation_ids: Vec<String>,
 }
 
-/// Create a linked verifiable presentation service
-///
-/// Creates the linked verifiable presentation service and adds it to every enabled DID document
-/// whose DID method supports updates. Returns the DID documents that were updated.
 #[utoipa::path(
     post,
-    path = "/services/linked-vp",
-    operation_id = "create_linked_verifiable_presentation_service",
+    path = "/create-linked-verifiable-presentation",
+    operation_id = "create_linked_verifiable_presentation",
     tags = ["Identity"],
-    request_body = inline(LinkedVPEndpointRequest),
+    request_body = LinkedVPEndpointRequest,
     responses(
-        (status = 200, description = "Linked verifiable presentation service created and DID documents updated", body = [Document]),
-        (status = 404, description = "No DID documents found"),
+        (status = 204, description = "Linked presentation service created"),
+        (status = 409, description = "Service already exists"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
     )
 )]
-#[axum_macros::debug_handler]
-pub(crate) async fn linked_vp(
+pub(crate) async fn create_linked_verifiable_presentation(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
     Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
-) -> Result<Response, ApiError> {
-    let service_id = "linked-verifiable-presentation-service".to_string();
-
-    let command = ServiceCommand::CreateLinkedVerifiablePresentationService {
-        service_id: service_id.clone(),
-        presentation_ids,
-    };
-
-    // Create a linked verifiable presentation service.
-    command_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &service_id,
-        &state.command.service,
-        command,
+) -> Result<StatusCode, ApiError> {
+    lifecycle::execute(
+        &state,
+        actor,
+        ServiceCommand::CreateLinkedVerifiablePresentationService {
+            service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
+            presentation_ids,
+        },
     )
-    .await?;
+    .await
+    .map_err(|error| error.into_api_error())?;
+    Ok(StatusCode::NO_CONTENT)
+}
 
-    let linked_verifiable_presentation_service = match query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &service_id,
-        &state.query.service,
+#[utoipa::path(
+    post,
+    path = "/remove-linked-verifiable-presentation",
+    operation_id = "remove_linked_verifiable_presentation",
+    tags = ["Identity"],
+    responses(
+        (status = 204, description = "Linked presentation service removed"),
+        (status = 404, description = "Service not found"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
     )
-    .await?
-    {
-        Some(Service {
-            service: Some(linked_verifiable_presentation_service),
-            ..
-        }) => linked_verifiable_presentation_service,
-        // TODO: this *should* be an impossible error, what should we return here?
-        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
-    };
-
-    // Query all DID Documents that require an update.
-    let document_ids: Vec<String> = query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        "all_documents",
-        &state.query.all_documents,
+)]
+pub(crate) async fn remove_linked_verifiable_presentation(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<StatusCode, ApiError> {
+    lifecycle::execute(
+        &state,
+        actor,
+        ServiceCommand::DeleteLinkedVerifiablePresentationService {
+            service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
+        },
     )
-    .await?
-    .map(|all_documents_view| {
-        all_documents_view
-            .documents
-            .into_values()
-            .filter(|document| {
-                document.status != Status::Disabled
-                    && document
-                        .did_method
-                        .as_ref()
-                        .map(SupportedDidMethod::supports_update)
-                        .unwrap_or(false)
-            })
-            .map(|document| document.document_id)
-            .collect()
-    })
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
-
-    for document_id in &document_ids {
-        let command = DocumentCommand::AddService {
-            service_id: service_id.clone(),
-            service: Box::new(linked_verifiable_presentation_service.clone()),
-        };
-
-        command_handler(
-            state.authorization_checker.clone(),
-            actor.clone(),
-            document_id,
-            &state.command.document,
-            command,
-        )
-        .await?;
-    }
-
-    publish_decentrally_hosted_documents(&state)
-        .await
-        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
-
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        "all_documents",
-        &state.query.all_documents,
-    )
-    .await?
-    .map(|all_documents_view| {
-        let documents: Vec<_> = all_documents_view
-            .documents
-            .into_values()
-            .filter(|document| {
-                document.status != Status::Disabled
-                    && document
-                        .did_method
-                        .as_ref()
-                        .map(SupportedDidMethod::supports_update)
-                        .unwrap_or(false)
-            })
-            .collect();
-        (StatusCode::OK, Json(documents)).into_response()
-    })
-    // TODO: this *should* be an impossible error, what should we return here?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    .await
+    .map_err(|error| error.into_api_error())?;
+    Ok(StatusCode::NO_CONTENT)
 }

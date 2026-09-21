@@ -17,7 +17,11 @@ use connections::{
     accept_connection_changes, get_connection, get_connections, post_connection, remove_connection, sync_connection,
 };
 use documents::{get_document, get_documents};
-use services::{linked_vp::linked_vp, service, services};
+use services::{
+    linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
+    linked_vp::{create_linked_verifiable_presentation, remove_linked_verifiable_presentation},
+    service, services,
+};
 use std::sync::Arc;
 use well_known::{did::did, did_configuration::did_configuration};
 
@@ -41,8 +45,23 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
                 .route("/profile", get(get_profile).patch(patch_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))
-                .route("/services/linked-vp", post(linked_vp)),
+                .route(
+                    "/create-linked-verifiable-presentation",
+                    post(create_linked_verifiable_presentation),
+                )
+                .route("/add-linked-domains", post(add_linked_domains))
+                .route("/remove-linked-domains", post(remove_linked_domains))
+                .route("/verify-linked-domains", get(verify_linked_domains))
+                .route(
+                    "/remove-linked-verifiable-presentation",
+                    post(remove_linked_verifiable_presentation),
+                ),
         )
+        .with_state(identity_state)
+}
+
+pub fn well_known_router(identity_state: Arc<IdentityState>) -> Router {
+    Router::new()
         .route("/.well-known/did.json", get(did))
         .route("/.well-known/did-configuration.json", get(did_configuration))
         .with_state(identity_state)

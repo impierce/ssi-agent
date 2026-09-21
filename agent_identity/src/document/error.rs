@@ -56,4 +56,6 @@ pub enum DocumentError {
     OpaqueOriginError,
     #[error("Host must be a domain name")]
     HostError,
+    #[error("Invalid domain or origin: {0}")]
+    InvalidOriginError(String),
 }
