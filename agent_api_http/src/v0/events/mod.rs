@@ -147,7 +147,8 @@ pub async fn events_sse_handler(
     // 2. Query historical catch-up events.
     let catchup_result = event_bus
         .history_ascending(&filter, last_event_id.as_deref(), limit)
-        .await;
+        .await
+        .map_err(|error| error.into_api_error())?;
 
     let catchup_events = catchup_result.events;
     let mut seen_ids = std::collections::HashSet::new();
@@ -469,5 +470,34 @@ mod tests {
             });
         let response = tower::ServiceExt::oneshot(app, req_with_actor).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_events_sse_history_reader_error_returns_500() {
+        struct FailingReader;
+        #[async_trait::async_trait]
+        impl shared_kernel::event_bus::EventHistoryReader for FailingReader {
+            async fn history_ascending(
+                &self,
+                _filter: &EventFilter,
+                _last_event_id: Option<&str>,
+                _limit: Option<usize>,
+            ) -> Result<shared_kernel::event_bus::HistoryAscendingResult, EventBusError> {
+                Err(EventBusError::Source("MongoDB failure".to_string()))
+            }
+        }
+
+        let bus_handle = EventBusHandle::new(16);
+        bus_handle.set_history_reader(Arc::new(FailingReader));
+
+        let app = router(Arc::new(bus_handle.into()));
+
+        let req = axum::http::Request::builder()
+            .uri("/v0/events")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let response = tower::ServiceExt::oneshot(app, req).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
     }
 }

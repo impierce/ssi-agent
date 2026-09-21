@@ -5,6 +5,7 @@ use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use shared_kernel::authorization::AuthorizationError;
+use shared_kernel::event_bus::EventBusError;
 
 /// Wraps errors from the `cqrs_es` crate to be returned as API errors.
 #[derive(Debug)]
@@ -150,6 +151,33 @@ impl IntoApiErrorExt for PersistenceError {
 impl From<PersistenceError> for PublicError {
     fn from(_err: PersistenceError) -> Self {
         PublicError::InternalServerError
+    }
+}
+
+impl IntoApiErrorExt for EventBusError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            EventBusError::Lagged(dropped) => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
+                .title("Event Bus Lagged")
+                .type_url(type_url("events#lagged"))
+                .message(format!("Subscriber lagged behind by {dropped} events"))
+                .finish(),
+            EventBusError::Source(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Event Source Error")
+                .type_url(type_url("events#source-error"))
+                .message(format!("Event source error: {error}"))
+                .finish(),
+            EventBusError::UnsupportedPosition => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Position")
+                .type_url(type_url("events#unsupported-position"))
+                .message("Position-based subscription is unsupported")
+                .finish(),
+            EventBusError::Closed => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
+                .title("Event Bus Closed")
+                .type_url(type_url("events#closed"))
+                .message("Event bus stream closed")
+                .finish(),
+        }
     }
 }
 

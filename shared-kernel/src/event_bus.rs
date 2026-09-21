@@ -299,13 +299,16 @@ impl EventBusHandle {
     /// - If missing/evicted, the latest `limit` events are returned and `gap_detected` is set to `true`.
     ///
     /// When `limit` is `None`, all matching events are returned without truncation.
-    #[must_use]
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`EventBusError`] if the underlying [`EventHistoryReader`] fails.
     pub async fn history_ascending(
         &self,
         filter: &EventFilter,
         last_event_id: Option<&str>,
         limit: Option<usize>,
-    ) -> HistoryAscendingResult {
+    ) -> Result<HistoryAscendingResult, EventBusError> {
         let reader = {
             let lock = match self.history_reader.read() {
                 Ok(guard) => guard,
@@ -315,15 +318,7 @@ impl EventBusHandle {
         };
 
         if let Some(reader) = reader {
-            match reader.history_ascending(filter, last_event_id, limit).await {
-                Ok(result) => return result,
-                Err(err) => {
-                    tracing::error!(
-                        "EventHistoryReader failed, falling back to in-memory history: {:?}",
-                        err
-                    );
-                }
-            }
+            return reader.history_ascending(filter, last_event_id, limit).await;
         }
 
         let lock = match self.history.read() {
@@ -362,7 +357,7 @@ impl EventBusHandle {
             }
         };
 
-        HistoryAscendingResult { events, gap_detected }
+        Ok(HistoryAscendingResult { events, gap_detected })
     }
 
     pub fn attach_source<S: EventSource>(&self, source: S) -> tokio::task::JoinHandle<()> {
@@ -628,14 +623,38 @@ mod tests {
         };
 
         // Query with limit Some(5)
-        let result = handle.history_ascending(&filter, None, Some(5)).await;
+        let result = handle.history_ascending(&filter, None, Some(5)).await.unwrap();
         assert_eq!(result.events.len(), 1);
         assert_eq!(result.events[0].id, target_event.id);
 
         // Query with unbounded limit None
-        let result_unbounded = handle.history_ascending(&filter, None, None).await;
+        let result_unbounded = handle.history_ascending(&filter, None, None).await.unwrap();
         assert_eq!(result_unbounded.events.len(), 1);
         assert_eq!(result_unbounded.events[0].id, target_event.id);
+    }
+
+    #[tokio::test]
+    async fn test_history_ascending_propagates_reader_error() {
+        struct FailingReader;
+
+        #[async_trait]
+        impl EventHistoryReader for FailingReader {
+            async fn history_ascending(
+                &self,
+                _filter: &EventFilter,
+                _last_event_id: Option<&str>,
+                _limit: Option<usize>,
+            ) -> Result<HistoryAscendingResult, EventBusError> {
+                Err(EventBusError::Source("connection timeout".to_string()))
+            }
+        }
+
+        let handle = EventBusHandle::new(16);
+        handle.set_history_reader(Arc::new(FailingReader));
+
+        let filter = EventFilter::default();
+        let result = handle.history_ascending(&filter, None, None).await;
+        assert!(matches!(result, Err(EventBusError::Source(msg)) if msg == "connection timeout"));
     }
 
     #[tokio::test]
@@ -680,7 +699,7 @@ mod tests {
         assert_eq!(first.id, "test:1:1");
 
         // After stream 1 ends, reconnect should pass From(Position(vec![42]))
-        let second = tokio::time::timeout(std::time::Duration::from_millis(2000), subscriber.next())
+        let second = tokio::time::timeout(std::time::Duration::from_secs(2), subscriber.next())
             .await
             .unwrap()
             .unwrap()
@@ -716,8 +735,8 @@ mod tests {
 
         async fn handle(
             &mut self,
-            _: Self::Command,
-            _: &Self::Services,
+            (): Self::Command,
+            (): &Self::Services,
             _: &cqrs_es::event_sink::EventSink<Self>,
         ) -> Result<(), Self::Error> {
             Ok(())
