@@ -470,7 +470,9 @@ pub async fn initialize_documents(
                 "Explicitly overwriting the deployment did:web; existing credentials are not migrated"
             );
             for (document_id, persisted_did) in drifted_documents {
-                agent_shared::handlers::public_command_handler(
+                command_handler(
+                    state.authorization_checker.clone(),
+                    Caller::Internal,
                     &document_id,
                     &state.command.document,
                     DocumentCommand::OverwritePreviousDidWeb {

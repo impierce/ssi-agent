@@ -192,6 +192,50 @@ async fn test_update_title_with_empty_string(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+async fn test_update_display_keeps_empty_name_instead_of_materializing_the_title(template_id: String) {
+    let logo = Logo {
+        uri: "https://example.com/logo.png".to_string(),
+        alt_text: None,
+    };
+
+    TemplateTestFramework::with(())
+        .given(vec![TemplateEvent::TemplateCreated {
+            template_id: template_id.clone(),
+            source_template_id: None,
+            title: "Diploma".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV1_1,
+            holder_type: HolderType::Individual,
+            modified_at: test_utils::modified_at(),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::default(),
+            description: None,
+            r#type: vec![],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        }])
+        .when(TemplateCommand::UpdateDisplay {
+            template_id: template_id.clone(),
+            display: Display {
+                name: String::new(),
+                logo: Some(logo.clone()),
+            },
+        })
+        .then_expect_events(vec![TemplateEvent::DisplayUpdated {
+            template_id,
+            display: Display {
+                name: String::new(),
+                logo: Some(logo),
+            },
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
 async fn test_update_title_on_archived_template_is_rejected(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Archived)])

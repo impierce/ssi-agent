@@ -1,6 +1,6 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
-use agent_library::template::aggregate::{DataModel, HolderType, PropertyAttribute, Template};
+use agent_library::template::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -142,44 +142,22 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
         template.r#type.clone()
     };
 
-    let display = template
-        .display
-        .as_ref()
-        .map(|d| {
-            let logo = d.logo.as_ref().and_then(|logo| {
-                logo.uri.parse().ok().map(|uri| OidcLogo {
-                    uri,
-                    alt_text: logo.alt_text.clone(),
-                })
-            });
-
-            let name = if d.name.trim().is_empty() {
-                template.title.clone()
-            } else {
-                d.name.clone()
-            };
-
-            vec![CredentialConfigurationsSupportedDisplay {
-                name,
-                locale: None,
-                logo,
-                description: None,
-                background_image: None,
-                background_color: None,
-                text_color: None,
-            }]
+    let resolved_display = Display::resolve(template.display.clone(), &template.title);
+    let logo = resolved_display.logo.as_ref().and_then(|logo| {
+        logo.uri.parse().ok().map(|uri| OidcLogo {
+            uri,
+            alt_text: logo.alt_text.clone(),
         })
-        .or_else(|| {
-            Some(vec![CredentialConfigurationsSupportedDisplay {
-                name: template.title.clone(),
-                locale: None,
-                logo: None,
-                description: None,
-                background_image: None,
-                background_color: None,
-                text_color: None,
-            }])
-        });
+    });
+    let display = Some(vec![CredentialConfigurationsSupportedDisplay {
+        name: resolved_display.name,
+        locale: None,
+        logo,
+        description: None,
+        background_image: None,
+        background_color: None,
+        text_color: None,
+    }]);
 
     let claims = if format == "vc+sd-jwt" {
         build_claims_from_schema(template, Some("credentialSubject."))
