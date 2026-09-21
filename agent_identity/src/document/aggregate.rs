@@ -509,7 +509,7 @@ impl Aggregate for Document {
 
                 if !iota_metadata.is_funded && iota_sponsoring_service_url.is_none() {
                     warn!(
-                        "Skipping publishing DID Document for DID method `{did_method}` because it is not sufficiently funded",  
+                        "Skipping publishing DID Document for DID method `{did_method}` because it is not sufficiently funded",
                     );
 
                     let did = self

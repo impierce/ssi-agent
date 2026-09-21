@@ -15,7 +15,7 @@ get {
 }
 
 params:path {
-  catalog_id: 
+  catalog_id:
 }
 
 docs {
@@ -25,26 +25,26 @@ docs {
 example {
   name: 200 Response
   description: Catalog retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/get-catalog-by-id/:catalog_id
     method: GET
     mode: none
     params:path: {
-      catalog_id: 
+      catalog_id:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

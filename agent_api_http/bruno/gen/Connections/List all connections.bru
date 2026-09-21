@@ -14,9 +14,9 @@ get {
 }
 
 body:form-urlencoded {
-  did: 
-  display: 
-  url: 
+  did:
+  display:
+  url:
 }
 
 docs {
@@ -26,28 +26,28 @@ docs {
 example {
   name: 200 Response
   description: All connections retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/connections
     method: GET
     mode: formUrlEncoded
     body:form-urlencoded: {
-      did: 
-      display: 
-      url: 
+      did:
+      display:
+      url:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

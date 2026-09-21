@@ -23,7 +23,7 @@ body:json {
 example {
   name: 201 Response
   description: Public offer created successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/create-public-offer
     method: POST
@@ -35,17 +35,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 201
       text: Created
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -54,7 +54,7 @@ example {
 example {
   name: 400 Response
   description: Template schema invalid for public offers
-  
+
   request: {
     url: {{BASE_URL}}/v0/create-public-offer
     method: POST
@@ -66,17 +66,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -85,7 +85,7 @@ example {
 example {
   name: 404 Response
   description: Template or offer not found
-  
+
   request: {
     url: {{BASE_URL}}/v0/create-public-offer
     method: POST
@@ -97,17 +97,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 404
       text: Not Found
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

@@ -1,7 +1,7 @@
 # ADR 0003: Hermetic Test Architecture and Configuration Decoupling
 
-**Status**: Accepted  
-**Date**: 2026-07-30  
+**Status**: Accepted
+**Date**: 2026-07-30
 **Context**: Establishing guidelines for hermetic, thread-safe unit and integration testing without global static state or CWD-dependent file I/O.
 
 ---

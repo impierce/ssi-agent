@@ -14,7 +14,7 @@ get {
 }
 
 params:query {
-  ~provisioned: 
+  ~provisioned:
 }
 
 docs {
@@ -25,26 +25,26 @@ docs {
 example {
   name: 200 Response
   description: Application configuration
-  
+
   request: {
     url: {{BASE_URL}}/v0/configuration
     method: GET
     mode: none
     params:query: {
-      ~provisioned: 
+      ~provisioned:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

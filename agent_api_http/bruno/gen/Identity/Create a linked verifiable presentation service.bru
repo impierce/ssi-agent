@@ -27,7 +27,7 @@ docs {
 example {
   name: 200 Response
   description: Linked verifiable presentation service created and DID documents updated
-  
+
   request: {
     url: {{BASE_URL}}/v0/services/linked-vp
     method: POST
@@ -38,17 +38,17 @@ example {
       }
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -70,7 +70,7 @@ example {
 example {
   name: 404 Response
   description: No DID documents found
-  
+
   request: {
     url: {{BASE_URL}}/v0/services/linked-vp
     method: POST
@@ -81,17 +81,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 404
       text: Not Found
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

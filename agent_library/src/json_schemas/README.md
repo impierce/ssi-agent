@@ -15,7 +15,7 @@ This folder contains the JSON Schemas of the digital credential data formats sup
 **Important Notes:**
 - We cannot issue truly official ELM credentials until the following points have been resolved
   - “National authorities” have issued an eIDAS legal identifier to the organization that wants to issue ELM credentials:
-    https://europa.eu/europass/elm-browser/documentation/3-2-0/rdf/ap/edc/documentation/edc-generic-no-cv_en.html#edcgn:IssuerNodeShape 
+    https://europa.eu/europass/elm-browser/documentation/3-2-0/rdf/ap/edc/documentation/edc-generic-no-cv_en.html#edcgn:IssuerNodeShape
   - An official ELM credential needs an E-Seal issued by a Trust Service Provider (TSP). The EDC issuer doesn't explain whether the E-Seal goes in the `proof` field or if it's an enveloppe.
   https://europass.europa.eu/en/how-issue-european-digital-credentials-learning#9379
   - An official ELM also preferes to have all images to be attached to the credential to be baked in, requiring at least one such baked in image. Without it the ELM is not valid.

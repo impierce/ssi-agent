@@ -20,23 +20,23 @@ docs {
 example {
   name: 200 Response
   description: All public templates retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/public/templates
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

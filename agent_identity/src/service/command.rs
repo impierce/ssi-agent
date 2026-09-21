@@ -1,5 +1,6 @@
 use identity_iota::verification::VerificationMethod;
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 use url::Url;
 
 #[derive(Debug, Deserialize)]
@@ -57,5 +58,11 @@ impl ServiceCommand {
             | Self::CreateLinkedVerifiablePresentationService { service_id, .. }
             | Self::DeleteLinkedVerifiablePresentationService { service_id } => service_id,
         }
+    }
+}
+
+impl CommandOperation for ServiceCommand {
+    fn operation_name(&self) -> &'static str {
+        self.operation()
     }
 }

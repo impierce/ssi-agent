@@ -14,7 +14,7 @@ get {
 }
 
 params:query {
-  ~did_method: 
+  ~did_method:
 }
 
 docs {
@@ -24,26 +24,26 @@ docs {
 example {
   name: 200 Response
   description: Documents retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/documents
     method: GET
     mode: none
     params:query: {
-      ~did_method: 
+      ~did_method:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
