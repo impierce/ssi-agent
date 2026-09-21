@@ -159,12 +159,12 @@ impl IntoApiErrorExt for EventBusError {
         match self {
             EventBusError::Lagged(dropped) => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
                 .title("Event Bus Lagged")
-                .type_url(type_url("events#lagged"))
+                .type_url(type_url("events#event-bus-lagged"))
                 .message(format!("Subscriber lagged behind by {dropped} events"))
                 .finish(),
             EventBusError::Source(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Event Source Error")
-                .type_url(type_url("events#source-error"))
+                .type_url(type_url("events#event-source-error"))
                 .message(format!("Event source error: {error}"))
                 .finish(),
             EventBusError::UnsupportedPosition => ApiError::builder(StatusCode::BAD_REQUEST)
@@ -174,7 +174,7 @@ impl IntoApiErrorExt for EventBusError {
                 .finish(),
             EventBusError::Closed => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
                 .title("Event Bus Closed")
-                .type_url(type_url("events#closed"))
+                .type_url(type_url("events#event-bus-closed"))
                 .message("Event bus stream closed")
                 .finish(),
         }
@@ -294,6 +294,54 @@ pub mod tests {
                 "title": "Invalid Command",
                 "status": 400,
                 "detail": "The command is invalid"
+            }),
+        );
+    }
+
+    #[tokio::test]
+    async fn event_bus_errors_successfully_convert_to_problem_details() {
+        assert_eq!(
+            into_json_value(EventBusError::Lagged(5).into_api_error().into_axum_response()).await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#event-bus-lagged"),
+                "title": "Event Bus Lagged",
+                "status": 503,
+                "detail": "Subscriber lagged behind by 5 events"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                EventBusError::Source("MongoDB error".into())
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#event-source-error"),
+                "title": "Event Source Error",
+                "status": 500,
+                "detail": "Event source error: MongoDB error"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(EventBusError::UnsupportedPosition.into_api_error().into_axum_response()).await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#unsupported-position"),
+                "title": "Unsupported Position",
+                "status": 400,
+                "detail": "Position-based subscription is unsupported"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(EventBusError::Closed.into_api_error().into_axum_response()).await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#event-bus-closed"),
+                "title": "Event Bus Closed",
+                "status": 503,
+                "detail": "Event bus stream closed"
             }),
         );
     }

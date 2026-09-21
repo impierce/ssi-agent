@@ -69,11 +69,12 @@ pub fn router(state: Arc<EventsState>) -> Router {
 #[utoipa::path(
     get,
     path = "/events",
+    operation_id = "events_sse_handler",
     params(
         ("types" = Option<String>, Query, description = "Comma-separated list of CloudEvent types to filter"),
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),
         ("subject" = Option<String>, Query, description = "Optional aggregate/subject ID filter"),
-        ("limit" = Option<usize>, Query, description = "Optional limit on historical events; defaults to 100"),
+        ("limit" = Option<usize>, Query, description = "Optional limit on historical events; defaults to 100, set to 0 for live-only stream"),
         ("since" = Option<String>, Query, description = "Filter events after RFC 3339 timestamp"),
         ("until" = Option<String>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
@@ -92,9 +93,7 @@ pub async fn events_sse_handler(
 ) -> Result<Sse<impl Stream<Item = Result<sse::Event, axum::Error>>>, ApiError> {
     let auth_request = AuthorizationRequest {
         actor,
-        operation: AuthorizationOperation::Query {
-            query_type: "events",
-        },
+        operation: AuthorizationOperation::Query { query_type: "events" },
     };
 
     state
@@ -142,9 +141,13 @@ pub async fn events_sse_handler(
     let limit = Some(params.limit.unwrap_or(100));
 
     // 1. Subscribe to live events FIRST to avoid missing published events in a race condition.
+    // Any events published between this subscription and the completion of history catch-up
+    // will be queued in the broadcast receiver channel.
     let live_subscription = event_bus.subscribe(filter.clone());
 
     // 2. Query historical catch-up events.
+    // If the storage reader fails, propagate an error immediately (fail-closed) so the client
+    // receives an HTTP 500 rather than an incomplete stream with missing events.
     let catchup_result = event_bus
         .history_ascending(&filter, last_event_id.as_deref(), limit)
         .await
@@ -154,11 +157,15 @@ pub async fn events_sse_handler(
     let mut seen_ids = std::collections::HashSet::new();
 
     let mut catchup_items = Vec::new();
+    // 3. If Last-Event-ID was requested but not found (evicted from memory/history), signal a gap
+    // so clients are informed that intermediate events were dropped.
     if catchup_result.gap_detected {
         catchup_items.push(Ok(sse::Event::default()
             .event("lagged")
             .data(json!({ "warning": "Last-Event-ID evicted from history" }).to_string())));
     }
+
+    // 4. Stream catch-up events in chronological order, tracking IDs in seen_ids to deduplicate against the live stream.
     for cloud_event in catchup_events {
         if !seen_ids.insert(cloud_event.id.clone()) {
             continue;
@@ -175,6 +182,7 @@ pub async fn events_sse_handler(
 
     let catchup_stream = futures::stream::iter(catchup_items);
 
+    // 5. Seamlessly transition to live stream, deduplicating any events that arrived during catch-up.
     let live_stream = live_subscription
         .filter(move |result| {
             let is_duplicate = match result {
@@ -202,6 +210,7 @@ pub async fn events_sse_handler(
                 .data(format!("Event bus error: {}", err))),
         });
 
+    // 6. Chain historical catch-up stream with real-time live stream.
     let sse_stream = catchup_stream.chain(live_stream);
 
     Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))

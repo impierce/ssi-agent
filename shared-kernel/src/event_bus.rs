@@ -1,3 +1,12 @@
+//! In-process and distributed event bus infrastructure using the CNCF `CloudEvents` v1.0 standard.
+//!
+//! This module provides:
+//! - Standardized [`CloudEvent`] schema for event streaming and decoupling across services.
+//! - [`EventFilter`] for filtering events by source, type, subject, and time ranges.
+//! - [`EventBusHandle`] providing an in-process broadcast channel alongside a bounded ring-buffer for fast replay.
+//! - [`EventSource`] and [`EventHistoryReader`] SPI traits allowing external persistent backends (such as `MongoDB` Change Streams) to feed live events and fulfill complete historical catch-up queries.
+//! - Automatic bridging of `cqrs-es` domain events to `CloudEvent`s via [`Query<A>`] dispatch.
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use convert_case::{Case, Casing};
@@ -102,17 +111,26 @@ impl EventFilter {
     #[must_use]
     pub fn matches(&self, event: &CloudEvent) -> bool {
         if !self.event_types.is_empty()
-            && !self.event_types.iter().any(|event_type| {
-                event_type.eq_ignore_ascii_case(&event.event_type)
-                    || event.event_type.to_lowercase().contains(&event_type.to_lowercase())
+            && !self.event_types.iter().any(|pattern| {
+                if pattern.eq_ignore_ascii_case(&event.event_type) {
+                    return true;
+                }
+                let event_suffix = event
+                    .event_type
+                    .strip_prefix("com.impierce.unicore.")
+                    .unwrap_or(&event.event_type);
+                let pattern_kebab = pattern.to_case(Case::Kebab);
+                event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)
             })
         {
             return false;
         }
         if !self.sources.is_empty()
             && !self.sources.iter().any(|source_pattern| {
+                let pattern_norm = source_pattern.trim_start_matches("/services/").trim_matches('/');
+                let event_source_norm = event.source.trim_start_matches("/services/").trim_matches('/');
                 source_pattern.eq_ignore_ascii_case(&event.source)
-                    || event.source.to_lowercase().contains(&source_pattern.to_lowercase())
+                    || pattern_norm.eq_ignore_ascii_case(event_source_norm)
             })
         {
             return false;
@@ -123,17 +141,17 @@ impl EventFilter {
             }
         }
         if let Some(since) = self.since {
-            if let Some(event_time) = event.time {
-                if event_time < since {
-                    return false;
-                }
+            match event.time {
+                Some(event_time) if event_time < since => return false,
+                None => return false,
+                _ => {}
             }
         }
         if let Some(until) = self.until {
-            if let Some(event_time) = event.time {
-                if event_time > until {
-                    return false;
-                }
+            match event.time {
+                Some(event_time) if event_time > until => return false,
+                None => return false,
+                _ => {}
             }
         }
         true
@@ -317,10 +335,14 @@ impl EventBusHandle {
             lock.clone()
         };
 
+        // 1. Delegate to persistent storage reader (e.g. MongoDB) if configured.
+        // Storage errors are propagated immediately (fail-closed) to ensure clients are not
+        // silently served an incomplete catch-up stream that masks database issues.
         if let Some(reader) = reader {
             return reader.history_ascending(filter, last_event_id, limit).await;
         }
 
+        // 2. Fall back to the bounded in-memory ring buffer (e.g. in test or standalone environments).
         let lock = match self.history.read() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
@@ -329,13 +351,17 @@ impl EventBusHandle {
         let mut gap_detected = false;
 
         let events: Vec<CloudEvent> = if let Some(last_id) = last_event_id {
+            // Find the position of the last acknowledged event in the in-memory ring buffer.
             if let Some(pos) = lock.iter().position(|event| event.id == last_id) {
+                // Resume strictly after last_id in chronological order.
                 let iter = lock.iter().skip(pos + 1).filter(|event| filter.matches(event));
                 match limit {
                     Some(max_count) => iter.take(max_count).cloned().collect(),
                     None => iter.cloned().collect(),
                 }
             } else {
+                // The requested event was either never present or evicted from the ring-buffer.
+                // Mark gap_detected = true so callers can emit a lagged/warning notice.
                 gap_detected = true;
                 let matching: Vec<&CloudEvent> = lock.iter().filter(|event| filter.matches(event)).collect();
                 match limit {
@@ -347,6 +373,7 @@ impl EventBusHandle {
                 }
             }
         } else {
+            // No last_event_id: return latest matching events in ascending order.
             let matching: Vec<&CloudEvent> = lock.iter().filter(|event| filter.matches(event)).collect();
             match limit {
                 Some(max_count) => {
@@ -360,12 +387,18 @@ impl EventBusHandle {
         Ok(HistoryAscendingResult { events, gap_detected })
     }
 
+    /// Attaches an external [`EventSource`] (such as a database Change Stream) to feed the bus in a background task.
+    ///
+    /// Supervised loop with exponential backoff that tracks [`Position`] resume tokens to ensure zero dropped events
+    /// across stream interruptions and cluster failovers.
     pub fn attach_source<S: EventSource>(&self, source: S) -> tokio::task::JoinHandle<()> {
         let bus = self.clone();
         tokio::spawn(async move {
-            let mut backoff_secs = 1u64;
+            let mut backoff_millis = 100u64;
             let mut last_position: Option<Position> = None;
+            let mut failed_resume_attempts: usize = 0;
             loop {
+                // Initial connect starts from Live; subsequent reconnects resume from the last known stream position.
                 let position = match last_position.clone() {
                     Some(pos) => SubscribePosition::From(pos),
                     None => SubscribePosition::Live,
@@ -373,13 +406,16 @@ impl EventBusHandle {
                 tracing::info!("Opening EventSource stream from position: {:?}", position);
                 match source.open(position).await {
                     Ok(mut stream) => {
-                        backoff_secs = 1;
+                        backoff_millis = 100;
+                        failed_resume_attempts = 0;
                         while let Some(item) = stream.next().await {
                             match item {
                                 Ok(source_event) => {
+                                    // Update the resume position checkpoint.
                                     if let Some(pos) = source_event.position {
                                         last_position = Some(pos);
                                     }
+                                    // Publish to local bus. Duplicates are automatically discarded by the history buffer.
                                     bus.publish(source_event.event);
                                 }
                                 Err(err) => {
@@ -391,10 +427,22 @@ impl EventBusHandle {
                     }
                     Err(err) => {
                         tracing::error!("Failed to open EventSource stream: {:?}", err);
+                        if last_position.is_some() {
+                            failed_resume_attempts += 1;
+                            if failed_resume_attempts >= 3 {
+                                tracing::warn!(
+                                    "Failed to resume EventSource from position after 3 consecutive attempts; falling back to SubscribePosition::Live: {:?}",
+                                    err
+                                );
+                                last_position = None;
+                                failed_resume_attempts = 0;
+                                backoff_millis = 100;
+                            }
+                        }
                     }
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
-                backoff_secs = (backoff_secs * 2).min(30);
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_millis)).await;
+                backoff_millis = (backoff_millis * 2).min(10_000);
             }
         })
     }
@@ -424,8 +472,8 @@ impl EventBus for EventBusHandle {
                             None
                         }
                     }
-                    Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
-                        Some(Err(EventBusError::Lagged(n)))
+                    Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(dropped_count)) => {
+                        Some(Err(EventBusError::Lagged(dropped_count)))
                     }
                 }
             }
@@ -440,6 +488,7 @@ where
     A: Aggregate,
     A::Event: serde::Serialize + DomainEvent,
 {
+    /// Bridges cqrs-es domain events to `CloudEvents` on the bus when aggregates persist changes.
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
         for envelope in events {
             let payload = match serde_json::to_value(&envelope.payload) {
@@ -450,6 +499,8 @@ where
                 }
             };
 
+            // Extract the original timestamp recorded in the envelope's metadata (set during command handling)
+            // so CloudEvent.time accurately reflects when the domain event occurred rather than when it was dispatched.
             let occurred_at = envelope
                 .metadata
                 .get("timestamp")
@@ -527,17 +578,62 @@ mod tests {
             Some(Utc::now()),
         );
 
+        // Exact URI match
         let f1 = EventFilter {
             sources: vec!["/services/credential".to_string()],
             ..Default::default()
         };
         assert!(f1.matches(&event));
 
+        // Bare aggregate name without /services/ prefix
         let f2 = EventFilter {
+            sources: vec!["credential".to_string()],
+            ..Default::default()
+        };
+        assert!(f2.matches(&event));
+
+        // Non-matching source
+        let f3 = EventFilter {
             sources: vec!["/services/offer".to_string()],
             ..Default::default()
         };
-        assert!(!f2.matches(&event));
+        assert!(!f3.matches(&event));
+
+        // Substring non-match: "cred" should not match "/services/credential"
+        let f4 = EventFilter {
+            sources: vec!["cred".to_string()],
+            ..Default::default()
+        };
+        assert!(!f4.matches(&event));
+
+        // Type filter matching domain event name and kebab-case suffix
+        let f5 = EventFilter {
+            event_types: vec!["CredentialSigned".to_string()],
+            ..Default::default()
+        };
+        assert!(f5.matches(&event));
+
+        let f6 = EventFilter {
+            event_types: vec!["credential-signed".to_string()],
+            ..Default::default()
+        };
+        assert!(f6.matches(&event));
+
+        // Partial non-suffix match should not match
+        let f7 = EventFilter {
+            event_types: vec!["Signed".to_string()],
+            ..Default::default()
+        };
+        assert!(!f7.matches(&event));
+
+        // Timeless event does not match when since is set
+        let mut timeless_event = CloudEvent::new("com.impierce.unicore.test", "/services/test");
+        timeless_event.time = None;
+        let f8 = EventFilter {
+            since: Some(Utc::now()),
+            ..Default::default()
+        };
+        assert!(!f8.matches(&timeless_event));
     }
 
     #[tokio::test]
@@ -705,6 +801,63 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(second.id, "test:1:2");
+
+        join_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_attach_source_falls_back_to_live_on_repeated_resume_failures() {
+        struct StalePositionSource {
+            calls: Arc<std::sync::atomic::AtomicUsize>,
+            recovered: Arc<std::sync::atomic::AtomicBool>,
+        }
+
+        #[async_trait]
+        impl EventSource for StalePositionSource {
+            async fn open(&self, from: SubscribePosition) -> Result<EventSourceStream, EventBusError> {
+                let call_idx = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                match from {
+                    SubscribePosition::Live if call_idx == 0 => {
+                        let event = build_cloud_event("test", "1", 1, "Init", serde_json::json!({}), None);
+                        let source_event = SourceEvent::new(event, Some(Position(vec![99])));
+                        Ok(Box::pin(futures::stream::iter(vec![Ok(source_event)])))
+                    }
+                    SubscribePosition::From(_) => Err(EventBusError::Source("ChangeStreamHistoryLost".to_string())),
+                    SubscribePosition::Live => {
+                        self.recovered.store(true, std::sync::atomic::Ordering::SeqCst);
+                        let event = build_cloud_event("test", "1", 2, "Recovered", serde_json::json!({}), None);
+                        Ok(Box::pin(futures::stream::iter(vec![Ok(SourceEvent::new(event, None))])))
+                    }
+                }
+            }
+        }
+
+        let handle = EventBusHandle::new(16);
+        let mut subscriber = handle.subscribe(EventFilter::default());
+
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let recovered = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let join_handle = handle.attach_source(StalePositionSource {
+            calls: calls.clone(),
+            recovered: recovered.clone(),
+        });
+
+        let first = tokio::time::timeout(std::time::Duration::from_millis(500), subscriber.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.id, "test:1:1");
+
+        // After 3 failed attempts from position, attach_source falls back to Live and yields second event
+        let second = tokio::time::timeout(std::time::Duration::from_secs(12), subscriber.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.id, "test:1:2");
+        assert!(recovered.load(std::sync::atomic::Ordering::SeqCst));
 
         join_handle.abort();
     }

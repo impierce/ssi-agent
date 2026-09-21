@@ -69,13 +69,12 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub mod event_source;
 pub mod event_verification;
 pub mod in_memory;
 pub mod mongodb;
 pub mod postgres;
 
-pub use event_source::MongoEventSource;
+pub use mongodb::MongoEventSource;
 
 /// A generic command handler for a specific aggregate.
 ///

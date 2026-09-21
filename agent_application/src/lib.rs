@@ -226,7 +226,9 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
                 let mongo_source = agent_store::MongoEventSource::new(builder.client.clone());
+                // 1. Stream live database writes from MongoDB Change Stream into the local EventBus.
                 event_bus.attach_source(mongo_source.clone());
+                // 2. Register MongoDB as the persistent history reader for complete historical catch-up queries.
                 event_bus.set_history_reader(Arc::new(mongo_source));
 
                 let issuance_state = Arc::new(

@@ -647,7 +647,7 @@ paths:
           type: string
       - name: limit
         in: query
-        description: Optional limit on historical events; defaults to 100
+        description: Optional limit on historical events; defaults to 100, set to 0 for live-only stream
         required: false
         schema:
           type: integer
