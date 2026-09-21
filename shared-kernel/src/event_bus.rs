@@ -102,15 +102,17 @@ impl EventFilter {
     #[must_use]
     pub fn matches(&self, event: &CloudEvent) -> bool {
         if !self.event_types.is_empty()
-            && !self.event_types.iter().any(|t| {
-                t.eq_ignore_ascii_case(&event.event_type) || event.event_type.to_lowercase().contains(&t.to_lowercase())
+            && !self.event_types.iter().any(|event_type| {
+                event_type.eq_ignore_ascii_case(&event.event_type)
+                    || event.event_type.to_lowercase().contains(&event_type.to_lowercase())
             })
         {
             return false;
         }
         if !self.sources.is_empty()
-            && !self.sources.iter().any(|s| {
-                s.eq_ignore_ascii_case(&event.source) || event.source.to_lowercase().contains(&s.to_lowercase())
+            && !self.sources.iter().any(|source_pattern| {
+                source_pattern.eq_ignore_ascii_case(&event.source)
+                    || event.source.to_lowercase().contains(&source_pattern.to_lowercase())
             })
         {
             return false;
@@ -172,6 +174,17 @@ pub trait EventSource: Send + Sync + 'static {
     async fn open(&self, from: SubscribePosition) -> Result<BusEventStream, EventBusError>;
 }
 
+/// SPI for reading historical events from persistent storage.
+#[async_trait]
+pub trait EventHistoryReader: Send + Sync + 'static {
+    async fn history_ascending(
+        &self,
+        filter: &EventFilter,
+        last_event_id: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<HistoryAscendingResult, EventBusError>;
+}
+
 use std::collections::VecDeque;
 
 /// In-process event bus handle backed by Tokio broadcast channel and recent event history ring-buffer.
@@ -180,6 +193,7 @@ pub struct EventBusHandle {
     sender: tokio::sync::broadcast::Sender<Arc<CloudEvent>>,
     history: Arc<std::sync::RwLock<VecDeque<CloudEvent>>>,
     history_capacity: usize,
+    history_reader: Arc<std::sync::RwLock<Option<Arc<dyn EventHistoryReader>>>>,
 }
 
 impl EventBusHandle {
@@ -194,7 +208,17 @@ impl EventBusHandle {
             sender,
             history: Arc::new(std::sync::RwLock::new(VecDeque::with_capacity(500))),
             history_capacity: 500,
+            history_reader: Arc::new(std::sync::RwLock::new(None)),
         }
+    }
+
+    /// Sets the persistent history reader SPI implementation.
+    pub fn set_history_reader(&self, reader: Arc<dyn EventHistoryReader>) {
+        let mut lock = match self.history_reader.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *lock = Some(reader);
     }
 }
 
@@ -225,7 +249,7 @@ impl EventBusHandle {
             Err(poisoned) => poisoned.into_inner(),
         };
 
-        if lock.iter().rev().any(|e| e.id == event.id) {
+        if lock.iter().rev().any(|existing_event| existing_event.id == event.id) {
             return;
         }
 
@@ -247,7 +271,7 @@ impl EventBusHandle {
         };
         lock.iter()
             .rev()
-            .filter(|e| filter.matches(e))
+            .filter(|event| filter.matches(event))
             .take(limit)
             .cloned()
             .collect()
@@ -258,13 +282,35 @@ impl EventBusHandle {
     /// If `last_event_id` is specified:
     /// - If found, events occurring *after* `last_event_id` are returned (`gap_detected = false`).
     /// - If missing/evicted, the latest `limit` events are returned and `gap_detected` is set to `true`.
+    ///
+    /// When `limit` is `None`, all matching events are returned without truncation.
     #[must_use]
-    pub fn history_ascending(
+    pub async fn history_ascending(
         &self,
         filter: &EventFilter,
         last_event_id: Option<&str>,
-        limit: usize,
+        limit: Option<usize>,
     ) -> HistoryAscendingResult {
+        let reader = {
+            let lock = match self.history_reader.read() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            lock.clone()
+        };
+
+        if let Some(reader) = reader {
+            match reader.history_ascending(filter, last_event_id, limit).await {
+                Ok(result) => return result,
+                Err(err) => {
+                    tracing::error!(
+                        "EventHistoryReader failed, falling back to in-memory history: {:?}",
+                        err
+                    );
+                }
+            }
+        }
+
         let lock = match self.history.read() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
@@ -273,23 +319,32 @@ impl EventBusHandle {
         let mut gap_detected = false;
 
         let events: Vec<CloudEvent> = if let Some(last_id) = last_event_id {
-            if let Some(pos) = lock.iter().position(|e| e.id == last_id) {
-                lock.iter()
-                    .skip(pos + 1)
-                    .filter(|e| filter.matches(e))
-                    .take(limit)
-                    .cloned()
-                    .collect()
+            if let Some(pos) = lock.iter().position(|event| event.id == last_id) {
+                let iter = lock.iter().skip(pos + 1).filter(|event| filter.matches(event));
+                match limit {
+                    Some(max_count) => iter.take(max_count).cloned().collect(),
+                    None => iter.cloned().collect(),
+                }
             } else {
                 gap_detected = true;
-                let matching: Vec<&CloudEvent> = lock.iter().filter(|e| filter.matches(e)).collect();
-                let skip = matching.len().saturating_sub(limit);
-                matching.into_iter().skip(skip).cloned().collect()
+                let matching: Vec<&CloudEvent> = lock.iter().filter(|event| filter.matches(event)).collect();
+                match limit {
+                    Some(max_count) => {
+                        let skip = matching.len().saturating_sub(max_count);
+                        matching.into_iter().skip(skip).cloned().collect()
+                    }
+                    None => matching.into_iter().cloned().collect(),
+                }
             }
         } else {
-            let matching: Vec<&CloudEvent> = lock.iter().filter(|e| filter.matches(e)).collect();
-            let skip = matching.len().saturating_sub(limit);
-            matching.into_iter().skip(skip).cloned().collect()
+            let matching: Vec<&CloudEvent> = lock.iter().filter(|event| filter.matches(event)).collect();
+            match limit {
+                Some(max_count) => {
+                    let skip = matching.len().saturating_sub(max_count);
+                    matching.into_iter().skip(skip).cloned().collect()
+                }
+                None => matching.into_iter().cloned().collect(),
+            }
         };
 
         HistoryAscendingResult { events, gap_detected }
@@ -508,8 +563,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_history_ascending_filter_with_limit() {
+    #[tokio::test]
+    async fn test_history_ascending_filter_with_limit() {
         let handle = EventBusHandle::new(16);
 
         // Publish an offer event, followed by several other events
@@ -523,10 +578,10 @@ mod tests {
         );
         handle.publish(target_event.clone());
 
-        for i in 2..=10 {
+        for index in 2..=10 {
             let filler = build_cloud_event(
                 "filler",
-                &i.to_string(),
+                &index.to_string(),
                 1,
                 "FillerCreated",
                 serde_json::json!({}),
@@ -540,9 +595,14 @@ mod tests {
             ..Default::default()
         };
 
-        // Query with limit 5 (less than total 10 events, but greater than matching 1 target event)
-        let result = handle.history_ascending(&filter, None, 5);
+        // Query with limit Some(5)
+        let result = handle.history_ascending(&filter, None, Some(5)).await;
         assert_eq!(result.events.len(), 1);
         assert_eq!(result.events[0].id, target_event.id);
+
+        // Query with unbounded limit None
+        let result_unbounded = handle.history_ascending(&filter, None, None).await;
+        assert_eq!(result_unbounded.events.len(), 1);
+        assert_eq!(result_unbounded.events[0].id, target_event.id);
     }
 }

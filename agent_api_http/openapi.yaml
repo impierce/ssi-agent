@@ -588,6 +588,13 @@ paths:
         required: false
         schema:
           type: string
+      - name: limit
+        in: query
+        description: Optional limit on historical events; defaults to unbounded
+        required: false
+        schema:
+          type: integer
+          minimum: 0
       - name: since
         in: query
         description: Filter events after RFC 3339 timestamp

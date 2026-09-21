@@ -220,7 +220,9 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
-                event_bus.attach_source(agent_store::MongoEventSource::new(builder.client.clone()));
+                let mongo_source = agent_store::MongoEventSource::new(builder.client.clone());
+                event_bus.attach_source(mongo_source.clone());
+                event_bus.set_history_reader(Arc::new(mongo_source));
 
                 let issuance_state = Arc::new(
                     agent_store::issuance_state(&builder, issuance_services, &event_bus, issuance_event_publishers)

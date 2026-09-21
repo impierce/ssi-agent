@@ -40,6 +40,7 @@ pub fn router(event_bus: EventBusHandle) -> Router {
         ("types" = Option<String>, Query, description = "Comma-separated list of CloudEvent types to filter"),
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),
         ("subject" = Option<String>, Query, description = "Optional aggregate/subject ID filter"),
+        ("limit" = Option<usize>, Query, description = "Optional limit on historical events; defaults to unbounded"),
         ("since" = Option<String>, Query, description = "Filter events after RFC 3339 timestamp"),
         ("until" = Option<String>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
@@ -55,20 +56,22 @@ pub async fn events_sse_handler(
 ) -> Sse<impl Stream<Item = Result<sse::Event, axum::Error>>> {
     let sources: Vec<String> = params
         .sources
-        .map(|s| {
-            s.split(',')
+        .map(|sources_str| {
+            sources_str
+                .split(',')
                 .map(|item| item.trim().to_string())
-                .filter(|i| !i.is_empty())
+                .filter(|trimmed| !trimmed.is_empty())
                 .collect()
         })
         .unwrap_or_default();
 
     let event_types: Vec<String> = params
         .types
-        .map(|s| {
-            s.split(',')
+        .map(|types_str| {
+            types_str
+                .split(',')
                 .map(|item| item.trim().to_string())
-                .filter(|i| !i.is_empty())
+                .filter(|trimmed| !trimmed.is_empty())
                 .collect()
         })
         .unwrap_or_default();
@@ -83,16 +86,18 @@ pub async fn events_sse_handler(
 
     let last_event_id = headers
         .get("last-event-id")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
+        .and_then(|header_value| header_value.to_str().ok())
+        .map(|id_str| id_str.to_string());
 
-    let limit = params.limit.unwrap_or(50).min(500);
+    let limit = params.limit;
 
     // 1. Subscribe to live events FIRST to avoid missing published events in a race condition.
     let live_subscription = event_bus.subscribe(filter.clone());
 
     // 2. Query historical catch-up events.
-    let catchup_result = event_bus.history_ascending(&filter, last_event_id.as_deref(), limit);
+    let catchup_result = event_bus
+        .history_ascending(&filter, last_event_id.as_deref(), limit)
+        .await;
 
     let catchup_events = catchup_result.events;
     let mut seen_ids = std::collections::HashSet::new();
@@ -122,7 +127,7 @@ pub async fn events_sse_handler(
     let live_stream = live_subscription
         .filter(move |result| {
             let is_duplicate = match result {
-                Ok(cloud_event) => !seen_ids.insert(cloud_event.id.clone()),
+                Ok(cloud_event) => seen_ids.remove(&cloud_event.id),
                 Err(_) => false,
             };
             async move { !is_duplicate }
@@ -138,9 +143,9 @@ pub async fn events_sse_handler(
                         .data(format!("Serialization error: {}", err))),
                 }
             }
-            Err(EventBusError::Lagged(n)) => Ok(sse::Event::default()
+            Err(EventBusError::Lagged(dropped_count)) => Ok(sse::Event::default()
                 .event("lagged")
-                .data(json!({ "dropped": n }).to_string())),
+                .data(json!({ "dropped": dropped_count }).to_string())),
             Err(err) => Ok(sse::Event::default()
                 .event("error")
                 .data(format!("Event bus error: {}", err))),
@@ -196,11 +201,11 @@ mod tests {
         .await
         .ok()
         .flatten()
-        .and_then(|f| f.ok())
-        .and_then(|f| f.into_data().ok());
+        .and_then(|frame_res| frame_res.ok())
+        .and_then(|frame| frame.into_data().ok());
 
         let body_str = frame
-            .map(|b| String::from_utf8(b.to_vec()).unwrap())
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
             .unwrap_or_default();
 
         assert!(body_str.contains(&cred_event.id));
@@ -248,11 +253,11 @@ mod tests {
         .await
         .ok()
         .flatten()
-        .and_then(|f| f.ok())
-        .and_then(|f| f.into_data().ok());
+        .and_then(|frame_res| frame_res.ok())
+        .and_then(|frame| frame.into_data().ok());
 
         let body_str = frame
-            .map(|b| String::from_utf8(b.to_vec()).unwrap())
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
             .unwrap_or_default();
 
         assert!(body_str.contains(&event2.id));
@@ -298,13 +303,78 @@ mod tests {
         .await
         .ok()
         .flatten()
-        .and_then(|f| f.ok())
-        .and_then(|f| f.into_data().ok());
+        .and_then(|frame_res| frame_res.ok())
+        .and_then(|frame| frame.into_data().ok());
 
         let body_str = frame
-            .map(|b| String::from_utf8(b.to_vec()).unwrap())
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
             .unwrap_or_default();
 
         assert!(body_str.contains(&event.id));
+    }
+
+    #[tokio::test]
+    async fn test_events_sse_deduplication_between_catchup_and_live() {
+        let bus_handle = EventBusHandle::new(16);
+        let event1 = shared_kernel::event_bus::build_cloud_event(
+            "credential",
+            "cred-1",
+            1,
+            "CredentialSigned",
+            serde_json::json!({}),
+            None,
+        );
+        bus_handle.publish(event1.clone());
+
+        let app = router(bus_handle.clone());
+        let req = axum::http::Request::builder()
+            .uri("/v0/events?sources=credential")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let response = tower::ServiceExt::oneshot(app, req).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let event2 = shared_kernel::event_bus::build_cloud_event(
+            "credential",
+            "cred-1",
+            2,
+            "CredentialRevoked",
+            serde_json::json!({}),
+            None,
+        );
+        bus_handle.publish(event2.clone());
+
+        let mut body = response.into_body();
+
+        let frame1 = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            http_body_util::BodyExt::frame(&mut body),
+        )
+        .await
+        .ok()
+        .flatten()
+        .and_then(|frame_res| frame_res.ok())
+        .and_then(|frame| frame.into_data().ok());
+
+        let body1 = frame1
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
+            .unwrap_or_default();
+        assert!(body1.contains(&event1.id));
+
+        let frame2 = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            http_body_util::BodyExt::frame(&mut body),
+        )
+        .await
+        .ok()
+        .flatten()
+        .and_then(|frame_res| frame_res.ok())
+        .and_then(|frame| frame.into_data().ok());
+
+        let body2 = frame2
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
+            .unwrap_or_default();
+        assert!(body2.contains(&event2.id));
     }
 }
