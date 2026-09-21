@@ -99,16 +99,7 @@ where
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(events_state.map(v0::events::router).unwrap_or_default())
-        .merge(public::router(library_state));
-
-    let app = if application_base_path == "/" {
-        app
-    } else {
-        Router::new().nest(application_base_path.trim_end_matches('/'), app)
-    };
-    app.merge(well_known)
-        .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
+        .merge(public::router(library_state))
         // Trace layers
         .layer(
             ServiceBuilder::new()
@@ -142,6 +133,16 @@ where
                 )
                 .layer(middleware::from_fn(log_request_body)),
         )
+        // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
+        .merge(events_state.map(v0::events::router).unwrap_or_default());
+
+    let app = if application_base_path == "/" {
+        app
+    } else {
+        Router::new().nest(application_base_path.trim_end_matches('/'), app)
+    };
+    app.merge(well_known)
+        .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
 }
 
 // This middleware logs the request body before passing it on.
@@ -424,5 +425,72 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
 
         assert_eq!(body.as_ref(), b"anonymous");
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn sse_response_body_chunks_are_not_logged_by_tracing_layer() {
+        let bus_handle = shared_kernel::event_bus::EventBusHandle::new(16);
+        let events_state = Arc::new(v0::events::EventsState::from(bus_handle.clone()));
+        bus_handle.publish(shared_kernel::event_bus::build_cloud_event(
+            "test",
+            "test-1",
+            1,
+            "TestEvent",
+            serde_json::json!({"secret": "sensitive-data"}),
+            None,
+        ));
+
+        let app = app_with_base_path(
+            ApiState {
+                events_state: Some(events_state),
+                ..Default::default()
+            },
+            Arc::new(NoActorExtractor),
+            "/",
+        );
+
+        let response = tower::ServiceExt::oneshot(
+            app,
+            Request::builder()
+                .uri("/v0/events?limit=1")
+                .header("accept", "text/event-stream")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("content-type").unwrap(), "text/event-stream");
+
+        let mut body = response.into_body();
+        let frame = http_body_util::BodyExt::frame(&mut body).await;
+        assert!(frame.is_some());
+
+        // Verify that absolutely nothing was logged for /events
+        assert!(!logs_contain("Received request"));
+        assert!(!logs_contain("Returning"));
+        assert!(!logs_contain("Response Body:"));
+        assert!(!logs_contain("sensitive-data"));
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn non_events_requests_are_logged_by_tracing_layer() {
+        let app = app_with_base_path(ApiState::default(), Arc::new(NoActorExtractor), "/");
+
+        let _response = tower::ServiceExt::oneshot(
+            app,
+            Request::builder()
+                .uri("/public/sponsoring-configuration")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert!(logs_contain("Received request"));
+        assert!(logs_contain("Returning"));
     }
 }

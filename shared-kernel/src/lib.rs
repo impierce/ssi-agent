@@ -27,6 +27,7 @@ pub use convert_case;
 pub use cqrs_es;
 pub use event_bus::{
     build_cloud_event, BusEventStream, CloudEvent, EventBus, EventBusError, EventBusHandle, EventFilter, EventSource,
+    EventSourceStream, Position, SourceEvent, SubscribePosition,
 };
 pub use slug::slugify;
 pub use strum;

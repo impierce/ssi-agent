@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use mongo_es::Client;
 use mongodb::bson::{self, doc};
 use shared_kernel::event_bus::{
-    build_cloud_event, BusEventStream, CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource,
-    HistoryAscendingResult, SubscribePosition,
+    build_cloud_event, CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource, EventSourceStream,
+    HistoryAscendingResult, Position, SourceEvent, SubscribePosition,
 };
 use tokio_stream::StreamExt;
 
@@ -50,7 +50,7 @@ impl EventSource for MongoEventSource {
     /// Opens a change-stream listener on the MongoDB `events` collection.
     ///
     /// Supports resuming from a specific position when `SubscribePosition::From` contains a valid serialized BSON [`ResumeToken`].
-    async fn open(&self, from: SubscribePosition) -> Result<BusEventStream, EventBusError> {
+    async fn open(&self, from: SubscribePosition) -> Result<EventSourceStream, EventBusError> {
         let database = self
             .client
             .default_database()
@@ -80,8 +80,10 @@ impl EventSource for MongoEventSource {
                     return None;
                 };
 
+                let position = bson::to_vec(&change.id).ok().map(Position);
+
                 match document_to_cloud_event(&document) {
-                    Some(cloud_event) => Some(Ok(cloud_event)),
+                    Some(cloud_event) => Some(Ok(SourceEvent::new(cloud_event, position))),
                     None => {
                         tracing::warn!("Failed to convert change stream document to CloudEvent");
                         None
@@ -134,6 +136,10 @@ impl EventHistoryReader for MongoEventSource {
         }
 
         let mut events = Vec::new();
+
+        if limit == Some(0) {
+            return Ok(HistoryAscendingResult { events, gap_detected });
+        }
 
         if let Some(target_id) = target_object_id {
             let query = doc! { "_id": { "$gt": target_id } };

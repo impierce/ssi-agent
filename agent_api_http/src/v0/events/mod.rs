@@ -73,7 +73,7 @@ pub fn router(state: Arc<EventsState>) -> Router {
         ("types" = Option<String>, Query, description = "Comma-separated list of CloudEvent types to filter"),
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),
         ("subject" = Option<String>, Query, description = "Optional aggregate/subject ID filter"),
-        ("limit" = Option<usize>, Query, description = "Optional limit on historical events; defaults to unbounded"),
+        ("limit" = Option<usize>, Query, description = "Optional limit on historical events; defaults to 100"),
         ("since" = Option<String>, Query, description = "Filter events after RFC 3339 timestamp"),
         ("until" = Option<String>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
@@ -139,7 +139,7 @@ pub async fn events_sse_handler(
         .and_then(|header_value| header_value.to_str().ok())
         .map(|id_str| id_str.to_string());
 
-    let limit = params.limit;
+    let limit = Some(params.limit.unwrap_or(100));
 
     // 1. Subscribe to live events FIRST to avoid missing published events in a race condition.
     let live_subscription = event_bus.subscribe(filter.clone());

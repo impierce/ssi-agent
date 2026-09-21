@@ -152,16 +152,31 @@ pub enum EventBusError {
     Closed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position(pub Vec<u8>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubscribePosition {
     Live,
     From(Position),
 }
 
+/// An item yielded by an [`EventSourceStream`], containing the [`CloudEvent`] and an optional [`Position`] for resuming.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceEvent {
+    pub event: CloudEvent,
+    pub position: Option<Position>,
+}
+
+impl SourceEvent {
+    #[must_use]
+    pub fn new(event: CloudEvent, position: Option<Position>) -> Self {
+        Self { event, position }
+    }
+}
+
 pub type BusEventStream = Pin<Box<dyn Stream<Item = Result<CloudEvent, EventBusError>> + Send>>;
+pub type EventSourceStream = Pin<Box<dyn Stream<Item = Result<SourceEvent, EventBusError>> + Send>>;
 
 /// Port for subscribing to the internal event bus.
 pub trait EventBus: Send + Sync {
@@ -171,7 +186,7 @@ pub trait EventBus: Send + Sync {
 /// SPI for event source adapters (e.g., `MongoDB` Change Streams).
 #[async_trait]
 pub trait EventSource: Send + Sync + 'static {
-    async fn open(&self, from: SubscribePosition) -> Result<BusEventStream, EventBusError>;
+    async fn open(&self, from: SubscribePosition) -> Result<EventSourceStream, EventBusError>;
 }
 
 /// SPI for reading historical events from persistent storage.
@@ -354,14 +369,24 @@ impl EventBusHandle {
         let bus = self.clone();
         tokio::spawn(async move {
             let mut backoff_secs = 1u64;
+            let mut last_position: Option<Position> = None;
             loop {
-                tracing::info!("Opening EventSource stream...");
-                match source.open(SubscribePosition::Live).await {
+                let position = match last_position.clone() {
+                    Some(pos) => SubscribePosition::From(pos),
+                    None => SubscribePosition::Live,
+                };
+                tracing::info!("Opening EventSource stream from position: {:?}", position);
+                match source.open(position).await {
                     Ok(mut stream) => {
                         backoff_secs = 1;
                         while let Some(item) = stream.next().await {
                             match item {
-                                Ok(event) => bus.publish(event),
+                                Ok(source_event) => {
+                                    if let Some(pos) = source_event.position {
+                                        last_position = Some(pos);
+                                    }
+                                    bus.publish(source_event.event);
+                                }
                                 Err(err) => {
                                     tracing::warn!("EventSource stream item error: {:?}", err);
                                 }
@@ -430,13 +455,20 @@ where
                 }
             };
 
+            let occurred_at = envelope
+                .metadata
+                .get("timestamp")
+                .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
+                .map(|datetime| datetime.with_timezone(&chrono::Utc))
+                .or_else(|| Some(chrono::Utc::now()));
+
             let cloud_event = build_cloud_event(
                 A::TYPE,
                 aggregate_id,
                 envelope.sequence,
                 &envelope.payload.event_type(),
                 payload,
-                Some(chrono::Utc::now()),
+                occurred_at,
             );
 
             self.publish(cloud_event);
@@ -604,5 +636,117 @@ mod tests {
         let result_unbounded = handle.history_ascending(&filter, None, None).await;
         assert_eq!(result_unbounded.events.len(), 1);
         assert_eq!(result_unbounded.events[0].id, target_event.id);
+    }
+
+    #[tokio::test]
+    async fn test_attach_source_resumes_from_last_position() {
+        struct MockEventSource {
+            attempts: Arc<std::sync::atomic::AtomicUsize>,
+        }
+
+        #[async_trait]
+        impl EventSource for MockEventSource {
+            async fn open(&self, from: SubscribePosition) -> Result<EventSourceStream, EventBusError> {
+                let attempt = self.attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if attempt == 0 {
+                    assert_eq!(from, SubscribePosition::Live);
+                    let event = build_cloud_event("test", "1", 1, "Created", serde_json::json!({}), None);
+                    let source_event = SourceEvent::new(event, Some(Position(vec![42])));
+                    let stream = futures::stream::iter(vec![Ok(source_event)]);
+                    Ok(Box::pin(stream))
+                } else {
+                    assert_eq!(from, SubscribePosition::From(Position(vec![42])));
+                    let event = build_cloud_event("test", "1", 2, "Updated", serde_json::json!({}), None);
+                    let source_event = SourceEvent::new(event, Some(Position(vec![43])));
+                    let stream = futures::stream::iter(vec![Ok(source_event)]);
+                    Ok(Box::pin(stream))
+                }
+            }
+        }
+
+        let handle = EventBusHandle::new(16);
+        let mut subscriber = handle.subscribe(EventFilter::default());
+
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let join_handle = handle.attach_source(MockEventSource {
+            attempts: attempts.clone(),
+        });
+
+        let first = tokio::time::timeout(std::time::Duration::from_millis(500), subscriber.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.id, "test:1:1");
+
+        // After stream 1 ends, reconnect should pass From(Position(vec![42]))
+        let second = tokio::time::timeout(std::time::Duration::from_millis(2000), subscriber.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.id, "test:1:2");
+
+        join_handle.abort();
+    }
+
+    #[derive(Default, Debug, Serialize, Deserialize)]
+    struct MockAggregate;
+
+    #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+    enum MockEvent {
+        Created,
+    }
+
+    impl DomainEvent for MockEvent {
+        fn event_type(&self) -> String {
+            "Created".to_string()
+        }
+        fn event_version(&self) -> String {
+            "1.0".to_string()
+        }
+    }
+
+    impl Aggregate for MockAggregate {
+        const TYPE: &'static str = "Mock";
+        type Command = ();
+        type Event = MockEvent;
+        type Error = std::convert::Infallible;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            _: Self::Command,
+            _: &Self::Services,
+            _: &cqrs_es::event_sink::EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+        fn apply(&mut self, _: Self::Event) {}
+    }
+
+    #[tokio::test]
+    async fn test_query_dispatch_preserves_metadata_timestamp() {
+        let handle = EventBusHandle::new(16);
+        let mut subscriber = handle.subscribe(EventFilter::default());
+
+        let expected_time = DateTime::parse_from_rfc3339("2026-01-15T10:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("timestamp".to_string(), "2026-01-15T10:30:00Z".to_string());
+
+        let envelope = cqrs_es::EventEnvelope {
+            aggregate_id: "agg-1".to_string(),
+            sequence: 1,
+            payload: MockEvent::Created,
+            metadata,
+        };
+
+        Query::<MockAggregate>::dispatch(&handle, "agg-1", &[envelope]).await;
+
+        let received = subscriber.next().await.unwrap().unwrap();
+        assert_eq!(received.time, Some(expected_time));
     }
 }
