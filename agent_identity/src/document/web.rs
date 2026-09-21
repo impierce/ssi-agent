@@ -43,6 +43,9 @@ pub fn normalize_origin(input: &str) -> Result<Url, DocumentError> {
         .parse()
         .map_err(|_| DocumentError::InvalidOriginError(input.to_string()))?;
     validate_public_origin(&url)?;
+    if !matches!(url.scheme(), "https" | "http") {
+        return Err(DocumentError::InvalidOriginError(input.to_string()));
+    }
     Ok(url)
 }
 
@@ -106,6 +109,10 @@ mod tests {
         assert!(matches!(
             normalize_origin("data://text/plain,hello"),
             Err(DocumentError::OpaqueOriginError)
+        ));
+        assert!(matches!(
+            normalize_origin("ftp://example.org"),
+            Err(DocumentError::InvalidOriginError(_))
         ));
     }
 }

@@ -1,7 +1,7 @@
 # ADR 0005: Require Explicit Authorization to Overwrite the Deployment `did:web`
 
-**Status**: Accepted  
-**Date**: 2026-09-09  
+**Status**: Accepted
+**Date**: 2026-09-09
 **Context**: Stable deployment identity and runtime Domain Linkage management
 
 ---

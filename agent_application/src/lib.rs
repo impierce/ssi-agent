@@ -104,7 +104,11 @@ pub async fn run() -> io::Result<()> {
 
 pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     agent_shared::config::warn_deprecated_settings();
-    let identity_services = Arc::new(IdentityServices::new(subject.clone()));
+    let identity_services = Arc::new(IdentityServices::new(
+        subject.clone(),
+        config().public_url.clone(),
+        config().iota_sponsoring_service_url.is_some(),
+    ));
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
     let holder_services = Arc::new(HolderServices::new(subject.clone()));

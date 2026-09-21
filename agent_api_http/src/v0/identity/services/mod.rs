@@ -224,8 +224,11 @@ mod tests {
             .into();
             let clock = Arc::new(AtomicI64::new(Timestamp::now_utc().to_unix()));
             let cname = Arc::new(StubCnameResolver::default());
-            let mut services = IdentityServices::new(Arc::new(Subject::test_subject().await));
-            services.public_url = configuration.public_url.clone();
+            let mut services = IdentityServices::new(
+                Arc::new(Subject::test_subject().await),
+                configuration.public_url.clone(),
+                configuration.iota_sponsoring_service_url.is_some(),
+            );
             services.cname_resolver = cname.clone();
             services.linkage_clock = {
                 let clock = clock.clone();
@@ -546,6 +549,26 @@ mod tests {
         let original = fixture.did().await;
         let mut configuration = fixture.configuration.clone();
         configuration.public_url = "https://new.example.org/".parse().unwrap();
+
+        let error = initialize_documents(&fixture.state, &configuration).await.unwrap_err();
+
+        assert!(error.to_string().contains("did:web:example.org"));
+        assert!(error.to_string().contains("new.example.org"));
+        assert_eq!(fixture.did().await, original);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn disabling_did_web_does_not_bypass_drift_protection() {
+        let fixture = Fixture::new().await;
+        let original = fixture.did().await;
+        let mut configuration = fixture.configuration.clone();
+        configuration.public_url = "https://new.example.org/".parse().unwrap();
+        configuration
+            .did_methods
+            .get_mut(&SupportedDidMethod::Web)
+            .unwrap()
+            .enabled = false;
 
         let error = initialize_documents(&fixture.state, &configuration).await.unwrap_err();
 
@@ -932,7 +955,12 @@ mod tests {
     async fn linking_rejects_unusable_origins() {
         let fixture = Fixture::new().await;
 
-        for origin in ["https://127.0.0.1", "not a domain!!", "data:text/plain,hello"] {
+        for origin in [
+            "https://127.0.0.1",
+            "not a domain!!",
+            "data:text/plain,hello",
+            "ftp://example.org",
+        ] {
             fixture.add_linked_domains(&[origin], 400).await;
         }
         // One bad entry rejects the whole request, rather than linking the good ones.

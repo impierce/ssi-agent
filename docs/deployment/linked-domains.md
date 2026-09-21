@@ -148,6 +148,12 @@ external verifier would — proving DNS, HTTPS and the `/.well-known/` hosting a
 and checks it against the DIDs it linked to *that* origin. Alongside it, the origin's `CNAME` chain is
 resolved with caching disabled, so a record edited moments ago is seen immediately.
 
+Outbound verification is restricted to HTTPS origins that resolve exclusively to globally routable
+addresses. UniCore pins the vetted DNS results for the request, does not follow redirects, and limits
+the response size. This prevents linked-domain input from being used to reach private, loopback,
+link-local, or otherwise sensitive services. Local HTTP is permitted only in builds using the
+`allow-localhost` development feature.
+
 `valid` reflects the linkage check, not the DNS check. A correctly served domain therefore verifies
 even when `dns.points_here` is `false`: an apex domain **cannot** have a `CNAME` record and must use a
 provider's `ALIAS`/`ANAME` or CNAME-flattening instead. The DNS result is reported because it is

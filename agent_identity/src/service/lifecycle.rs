@@ -53,12 +53,13 @@ pub async fn execute(
     execute_locked(state, command).await
 }
 
-fn can_link(document: &Document) -> bool {
+fn can_link(document: &Document, iota_sponsoring_enabled: bool) -> bool {
     document.status != Status::Disabled
         && document.did_method.is_some_and(|method| method.supports_update())
-        && document.iota_metadata.as_ref().is_none_or(|metadata| {
-            metadata.is_funded || agent_shared::config::config().iota_sponsoring_service_url.is_some()
-        })
+        && document
+            .iota_metadata
+            .as_ref()
+            .is_none_or(|metadata| metadata.is_funded || iota_sponsoring_enabled)
 }
 
 async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> Result<(), ServiceManagementError> {
@@ -74,7 +75,7 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
         } => {
             *verification_methods = documents
                 .values()
-                .filter(|document| can_link(document))
+                .filter(|document| can_link(document, state.services.iota_sponsoring_enabled))
                 .filter_map(|document| document.document.as_ref())
                 .flat_map(|document| document.methods(None).into_iter().cloned())
                 .collect();
@@ -110,7 +111,7 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
                     service_id: service.service_id.clone(),
                 }
             } else {
-                if !can_link(document) {
+                if !can_link(document, state.services.iota_sponsoring_enabled) {
                     continue;
                 }
                 let mut entry = service.service.clone().expect("active service has an entry");
@@ -224,7 +225,7 @@ pub async fn verify(
                 vec!["no Domain Linkage Credential was issued for this origin".to_string()],
             )
         } else {
-            match state.services.fetch_linked_dids(&origin).await {
+            match state.services.fetch_linked_dids_strict(&origin).await {
                 Ok(actual) => {
                     let problems: Vec<String> = expected_dids
                         .iter()
@@ -298,7 +299,10 @@ pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
         .await?
         .is_some_and(|service| service.needs_renewal((state.services.linkage_clock)()))
     {
-        let eligible_documents = query_all_documents(state, |(_, document)| can_link(document)).await?;
+        let eligible_documents = query_all_documents(state, |(_, document)| {
+            can_link(document, state.services.iota_sponsoring_enabled)
+        })
+        .await?;
         if eligible_documents.is_empty() {
             warn!("Linked domains need renewal, but no eligible signing DID is enabled");
         } else {

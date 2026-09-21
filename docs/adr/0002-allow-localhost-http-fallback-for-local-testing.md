@@ -8,7 +8,7 @@
 
 ## Context
 
-When testing identity services locally, protocols such as DID Configuration and OIDC specifically require the use of HTTPS for security reasons. Locally there is also typically nothing published to fetch, and `DomainLinkageConfiguration::from_json_value` rejects a configuration whose `linked_dids` list is empty. 
+When testing identity services locally, protocols such as DID Configuration and OIDC specifically require the use of HTTPS for security reasons. Locally there is also typically nothing published to fetch, and `DomainLinkageConfiguration::from_json_value` rejects a configuration whose `linked_dids` list is empty.
 
 However, during local development and automated E2E testing, running a full TLS server stack and managing certificates is burdensome. We needed a simple way to boot the application locally on HTTP (`http://localhost`) and still have tests run without failing due to strict HTTPS checks.
 

@@ -389,30 +389,22 @@ pub async fn initialize_documents(
     let all_documents = query_all_documents(state, |_| true).await?;
 
     // Check identity drift before dispatching any document mutations.
-    let expected = if configuration
-        .did_methods
-        .get(&SupportedDidMethod::Web)
-        .is_some_and(|options| options.enabled)
-    {
-        Some(crate::document::web::did_web(&configuration.public_url)?)
-    } else {
-        None
-    };
+    let persisted_documents: Vec<_> = all_documents
+        .values()
+        .filter(|document| document.did_method == Some(SupportedDidMethod::Web))
+        .filter_map(|document| {
+            document
+                .document
+                .as_ref()
+                .map(|persisted| (document.document_id.clone(), persisted.id().clone()))
+        })
+        .collect();
     let mut did_web_overwritten = false;
-    if let Some(expected) = &expected {
-        let persisted_documents: Vec<_> = all_documents
-            .values()
-            .filter(|document| document.did_method == Some(SupportedDidMethod::Web))
-            .filter_map(|document| {
-                document
-                    .document
-                    .as_ref()
-                    .map(|persisted| (document.document_id.clone(), persisted.id().clone()))
-            })
-            .collect();
+    if !persisted_documents.is_empty() {
+        let expected = crate::document::web::did_web(&configuration.public_url)?;
         let drifted_documents: Vec<_> = persisted_documents
             .iter()
-            .filter(|(_, persisted)| persisted != expected)
+            .filter(|(_, persisted)| persisted != &expected)
             .cloned()
             .collect();
 
@@ -461,7 +453,7 @@ pub async fn initialize_documents(
                 .await?;
             }
             did_web_overwritten = true;
-        } else if !persisted_documents.is_empty() {
+        } else {
             if let Some(previous_did) = &configuration.overwrite_previous_did_web {
                 warn!(
                     overwrite_previous_did_web = previous_did,
