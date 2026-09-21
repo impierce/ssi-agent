@@ -383,7 +383,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             issuance_state: Some(issuance_state),
             holder_state: Some(holder_state),
             verification_state: Some(verification_state),
-            event_bus: Some(event_bus),
+            events_state: Some(Arc::new(agent_api_http::v0::events::EventsState::from(event_bus))),
         },
         event_verification,
         readiness,

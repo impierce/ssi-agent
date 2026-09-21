@@ -13,6 +13,39 @@ use serde_json::json;
 use shared_kernel::event_bus::{EventBus, EventBusError, EventBusHandle, EventFilter};
 use std::time::Duration;
 
+use crate::error::IntoApiErrorExt;
+use crate::extractors::RequestActor;
+use http_api_problem::ApiError;
+use shared_kernel::authorization::{
+    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest,
+};
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct EventsState {
+    pub event_bus: EventBusHandle,
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
+}
+
+impl EventsState {
+    #[must_use]
+    pub fn new(event_bus: EventBusHandle, authorization_checker: Arc<dyn AuthorizationChecker>) -> Self {
+        Self {
+            event_bus,
+            authorization_checker,
+        }
+    }
+}
+
+impl From<EventBusHandle> for EventsState {
+    fn from(event_bus: EventBusHandle) -> Self {
+        Self {
+            event_bus,
+            authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct EventQueryParams {
     pub types: Option<String>,
@@ -23,12 +56,12 @@ pub struct EventQueryParams {
     pub until: Option<DateTime<Utc>>,
 }
 
-pub fn router(event_bus: EventBusHandle) -> Router {
+pub fn router(state: Arc<EventsState>) -> Router {
     Router::new().nest(
         crate::API_VERSION,
         Router::new()
             .route("/events", get(events_sse_handler))
-            .with_state(event_bus),
+            .with_state(state),
     )
 }
 
@@ -45,15 +78,32 @@ pub fn router(event_bus: EventBusHandle) -> Router {
         ("until" = Option<String>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
     responses(
-        (status = 200, description = "Server-Sent Events stream of CloudEvents", body = shared_kernel::event_bus::CloudEvent, content_type = "text/event-stream")
+        (status = 200, description = "Server-Sent Events stream of CloudEvents", body = shared_kernel::event_bus::CloudEvent, content_type = "text/event-stream"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
     ),
     tag = "Events"
 )]
 pub async fn events_sse_handler(
-    State(event_bus): State<EventBusHandle>,
+    State(state): State<Arc<EventsState>>,
+    RequestActor(actor): RequestActor,
     headers: axum::http::HeaderMap,
     Query(params): Query<EventQueryParams>,
-) -> Sse<impl Stream<Item = Result<sse::Event, axum::Error>>> {
+) -> Result<Sse<impl Stream<Item = Result<sse::Event, axum::Error>>>, ApiError> {
+    let auth_request = AuthorizationRequest {
+        actor,
+        operation: AuthorizationOperation::Query {
+            query_type: "events",
+        },
+    };
+
+    state
+        .authorization_checker
+        .is_authorized(&auth_request)
+        .await
+        .map_err(|error| error.into_api_error())?;
+
+    let event_bus = &state.event_bus;
     let sources: Vec<String> = params
         .sources
         .map(|sources_str| {
@@ -153,7 +203,7 @@ pub async fn events_sse_handler(
 
     let sse_stream = catchup_stream.chain(live_stream);
 
-    Sse::new(sse_stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 
 #[cfg(test)]
@@ -182,7 +232,7 @@ mod tests {
         bus_handle.publish(cred_event.clone());
         bus_handle.publish(other_event.clone());
 
-        let app = router(bus_handle.clone());
+        let app = router(Arc::new(bus_handle.clone().into()));
 
         let req = axum::http::Request::builder()
             .uri("/v0/events?sources=credential")
@@ -234,7 +284,7 @@ mod tests {
         bus_handle.publish(event1.clone());
         bus_handle.publish(event2.clone());
 
-        let app = router(bus_handle.clone());
+        let app = router(Arc::new(bus_handle.clone().into()));
 
         let req = axum::http::Request::builder()
             .uri("/v0/events?sources=credential")
@@ -279,7 +329,7 @@ mod tests {
         );
         bus_handle.publish(event.clone());
 
-        let app = router(bus_handle.clone());
+        let app = router(Arc::new(bus_handle.clone().into()));
 
         let past_time = (now - chrono::Duration::hours(1)).to_rfc3339();
         let uri = format!(
@@ -326,7 +376,7 @@ mod tests {
         );
         bus_handle.publish(event1.clone());
 
-        let app = router(bus_handle.clone());
+        let app = router(Arc::new(bus_handle.clone().into()));
         let req = axum::http::Request::builder()
             .uri("/v0/events?sources=credential")
             .body(axum::body::Body::empty())
@@ -376,5 +426,48 @@ mod tests {
             .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
             .unwrap_or_default();
         assert!(body2.contains(&event2.id));
+    }
+
+    #[tokio::test]
+    async fn test_events_sse_authorization() {
+        struct MockAuth;
+        #[async_trait::async_trait]
+        impl AuthorizationChecker for MockAuth {
+            async fn is_authorized(
+                &self,
+                request: &AuthorizationRequest,
+            ) -> Result<(), shared_kernel::authorization::AuthorizationError> {
+                if request.actor.is_none() {
+                    Err(shared_kernel::authorization::AuthorizationError::Unauthorized)
+                } else {
+                    Ok(())
+                }
+            }
+        }
+
+        let bus_handle = EventBusHandle::new(16);
+        let events_state = Arc::new(EventsState::new(bus_handle, Arc::new(MockAuth)));
+        let app = router(events_state);
+
+        // 1. Without actor -> 401 Unauthorized
+        let req = axum::http::Request::builder()
+            .uri("/v0/events")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+
+        // 2. With actor -> 200 OK
+        let mut req_with_actor = axum::http::Request::builder()
+            .uri("/v0/events")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        req_with_actor
+            .extensions_mut()
+            .insert(shared_kernel::authorization::Actor {
+                subject: "test-user".to_string(),
+            });
+        let response = tower::ServiceExt::oneshot(app, req_with_actor).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
     }
 }

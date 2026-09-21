@@ -250,7 +250,7 @@ mod tests {
             let app = crate::app_with_base_path(
                 crate::ApiState {
                     identity_state: Some(state.clone()),
-                    event_bus: Some(event_bus),
+                    events_state: Some(Arc::new(crate::v0::events::EventsState::from(event_bus))),
                     ..Default::default()
                 },
                 Arc::new(HeaderActor),

@@ -25,7 +25,6 @@ use http::HeaderMap;
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
 use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
-use shared_kernel::event_bus::EventBusHandle;
 use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -43,7 +42,7 @@ pub struct ApiState {
     pub issuance_state: Option<Arc<IssuanceState>>,
     pub holder_state: Option<Arc<HolderState>>,
     pub verification_state: Option<Arc<VerificationState>>,
-    pub event_bus: Option<EventBusHandle>,
+    pub events_state: Option<Arc<v0::events::EventsState>>,
 }
 
 /// Build the top-level API router.
@@ -68,7 +67,7 @@ pub(crate) fn app_with_base_path<E>(
         issuance_state,
         holder_state,
         verification_state,
-        event_bus,
+        events_state,
     }: ApiState,
     actor_extractor: Arc<E>,
     application_base_path: &str,
@@ -100,7 +99,7 @@ where
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(event_bus.map(v0::events::router).unwrap_or_default())
+        .merge(events_state.map(v0::events::router).unwrap_or_default())
         .merge(public::router(library_state));
 
     let app = if application_base_path == "/" {

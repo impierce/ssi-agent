@@ -671,6 +671,10 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/CloudEvent'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
   /v0/get-all-catalogs:
     get:
       tags:
