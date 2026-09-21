@@ -14,7 +14,7 @@ A decentralized identifier (DID) serves as a pointer to a corresponding DID Docu
 | **[did:web](https://w3c-ccg.github.io/did-method-web/)**                                  |     ✅      |      ✅      |     ✅     |      ✅      |
 | **[did:iota](https://wiki.iota.org/identity.rs/explanations/decentralized-identifiers/)** |     ✅      |      ✅      |     ✅     |      ✅      |
 
-✅ = Supported  
+✅ = Supported
 ❌ = Not recommended
 
 ### Self-contained DID Methods
@@ -75,8 +75,6 @@ did_methods:
     enabled: true
   did_web:
     enabled: true
-
-domain_linkage_enabled: true
 
 signing_algorithms_supported:
   es256:

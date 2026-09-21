@@ -93,19 +93,21 @@ impl CredentialTypeVersion {
 
 impl CredentialType {
     fn get_version(&self, data: &Value) -> Result<CredentialTypeVersion, JsonSchemaError> {
-        let context_array = serde_json::from_value::<Vec<String>>(data["@context"].clone())
-            .map_err(|e| JsonSchemaError::InvalidJsonData(e.to_string()))?;
+        let context_array = data["@context"]
+            .as_array()
+            .ok_or_else(|| JsonSchemaError::InvalidJsonData("`@context` is missing or not an array".to_string()))?;
 
         match self {
             CredentialType::OpenBadgeCredential => {
-                match context_array
-                    .get(1)
-                    .ok_or(JsonSchemaError::GetCredentialTypeError(
-                        "Invalid Credential Format: Second context element missing from OpenBadge Credential"
-                            .to_string(),
-                    ))?
-                    .as_str()
-                {
+                let second_context =
+                    context_array
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .ok_or(JsonSchemaError::GetCredentialTypeError(
+                            "Invalid Credential Format: Second context element missing from OpenBadge Credential"
+                                .to_string(),
+                        ))?;
+                match second_context {
                     context
                         if context.starts_with("https://purl.imsglobal.org/spec/ob/v3p0/context-")
                             && context.ends_with(".json") =>
@@ -119,14 +121,15 @@ impl CredentialType {
                 }
             }
             CredentialType::VerifiableCredential => {
-                match context_array
-                    .first()
-                    .ok_or(JsonSchemaError::GetCredentialTypeError(
+                let first_context =
+                    context_array
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .ok_or(JsonSchemaError::GetCredentialTypeError(
                         "Invalid Credential Format: Required first context element missing from Verifiable Credential"
                             .to_string(),
-                    ))?
-                    .as_str()
-                {
+                    ))?;
+                match first_context {
                     "https://www.w3.org/2018/credentials/v1" => Ok(CredentialTypeVersion::VerifiableCredentialV1_1),
                     "https://www.w3.org/ns/credentials/v2" => Ok(CredentialTypeVersion::VerifiableCredentialV2),
                     _ => Err(JsonSchemaError::GetCredentialTypeError(
@@ -243,30 +246,34 @@ mod tests {
     lazy_static! {
         static ref EXAMPLE_BASIC_OB3: Value = json!({
             "@context": [
-              "https://www.w3.org/ns/credentials/v2",
-              "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+                "https://www.w3.org/ns/credentials/v2",
+                "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
             ],
             "id": "http://example.com/credentials/3527",
             "type": ["VerifiableCredential", "AchievementCredential"],
             "issuer": {
-              "id": "https://example.com/issuers/876543",
-              "type": ["Profile"],
-              "name": "Example Corp"
+                "id": "https://example.com/issuers/876543",
+                "type": ["Profile"],
+                "name": "Example Corp"
             },
             "validFrom": "2010-01-01T00:00:00Z",
             "name": "Teamwork Badge",
             "credentialSubject": {
-              "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
-              "type": ["AchievementSubject"],
-              "achievement": {
-                        "id": "https://example.com/achievements/21st-century-skills/teamwork",
-                        "type": ["Achievement"],
-                        "criteria": {
-                            "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
-                        },
-                        "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
-                        "name": "Teamwork"
-                    }
+                "id": "did:example:ebfeb1f712ebc6f1c276e12ec21",
+                "type": ["AchievementSubject"],
+                "activityStartDate": "2020-01-01T00:00:00Z",
+                "activityEndDate": "2020-06-01T00:00:00Z",
+                "achievement": {
+                    "id": "https://example.com/achievements/21st-century-skills/teamwork",
+                    "type": ["Achievement"],
+                    "criteria": {
+                        "narrative": "Team members are nominated for this badge by their peers and recognized upon review by Example Corp management."
+                    },
+                    "description": "This badge recognizes the development of the capacity to collaborate within a group environment.",
+                    "name": "Teamwork",
+                    "fieldOfStudy": "Business",
+                    "specialization": "Team Leadership"
+                }
             }
         });
         static ref EXAMPLE_BASIC_ELM_EDC: Value = json!({

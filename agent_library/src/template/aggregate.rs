@@ -87,6 +87,27 @@ impl Default for Expiration {
     }
 }
 
+// A rendering hint for a schema property, carrying type information that standard JSON Schema
+// keywords cannot express.
+//
+// This is metadata only: UniCore stores and returns it verbatim and never validates anything
+// against it. Marking a property as `country` does not make UniCore reject a non-string schema
+// or an issued value that is not a country code — keeping the hint, the schema and the values
+// consistent is the caller's responsibility.
+//
+// `country`: the property holds a country, expected to be a `string` carrying an ISO 3166-1
+// alpha-2 code (e.g. `"NL"`). Frontends can use this to render a flag or a country picker
+// instead of a plain text field.
+// `skill`: this hint tells the frontends to render a skill picker rather than a plain
+// text field. The skills themselves are stored as a JSON Schema `const` within the property;
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum FormFieldType {
+    Country,
+    Skill,
+}
+
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
@@ -97,6 +118,12 @@ pub struct PropertyAttribute {
     /// Defaults to `false`.
     #[serde(default)]
     pub non_removable: bool,
+    /// Allows the caller to store additional type information not supported by standard JSON Schema keywords.
+    /// This can be used by frontends to preserve field type information for visualizations.
+    /// Purely a rendering hint that UniCore stores as given and never validates against the
+    /// schema or the issued values.
+    #[serde(default)]
+    pub r#type: Option<FormFieldType>,
 }
 
 impl PropertyAttribute {
@@ -105,6 +132,7 @@ impl PropertyAttribute {
         Self {
             selectively_disclosable,
             non_removable,
+            r#type: None,
         }
     }
 
@@ -256,6 +284,7 @@ impl Aggregate for Template {
                             let attr = attrs.entry(key).or_insert(PropertyAttribute {
                                 selectively_disclosable: false,
                                 non_removable: false,
+                                r#type: None,
                             });
                             attr.non_removable = is_required;
                         }
@@ -313,6 +342,8 @@ impl Aggregate for Template {
             }
             UpdateDisplay { template_id, display } => {
                 ensure_template_editable(&self.status)?;
+
+                let display = default_empty_display_name(display, &self.title);
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -838,6 +869,13 @@ fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
     }
 }
 
+fn default_empty_display_name(mut display: Display, title: &str) -> Display {
+    if display.name.trim().is_empty() {
+        display.name = title.to_string();
+    }
+    display
+}
+
 fn ensure_template_editable(status: &Status) -> Result<(), TemplateError> {
     match status {
         Status::Draft | Status::Published => Ok(()),
@@ -1094,6 +1132,7 @@ pub mod test_utils {
             PropertyAttribute {
                 selectively_disclosable: true,
                 non_removable: false,
+                r#type: None,
             },
         );
         Some(config)

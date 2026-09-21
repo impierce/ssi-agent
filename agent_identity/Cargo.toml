@@ -18,12 +18,14 @@ cqrs-es.workspace = true
 derivative.workspace = true
 did-jwk-extern = { version = "0.1.1", package = "did-jwk" }
 did-key-extern = { version = "0.2.2", package = "did-method-key" }
+hickory-resolver.workspace = true
 identity_credential.workspace = true
 identity_core.workspace = true
 identity_did.workspace = true
 identity_document.workspace = true
 identity_storage.workspace = true
 identity_iota.workspace = true
+indexmap.workspace = true
 iota-sdk.workspace = true
 itertools = "0.14"
 jsonwebtoken.workspace = true

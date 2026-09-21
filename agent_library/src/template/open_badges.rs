@@ -102,6 +102,67 @@ fn ob_opinionated_required_by_path() -> &'static [(&'static str, &'static [&'sta
     ]
 }
 
+/// UniCore-opinionated synthetic `$def`s keyed by schema path, for object paths that OB 3.0
+/// itself leaves unvalidated.
+///
+/// `AchievementSubject` declares `"additionalProperties": true`, so a `profile` object is
+/// permitted on the subject root to carry the recipient's OB 3.0 `Profile` data - all other
+/// homes for the recipient's profile seemed unsuitable. No spec `$def` governs it, so instead
+/// of leaving its interior open, UniCore constrains it to exactly these four fields with enforced
+/// types: `givenName`/`familyName`/`email`/`dateOfBirth` are all strings, `email` carries
+/// `format: "email"` and `dateOfBirth` carries `format: "date"`.
+///
+/// Each entry is an exact pin, not a lower bound: a field whose def declares no `format` must not
+/// carry one either. A caller-supplied format on `givenName`/`familyName` is therefore rejected —
+/// UniCore decides what these fields mean, and an unvetted `format` would let callers constrain
+/// them in ways UniCore never agreed to (e.g. `format: "email"` on `givenName`).
+///
+/// This is the single source of truth for both the allowed property set (its presence adds
+/// `profile` to the subject root's allowed keys, see [`validate_ob_properties_recursive`]) and
+/// the interior name/type validation ([`validate_ob_opinionated_types`]).
+fn ob_opinionated_defs() -> &'static std::collections::HashMap<String, serde_json::Value> {
+    static DEFS: std::sync::OnceLock<std::collections::HashMap<String, serde_json::Value>> = std::sync::OnceLock::new();
+    DEFS.get_or_init(|| {
+        let mut defs = std::collections::HashMap::new();
+        defs.insert(
+            "profile".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "givenName": { "type": "string" },
+                    "familyName": { "type": "string" },
+                    "email": { "type": "string", "format": "email" },
+                    "dateOfBirth": { "type": "string", "format": "date" }
+                }
+            }),
+        );
+        defs
+    })
+}
+
+/// Splits a schema path into its parent path and final segment, e.g. `"profile"` → `("", "profile")`
+/// and `"profile/address"` → `("profile", "address")`.
+fn split_parent_path(path: &str) -> (&str, &str) {
+    path.rsplit_once("/").unwrap_or(("", path))
+}
+
+/// Navigates through `properties` segments to the schema node at `path`, i.e. the node that
+/// declares the `type` of the field itself, not its children. Returns `None` if the path is
+/// absent from the schema.
+fn node_at_path<'a>(schema: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    path.is_empty()
+        .then_some(schema)
+        .or_else(|| schema.pointer(&format!("/properties/{}", path.replace('/', "/properties/"))))
+}
+
+/// Navigates through `properties` segments to the properties map at `path`.
+fn props_at_path<'a>(
+    schema: &'a serde_json::Value,
+    path: &str,
+) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
+    node_at_path(schema, path)?.get("properties")?.as_object()
+}
+
 /// Returns the combined required child keys per schema path: OB 3.0 spec + UniCore extras.
 fn ob_combined_required_by_path() -> std::collections::HashMap<String, Vec<String>> {
     let mut combined = ob_spec_required_by_path();
@@ -219,7 +280,61 @@ pub(crate) fn validate_open_badges_schema_properties(schema: &serde_json::Value)
         None => return Ok(()), // Cannot validate without defs; pass through.
     };
     let root_def = defs.get("AchievementSubject");
-    validate_ob_properties_recursive(schema, "", root_def, defs)
+    validate_ob_properties_recursive(schema, "", root_def, defs)?;
+    validate_ob_opinionated_types(schema)
+}
+
+/// Reports whether a schema node matches the `type`/`format` a synthetic def declares.
+/// Both are compared exactly: a def that declares no `format` requires the node to have none
+/// either, so callers cannot attach a format UniCore has not sanctioned.
+fn schema_matches_def(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+    actual.get("type") == expected.get("type") && actual.get("format") == expected.get("format")
+}
+
+/// Enforces the declared `type`/`format` of UniCore-opinionated fields (e.g. the recipient
+/// `profile` object) that OB 3.0 leaves unvalidated. Each node that is present must match the
+/// synthetic def in [`ob_opinionated_defs`]; absent (optional) nodes and fields are skipped.
+///
+/// The node at an opinionated path is checked before its children, so a `profile` declared as
+/// anything other than an object is rejected rather than silently skipped for lack of children.
+fn validate_ob_opinionated_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    let mut mismatched: Vec<String> = Vec::new();
+
+    for (path, def) in ob_opinionated_defs() {
+        let Some(node) = node_at_path(schema, path) else {
+            continue; // Optional node — absence is fine; only the shape is constrained.
+        };
+
+        if !schema_matches_def(node, def) {
+            mismatched.push(format!("/{path}"));
+            continue; // Not the declared shape — its children are not meaningful to check.
+        }
+
+        let (Some(actual), Some(expected)) = (
+            node.get("properties").and_then(|p| p.as_object()),
+            def.get("properties").and_then(|p| p.as_object()),
+        ) else {
+            continue;
+        };
+
+        for (field, expected_schema) in expected {
+            let Some(actual_schema) = actual.get(field) else {
+                continue; // Optional field — absence is fine; only the shape is constrained.
+            };
+            if !schema_matches_def(actual_schema, expected_schema) {
+                mismatched.push(format!("/{path}/{field}"));
+            }
+        }
+    }
+
+    if !mismatched.is_empty() {
+        mismatched.sort();
+        return Err(TemplateError::InvalidOpenBadgesPropertyType(format!(
+            "The following fields do not match the required type/format: [{}]",
+            mismatched.join(", ")
+        )));
+    }
+    Ok(())
 }
 
 fn validate_ob_properties_recursive(
@@ -234,9 +349,20 @@ fn validate_ob_properties_recursive(
     };
 
     // Determine the set of allowed property names at this level from the current def.
-    let allowed: Option<std::collections::HashSet<&str>> = current_def
+    let mut allowed: Option<std::collections::HashSet<&str>> = current_def
         .and_then(|def| def.get("properties").and_then(|p| p.as_object()))
         .map(|props| props.keys().map(|k| k.as_str()).collect());
+
+    // Merge in UniCore's opinionated synthetic defs that live directly under this path
+    // (e.g. `profile` under the root), so they are permitted alongside the spec properties.
+    if let Some(ref mut allowed_set) = allowed {
+        for opinionated_path in ob_opinionated_defs().keys() {
+            let (parent, key) = split_parent_path(opinionated_path);
+            if parent == current_path {
+                allowed_set.insert(key);
+            }
+        }
+    }
 
     let mut disallowed: Vec<&str> = Vec::new();
 
@@ -253,13 +379,16 @@ fn validate_ob_properties_recursive(
             format!("{}/{}", current_path, key)
         };
 
-        // Resolve the child def by following the $ref in the current def's properties.
+        // Resolve the child def by following the $ref in the current def's properties, falling
+        // back to a UniCore-opinionated synthetic def (e.g. `profile`) where the spec has none.
+        // This restricts the interior of opinionated objects to their declared property set.
         let child_def = current_def
             .and_then(|def| def.get("properties").and_then(|p| p.as_object()))
             .and_then(|props| props.get(key.as_str()))
             .and_then(|prop_schema| prop_schema.get("$ref").and_then(|r| r.as_str()))
             .and_then(|r| r.strip_prefix("#/$defs/"))
-            .and_then(|def_name| defs.get(def_name));
+            .and_then(|def_name| defs.get(def_name))
+            .or_else(|| ob_opinionated_defs().get(&child_path));
 
         validate_ob_properties_recursive(value, &child_path, child_def, defs)?;
     }
@@ -281,18 +410,6 @@ fn validate_ob_properties_recursive(
 /// Required fields are derived from `ob_combined_required_by_path()` so this function
 /// automatically reflects any changes to the spec JSON file or the opinionated extras list.
 pub(crate) fn validate_open_badges_required_properties(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    // Navigate through `properties` segments to the properties map at `path`.
-    fn props_at_path<'a>(
-        schema: &'a serde_json::Value,
-        path: &str,
-    ) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
-        let mut current = schema.get("properties")?.as_object()?;
-        for seg in path.split('/').filter(|s| !s.is_empty()) {
-            current = current.get(seg)?.get("properties")?.as_object()?;
-        }
-        Some(current)
-    }
-
     let combined = ob_combined_required_by_path();
     let required_reachable = ob_required_reachable_paths(&combined);
     let leaf_paths: std::collections::HashSet<String> = open_badges_required_leaf_paths().into_iter().collect();

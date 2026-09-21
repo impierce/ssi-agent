@@ -48,10 +48,24 @@ pub struct TemplateDto {
 
 impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
+        // An empty `display.name` means no explicit display name has been set: fall back to the
+        // current title so the API always surfaces a usable name, without baking the title into
+        // the stored template (which would stop later title updates from being reflected here).
+        let display = value.display.map(|display| {
+            if display.name.trim().is_empty() {
+                Display {
+                    name: value.title.clone(),
+                    logo: display.logo,
+                }
+            } else {
+                display
+            }
+        });
+
         Self {
             template_id: value.template_id,
             title: value.title,
-            display: value.display,
+            display,
             data_model: value.data_model,
             holder_type: value.holder_type,
             modified_at: value.modified_at,
@@ -545,8 +559,14 @@ pub(crate) async fn get_templates(
             .map(TemplateDto::from)
             .collect();
 
-        // Sort by most recently modified first (RFC 3339 strings are lexicographically comparable).
-        filtered_templates.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        filtered_templates.sort_by(|left, right| {
+            crate::utils::compare_rfc3339_newest_first(
+                left.modified_at.as_deref(),
+                &left.template_id,
+                right.modified_at.as_deref(),
+                &right.template_id,
+            )
+        });
 
         filtered_templates
     })
@@ -886,6 +906,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_template_defaults_empty_display_name_to_title() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let response = create_template(
+            State(state),
+            RequestActor(None),
+            Json(CreateNewTemplateRequestBody {
+                title: "Created Template".to_string(),
+                display: Some(Display {
+                    name: String::new(),
+                    logo: None,
+                }),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: None,
+                r#type: vec![],
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(body["display"]["name"], "Created Template");
+    }
+
+    #[tokio::test]
     async fn update_template_requires_id() {
         let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
 
@@ -1006,6 +1061,109 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_template_defaults_empty_display_name_to_updated_title() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "template-to-update", Visibility::Private).await;
+
+        let response = update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: Some("Updated title".to_string()),
+                display: Some(Display {
+                    name: String::new(),
+                    logo: None,
+                }),
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.display.unwrap().name, "Updated title");
+    }
+
+    #[tokio::test]
+    async fn update_template_keeps_title_and_display_name_independent() {
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+        create_source_template(&state, "template-to-update", Visibility::Private).await;
+
+        update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: None,
+                display: Some(Display {
+                    name: "Custom display name".to_string(),
+                    logo: None,
+                }),
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.title, "Source Template");
+        assert_eq!(template.display.unwrap().name, "Custom display name");
+
+        update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: Some("Updated title".to_string()),
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.title, "Updated title");
+        assert_eq!(template.display.unwrap().name, "Custom display name");
+    }
+
+    #[tokio::test]
     async fn get_templates_filters_deleted_and_sorts_latest_first() {
         let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
         create_source_template_with_title(&state, "older-template", "Older Template", Visibility::Private).await;
@@ -1060,5 +1218,68 @@ mod tests {
             .into_response();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn schema_properties_attributes_type_survives_api_round_trip() {
+        // Verifies that `schemaPropertiesAttributes[*].type` (a caller-supplied rendering hint)
+        // is preserved end-to-end: create template → retrieve via get endpoint → field still present.
+        use agent_library::template::aggregate::FormFieldType;
+
+        let state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
+
+        let response = create_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(CreateNewTemplateRequestBody {
+                title: "Country Template".to_string(),
+                display: None,
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec![],
+                schema: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "nationality": { "type": "string" }
+                    }
+                })),
+                schema_properties_attributes: Some(HashMap::from([(
+                    "/nationality".to_string(),
+                    PropertyAttribute {
+                        selectively_disclosable: false,
+                        non_removable: false,
+                        r#type: Some(FormFieldType::Country),
+                    },
+                )])),
+                holder_authorization: Authorization::default(),
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let created: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let template_id = created["id"].as_str().unwrap().to_string();
+
+        let response = get_template(State(state), RequestActor(None), Path(template_id))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let retrieved: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(
+            retrieved["schemaPropertiesAttributes"]["/nationality"]["type"],
+            json!("country")
+        );
     }
 }

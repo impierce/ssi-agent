@@ -60,6 +60,10 @@ This error occurs when a template expiration value is malformed or unsupported.
 
 This error occurs when the template `type` content is invalid for the selected data model or constraints.
 
+## Invalid Open Badges Property Type
+
+This error occurs when an OpenBadges 3.0 template schema contains a property with an unsupported type.
+
 ## Invalid Status On Create
 
 This error occurs when a new template is created with a disallowed initial status.
@@ -76,16 +80,16 @@ This error occurs when `schemaPropertiesAttributes` contains duplicate keys afte
 
 This error occurs when a template in `Draft` stage is made public.
 
-# Catalogs 
+# Catalogs
 
-## Catalog Template Not Found 
+## Catalog Template Not Found
 
-A requested template was not found. 
+A requested template was not found.
 
 ## Missing Catalog Name
 
-This error occurs when a catalog does not have a name. Name is a required field in catalogs. 
+This error occurs when a catalog does not have a name. Name is a required field in catalogs.
 
 ## Catalog Not Found
 
-This error occurs when a catalog could not be found. 
+This error occurs when a catalog could not be found.

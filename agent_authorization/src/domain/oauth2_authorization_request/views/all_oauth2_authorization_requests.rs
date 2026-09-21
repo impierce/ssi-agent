@@ -1,13 +1,13 @@
 use super::OAuth2AuthorizationRequest;
 use super::OAuth2AuthorizationRequestView;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllOAuth2AuthorizationRequestsView {
     #[serde(flatten)]
-    pub oauth2_authorization_requests: HashMap<String, OAuth2AuthorizationRequestView>,
+    pub oauth2_authorization_requests: IndexMap<String, OAuth2AuthorizationRequestView>,
 }
 
 impl View<OAuth2AuthorizationRequest> for AllOAuth2AuthorizationRequestsView {

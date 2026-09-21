@@ -1,7 +1,7 @@
 use crate::public_offer::aggregate::PublicOffer;
 use cqrs_es::View;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Single aggregate view - projects a single PublicOffer from its events
 pub type PublicOfferView = PublicOffer;
@@ -36,14 +36,14 @@ impl View<PublicOffer> for PublicOfferView {
 /// All aggregates view - projects all PublicOffers into a HashMap
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllPublicOffersView {
-    pub offers: HashMap<String, PublicOfferView>,
+    pub offers: IndexMap<String, PublicOfferView>,
 }
 
 impl View<PublicOffer> for AllPublicOffersView {
     fn update(&mut self, event: &cqrs_es::EventEnvelope<PublicOffer>) {
         match &event.payload {
             crate::public_offer::event::PublicOfferEvent::Deleted { .. } => {
-                self.offers.remove(&event.aggregate_id);
+                self.offers.shift_remove(&event.aggregate_id);
             }
             _ => {
                 self.offers.entry(event.aggregate_id.clone()).or_default().update(event);

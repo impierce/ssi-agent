@@ -14,13 +14,13 @@ use agent_issuance::{
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
+use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
 use axum::Extension;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
@@ -329,29 +329,13 @@ pub(crate) async fn credentials(
     .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SignedCredentialFormat {
-    JwtVcJson,
-    VcSdJwt,
-    DcSdJwt,
-}
-
-impl SignedCredentialFormat {
-    fn as_str(self) -> &'static str {
-        match self {
-            SignedCredentialFormat::JwtVcJson => "jwt_vc_json",
-            SignedCredentialFormat::VcSdJwt => "vc+sd-jwt",
-            SignedCredentialFormat::DcSdJwt => "dc+sd-jwt",
-        }
-    }
-}
-
 #[allow(clippy::result_large_err)]
 fn validate_signed_credential_format_matches_configuration(
     signed_credential: &str,
     credential_configuration: &CredentialConfigurationsSupportedObject,
 ) -> Result<(), ApiError> {
-    let actual_format = detect_signed_credential_format(signed_credential)?;
+    let actual_format = detect_signed_credential_format(signed_credential)
+        .map_err(|e| invalid_signed_credential_format_error(e.to_string()))?;
     let expected_format = expected_signed_credential_format(credential_configuration)?;
 
     if actual_format == expected_format {
@@ -383,52 +367,6 @@ fn expected_signed_credential_format(
             .message("The template-backed credential configuration uses an unsupported credential format.")
             .finish()),
     }
-}
-
-#[allow(clippy::result_large_err)]
-fn detect_signed_credential_format(signed_credential: &str) -> Result<SignedCredentialFormat, ApiError> {
-    if signed_credential.contains('~') {
-        let issuer_jwt = signed_credential
-            .split('~')
-            .find(|segment| !segment.is_empty())
-            .ok_or_else(|| {
-                invalid_signed_credential_format_error("Signed SD-JWT credential is missing the issuer JWT.")
-            })?;
-
-        let header = decode_jwt_segment_json(issuer_jwt, 0)?;
-        match header.get("typ").and_then(Value::as_str) {
-            Some("vc+sd-jwt") => Ok(SignedCredentialFormat::VcSdJwt),
-            Some("dc+sd-jwt") => Ok(SignedCredentialFormat::DcSdJwt),
-            _ => Err(invalid_signed_credential_format_error(
-                "Signed SD-JWT credential must declare header typ `vc+sd-jwt` or `dc+sd-jwt`.",
-            )),
-        }
-    } else {
-        let payload = decode_jwt_segment_json(signed_credential, 1)?;
-        if payload.get("vc").is_some() {
-            Ok(SignedCredentialFormat::JwtVcJson)
-        } else {
-            Err(invalid_signed_credential_format_error(
-                "Signed JWT credential must contain a `vc` claim to match `jwt_vc_json`.",
-            ))
-        }
-    }
-}
-
-#[allow(clippy::result_large_err)]
-fn decode_jwt_segment_json(jwt: &str, segment_index: usize) -> Result<Value, ApiError> {
-    let segment = jwt
-        .split('.')
-        .nth(segment_index)
-        .ok_or_else(|| invalid_signed_credential_format_error("Signed credential is not a valid JWT."))?;
-
-    let decoded = URL_SAFE_NO_PAD
-        .decode(segment)
-        .map_err(|_| invalid_signed_credential_format_error("Signed credential contains invalid base64url data."))?;
-
-    serde_json::from_slice(&decoded).map_err(|_| {
-        invalid_signed_credential_format_error("Signed credential contains invalid JSON in its JWT segments.")
-    })
 }
 
 fn invalid_signed_credential_format_error(message: impl Into<String>) -> ApiError {
@@ -464,19 +402,36 @@ pub(crate) async fn all_credentials(
         &state.query.all_credentials,
     )
     .await?
-    .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
+    .map(|all_credentials_view| crate::utils::newest_first(all_credentials_view.credentials).collect::<Vec<_>>())
     .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchCredentialEndpointRequest {
+    #[schema(schema_with = agent_issuance::credential::openapi::status_type)]
     pub credential_status: StatusType,
 }
 
-/// Currently, this endpoint only supports patching the CredentialStatus of a credential according to the IETF OAuth Token Status List spec.
+/// Update credential status
+///
+/// Updates a credential's status according to the IETF OAuth Token Status List specification.
+#[utoipa::path(
+    patch,
+    path = "/credentials/{credential_id}",
+    operation_id = "update_credential_status",
+    tags = ["Issuance"],
+    request_body(
+        content = PatchCredentialEndpointRequest,
+        example = json!({ "credentialStatus": "INVALID" })
+    ),
+    responses(
+        (status = 204, description = "Credential status updated successfully"),
+        (status = 404, description = "Credential not found"),
+    )
+)]
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
@@ -707,7 +662,15 @@ pub mod tests {
         // Please look at the comments in agent_issuance/src/credential/aggregate.rs `SignCredential` for more information.
         pub static ref VC_DM_1_1_CREDENTIAL: serde_json::Value = json!({
             "id": "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
-            "@context": [ "https://www.w3.org/2018/credentials/v1" ],
+            "@context": [
+                "https://www.w3.org/2018/credentials/v1",
+                {
+                    "logo_uri": {
+                        "@id": "https://www.iana.org/assignments/jwt#logo_uri",
+                        "@type": "@id"
+                    }
+                }
+            ],
             "type": [ "VerifiableCredential" ],
             "name": "Verifiable Credential",
             "issuer": {

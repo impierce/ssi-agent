@@ -1,13 +1,13 @@
 use super::CredentialView;
 use crate::credential::views::Credential;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllCredentialsView {
     #[serde(flatten)]
-    pub credentials: HashMap<String, CredentialView>,
+    pub credentials: IndexMap<String, CredentialView>,
 }
 
 impl View<Credential> for AllCredentialsView {

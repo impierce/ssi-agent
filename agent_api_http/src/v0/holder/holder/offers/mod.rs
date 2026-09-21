@@ -39,10 +39,7 @@ pub(crate) async fn offers(
     )
     .await?
     .map(|all_received_offers_view| {
-        all_received_offers_view
-            .received_offers
-            .into_values()
-            .collect::<Vec<_>>()
+        crate::utils::newest_first(all_received_offers_view.received_offers).collect::<Vec<_>>()
     })
     .unwrap_or_default();
 

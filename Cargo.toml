@@ -30,19 +30,19 @@ license-file = "LICENSE"
 publish = false
 
 [workspace.lints.clippy]
-# Enables a large group of strict lints for idiomatic Rust. 
-# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they 
+# Enables a large group of strict lints for idiomatic Rust.
+# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they
 # prove too noisy.
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "bc3f563" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "bc3f563", features = [
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "be4e047", features = [
     "utoipa",
 ] }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "bc3f563" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "bc3f563" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "bc3f563" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -55,6 +55,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.5.0"
 derivative = "2.2"
 futures = "0.3"
+hickory-resolver = "0.26"
 mockall = "0.14"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
@@ -76,6 +77,7 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
     "stronghold",
 ] }
 iso8601 = "0.6"
+indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
 jsonwebtoken = "9.3"
 lazy_static = "1.4"

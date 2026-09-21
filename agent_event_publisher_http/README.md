@@ -87,6 +87,8 @@ DocumentCreated
 PublicKeyUpdated
 DocumentStatusUpdated
 ServiceAdded
+ServiceRemoved
+DocumentDidWebOverwritten
 DocumentPublished
 ```
 
@@ -104,9 +106,11 @@ SourceUpdated,
 #### `service`
 
 ```
-DomainLinkageServiceCreated
-DomainLinkageServiceDeleted
+LinkedDomainsAdded
+LinkedDomainsRemoved
+LinkedDomainsCredentialsRenewed
 LinkedVerifiablePresentationServiceCreated
+LinkedVerifiablePresentationServiceDeleted
 ```
 
 #### `template`

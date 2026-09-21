@@ -42,7 +42,7 @@ pub(crate) async fn get_presentations(
         &state.query.all_presentations,
     )
     .await?
-    .map(|all_presentations_view| all_presentations_view.presentations.into_values().collect::<Vec<_>>())
+    .map(|all_presentations_view| crate::utils::newest_first(all_presentations_view.presentations).collect::<Vec<_>>())
     .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_presentations)).into_response())
