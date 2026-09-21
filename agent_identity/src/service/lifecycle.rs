@@ -16,7 +16,7 @@ use agent_shared::handlers::{public_command_handler, public_query_handler, Comma
 use identity_did::DID as _;
 use serde::Serialize;
 use shared_kernel::authorization::{
-    Actor, AuthorizationError, AuthorizationOperation, AuthorizationRequest, CommandAuthorization,
+    Actor, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
 };
 use std::sync::{Arc, Weak};
 use tracing::warn;
@@ -41,11 +41,11 @@ pub async fn execute(
     state
         .authorization_checker
         .is_authorized(&AuthorizationRequest {
-            actor,
+            caller: actor.map_or(Caller::Anonymous, Caller::Actor),
             operation: AuthorizationOperation::Command {
                 aggregate_id: command.service_id().to_owned(),
-                command_type: command.operation(),
-                authorization: CommandAuthorization::ACTOR_REQUIRED,
+                resource_id: Some(command.service_id().to_owned()),
+                operation_name: command.operation_name(),
             },
         })
         .await?;
@@ -188,9 +188,10 @@ pub async fn verify(
     state
         .authorization_checker
         .is_authorized(&AuthorizationRequest {
-            actor,
+            caller: actor.map_or(Caller::Anonymous, Caller::Actor),
             operation: AuthorizationOperation::Query {
-                query_type: std::any::type_name::<LinkedDomainsVerification>(),
+                resource_id: Some(LINKED_DOMAINS_SERVICE_ID.to_owned()),
+                operation_name: "identity.services.linked_domains.verify",
             },
         })
         .await?;

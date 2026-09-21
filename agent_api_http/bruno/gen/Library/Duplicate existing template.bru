@@ -27,7 +27,7 @@ docs {
 example {
   name: 201 Response
   description: Duplicate created successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/duplicate-template
     method: POST
@@ -38,17 +38,17 @@ example {
       }
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 201
       text: Created
     }
-  
+
     body: {
       type: json
       content: '''
@@ -80,7 +80,7 @@ example {
 example {
   name: 422 Response
   description: Source Template Not Found
-  
+
   request: {
     url: {{BASE_URL}}/v0/duplicate-template
     method: POST
@@ -91,17 +91,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 422
       text: Unprocessable Entity
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

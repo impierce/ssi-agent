@@ -30,8 +30,8 @@ license-file = "LICENSE"
 publish = false
 
 [workspace.lints.clippy]
-# Enables a large group of strict lints for idiomatic Rust. 
-# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they 
+# Enables a large group of strict lints for idiomatic Rust.
+# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they
 # prove too noisy.
 pedantic = "warn"
 

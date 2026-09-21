@@ -16,23 +16,23 @@ get {
 example {
   name: 200 Response
   description: Authorization requests
-  
+
   request: {
     url: {{BASE_URL}}/v0/authorization_requests
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

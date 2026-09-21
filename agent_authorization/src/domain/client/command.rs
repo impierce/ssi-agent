@@ -1,5 +1,6 @@
 use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 use url::Url;
 
 #[derive(Debug, Deserialize)]
@@ -21,4 +22,12 @@ pub enum ClientCommand {
         code_challenge_methods_supported: Vec<CodeChallengeMethod>,
         require_pushed_authorization_request: bool,
     },
+}
+
+impl CommandOperation for ClientCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::RegisterClient { .. } => "authorization.clients.register",
+        }
+    }
 }

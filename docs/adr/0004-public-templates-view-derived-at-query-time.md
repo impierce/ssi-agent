@@ -1,8 +1,8 @@
 # ADR 0004: Derive the Public Templates View at Query Time
 
-**Status**: Accepted  
-**Date**: 2026-08-21  
-**Context**: Read model backing the `GET /public/templates` endpoint  
+**Status**: Accepted
+**Date**: 2026-08-21
+**Context**: Read model backing the `GET /public/templates` endpoint
 
 ---
 

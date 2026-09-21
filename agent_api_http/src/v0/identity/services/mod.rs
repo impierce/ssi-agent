@@ -68,6 +68,7 @@ pub(crate) async fn services(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_services",
+        None,
         &state.query.all_services,
     )
     .await?
@@ -106,6 +107,7 @@ pub(crate) async fn service(
         state.authorization_checker.clone(),
         actor.clone(),
         &service_id,
+        Some(&service_id),
         &state.query.service,
     )
     .await?
@@ -140,7 +142,7 @@ mod tests {
     use serde_json::{json, Value};
     use shared_kernel::authorization::{
         Actor, ActorExtractor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
-        ToActor,
+        Caller, ToActor,
     };
     use std::sync::{
         atomic::{AtomicBool, AtomicI64, Ordering},
@@ -159,7 +161,7 @@ mod tests {
     impl AuthorizationChecker for RecordingAuthorization {
         async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
             self.requests.lock().unwrap().push(request.clone());
-            if request.actor.is_none() {
+            if matches!(request.caller, Caller::Anonymous) {
                 return Err(AuthorizationError::Unauthorized);
             }
             if self.denied.load(Ordering::SeqCst) {
@@ -492,8 +494,13 @@ mod tests {
             "identity.services.linked_verifiable_presentation.create",
             "identity.services.linked_verifiable_presentation.delete",
         ] {
-            assert!(requests.iter().any(|request| request.actor.as_ref().is_some_and(|actor| actor.subject == "administrator")
-                && matches!(&request.operation, AuthorizationOperation::Command { command_type, .. } if *command_type == operation)));
+            assert!(requests.iter().any(|request| matches!(
+                &request.caller,
+                Caller::Actor(actor) if actor.subject == "administrator"
+            ) && matches!(
+                &request.operation,
+                AuthorizationOperation::Command { operation_name, .. } if *operation_name == operation
+            )));
         }
     }
 
