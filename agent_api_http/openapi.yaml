@@ -818,7 +818,7 @@ paths:
         '400':
           description: Malformed JSON request body
         '422':
-          description: Request body does not match the expected schema
+          description: Request body does not match the expected schema, or the credential could not be decoded
   /v0/holder/credentials/{holder_credential_id}:
     get:
       tags:
@@ -882,8 +882,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OfferView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Credential offer not found
+        '409':
+          description: The credential offer is not in a state that allows accepting it
+        '422':
+          description: The credential offer cannot be processed, e.g. it carries no pre-authorized code
+        '501':
+          description: The credential issuer requires a flow UniCore does not support yet
+        '502':
+          description: The credential issuer or its authorization server could not be reached
   /v0/holder/offers/{offer_id}/reject:
     post:
       tags:
@@ -901,6 +911,12 @@ paths:
       responses:
         '204':
           description: Credential offer rejected successfully
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Credential offer not found
+        '409':
+          description: The credential offer has already been accepted or rejected
   /v0/holder/offers/{received_offer_id}:
     get:
       tags:
@@ -922,6 +938,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OfferView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Offer not found
   /v0/holder/presentations:
@@ -938,8 +956,6 @@ paths:
           content:
             application/json:
               schema:
-        '400':
-          description: Invalid path parameter
                 type: array
                 items:
                   $ref: '#/components/schemas/PresentationView'
@@ -990,6 +1006,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PresentationView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Presentation not found
   /v0/holder/presentations/{presentation_id}/signed:
@@ -1006,8 +1024,6 @@ paths:
         description: Credential presentation ID
         required: true
         schema:
-        '400':
-          description: Invalid path parameter
           type: string
       responses:
         '200':
@@ -1016,6 +1032,8 @@ paths:
             application/jwt:
               schema:
                 type: string
+        '400':
+          description: Invalid path parameter
         '404':
           description: Signed credential presentation not found
   /v0/list-all-templates:
@@ -1032,8 +1050,6 @@ paths:
           content:
             application/json:
               schema:
-        '400':
-          description: Invalid path parameter
                 type: array
                 items:
                   $ref: '#/components/schemas/Template'
@@ -1199,6 +1215,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Offer'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Offer not found
   /v0/profile:
@@ -1215,8 +1233,6 @@ paths:
           content:
             application/json:
               schema:
-        '400':
-          description: Invalid path parameter
                 $ref: '#/components/schemas/Profile'
         '404':
           description: Profile not found
@@ -1353,6 +1369,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceResponse'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Identity service not found
   /v0/take-public-offer-offline:
@@ -1369,8 +1387,6 @@ paths:
         required: true
       responses:
         '204':
-        '400':
-          description: Invalid path parameter
           description: Public offer taken offline successfully
         '404':
           description: Public offer not found

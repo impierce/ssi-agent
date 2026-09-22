@@ -18,7 +18,10 @@ use std::sync::Arc;
     operation_id = "reject_credential_offer",
     tags = ["Identity", "Holder"],
     responses(
-        (status = 204, description = "Credential offer rejected successfully")
+        (status = 204, description = "Credential offer rejected successfully"),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Credential offer not found"),
+        (status = 409, description = "The credential offer has already been accepted or rejected"),
     )
 )]
 #[axum_macros::debug_handler]
