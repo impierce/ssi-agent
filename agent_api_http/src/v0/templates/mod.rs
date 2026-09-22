@@ -114,7 +114,9 @@ pub struct CreateNewTemplateRequestBody {
         )
     ),
     responses(
-        (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto)
+        (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
+        (status = 400, description = "Malformed JSON request body, or an invalid template definition"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -209,7 +211,8 @@ pub struct DuplicateTemplateEndpointRequest {
     ),
     responses(
         (status = 201, description = "Duplicate created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
-        (status = 422, description = "Source Template Not Found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Source template not found, or the request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -307,7 +310,10 @@ pub struct UpdateTemplateEndpointRequest {
     operation_id = "update_template",
     tags = ["Library", "Templates"],
     responses(
-        (status = 204, description = "Template updated successfully")
+        (status = 204, description = "Template updated successfully"),
+        (status = 400, description = "Malformed JSON request body, or a missing template ID"),
+        (status = 404, description = "Template not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -576,7 +582,8 @@ pub(crate) async fn get_templates(
     operation_id = "get_template_by_id",
     tags = ["Library", "Templates"],
     responses(
-        (status = 200, description = "Template retrieved successfully", body = TemplateDto)
+        (status = 200, description = "Template retrieved successfully", body = TemplateDto),
+        (status = 404, description = "Template not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -620,7 +627,10 @@ pub struct DeleteTemplateEndpointRequest {
     operation_id = "delete_template_by_id",
     tags = ["Library", "Templates"],
     responses(
-        (status = 204, description = "Template deleted successfully")
+        (status = 204, description = "Template deleted successfully"),
+        (status = 400, description = "Malformed JSON request body, or a missing template ID"),
+        (status = 404, description = "Template not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]

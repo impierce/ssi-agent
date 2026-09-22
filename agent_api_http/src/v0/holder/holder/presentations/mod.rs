@@ -96,7 +96,9 @@ pub struct PresentationsEndpointRequest {
     request_body = PresentationsEndpointRequest,
     responses(
         (status = 201, description = "Presentation created successfully", body = Presentation),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]

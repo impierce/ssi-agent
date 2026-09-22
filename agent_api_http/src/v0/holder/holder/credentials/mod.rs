@@ -65,6 +65,8 @@ pub struct HolderCredentialsEndpointRequest {
     request_body = HolderCredentialsEndpointRequest,
     responses(
         (status = 201, description = "Credential stored successfully", body = Credential),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]

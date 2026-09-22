@@ -152,6 +152,7 @@ pub(crate) async fn get_connections(
     tags = ["Connections"],
     responses(
         (status = 200, description = "Connection retrieved successfully", body = ConnectionView),
+        (status = 404, description = "Connection not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -226,7 +227,9 @@ pub struct AcceptConnectionChangesRequest {
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 404, description = "Connection not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn accept_connection_changes(
@@ -263,7 +266,9 @@ pub struct RemoveConnectionRequest {
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 404, description = "Connection not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn remove_connection(

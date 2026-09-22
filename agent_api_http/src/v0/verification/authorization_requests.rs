@@ -147,6 +147,8 @@ pub struct AuthorizationRequestsEndpointRequest {
             body = String,
             content_type = "application/x-www-form-urlencoded"
         ),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]

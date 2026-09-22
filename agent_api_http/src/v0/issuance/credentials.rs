@@ -42,7 +42,8 @@ use std::sync::Arc;
     operation_id = "get_credential_by_id",
     tags = ["Issuance"],
     responses(
-        (status = 200, description = "Successfully retrieved credential", body = Credential)
+        (status = 200, description = "Successfully retrieved credential", body = Credential),
+        (status = 404, description = "Credential not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -86,7 +87,10 @@ pub struct CredentialsEndpointRequest {
     responses(
         (status = 201, description = "Credential created successfully",
             headers(("Location" = String, description = "URI of the newly created credential"))
-        )
+        ),
+        (status = 400, description = "Missing or empty `templateId`"),
+        (status = 404, description = "Template not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -429,7 +433,9 @@ pub struct PatchCredentialEndpointRequest {
     ),
     responses(
         (status = 204, description = "Credential status updated successfully"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub async fn patch_credential(

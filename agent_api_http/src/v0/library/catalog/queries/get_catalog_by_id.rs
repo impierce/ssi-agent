@@ -21,6 +21,7 @@ use std::sync::Arc;
     tags = ["Library", "Catalog"],
     responses(
         (status = 200, description = "Catalog retrieved successfully", body = CatalogDto),
+        (status = 404, description = "Catalog not found"),
     )
 )]
 #[axum_macros::debug_handler]

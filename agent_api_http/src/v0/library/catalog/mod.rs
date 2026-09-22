@@ -67,7 +67,9 @@ pub struct CreateCatalogRequest {
         content = CreateCatalogRequest,
         ),
     responses(
-        (status = 201, description = "Catalog created successfully", body = CatalogDto)
+        (status = 201, description = "Catalog created successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body, or an empty catalog name"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -135,7 +137,9 @@ pub struct AddTemplatesRequest {
         content = AddTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Catalog updated successfully", body = CatalogDto)
+        (status = 200, description = "Catalog updated successfully", body = CatalogDto),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -202,7 +206,9 @@ pub struct RemoveTemplatesRequest {
         content = RemoveTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Template(s) removed successfully", body = CatalogDto)
+        (status = 200, description = "Template(s) removed successfully", body = CatalogDto),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -269,7 +275,9 @@ pub struct ChangeCatalogAppearanceRequest {
         content = ChangeCatalogAppearanceRequest,
         ),
     responses(
-        (status = 200, description = "Catalog appearance updated successfully", body = CatalogDto)
+        (status = 200, description = "Catalog appearance updated successfully", body = CatalogDto),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -333,7 +341,9 @@ pub struct MakeCatalogPublicRequest {
         content = MakeCatalogPublicRequest,
         ),
     responses(
-        (status = 200, description = "Catalog make public successfully", body = CatalogDto)
+        (status = 200, description = "Catalog made public successfully", body = CatalogDto),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -364,7 +374,18 @@ pub(crate) async fn make_catalog_public(
         command,
     )
     .await?;
-    Ok(StatusCode::OK.into_response())
+
+    // Return the updated catalog
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -385,7 +406,9 @@ pub struct MakeCatalogPrivateRequest {
         content = MakeCatalogPrivateRequest,
         ),
     responses(
-        (status = 200, description = "Catalog made private successfully.", body = CatalogDto)
+        (status = 200, description = "Catalog made private successfully.", body = CatalogDto),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -416,7 +439,18 @@ pub(crate) async fn make_catalog_private(
         command,
     )
     .await?;
-    Ok(StatusCode::OK.into_response())
+
+    // Return the updated catalog
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -437,7 +471,10 @@ pub struct DeleteCatalogRequest {
         content = DeleteCatalogRequest,
         ),
     responses(
-        (status = 204, description = "Catalog deleted"))
+        (status = 204, description = "Catalog deleted"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
+    )
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_catalog(

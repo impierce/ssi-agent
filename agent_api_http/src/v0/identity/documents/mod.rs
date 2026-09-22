@@ -30,6 +30,7 @@ pub struct GetDocumentsEndpoint {
     params(GetDocumentsEndpoint),
     responses(
         (status = 200, description = "Documents retrieved successfully", body = [Document]),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 #[axum_macros::debug_handler]
