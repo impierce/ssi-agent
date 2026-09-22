@@ -138,6 +138,7 @@ pub struct AddTemplatesRequest {
         ),
     responses(
         (status = 200, description = "Catalog updated successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Catalog not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -207,6 +208,7 @@ pub struct RemoveTemplatesRequest {
         ),
     responses(
         (status = 200, description = "Template(s) removed successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Catalog not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -276,6 +278,7 @@ pub struct ChangeCatalogAppearanceRequest {
         ),
     responses(
         (status = 200, description = "Catalog appearance updated successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Catalog not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -342,6 +345,7 @@ pub struct MakeCatalogPublicRequest {
         ),
     responses(
         (status = 200, description = "Catalog made public successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Catalog not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -407,6 +411,7 @@ pub struct MakeCatalogPrivateRequest {
         ),
     responses(
         (status = 200, description = "Catalog made private successfully.", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Catalog not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -472,6 +477,7 @@ pub struct DeleteCatalogRequest {
         ),
     responses(
         (status = 204, description = "Catalog deleted"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Catalog not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )

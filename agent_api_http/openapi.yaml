@@ -85,6 +85,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Catalog not found
         '422':
@@ -177,6 +179,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Catalog not found
         '422':
@@ -229,6 +233,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Connection'
+        '400':
+          description: Invalid query parameter
     post:
       tags:
       - Connections
@@ -253,6 +259,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+        '400':
+          description: Malformed JSON request body
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -269,6 +277,8 @@ paths:
       responses:
         '200':
           description: ''
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Connection not found
         '422':
@@ -289,6 +299,8 @@ paths:
       responses:
         '200':
           description: ''
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Connection not found
         '422':
@@ -309,6 +321,8 @@ paths:
       responses:
         '200':
           description: ''
+        '400':
+          description: Malformed JSON request body
   /v0/connections/{id}:
     get:
       tags:
@@ -568,6 +582,8 @@ paths:
       responses:
         '204':
           description: Catalog deleted
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Catalog not found
         '422':
@@ -587,6 +603,8 @@ paths:
       responses:
         '204':
           description: Public offer deleted successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Public offer not found
         '422':
@@ -1074,6 +1092,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Catalog not found
         '422':
@@ -1099,6 +1119,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Catalog not found
         '422':
@@ -1252,6 +1274,8 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+        '400':
+          description: Malformed JSON request body
         '409':
           description: The profile was provisioned through configuration and cannot be modified at runtime
         '422':
@@ -1330,6 +1354,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Catalog not found
         '422':
@@ -1388,6 +1414,8 @@ paths:
       responses:
         '204':
           description: Public offer taken offline successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Public offer not found
         '422':
@@ -1407,6 +1435,8 @@ paths:
       responses:
         '204':
           description: Public offer taken online successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Public offer not found
         '422':

@@ -40,6 +40,7 @@ pub struct AddConnectionEndpointRequest {
                 ("Location" = String, description = "URI of the newly created connection")
             )
         ),
+        (status = 400, description = "Malformed JSON request body"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -107,7 +108,8 @@ pub struct GetConnectionsEndpointRequest {
     operation_id = "get_all_connections",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView])
+        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView]),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -190,7 +192,8 @@ pub struct SyncConnectionRequest {
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -229,6 +232,7 @@ pub struct AcceptConnectionChangesRequest {
     tags = ["Connections"],
     responses(
         (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Connection not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -268,6 +272,7 @@ pub struct RemoveConnectionRequest {
     tags = ["Connections"],
     responses(
         (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Connection not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )

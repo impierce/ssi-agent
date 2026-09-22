@@ -252,6 +252,7 @@ pub(crate) async fn create_public_offer(
     request_body = TakePublicOfferOfflineRequest,
     responses(
         (status = 204, description = "Public offer taken offline successfully"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Public offer not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -287,6 +288,7 @@ pub(crate) async fn take_public_offer_offline(
     request_body = TakePublicOfferOnlineRequest,
     responses(
         (status = 204, description = "Public offer taken online successfully"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Public offer not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -322,6 +324,7 @@ pub(crate) async fn take_public_offer_online(
     request_body = DeletePublicOfferRequest,
     responses(
         (status = 204, description = "Public offer deleted successfully"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Public offer not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )

@@ -41,6 +41,7 @@ pub struct PatchProfileEndpointRequest {
     tags = ["Identity", "Profile"],
     responses(
         (status = 200, description = "Profile updated successfully"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 409, description = "The profile was provisioned through configuration and cannot be modified at runtime"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
