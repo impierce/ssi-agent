@@ -1458,6 +1458,26 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_loads_fuzz_config_file() {
+        temp_env::with_vars(
+            [(
+                "UNICORE__CONFIG_FILE",
+                Some("../agent_application/docker/fuzz.config.yaml"),
+            )],
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+                assert!(config.signing_algorithms_supported[&Algorithm::EdDSA].enabled);
+                assert!(config.event_publishers.http.is_empty());
+                assert!(config.event_publishers.nats.is_none());
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
     fn test_env_var_overwrites_config_file() {
         temp_env::with_vars(
             [

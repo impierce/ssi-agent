@@ -5,8 +5,8 @@
 # 1. No outbound traffic. A fuzzer sends arbitrary data to every operation, including ones that
 #    would normally reach third parties (did:web resolution, event publishers). Anything that
 #    leaves the compose project is disabled so a run stays hermetic and reproducible.
-# 2. Maximum reachable surface. Every DID method and signing algorithm that can be enabled without
-#    breaking rule 1 is enabled, so that as many operations as possible are exercised.
+# 2. Maximum reachable local surface. Every DID method and signing algorithm that does not require
+#    a remote service is enabled, so that as many operations as possible are exercised.
 
 log_format: "text"
 
@@ -33,7 +33,7 @@ signing_algorithms_supported:
     enabled: true
     preferred: true
   eddsa:
-    enabled: false
+    enabled: true
 
 # No publishers: a fuzz run must not emit traffic to anything outside the compose project.
 event_publishers:
@@ -46,24 +46,6 @@ display:
     logo:
       uri: "https://www.impierce.com/external/impierce-icon.png"
       alt_text: UniCore Logo
-
-credential_configurations:
-  - credential_configuration_id: w3c_vc_credential
-    format: jwt_vc_json
-    type:
-      - VerifiableCredential
-    display:
-      - name: Fuzz Credential
-        locale: en
-        logo:
-          uri: "https://www.impierce.com/external/impierce-logo.png"
-          alt_text: UniCore Logo
-    authorization:
-      pre_authorized: true
-      transaction_code_constraints:
-        input_mode: "numeric"
-        length: 6
-        description: "Transaction code to authorize credential issuance"
 
 secret_manager:
   stronghold_path: "/app/fuzz.stronghold.dat"
