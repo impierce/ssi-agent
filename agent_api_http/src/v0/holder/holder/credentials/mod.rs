@@ -65,6 +65,8 @@ pub struct HolderCredentialsEndpointRequest {
     request_body = HolderCredentialsEndpointRequest,
     responses(
         (status = 201, description = "Credential stored successfully", body = Credential),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema, or the credential could not be decoded"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -112,6 +114,7 @@ pub(crate) async fn post_credentials(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Credential retrieved successfully", body = Credential),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential not found"),
     )
 )]

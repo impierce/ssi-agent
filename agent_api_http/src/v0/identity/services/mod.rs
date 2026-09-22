@@ -94,6 +94,7 @@ pub(crate) async fn services(
     ),
     responses(
         (status = 200, description = "Identity service", body = ServiceResponse),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Identity service not found"),
     )
 )]

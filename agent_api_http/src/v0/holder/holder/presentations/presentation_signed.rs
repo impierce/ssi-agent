@@ -22,6 +22,7 @@ use crate::handlers::public_query_handler;
     ),
     responses(
         (status = 200, description = "Signed credential presentation", body = String, content_type = "application/jwt"),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Signed credential presentation not found"),
     )
 )]

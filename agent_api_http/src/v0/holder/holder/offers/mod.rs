@@ -56,6 +56,7 @@ pub(crate) async fn offers(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Offer retrieved successfully", body = Offer),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Offer not found"),
     )
 )]

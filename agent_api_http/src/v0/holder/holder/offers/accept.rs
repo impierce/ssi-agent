@@ -1,3 +1,4 @@
+use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
 use agent_holder::{
@@ -5,6 +6,7 @@ use agent_holder::{
     offer::{
         aggregate::{Offer, OfferCredential},
         command::OfferCommand,
+        error::OfferError,
         queries::ReceivedOfferView,
     },
     state::HolderState,
@@ -28,7 +30,12 @@ use std::sync::Arc;
     tags = ["Identity", "Holder"],
     responses(
         (status = 201, description = "Credential offer accepted successfully", body = Offer),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential offer not found"),
+        (status = 409, description = "The credential offer is not in a state that allows accepting it"),
+        (status = 422, description = "The credential offer cannot be processed, e.g. it carries no pre-authorized code"),
+        (status = 501, description = "The credential issuer requires a flow UniCore does not support yet"),
+        (status = 502, description = "The credential issuer or its authorization server could not be reached"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -51,7 +58,7 @@ pub(crate) async fn accept(
         &state.query.received_offer,
     )
     .await?
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+    .ok_or_else(|| OfferError::MissingCredentialOfferError.into_api_error())?;
 
     let command = OfferCommand::AcceptCredentialOffer {
         received_offer_id: received_offer_id.clone(),

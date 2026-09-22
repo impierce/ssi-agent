@@ -58,6 +58,7 @@ pub(crate) async fn get_presentations(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Presentation retrieved successfully", body = Presentation),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Presentation not found"),
     )
 )]
@@ -96,7 +97,9 @@ pub struct PresentationsEndpointRequest {
     request_body = PresentationsEndpointRequest,
     responses(
         (status = 201, description = "Presentation created successfully", body = Presentation),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]

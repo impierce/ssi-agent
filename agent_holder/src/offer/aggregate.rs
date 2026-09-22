@@ -275,6 +275,12 @@ impl Aggregate for Offer {
                 }])
             }
             RejectCredentialOffer { received_offer_id } => {
+                // A never-received offer has no `credential_offer` but does default to `Pending`, so the
+                // status check alone would let a rejection materialise an offer that never existed.
+                if self.credential_offer.is_none() {
+                    return Err(MissingCredentialOfferError);
+                }
+
                 // TODO: should we 'do nothing' or log a `warn!` message instead of returning an error?
                 if self.status != Status::Pending {
                     return Err(CredentialOfferStatusNotPendingError);
@@ -676,6 +682,17 @@ pub mod tests {
                 received_offer_id: received_offer_id.clone(),
                 status: Status::Rejected,
             }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_reject_unknown_credential_offer(received_offer_id: String) {
+        OfferTestFramework::with(HolderServices::default().await)
+            .given_no_previous_events()
+            .when_async(OfferCommand::RejectCredentialOffer { received_offer_id })
+            .await
+            .then_expect_error_message(&OfferError::MissingCredentialOfferError.to_string());
     }
 }
 
