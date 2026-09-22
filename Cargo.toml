@@ -90,6 +90,7 @@ product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0
     "gas-station",
     "default-http-client",
 ] }
+percent-encoding = "2.3"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
     "json",

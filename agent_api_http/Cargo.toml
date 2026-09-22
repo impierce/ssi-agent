@@ -40,6 +40,7 @@ oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
 opentelemetry.workspace = true
+percent-encoding.workspace = true
 rand.workspace = true
 sd-jwt.workspace = true
 serde.workspace = true
