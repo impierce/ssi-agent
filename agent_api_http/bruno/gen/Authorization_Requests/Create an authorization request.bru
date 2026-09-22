@@ -27,7 +27,7 @@ docs {
 example {
   name: 201 Response
   description: Authorization request created
-  
+
   request: {
     url: {{BASE_URL}}/v0/authorization_requests
     method: POST
@@ -39,21 +39,21 @@ example {
       }
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/x-www-form-urlencoded
     }
-  
+
     status: {
       code: 201
       text: Created
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

@@ -34,6 +34,7 @@ pub(crate) async fn offers(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_received_offers",
+        None,
         &state.query.all_received_offers,
     )
     .await?
@@ -55,6 +56,7 @@ pub(crate) async fn offers(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Offer retrieved successfully", body = Offer),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Offer not found"),
     )
 )]
@@ -68,6 +70,7 @@ pub(crate) async fn offer(
         state.authorization_checker.clone(),
         actor.clone(),
         &received_offer_id,
+        Some(&received_offer_id),
         &state.query.received_offer,
     )
     .await?

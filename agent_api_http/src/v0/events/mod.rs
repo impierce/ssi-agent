@@ -10,7 +10,10 @@ use chrono::{DateTime, Utc};
 use futures::stream::{Stream, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
-use shared_kernel::event_bus::{EventBus, EventBusError, EventBusHandle, EventFilter};
+use shared_kernel::{
+    authorization::Caller,
+    event_bus::{EventBus, EventBusError, EventBusHandle, EventFilter},
+};
 use std::time::Duration;
 
 use crate::error::IntoApiErrorExt;
@@ -70,6 +73,10 @@ pub fn router(state: Arc<EventsState>) -> Router {
     get,
     path = "/events",
     operation_id = "events_sse_handler",
+    tag = "Events",
+    extensions(
+        ("x-access-operation" = json!("events.stream"))
+    ),
     params(
         ("types" = Option<String>, Query, description = "Comma-separated list of CloudEvent types to filter"),
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),
@@ -82,8 +89,7 @@ pub fn router(state: Arc<EventsState>) -> Router {
         (status = 200, description = "Server-Sent Events stream of CloudEvents", body = shared_kernel::event_bus::CloudEvent, content_type = "text/event-stream"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden")
-    ),
-    tag = "Events"
+    )
 )]
 pub async fn events_sse_handler(
     State(state): State<Arc<EventsState>>,
@@ -91,9 +97,13 @@ pub async fn events_sse_handler(
     headers: axum::http::HeaderMap,
     Query(params): Query<EventQueryParams>,
 ) -> Result<Sse<impl Stream<Item = Result<sse::Event, axum::Error>>>, ApiError> {
+    let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
     let auth_request = AuthorizationRequest {
-        actor,
-        operation: AuthorizationOperation::Query { query_type: "events" },
+        caller,
+        operation: AuthorizationOperation::Query {
+            resource_id: None,
+            operation_name: "events.stream",
+        },
     };
 
     state
@@ -447,7 +457,7 @@ mod tests {
                 &self,
                 request: &AuthorizationRequest,
             ) -> Result<(), shared_kernel::authorization::AuthorizationError> {
-                if request.actor.is_none() {
+                if matches!(request.caller, Caller::Anonymous) {
                     Err(shared_kernel::authorization::AuthorizationError::Unauthorized)
                 } else {
                     Ok(())

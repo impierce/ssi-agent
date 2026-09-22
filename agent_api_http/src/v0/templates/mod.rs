@@ -1,6 +1,6 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
@@ -30,7 +30,7 @@ pub struct TemplateDto {
     #[serde(rename = "id")]
     pub template_id: String,
     pub title: String,
-    pub display: Option<Display>,
+    pub display: Display,
     pub data_model: DataModel,
     pub holder_type: HolderType,
     pub modified_at: Option<String>,
@@ -48,19 +48,11 @@ pub struct TemplateDto {
 
 impl From<Template> for TemplateDto {
     fn from(value: Template) -> Self {
-        // An empty `display.name` means no explicit display name has been set: fall back to the
-        // current title so the API always surfaces a usable name, without baking the title into
-        // the stored template (which would stop later title updates from being reflected here).
-        let display = value.display.map(|display| {
-            if display.name.trim().is_empty() {
-                Display {
-                    name: value.title.clone(),
-                    logo: display.logo,
-                }
-            } else {
-                display
-            }
-        });
+        // An empty `display.name` — or no stored `display` at all — means no explicit display name
+        // has been set: fall back to the current title so the API always surfaces a usable name,
+        // without baking the title into the stored template (which would stop later title updates
+        // from being reflected here).
+        let display = Display::resolve(value.display, &value.title);
 
         Self {
             template_id: value.template_id,
@@ -122,7 +114,9 @@ pub struct CreateNewTemplateRequestBody {
         )
     ),
     responses(
-        (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto)
+        (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
+        (status = 400, description = "Malformed JSON request body, or an invalid template definition"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -176,10 +170,10 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -217,7 +211,8 @@ pub struct DuplicateTemplateEndpointRequest {
     ),
     responses(
         (status = 201, description = "Duplicate created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
-        (status = 422, description = "Source Template Not Found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Source template not found, or the request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -232,6 +227,7 @@ pub(crate) async fn duplicate_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &source_template_id,
+        Some(&source_template_id),
         &state.query.template,
     )
     .await?
@@ -266,10 +262,10 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = query_handler(
+    let new_template = internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &new_template_id,
+        Some(&new_template_id),
         &state.query.template,
     )
     .await?
@@ -314,7 +310,10 @@ pub struct UpdateTemplateEndpointRequest {
     operation_id = "update_template",
     tags = ["Library", "Templates"],
     responses(
-        (status = 204, description = "Template updated successfully")
+        (status = 204, description = "Template updated successfully"),
+        (status = 400, description = "Malformed JSON request body, or a missing template ID"),
+        (status = 404, description = "Template not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -344,6 +343,7 @@ pub(crate) async fn update_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -542,6 +542,7 @@ pub(crate) async fn get_templates(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_templates",
+        None,
         &state.query.all_templates,
     )
     .await?
@@ -581,7 +582,9 @@ pub(crate) async fn get_templates(
     operation_id = "get_template_by_id",
     tags = ["Library", "Templates"],
     responses(
-        (status = 200, description = "Template retrieved successfully", body = TemplateDto)
+        (status = 200, description = "Template retrieved successfully", body = TemplateDto),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Template not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -594,6 +597,7 @@ pub(crate) async fn get_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -624,7 +628,10 @@ pub struct DeleteTemplateEndpointRequest {
     operation_id = "delete_template_by_id",
     tags = ["Library", "Templates"],
     responses(
-        (status = 204, description = "Template deleted successfully")
+        (status = 204, description = "Template deleted successfully"),
+        (status = 400, description = "Malformed JSON request body, or a missing template ID"),
+        (status = 404, description = "Template not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -641,6 +648,7 @@ pub(crate) async fn delete_template(
         state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &state.query.template,
     )
     .await?
@@ -776,6 +784,36 @@ mod tests {
         .err()
         .unwrap();
         assert!(expiration_error.to_string().contains("expiration"));
+    }
+
+    #[test]
+    fn template_dto_always_carries_a_display_object() {
+        // Wallets and verifiers render a name (and logo) from `display` unconditionally, so a
+        // template that never stored one still gets an object derived from its title.
+        let dto = TemplateDto::from(Template {
+            template_id: "template-id".to_string(),
+            source_template_id: None,
+            title: "Template".to_string(),
+            display: None,
+            data_model: DataModel::W3CVcDataModelV1_1,
+            holder_type: HolderType::Individual,
+            modified_at: Some("2024-01-01T00:00:00Z".to_string()),
+            tags: None,
+            status: Status::Draft,
+            visibility: Visibility::Private,
+            credential_expiration: Expiration::Never,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+        });
+
+        assert_eq!(dto.display.name, "Template");
+        assert!(dto.display.logo.is_none());
+
+        let serialized = serde_json::to_value(dto).unwrap();
+        assert_eq!(serialized["display"]["name"], "Template");
     }
 
     #[test]
@@ -1063,7 +1101,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_template_defaults_empty_display_name_to_updated_title() {
+    async fn update_template_keeps_empty_display_name_and_resolves_it_on_read() {
         let state =
             Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
@@ -1098,7 +1136,36 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(template.display.unwrap().name, "Updated title");
+
+        assert_eq!(template.display.as_ref().unwrap().name, "");
+        assert_eq!(TemplateDto::from(template).display.name, "Updated title");
+
+        update_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(UpdateTemplateEndpointRequest {
+                template_id: "template-to-update".to_string(),
+                title: Some("Renamed title".to_string()),
+                display: None,
+                tags: None,
+                status: None,
+                visibility: None,
+                credential_expiration: None,
+                description: None,
+                r#type: None,
+                schema: None,
+                schema_properties_attributes: None,
+                holder_authorization: None,
+            }),
+        )
+        .await
+        .unwrap();
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(TemplateDto::from(template).display.name, "Renamed title");
     }
 
     #[tokio::test]

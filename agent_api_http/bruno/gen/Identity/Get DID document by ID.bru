@@ -24,26 +24,26 @@ docs {
 example {
   name: 200 Response
   description: Document retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/documents/:document_id
     method: GET
     mode: none
     params:path: {
-      document_id: 
+      document_id:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -63,26 +63,26 @@ example {
 example {
   name: 404 Response
   description: Document not found
-  
+
   request: {
     url: {{BASE_URL}}/v0/documents/:document_id
     method: GET
     mode: none
     params:path: {
-      document_id: 
+      document_id:
     }
   }
-  
+
   response: {
     status: {
       code: 404
       text: Not Found
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

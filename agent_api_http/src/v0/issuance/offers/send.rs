@@ -28,7 +28,9 @@ pub struct EmailOfferEndpointRequest {
     operation_id = "send_offer_to_individual",
     tags = ["Issuance"],
     responses(
-        (status = 200, description = "Offer sent successfully")
+        (status = 200, description = "Offer sent successfully"),
+        (status = 400, description = "The credential offer does not exist"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -74,7 +76,9 @@ pub struct TargetUrlOfferEndpointRequest {
     operation_id = "send_offer_to_organization",
     tags = ["Issuance"],
     responses(
-        (status = 200, description = "Offer sent successfully")
+        (status = 200, description = "Offer sent successfully"),
+        (status = 400, description = "The credential offer does not exist"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]

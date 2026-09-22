@@ -30,6 +30,7 @@ pub struct GetDocumentsEndpoint {
     params(GetDocumentsEndpoint),
     responses(
         (status = 200, description = "Documents retrieved successfully", body = [Document]),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -44,6 +45,7 @@ pub(crate) async fn get_documents(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_documents",
+        None,
         &state.query.all_documents,
     )
     .await?
@@ -73,6 +75,7 @@ pub(crate) async fn get_documents(
     tags = ["Identity"],
     responses(
         (status = 200, description = "Document retrieved successfully", body = Document),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Document not found"),
     )
 )]
@@ -86,6 +89,7 @@ pub(crate) async fn get_document(
         state.authorization_checker.clone(),
         actor.clone(),
         &document_id,
+        Some(&document_id),
         &state.query.document,
     )
     .await?

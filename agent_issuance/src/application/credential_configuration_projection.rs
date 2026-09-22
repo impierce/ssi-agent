@@ -1,6 +1,6 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
-use agent_library::template::aggregate::{DataModel, HolderType, PropertyAttribute, Template};
+use agent_library::template::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -10,6 +10,7 @@ use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
 };
+use shared_kernel::authorization::Caller;
 use shared_kernel::view_repository::DynViewRepository;
 use std::{
     collections::HashMap,
@@ -67,7 +68,7 @@ impl CredentialConfigurationProjection {
                 };
                 if let Err(e) = command_handler(
                     self.issuance_state.authorization_checker.clone(),
-                    None,
+                    Caller::Internal,
                     SERVER_CONFIG_ID,
                     &self.issuance_state.command.server_config,
                     command,
@@ -94,7 +95,7 @@ impl CredentialConfigurationProjection {
         };
         if let Err(e) = command_handler(
             self.issuance_state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             SERVER_CONFIG_ID,
             &self.issuance_state.command.server_config,
             command,
@@ -141,44 +142,22 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
         template.r#type.clone()
     };
 
-    let display = template
-        .display
-        .as_ref()
-        .map(|d| {
-            let logo = d.logo.as_ref().and_then(|logo| {
-                logo.uri.parse().ok().map(|uri| OidcLogo {
-                    uri,
-                    alt_text: logo.alt_text.clone(),
-                })
-            });
-
-            let name = if d.name.trim().is_empty() {
-                template.title.clone()
-            } else {
-                d.name.clone()
-            };
-
-            vec![CredentialConfigurationsSupportedDisplay {
-                name,
-                locale: None,
-                logo,
-                description: None,
-                background_image: None,
-                background_color: None,
-                text_color: None,
-            }]
+    let resolved_display = Display::resolve(template.display.clone(), &template.title);
+    let logo = resolved_display.logo.as_ref().and_then(|logo| {
+        logo.uri.parse().ok().map(|uri| OidcLogo {
+            uri,
+            alt_text: logo.alt_text.clone(),
         })
-        .or_else(|| {
-            Some(vec![CredentialConfigurationsSupportedDisplay {
-                name: template.title.clone(),
-                locale: None,
-                logo: None,
-                description: None,
-                background_image: None,
-                background_color: None,
-                text_color: None,
-            }])
-        });
+    });
+    let display = Some(vec![CredentialConfigurationsSupportedDisplay {
+        name: resolved_display.name,
+        locale: None,
+        logo,
+        description: None,
+        background_image: None,
+        background_color: None,
+        text_color: None,
+    }]);
 
     let claims = if format == "vc+sd-jwt" {
         build_claims_from_schema(template, Some("credentialSubject."))
@@ -356,7 +335,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     };
                     if let Err(e) = command_handler(
                         self.issuance_state.authorization_checker.clone(),
-                        None,
+                        Caller::Internal,
                         SERVER_CONFIG_ID,
                         &self.issuance_state.command.server_config,
                         command,

@@ -43,7 +43,7 @@ docs {
 example {
   name: 201 Response (OpenBadges template)
   description: New template created successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/create-new-template
     method: POST
@@ -70,17 +70,17 @@ example {
       }
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 201
       text: Created
     }
-  
+
     body: {
       type: json
       content: '''
@@ -112,7 +112,7 @@ example {
 example {
   name: 201 Response (Standard template)
   description: New template created successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/create-new-template
     method: POST
@@ -125,17 +125,17 @@ example {
       }
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 201
       text: Created
     }
-  
+
     body: {
       type: json
       content: '''

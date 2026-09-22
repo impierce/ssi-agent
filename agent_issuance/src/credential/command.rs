@@ -3,6 +3,7 @@ use oid4vci::{
     notification_request::NotificationRequest, proofs::Proofs,
 };
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 use crate::credential::aggregate::CredentialStatus;
 
@@ -38,4 +39,16 @@ pub enum CredentialCommand {
         credential_id: String,
         credential_status: CredentialStatus,
     },
+}
+
+impl CommandOperation for CredentialCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateUnsignedCredential { .. } => "issuance.credentials.unsigned.create",
+            Self::CreateSignedCredential { .. } => "issuance.credentials.signed.create",
+            Self::SignCredential { .. } => "issuance.credentials.sign",
+            Self::AddNotification { .. } => "issuance.credentials.notifications.add",
+            Self::UpdateCredentialStatus { .. } => "issuance.credentials.status.update",
+        }
+    }
 }

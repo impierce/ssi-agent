@@ -22,6 +22,7 @@ use axum::{
     Router,
 };
 use http::HeaderMap;
+use http_api_problem::ApiError;
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
 use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
@@ -158,6 +159,10 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 
     debug!("Path segments and query string: `{}`", parts.uri);
 
+    if path_contains_null_byte(parts.uri.path()) {
+        return Err(null_byte_rejection().into_axum_response());
+    }
+
     // Convert the request body into bytes.
     let bytes = body
         .collect()
@@ -165,11 +170,52 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
         .to_bytes();
 
+    if body_contains_null_byte(&bytes) {
+        return Err(null_byte_rejection().into_axum_response());
+    }
+
     let _ = serde_json::from_slice(&bytes)
         .and_then(|json_value: serde_json::Value| serde_json::to_string_pretty(&json_value))
         .map(|pretty_json| info!("Request Body: {}", pretty_json));
 
     Ok(Request::from_parts(parts, Body::from(bytes)))
+}
+
+/// A `NUL` anywhere in a request eventually reaches the event store, which cannot hold one: Postgres
+/// rejects it in `text` (`invalid byte sequence for encoding "UTF8": 0x00`) and in `jsonb`
+/// (`unsupported Unicode escape sequence`). Both surface far downstream as a `500`, so requests
+/// carrying one are turned away here instead.
+///
+/// A URI spells a `NUL` as `%00`; the path is still percent-encoded at this point, so it is matched
+/// in that form rather than decoded first.
+fn path_contains_null_byte(path: &str) -> bool {
+    path.as_bytes()
+        .windows(3)
+        .any(|window| window[0] == b'%' && &window[1..] == b"00")
+}
+
+/// JSON spells a `NUL` as the escape `\u0000`, which survives parsing as a real `NUL` byte, so the
+/// raw body is matched against both spellings.
+fn body_contains_null_byte(bytes: &[u8]) -> bool {
+    if bytes.contains(&0) {
+        return true;
+    }
+
+    bytes
+        .windows(6)
+        .enumerate()
+        .filter(|(_, window)| *window == br"\u0000")
+        // A backslash that is itself escaped (`\\u0000`) is literal text and stores fine. The escape
+        // is only real when an even number of backslashes precedes it.
+        .any(|(index, _)| bytes[..index].iter().rev().take_while(|byte| **byte == b'\\').count() % 2 == 0)
+}
+
+fn null_byte_rejection() -> ApiError {
+    ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Unsupported Character")
+        .type_url(error::type_url("request#unsupported-character"))
+        .message("The request contains a NUL character, which cannot be stored.")
+        .finish()
 }
 
 /// Adapter that lets the actor extractor read values from HTTP headers.
@@ -254,6 +300,21 @@ mod tests {
 
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
     pub const TEMPLATE_ID: &str = "001";
+
+    #[test]
+    fn null_bytes_are_detected_in_every_spelling() {
+        assert!(path_contains_null_byte("/v0/credentials/%00"));
+        assert!(!path_contains_null_byte("/v0/credentials/00"));
+        assert!(!path_contains_null_byte("/v0/credentials/abc"));
+
+        assert!(body_contains_null_byte(b"{\"id\": \"a\0b\"}"));
+        assert!(body_contains_null_byte(br#"{"id": "a\u0000b"}"#));
+        assert!(!body_contains_null_byte(br#"{"id": "ab"}"#));
+
+        // A backslash that is itself escaped leaves the text `\u0000`, which stores fine.
+        assert!(!body_contains_null_byte(br#"{"id": "a\\u0000b"}"#));
+        assert!(body_contains_null_byte(br#"{"id": "a\\\u0000b"}"#));
+    }
 
     lazy_static::lazy_static! {
         static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =

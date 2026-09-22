@@ -25,26 +25,26 @@ docs {
 example {
   name: 200 Response
   description: Template retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/get-template-by-id/:id
     method: GET
     mode: none
     params:path: {
-      id: 
+      id:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

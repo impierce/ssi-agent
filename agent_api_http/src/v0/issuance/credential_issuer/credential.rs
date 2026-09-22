@@ -224,6 +224,7 @@ pub mod tests {
     };
     use rstest::rstest;
     use serde_json::{json, Value};
+    use shared_kernel::authorization::Caller;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt;
@@ -340,7 +341,7 @@ pub mod tests {
         };
         agent_shared::handlers::command_handler(
             issuance_state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             TEST_NONCE,
             &issuance_state.command.nonce,
             command,
@@ -458,7 +459,7 @@ pub mod tests {
         };
         agent_shared::handlers::command_handler(
             issuance_state.authorization_checker.clone(),
-            None,
+            Caller::Internal,
             TEST_NONCE,
             &issuance_state.command.nonce,
             command,

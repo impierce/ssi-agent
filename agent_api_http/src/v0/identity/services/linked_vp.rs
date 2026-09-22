@@ -24,9 +24,11 @@ pub struct LinkedVPEndpointRequest {
     request_body = LinkedVPEndpointRequest,
     responses(
         (status = 204, description = "Linked presentation service created"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 409, description = "Service already exists"),
         (status = 401, description = "Authentication required"),
         (status = 403, description = "Operation forbidden"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn create_linked_verifiable_presentation(

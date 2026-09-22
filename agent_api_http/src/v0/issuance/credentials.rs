@@ -1,6 +1,6 @@
 use crate::error::type_url;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -42,7 +42,9 @@ use std::sync::Arc;
     operation_id = "get_credential_by_id",
     tags = ["Issuance"],
     responses(
-        (status = 200, description = "Successfully retrieved credential", body = Credential)
+        (status = 200, description = "Successfully retrieved credential", body = Credential),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Credential not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -55,6 +57,7 @@ pub(crate) async fn credential(
         state.authorization_checker.clone(),
         actor.clone(),
         &credential_id,
+        Some(&credential_id),
         &state.query.credential,
     )
     .await?
@@ -85,7 +88,10 @@ pub struct CredentialsEndpointRequest {
     responses(
         (status = 201, description = "Credential created successfully",
             headers(("Location" = String, description = "URI of the newly created credential"))
-        )
+        ),
+        (status = 400, description = "Missing or empty `templateId`"),
+        (status = 404, description = "Template not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -120,6 +126,7 @@ pub(crate) async fn credentials(
         library_state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &library_state.query.template,
     )
     .await?
@@ -158,6 +165,7 @@ pub(crate) async fn credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         SERVER_CONFIG_ID,
+        Some(SERVER_CONFIG_ID),
         &state.query.server_config,
     )
     .await?
@@ -248,6 +256,7 @@ pub(crate) async fn credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &state.query.offer,
     )
     .await?
@@ -300,10 +309,10 @@ pub(crate) async fn credentials(
     .await?;
 
     // Return the credential.
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &credential_id,
+        Some(&credential_id),
         &state.query.credential,
     )
     .await?
@@ -394,6 +403,7 @@ pub(crate) async fn all_credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_credentials",
+        None,
         &state.query.all_credentials,
     )
     .await?
@@ -424,7 +434,9 @@ pub struct PatchCredentialEndpointRequest {
     ),
     responses(
         (status = 204, description = "Credential status updated successfully"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub async fn patch_credential(
@@ -439,6 +451,7 @@ pub async fn patch_credential(
         state.authorization_checker.clone(),
         actor.clone(),
         &credential_id,
+        Some(&credential_id),
         &state.query.credential,
     )
     .await?
@@ -474,9 +487,8 @@ pub async fn patch_credential(
             .next_back()
             .ok_or(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?; // This is an Internal Server Error because if this line fails that means we stored an incorect URL in our own credential.
 
-        command_handler(
+        internal_command_handler(
             state.authorization_checker.clone(),
-            actor.clone(),
             status_list_id,
             &state.command.status_list,
             command,

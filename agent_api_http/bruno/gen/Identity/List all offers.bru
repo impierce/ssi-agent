@@ -21,23 +21,23 @@ docs {
 example {
   name: 200 Response
   description: All offers retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/holder/offers
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

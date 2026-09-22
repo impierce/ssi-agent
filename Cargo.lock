@@ -105,6 +105,7 @@ dependencies = [
  "oid4vci",
  "oid4vp",
  "opentelemetry",
+ "percent-encoding",
  "rand 0.9.4",
  "rstest",
  "sd-jwt-payload",

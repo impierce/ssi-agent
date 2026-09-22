@@ -30,7 +30,7 @@ use std::{collections::HashMap, sync::Arc};
 pub struct PublicTemplateDto {
     pub title: String,
     pub description: Option<String>,
-    pub display: Option<Display>,
+    pub display: Display,
     pub data_model: DataModel,
     pub holder_type: HolderType,
     pub r#type: Vec<String>,
@@ -43,10 +43,12 @@ pub struct PublicTemplateDto {
 
 impl From<agent_library::template::views::TemplateView> for PublicTemplateDto {
     fn from(value: agent_library::template::views::TemplateView) -> Self {
+        let display = Display::resolve(value.display, &value.title);
+
         Self {
             title: value.title,
             description: value.description,
-            display: value.display,
+            display,
             data_model: value.data_model,
             holder_type: value.holder_type,
             r#type: value.r#type,
@@ -289,6 +291,7 @@ mod tests {
         // `modifiedAt` is deliberately public: it is the only freshness signal a reader has.
         assert_eq!(template["modifiedAt"], "2026-01-01T00:00:00Z");
         assert_eq!(template["title"], "Title of public-published");
+        assert_eq!(template["display"]["name"], "Title of public-published");
         assert_eq!(template["description"], "A description");
         assert_eq!(template["type"], serde_json::json!(["VerifiableCredential"]));
         assert_eq!(template["schema"], serde_json::json!({ "type": "object" }));

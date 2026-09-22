@@ -1,5 +1,5 @@
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
     state::HolderState,
@@ -36,6 +36,7 @@ pub(crate) async fn credentials(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_holder_credentials",
+        None,
         &state.query.all_holder_credentials,
     )
     .await?
@@ -64,6 +65,8 @@ pub struct HolderCredentialsEndpointRequest {
     request_body = HolderCredentialsEndpointRequest,
     responses(
         (status = 201, description = "Credential stored successfully", body = Credential),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema, or the credential could not be decoded"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -89,10 +92,10 @@ pub(crate) async fn post_credentials(
     )
     .await?;
 
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &holder_credential_id,
+        Some(&holder_credential_id),
         &state.query.holder_credential,
     )
     .await?
@@ -111,6 +114,7 @@ pub(crate) async fn post_credentials(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Credential retrieved successfully", body = Credential),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential not found"),
     )
 )]
@@ -124,6 +128,7 @@ pub(crate) async fn credential(
         state.authorization_checker.clone(),
         actor.clone(),
         &holder_credential_id,
+        Some(&holder_credential_id),
         &state.query.holder_credential,
     )
     .await?

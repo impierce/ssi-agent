@@ -41,6 +41,9 @@ pub struct PatchProfileEndpointRequest {
     tags = ["Identity", "Profile"],
     responses(
         (status = 200, description = "Profile updated successfully"),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 409, description = "The profile was provisioned through configuration and cannot be modified at runtime"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -159,6 +162,7 @@ pub(crate) async fn get_profile(
         state.authorization_checker.clone(),
         actor.clone(),
         PROFILE_ID,
+        Some(PROFILE_ID),
         &state.query.profile,
     )
     .await?

@@ -21,6 +21,8 @@ use std::sync::Arc;
     tags = ["Library", "Catalog"],
     responses(
         (status = 200, description = "Catalog retrieved successfully", body = CatalogDto),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Catalog not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -33,6 +35,7 @@ pub(crate) async fn get_catalog_by_id(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?

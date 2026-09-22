@@ -62,6 +62,8 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '422':
+          description: Request body does not match the expected schema
   /v0/add-templates-to-catalog:
     post:
       tags:
@@ -83,6 +85,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Catalog not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/authorization_requests:
     get:
       tags:
@@ -122,6 +130,10 @@ paths:
             application/x-www-form-urlencoded:
               schema:
                 type: string
+        '400':
+          description: Malformed JSON request body
+        '422':
+          description: Request body does not match the expected schema
   /v0/authorization_requests/{authorization_request_id}:
     get:
       tags:
@@ -142,6 +154,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthorizationRequestResponse'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Authorization request not found
   /v0/change-catalog-appearance:
@@ -165,6 +179,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Catalog not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/configuration:
     get:
       tags:
@@ -189,6 +209,8 @@ paths:
             application/json:
               schema:
                 type: object
+        '400':
+          description: Invalid query parameter
   /v0/connections:
     get:
       tags:
@@ -211,6 +233,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Connection'
+        '400':
+          description: Invalid query parameter
     post:
       tags:
       - Connections
@@ -235,6 +259,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+        '400':
+          description: Malformed JSON request body
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -251,6 +277,12 @@ paths:
       responses:
         '200':
           description: ''
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Connection not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/connections/remove-connection:
     post:
       tags:
@@ -267,6 +299,12 @@ paths:
       responses:
         '200':
           description: ''
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Connection not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/connections/sync-connection:
     post:
       tags:
@@ -283,6 +321,8 @@ paths:
       responses:
         '200':
           description: ''
+        '400':
+          description: Malformed JSON request body
   /v0/connections/{id}:
     get:
       tags:
@@ -303,6 +343,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Connection not found
   /v0/create-linked-verifiable-presentation:
     post:
       tags:
@@ -317,12 +361,16 @@ paths:
       responses:
         '204':
           description: Linked presentation service created
+        '400':
+          description: Malformed JSON request body
         '401':
           description: Authentication required
         '403':
           description: Operation forbidden
         '409':
           description: Service already exists
+        '422':
+          description: Request body does not match the expected schema
   /v0/create-new-catalog:
     post:
       tags:
@@ -344,6 +392,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body, or an empty catalog name
+        '422':
+          description: Request body does not match the expected schema
   /v0/create-new-template:
     post:
       tags:
@@ -392,6 +444,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Template'
+        '400':
+          description: Malformed JSON request body, or an invalid template definition
+        '422':
+          description: Request body does not match the expected schema
   /v0/create-public-offer:
     post:
       tags:
@@ -411,6 +467,8 @@ paths:
           description: Template schema invalid for public offers
         '404':
           description: Template or offer not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/credentials:
     get:
       tags:
@@ -448,6 +506,12 @@ paths:
               schema:
                 type: string
               description: URI of the newly created credential
+        '400':
+          description: Missing or empty `templateId`
+        '404':
+          description: Template not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/credentials/{credential_id}:
     get:
       tags:
@@ -468,6 +532,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Credential not found
     patch:
       tags:
       - Issuance
@@ -491,8 +559,12 @@ paths:
       responses:
         '204':
           description: Credential status updated successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Credential not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/delete-catalog:
     post:
       tags:
@@ -510,6 +582,12 @@ paths:
       responses:
         '204':
           description: Catalog deleted
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Catalog not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/delete-public-offer:
     post:
       tags:
@@ -525,8 +603,12 @@ paths:
       responses:
         '204':
           description: Public offer deleted successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/delete-template:
     post:
       tags:
@@ -544,6 +626,12 @@ paths:
       responses:
         '204':
           description: Template deleted successfully
+        '400':
+          description: Malformed JSON request body, or a missing template ID
+        '404':
+          description: Template not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/documents:
     get:
       tags:
@@ -568,6 +656,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Document'
+        '400':
+          description: Invalid query parameter
   /v0/documents/{document_id}:
     get:
       tags:
@@ -588,6 +678,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Document'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Document not found
   /v0/duplicate-template:
@@ -618,8 +710,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Template'
+        '400':
+          description: Malformed JSON request body
         '422':
-          description: Source Template Not Found
+          description: Source template not found, or the request body does not match the expected schema
   /v0/events:
     get:
       tags:
@@ -675,6 +769,7 @@ paths:
           description: Unauthorized
         '403':
           description: Forbidden
+      x-access-operation: events.stream
   /v0/get-all-catalogs:
     get:
       tags:
@@ -728,6 +823,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Catalog not found
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -749,6 +848,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Template not found
   /v0/holder/credentials:
     get:
       tags:
@@ -786,6 +889,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CredentialView'
+        '400':
+          description: Malformed JSON request body
+        '422':
+          description: Request body does not match the expected schema, or the credential could not be decoded
   /v0/holder/credentials/{holder_credential_id}:
     get:
       tags:
@@ -807,6 +914,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CredentialView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Credential not found
   /v0/holder/offers:
@@ -847,8 +956,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OfferView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Credential offer not found
+        '409':
+          description: The credential offer is not in a state that allows accepting it
+        '422':
+          description: The credential offer cannot be processed, e.g. it carries no pre-authorized code
+        '501':
+          description: The credential issuer requires a flow UniCore does not support yet
+        '502':
+          description: The credential issuer or its authorization server could not be reached
   /v0/holder/offers/{offer_id}/reject:
     post:
       tags:
@@ -866,6 +985,12 @@ paths:
       responses:
         '204':
           description: Credential offer rejected successfully
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Credential offer not found
+        '409':
+          description: The credential offer has already been accepted or rejected
   /v0/holder/offers/{received_offer_id}:
     get:
       tags:
@@ -887,6 +1012,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OfferView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Offer not found
   /v0/holder/presentations:
@@ -926,8 +1053,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PresentationView'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Credential not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/holder/presentations/{presentation_id}:
     get:
       tags:
@@ -949,6 +1080,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PresentationView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Presentation not found
   /v0/holder/presentations/{presentation_id}/signed:
@@ -973,6 +1106,8 @@ paths:
             application/jwt:
               schema:
                 type: string
+        '400':
+          description: Invalid path parameter
         '404':
           description: Signed credential presentation not found
   /v0/list-all-templates:
@@ -1013,6 +1148,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Catalog not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/make-catalog-public:
     post:
       tags:
@@ -1029,11 +1170,17 @@ paths:
         required: true
       responses:
         '200':
-          description: Catalog make public successfully
+          description: Catalog made public successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Catalog not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/offers:
     get:
       tags:
@@ -1102,6 +1249,10 @@ paths:
       responses:
         '200':
           description: Offer sent successfully
+        '400':
+          description: The credential offer does not exist
+        '422':
+          description: Request body does not match the expected schema
   /v0/offers/send-offer-to-organization:
     post:
       tags:
@@ -1118,6 +1269,10 @@ paths:
       responses:
         '200':
           description: Offer sent successfully
+        '400':
+          description: The credential offer does not exist
+        '422':
+          description: Request body does not match the expected schema
   /v0/offers/{offer_id}:
     get:
       tags:
@@ -1138,6 +1293,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Offer'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Offer not found
   /v0/profile:
@@ -1173,6 +1330,12 @@ paths:
       responses:
         '200':
           description: Profile updated successfully
+        '400':
+          description: Malformed JSON request body
+        '409':
+          description: The profile was provisioned through configuration and cannot be modified at runtime
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-linked-domains:
     post:
       tags:
@@ -1210,6 +1373,8 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-linked-verifiable-presentation:
     post:
       tags:
@@ -1245,6 +1410,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: Catalog not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/services:
     get:
       tags:
@@ -1280,6 +1451,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceResponse'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Identity service not found
   /v0/take-public-offer-offline:
@@ -1297,8 +1470,12 @@ paths:
       responses:
         '204':
           description: Public offer taken offline successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/take-public-offer-online:
     post:
       tags:
@@ -1314,8 +1491,12 @@ paths:
       responses:
         '204':
           description: Public offer taken online successfully
+        '400':
+          description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/update-template:
     post:
       tags:
@@ -1333,6 +1514,12 @@ paths:
       responses:
         '204':
           description: Template updated successfully
+        '400':
+          description: Malformed JSON request body, or a missing template ID
+        '404':
+          description: Template not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/verify-linked-domains:
     get:
       tags:
@@ -2596,6 +2783,7 @@ components:
       type: object
       required:
       - title
+      - display
       - dataModel
       - holderType
       - type
@@ -2610,9 +2798,7 @@ components:
           - string
           - 'null'
         display:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Display'
+          $ref: '#/components/schemas/Display'
         holderType:
           $ref: '#/components/schemas/HolderType'
         modifiedAt:
@@ -2746,6 +2932,7 @@ components:
       required:
       - id
       - title
+      - display
       - dataModel
       - holderType
       - status
@@ -2763,9 +2950,7 @@ components:
           - string
           - 'null'
         display:
-          oneOf:
-          - type: 'null'
-          - $ref: '#/components/schemas/Display'
+          $ref: '#/components/schemas/Display'
         holderAuthorization:
           $ref: '#/components/schemas/HolderAuthorization'
         holderType:

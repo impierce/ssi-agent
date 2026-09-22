@@ -27,6 +27,7 @@ pub struct ConfigurationQuery {
     params(ConfigurationQuery),
     responses(
         (status = 200, description = "Application configuration", body = Object),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 pub async fn configuration(Query(ConfigurationQuery { provisioned }): Query<ConfigurationQuery>) -> Response {

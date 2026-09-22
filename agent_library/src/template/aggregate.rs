@@ -26,6 +26,39 @@ pub struct Display {
     pub logo: Option<Logo>,
 }
 
+impl Display {
+    /// Resolves the display name against the template `title`.
+    ///
+    /// `name` is a `String` and cannot express "not provided", so an empty (or whitespace-only)
+    /// name stands in for it and falls back to the title. The fallback is resolved on read rather
+    /// than materialized into the aggregate on write, which keeps the link live: as long as no
+    /// explicit display name was given, later title updates keep flowing through to every reader.
+    pub fn resolved_name(&self, title: &str) -> String {
+        if self.name.trim().is_empty() {
+            title.to_string()
+        } else {
+            self.name.clone()
+        }
+    }
+
+    /// Resolves a template's stored `display` into one that is always present and always carries a
+    /// name. A template may have no `display` at all, but wallets and verifiers render a name and a
+    /// logo from it unconditionally, so readers are given an object either way — derived from the
+    /// title when nothing was stored.
+    pub fn resolve(display: Option<Display>, title: &str) -> Display {
+        match display {
+            Some(display) => Display {
+                name: display.resolved_name(title),
+                logo: display.logo,
+            },
+            None => Display {
+                name: title.to_string(),
+                logo: None,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq, utoipa::ToSchema)]
 pub enum DataModel {
     // See https://www.w3.org/TR/vc-data-model-1.1/
@@ -343,7 +376,9 @@ impl Aggregate for Template {
             UpdateDisplay { template_id, display } => {
                 ensure_template_editable(&self.status)?;
 
-                let display = default_empty_display_name(display, &self.title);
+                // An empty `display.name` is stored verbatim: it means "no explicit display name",
+                // and the read paths resolve it to the current title. Materializing the title here
+                // would freeze it, so later title updates would no longer reach the wallet.
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -867,13 +902,6 @@ fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
     } else {
         Some(normalized)
     }
-}
-
-fn default_empty_display_name(mut display: Display, title: &str) -> Display {
-    if display.name.trim().is_empty() {
-        display.name = title.to_string();
-    }
-    display
 }
 
 fn ensure_template_editable(status: &Status) -> Result<(), TemplateError> {

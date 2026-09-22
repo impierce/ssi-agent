@@ -1,5 +1,6 @@
 use oid4vp::dcql::dcql_query::DcqlQuery;
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 use crate::generic_oid4vc::GenericAuthorizationResponse;
 
@@ -17,4 +18,14 @@ pub enum AuthorizationRequestCommand {
     VerifyAuthorizationResponse {
         authorization_response: GenericAuthorizationResponse,
     },
+}
+
+impl CommandOperation for AuthorizationRequestCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateAuthorizationRequest { .. } => "verification.authorization_requests.create",
+            Self::SignAuthorizationRequestObject => "verification.authorization_requests.sign",
+            Self::VerifyAuthorizationResponse { .. } => "verification.authorization_requests.response.verify",
+        }
+    }
 }

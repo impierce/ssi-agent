@@ -1,0 +1,60 @@
+# Disposable UniCore instance used for OpenAPI fuzzing. Driven by `scripts/fuzz-openapi.sh`.
+#
+# Deliberately separate from `compose.yaml` rather than an override of it:
+#   - its own project name, so a fuzz run never disturbs a local development stack;
+#   - no published port on 3033, which is where a development instance usually lives;
+#   - no pgadmin, no persistent volumes, no event publishers.
+
+name: unicore-fuzz
+
+services:
+  fuzz-postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: fuzz
+      POSTGRES_USER: fuzz_user
+      POSTGRES_PASSWORD: fuzz_pass
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # The event store is thrown away after every run, so it never needs to touch a disk.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuzz_user -d fuzz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  ssi-agent:
+    build:
+      context: ../..
+      dockerfile: ./agent_application/docker/Dockerfile
+    depends_on:
+      fuzz-postgres:
+        condition: service_healthy
+    # Published so the runner script can poll `/readyz` and so a developer can inspect the
+    # instance while it is up. Schemathesis itself reaches the agent over the compose network.
+    ports:
+      - "${UNICORE_FUZZ_PORT:-3099}:3033"
+    environment:
+      UNICORE__PROFILE: development
+      UNICORE__CONFIG_FILE: /app/config.yaml
+      UNICORE__APPLICATION_URL: "http://localhost:3033"
+      UNICORE__EVENT_STORE__TYPE: postgres
+      UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://fuzz_user:fuzz_pass@fuzz-postgres:5432/fuzz
+      # Throwaway instance, throwaway secret. Never reuse this value anywhere else.
+      UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "fuzz-only-stronghold-password"
+    volumes:
+      - ./fuzz.config.yaml:/app/config.yaml:ro
+
+  schemathesis:
+    image: ghcr.io/schemathesis/schemathesis:${SCHEMATHESIS_VERSION:-4.9.4}
+    # Started only via `docker compose run`, never by `docker compose up`.
+    profiles: ["tools"]
+    depends_on:
+      - ssi-agent
+    volumes:
+      - ../../agent_api_http/openapi.yaml:/spec/openapi.yaml:ro
+      - ../../reports/fuzz:/reports
+    # The arguments come from `scripts/fuzz-openapi.sh`.
+    entrypoint: ["schemathesis"]

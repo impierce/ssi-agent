@@ -27,7 +27,7 @@ docs {
 example {
   name: 200 Response
   description: Catalog make public successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/make-catalog-public
     method: POST
@@ -38,17 +38,17 @@ example {
       }
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

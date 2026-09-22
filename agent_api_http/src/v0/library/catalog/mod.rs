@@ -2,7 +2,7 @@ pub mod openapi;
 pub mod queries;
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
@@ -67,7 +67,9 @@ pub struct CreateCatalogRequest {
         content = CreateCatalogRequest,
         ),
     responses(
-        (status = 201, description = "Catalog created successfully", body = CatalogDto)
+        (status = 201, description = "Catalog created successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body, or an empty catalog name"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -98,10 +100,10 @@ pub(crate) async fn create_catalog(
     .await?;
 
     // Return the created catalog
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -135,7 +137,10 @@ pub struct AddTemplatesRequest {
         content = AddTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Catalog updated successfully", body = CatalogDto)
+        (status = 200, description = "Catalog updated successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -151,6 +156,7 @@ pub(crate) async fn add_templates_to_catalog(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -171,10 +177,10 @@ pub(crate) async fn add_templates_to_catalog(
     .await?;
 
     // Return the updated catalog
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -201,7 +207,10 @@ pub struct RemoveTemplatesRequest {
         content = RemoveTemplatesRequest,
         ),
     responses(
-        (status = 200, description = "Template(s) removed successfully", body = CatalogDto)
+        (status = 200, description = "Template(s) removed successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -217,6 +226,7 @@ pub(crate) async fn remove_templates_from_catalog(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -237,10 +247,10 @@ pub(crate) async fn remove_templates_from_catalog(
     .await?;
 
     // Return the updated catalog
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -267,7 +277,10 @@ pub struct ChangeCatalogAppearanceRequest {
         content = ChangeCatalogAppearanceRequest,
         ),
     responses(
-        (status = 200, description = "Catalog appearance updated successfully", body = CatalogDto)
+        (status = 200, description = "Catalog appearance updated successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -280,6 +293,7 @@ pub(crate) async fn change_catalog_appearance(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -304,6 +318,7 @@ pub(crate) async fn change_catalog_appearance(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -329,7 +344,10 @@ pub struct MakeCatalogPublicRequest {
         content = MakeCatalogPublicRequest,
         ),
     responses(
-        (status = 200, description = "Catalog make public successfully", body = CatalogDto)
+        (status = 200, description = "Catalog made public successfully", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -342,6 +360,7 @@ pub(crate) async fn make_catalog_public(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -359,7 +378,18 @@ pub(crate) async fn make_catalog_public(
         command,
     )
     .await?;
-    Ok(StatusCode::OK.into_response())
+
+    // Return the updated catalog
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -380,7 +410,10 @@ pub struct MakeCatalogPrivateRequest {
         content = MakeCatalogPrivateRequest,
         ),
     responses(
-        (status = 200, description = "Catalog made private successfully.", body = CatalogDto)
+        (status = 200, description = "Catalog made private successfully.", body = CatalogDto),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
     )]
 #[axum_macros::debug_handler]
@@ -393,6 +426,7 @@ pub(crate) async fn make_catalog_private(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -410,7 +444,18 @@ pub(crate) async fn make_catalog_private(
         command,
     )
     .await?;
-    Ok(StatusCode::OK.into_response())
+
+    // Return the updated catalog
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &catalog_id,
+        Some(&catalog_id),
+        &state.query.catalog,
+    )
+    .await?
+    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -431,7 +476,11 @@ pub struct DeleteCatalogRequest {
         content = DeleteCatalogRequest,
         ),
     responses(
-        (status = 204, description = "Catalog deleted"))
+        (status = 204, description = "Catalog deleted"),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Catalog not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
+    )
     )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_catalog(
@@ -443,6 +492,7 @@ pub(crate) async fn delete_catalog(
         state.authorization_checker.clone(),
         actor.clone(),
         &catalog_id,
+        Some(&catalog_id),
         &state.query.catalog,
     )
     .await?
@@ -461,4 +511,130 @@ pub(crate) async fn delete_catalog(
     )
     .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handlers::public_command_handler;
+    use agent_store::{in_memory::InMemory, library_state};
+    use shared_kernel::{
+        async_trait,
+        authorization::{
+            Actor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller,
+        },
+    };
+    use std::sync::Mutex;
+
+    struct CapturingAuthorizationChecker {
+        requests: Arc<Mutex<Vec<AuthorizationRequest>>>,
+    }
+
+    #[async_trait]
+    impl AuthorizationChecker for CapturingAuthorizationChecker {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(())
+        }
+    }
+
+    async fn catalog_state(requests: Arc<Mutex<Vec<AuthorizationRequest>>>, catalog_id: &str) -> Arc<LibraryState> {
+        let mut state = library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await;
+
+        public_command_handler(
+            catalog_id,
+            &state.command.catalog,
+            CatalogCommand::CreateCatalog {
+                catalog_id: catalog_id.to_string(),
+                display: CatalogDisplay {
+                    name: "Catalog".to_string(),
+                    description: String::new(),
+                    icon: None,
+                },
+                visibility: CatalogVisibility::Private,
+            },
+        )
+        .await
+        .unwrap();
+
+        state.authorization_checker = Arc::new(CapturingAuthorizationChecker { requests });
+        Arc::new(state)
+    }
+
+    fn assert_catalog_mutation_sequence(
+        requests: &[AuthorizationRequest],
+        actor: &Actor,
+        catalog_id: &str,
+        command_operation_name: &'static str,
+    ) {
+        assert_eq!(requests.len(), 3);
+        assert_eq!(requests[0].caller, Caller::Actor(actor.clone()));
+        assert_eq!(requests[1].caller, Caller::Actor(actor.clone()));
+        assert_eq!(requests[2].caller, Caller::Internal);
+
+        assert_eq!(
+            requests[0].operation,
+            AuthorizationOperation::Query {
+                resource_id: Some(catalog_id.to_string()),
+                operation_name: "library.catalogs.get",
+            }
+        );
+        assert_eq!(
+            requests[1].operation,
+            AuthorizationOperation::Command {
+                aggregate_id: catalog_id.to_string(),
+                resource_id: None,
+                operation_name: command_operation_name,
+            }
+        );
+        assert_eq!(
+            requests[2].operation,
+            AuthorizationOperation::Query {
+                resource_id: Some(catalog_id.to_string()),
+                operation_name: "library.catalogs.get",
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn catalog_template_mutations_preserve_the_authorization_boundary() {
+        let catalog_id = "catalog-1";
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+
+        for (operation_name, add) in [
+            ("library.catalogs.templates.add", true),
+            ("library.catalogs.templates.remove", false),
+        ] {
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let state = catalog_state(Arc::clone(&requests), catalog_id).await;
+
+            if add {
+                add_templates_to_catalog(
+                    State(state),
+                    RequestActor(Some(actor.clone())),
+                    Json(AddTemplatesRequest {
+                        catalog_id: catalog_id.to_string(),
+                        template_ids: Vec::new(),
+                    }),
+                )
+                .await
+                .unwrap();
+            } else {
+                remove_templates_from_catalog(
+                    State(state),
+                    RequestActor(Some(actor.clone())),
+                    Json(RemoveTemplatesRequest {
+                        catalog_id: catalog_id.to_string(),
+                        template_ids: Vec::new(),
+                    }),
+                )
+                .await
+                .unwrap();
+            }
+
+            assert_catalog_mutation_sequence(&requests.lock().unwrap(), &actor, catalog_id, operation_name);
+        }
+    }
 }

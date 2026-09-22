@@ -32,6 +32,7 @@ pub(crate) async fn get_all_catalogs(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_catalogs",
+        None,
         &state.query.all_catalogs,
     )
     .await?

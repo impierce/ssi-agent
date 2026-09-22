@@ -1,0 +1,70 @@
+# Property-based fuzzing of the HTTP API against its own generated OpenAPI specification.
+#
+# Deliberately not part of `Format, Lint, Test`: property-based testing explores a different set of
+# inputs on every run, so a failure here is a finding to triage rather than a verdict on the commit
+# that happens to trigger it. Runs on a schedule and on demand.
+name: Fuzz OpenAPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_examples:
+        description: "Test cases generated per API operation"
+        required: false
+        default: "50"
+      seed:
+        description: "Random seed, to reproduce an earlier run (optional)"
+        required: false
+        default: ""
+      extra_args:
+        description: "Additional Schemathesis flags, e.g. --include-path /v0/credentials"
+        required: false
+        default: ""
+  schedule:
+    # 03:17 UTC daily. Off the hour, to avoid the GitHub-wide scheduling spike.
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read # for checkout
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    # The agent image is built from source; the fuzz run itself is the shorter half.
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Fuzz
+        env:
+          FUZZ_MAX_EXAMPLES: ${{ inputs.max_examples || '50' }}
+          FUZZ_SEED: ${{ inputs.seed }}
+          FUZZ_EXTRA_ARGS: ${{ inputs.extra_args }}
+        run: ./scripts/fuzz-openapi.sh
+
+      - name: Summarize
+        if: always()
+        run: |
+          report="reports/fuzz/junit.xml"
+          if [ ! -f "$report" ]; then
+            echo "No JUnit report was produced — the run failed before fuzzing started." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 scripts/fuzz-summary.py "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-reports
+          path: reports/fuzz/
+          if-no-files-found: warn
+          retention-days: 14

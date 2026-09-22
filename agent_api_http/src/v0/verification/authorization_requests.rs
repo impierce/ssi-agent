@@ -1,6 +1,6 @@
 use crate::extractors::RequestActor;
 use crate::{
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
@@ -18,6 +18,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::header;
 use oid4vp::{dcql::dcql_query::DcqlQuery, token::vp_token_validator::DecodedVpToken};
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -69,6 +70,7 @@ pub(crate) async fn all_authorization_requests(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_authorization_requests",
+        None,
         &state.query.all_authorization_requests,
     )
     .await?
@@ -93,6 +95,7 @@ pub(crate) async fn all_authorization_requests(
     ),
     responses(
         (status = 200, description = "Authorization request", body = AuthorizationRequestResponse),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Authorization request not found"),
     )
 )]
@@ -106,6 +109,7 @@ pub(crate) async fn authorization_request(
         state.authorization_checker.clone(),
         actor.clone(),
         &authorization_request_id,
+        Some(&authorization_request_id),
         &state.query.authorization_request,
     )
     .await?
@@ -145,6 +149,8 @@ pub struct AuthorizationRequestsEndpointRequest {
             body = String,
             content_type = "application/x-www-form-urlencoded"
         ),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -174,9 +180,8 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Sign the authorization request object.
-    command_handler(
+    internal_command_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone(),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
@@ -184,10 +189,10 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Return the authorization_request.
-    query_handler(
+    internal_query_handler(
         verification_state.authorization_checker.clone(),
-        actor.clone(),
         &state,
+        Some(&state),
         &verification_state.query.authorization_request,
     )
     .await?
@@ -198,7 +203,13 @@ pub(crate) async fn authorization_requests(
             [
                 (
                     header::LOCATION,
-                    format!("{API_VERSION}/authorization_requests/{state}").as_str(),
+                    // `state` is caller-supplied and lands in a header here. Left raw, a control
+                    // character in it makes the header value unparsable and axum answers 500.
+                    format!(
+                        "{API_VERSION}/authorization_requests/{}",
+                        utf8_percent_encode(&state, NON_ALPHANUMERIC)
+                    )
+                    .as_str(),
                 ),
                 (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
             ],

@@ -46,6 +46,7 @@ impl LinkedDomainsRequest {
         (status = 400, description = "No eligible signing DID, or an invalid origin"),
         (status = 401, description = "Authentication required"),
         (status = 403, description = "Operation forbidden"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn add_linked_domains(
@@ -84,6 +85,7 @@ pub(crate) async fn add_linked_domains(
         (status = 400, description = "An invalid origin"),
         (status = 401, description = "Authentication required"),
         (status = 403, description = "Operation forbidden"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn remove_linked_domains(

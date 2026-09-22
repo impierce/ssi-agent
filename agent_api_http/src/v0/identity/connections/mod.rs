@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -40,6 +40,7 @@ pub struct AddConnectionEndpointRequest {
                 ("Location" = String, description = "URI of the newly created connection")
             )
         ),
+        (status = 400, description = "Malformed JSON request body"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -66,10 +67,10 @@ pub(crate) async fn post_connection(
     .await?;
 
     // Return the connection.
-    query_handler(
+    internal_query_handler(
         state.authorization_checker.clone(),
-        actor.clone(),
         &connection_id,
+        Some(&connection_id),
         &state.query.connection,
     )
     .await?
@@ -107,7 +108,8 @@ pub struct GetConnectionsEndpointRequest {
     operation_id = "get_all_connections",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView])
+        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView]),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -120,6 +122,7 @@ pub(crate) async fn get_connections(
         state.authorization_checker.clone(),
         actor.clone(),
         "all_connections",
+        None,
         &state.query.all_connections,
     )
     .await?
@@ -151,6 +154,8 @@ pub(crate) async fn get_connections(
     tags = ["Connections"],
     responses(
         (status = 200, description = "Connection retrieved successfully", body = ConnectionView),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Connection not found"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -163,6 +168,7 @@ pub(crate) async fn get_connection(
         state.authorization_checker.clone(),
         actor.clone(),
         &id,
+        Some(&id),
         &state.query.connection,
     )
     .await?
@@ -186,7 +192,8 @@ pub struct SyncConnectionRequest {
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -224,7 +231,10 @@ pub struct AcceptConnectionChangesRequest {
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Connection not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn accept_connection_changes(
@@ -261,7 +271,10 @@ pub struct RemoveConnectionRequest {
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Connection not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn remove_connection(

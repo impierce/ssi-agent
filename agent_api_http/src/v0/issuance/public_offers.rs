@@ -147,6 +147,7 @@ pub(crate) async fn all_public_offers(
         issuance_state.authorization_checker.clone(),
         actor.clone(),
         "all_public_offers",
+        None,
         &issuance_state.query.all_public_offers,
     )
     .await?
@@ -160,6 +161,7 @@ pub(crate) async fn all_public_offers(
             issuance_state.authorization_checker.clone(),
             actor.clone(),
             &public_offer.id,
+            Some(&public_offer.id),
             &issuance_state.query.offer,
         )
         .await?
@@ -181,7 +183,8 @@ pub(crate) async fn all_public_offers(
     responses(
         (status = 201, description = "Public offer created successfully"),
         (status = 404, description = "Template or offer not found"),
-        (status = 400, description = "Template schema invalid for public offers")
+        (status = 400, description = "Template schema invalid for public offers"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -195,6 +198,7 @@ pub(crate) async fn create_public_offer(
         issuance_state.authorization_checker.clone(),
         actor.clone(),
         &offer_id,
+        Some(&offer_id),
         &issuance_state.query.offer,
     )
     .await?
@@ -207,6 +211,7 @@ pub(crate) async fn create_public_offer(
         library_state.authorization_checker.clone(),
         actor.clone(),
         &template_id,
+        Some(&template_id),
         &library_state.query.template,
     )
     .await
@@ -247,7 +252,9 @@ pub(crate) async fn create_public_offer(
     request_body = TakePublicOfferOfflineRequest,
     responses(
         (status = 204, description = "Public offer taken offline successfully"),
-        (status = 404, description = "Public offer not found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Public offer not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -281,7 +288,9 @@ pub(crate) async fn take_public_offer_offline(
     request_body = TakePublicOfferOnlineRequest,
     responses(
         (status = 204, description = "Public offer taken online successfully"),
-        (status = 404, description = "Public offer not found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Public offer not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -315,7 +324,9 @@ pub(crate) async fn take_public_offer_online(
     request_body = DeletePublicOfferRequest,
     responses(
         (status = 204, description = "Public offer deleted successfully"),
-        (status = 404, description = "Public offer not found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Public offer not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
