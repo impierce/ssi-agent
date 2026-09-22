@@ -1,2 +1,3 @@
 *config.yaml
 !example.config.yaml
+!docker/fuzz.config.yaml

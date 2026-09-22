@@ -1,0 +1,52 @@
+# Configuration used exclusively by `scripts/fuzz-openapi.sh`.
+#
+# Two properties matter here:
+#
+# 1. No outbound traffic. A fuzzer sends arbitrary data to every operation, including ones that
+#    would normally reach third parties (did:web resolution, event publishers). Anything that
+#    leaves the compose project is disabled so a run stays hermetic and reproducible.
+# 2. Maximum reachable local surface. Every DID method and signing algorithm that does not require
+#    a remote service is enabled, so that as many operations as possible are exercised.
+
+log_format: "text"
+
+event_store:
+  type: "postgres"
+  # connection_string <== injected through `UNICORE__EVENT_STORE__CONNECTION_STRING`
+
+application_url: "http://localhost:3033"
+
+did_methods:
+  did_jwk:
+    enabled: true
+    preferred: true
+  did_key:
+    enabled: true
+  # Resolving did:web reaches out over the network.
+  did_web:
+    enabled: false
+
+enable_interactive_authorization_flow: true
+
+signing_algorithms_supported:
+  es256:
+    enabled: true
+    preferred: true
+  eddsa:
+    enabled: true
+
+# No publishers: a fuzz run must not emit traffic to anything outside the compose project.
+event_publishers:
+  http: []
+  nats: null
+
+display:
+  - name: UniCore
+    locale: en
+    logo:
+      uri: "https://www.impierce.com/external/impierce-icon.png"
+      alt_text: UniCore Logo
+
+secret_manager:
+  stronghold_path: "/app/fuzz.stronghold.dat"
+  # stronghold_password <== injected through `UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD`
