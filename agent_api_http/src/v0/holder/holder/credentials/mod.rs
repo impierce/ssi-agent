@@ -114,6 +114,7 @@ pub(crate) async fn post_credentials(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Credential retrieved successfully", body = Credential),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential not found"),
     )
 )]

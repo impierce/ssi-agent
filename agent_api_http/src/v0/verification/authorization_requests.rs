@@ -94,6 +94,7 @@ pub(crate) async fn all_authorization_requests(
     ),
     responses(
         (status = 200, description = "Authorization request", body = AuthorizationRequestResponse),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Authorization request not found"),
     )
 )]

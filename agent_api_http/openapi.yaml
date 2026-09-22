@@ -152,6 +152,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthorizationRequestResponse'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Authorization request not found
   /v0/change-catalog-appearance:
@@ -327,6 +329,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Connection'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Connection not found
   /v0/create-linked-verifiable-presentation:
@@ -514,6 +518,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Credential'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Credential not found
     patch:
@@ -654,6 +660,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Document'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Document not found
   /v0/duplicate-template:
@@ -741,6 +749,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Catalog'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Catalog not found
   /v0/get-template-by-id/{id}:
@@ -764,6 +774,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Template not found
   /v0/holder/credentials:
@@ -828,6 +840,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CredentialView'
+        '400':
+          description: Invalid path parameter
         '404':
           description: Credential not found
   /v0/holder/offers:
@@ -924,6 +938,8 @@ paths:
           content:
             application/json:
               schema:
+        '400':
+          description: Invalid path parameter
                 type: array
                 items:
                   $ref: '#/components/schemas/PresentationView'
@@ -990,6 +1006,8 @@ paths:
         description: Credential presentation ID
         required: true
         schema:
+        '400':
+          description: Invalid path parameter
           type: string
       responses:
         '200':
@@ -1014,6 +1032,8 @@ paths:
           content:
             application/json:
               schema:
+        '400':
+          description: Invalid path parameter
                 type: array
                 items:
                   $ref: '#/components/schemas/Template'
@@ -1195,6 +1215,8 @@ paths:
           content:
             application/json:
               schema:
+        '400':
+          description: Invalid path parameter
                 $ref: '#/components/schemas/Profile'
         '404':
           description: Profile not found
@@ -1347,6 +1369,8 @@ paths:
         required: true
       responses:
         '204':
+        '400':
+          description: Invalid path parameter
           description: Public offer taken offline successfully
         '404':
           description: Public offer not found

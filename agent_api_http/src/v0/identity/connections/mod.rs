@@ -152,6 +152,7 @@ pub(crate) async fn get_connections(
     tags = ["Connections"],
     responses(
         (status = 200, description = "Connection retrieved successfully", body = ConnectionView),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Connection not found"),
     )
 )]

@@ -583,6 +583,7 @@ pub(crate) async fn get_templates(
     tags = ["Library", "Templates"],
     responses(
         (status = 200, description = "Template retrieved successfully", body = TemplateDto),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Template not found"),
     )
 )]

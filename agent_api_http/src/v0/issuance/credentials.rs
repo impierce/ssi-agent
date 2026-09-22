@@ -43,6 +43,7 @@ use std::sync::Arc;
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Successfully retrieved credential", body = Credential),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential not found"),
     )
 )]

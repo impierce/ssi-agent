@@ -75,6 +75,7 @@ pub(crate) async fn get_documents(
     tags = ["Identity"],
     responses(
         (status = 200, description = "Document retrieved successfully", body = Document),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Document not found"),
     )
 )]

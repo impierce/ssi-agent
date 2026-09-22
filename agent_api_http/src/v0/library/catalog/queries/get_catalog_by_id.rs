@@ -21,6 +21,7 @@ use std::sync::Arc;
     tags = ["Library", "Catalog"],
     responses(
         (status = 200, description = "Catalog retrieved successfully", body = CatalogDto),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Catalog not found"),
     )
 )]

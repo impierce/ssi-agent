@@ -58,6 +58,7 @@ pub(crate) async fn get_presentations(
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Presentation retrieved successfully", body = Presentation),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Presentation not found"),
     )
 )]
