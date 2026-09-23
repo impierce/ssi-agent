@@ -714,6 +714,62 @@ paths:
           description: Malformed JSON request body
         '422':
           description: Source template not found, or the request body does not match the expected schema
+  /v0/events:
+    get:
+      tags:
+      - Events
+      summary: Stream domain events as CloudEvents via SSE with Catch-Up.
+      operationId: events_sse_handler
+      parameters:
+      - name: types
+        in: query
+        description: Comma-separated list of CloudEvent types to filter
+        required: false
+        schema:
+          type: string
+      - name: sources
+        in: query
+        description: Comma-separated list of sources/aggregate types to filter
+        required: false
+        schema:
+          type: string
+      - name: subject
+        in: query
+        description: Optional aggregate/subject ID filter
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Optional limit on historical events; defaults to 100, set to 0 for live-only stream
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: since
+        in: query
+        description: Filter events after RFC 3339 timestamp
+        required: false
+        schema:
+          type: string
+      - name: until
+        in: query
+        description: Filter events before RFC 3339 timestamp
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Server-Sent Events stream of CloudEvents
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/CloudEvent'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+      x-access-operation: events.stream
   /v0/get-all-catalogs:
     get:
       tags:
@@ -1613,6 +1669,42 @@ components:
             name: ''
             description: ''
             icon: null
+    CloudEvent:
+      type: object
+      description: A CNCF CloudEvent envelope (v1.0 spec).
+      required:
+      - id
+      - source
+      - specversion
+      - type
+      properties:
+        data: {}
+        datacontenttype:
+          type:
+          - string
+          - 'null'
+        dataschema:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        source:
+          type: string
+        specversion:
+          type: string
+        subject:
+          type:
+          - string
+          - 'null'
+        time:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        type:
+          type: string
+          example: com.impierce.unicore.offer-created
     CnameCheck:
       type: object
       description: The outcome of checking one origin's DNS against the deployment's own host.
@@ -3038,6 +3130,8 @@ tags:
   description: Manage all aspects of your organisational identity.
 - name: Holder
   description: Manage the credentials your organisation holds itself.
+- name: Events
+  description: Stream domain events as CloudEvents via SSE.
 - name: Connections
   description: Manage trusted connections.
 - name: Profile

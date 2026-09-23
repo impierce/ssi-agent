@@ -539,7 +539,7 @@ mod tests {
     }
 
     async fn catalog_state(requests: Arc<Mutex<Vec<AuthorizationRequest>>>, catalog_id: &str) -> Arc<LibraryState> {
-        let mut state = library_state(&InMemory, Default::default(), Default::default()).await;
+        let mut state = library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await;
 
         public_command_handler(
             catalog_id,

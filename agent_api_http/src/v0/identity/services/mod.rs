@@ -238,8 +238,14 @@ mod tests {
                 let clock = clock.clone();
                 Arc::new(move || Timestamp::from_unix(clock.load(Ordering::SeqCst)).unwrap())
             };
-            let mut state =
-                agent_store::identity_state(&agent_store::in_memory::InMemory, Arc::new(services), vec![]).await;
+            let event_bus = shared_kernel::EventBusHandle::default();
+            let mut state = agent_store::identity_state(
+                &agent_store::in_memory::InMemory,
+                Arc::new(services),
+                &event_bus,
+                vec![],
+            )
+            .await;
             initialize_documents(&state, &configuration).await.unwrap();
             let authorization = Arc::new(RecordingAuthorization::default());
             state.authorization_checker = authorization.clone();
@@ -247,6 +253,7 @@ mod tests {
             let app = crate::app_with_base_path(
                 crate::ApiState {
                     identity_state: Some(state.clone()),
+                    events_state: Some(Arc::new(crate::v0::events::EventsState::from(event_bus))),
                     ..Default::default()
                 },
                 Arc::new(HeaderActor),

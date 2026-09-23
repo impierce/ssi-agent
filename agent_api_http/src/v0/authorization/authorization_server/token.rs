@@ -151,8 +151,15 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -168,6 +175,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &Default::default(),
                 Default::default(),
                 Default::default(),
             )
@@ -186,8 +194,15 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pre_authorized_token_redemption_fails_when_public_offer_is_offline() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -226,6 +241,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &Default::default(),
                 Default::default(),
                 Default::default(),
             )
@@ -273,8 +289,15 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pre_authorized_token_redemption_fails_when_public_offer_is_deleted() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -313,6 +336,7 @@ pub mod tests {
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &Default::default(),
                 Default::default(),
                 Default::default(),
             )

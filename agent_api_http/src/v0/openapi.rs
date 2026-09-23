@@ -13,6 +13,7 @@ use utoipa::OpenApi;
     nest(
         (path = "/v0", api = crate::v0::configuration::ConfigurationApi),
         (path = "/v0", api = crate::v0::holder::openapi::HolderApi),
+        (path = "/v0", api = crate::v0::events::openapi::EventsApi),
         (path = "/v0", api = crate::v0::identity::connections::openapi::ConnectionsApi),
         (path = "/v0", api = crate::v0::identity::openapi::IdentityApi),
         (path = "/v0", api = crate::v0::issuance::openapi::IssuanceApi),
