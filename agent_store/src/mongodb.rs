@@ -20,12 +20,39 @@ where
     A: Aggregate,
 {
     async fn new(client: Client, services: A::Services) -> Self {
-        let repo = MongoEventRepository::new(client)
-            .await
-            .expect("Failed to create MongoEventRepository");
+        let repo = new_event_repository(client).await;
         let store = PersistedEventStore::new_event_store(repo);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
+        }
+    }
+}
+
+/// Builds the event repository, retrying while MongoDB is still coming up.
+///
+/// This runs once per aggregate type at startup, so a deployment scheduled alongside its database
+/// would otherwise panic on the first aggregate before MongoDB accepts connections. A genuine
+/// misconfiguration still panics, once the retries are exhausted.
+async fn new_event_repository(client: Client) -> MongoEventRepository {
+    const MAX_ATTEMPTS: u32 = 5;
+
+    let mut backoff = std::time::Duration::from_millis(500);
+    let mut attempt = 1;
+    loop {
+        match MongoEventRepository::new(client.clone()).await {
+            Ok(repository) => return repository,
+            Err(error) => {
+                assert!(
+                    attempt < MAX_ATTEMPTS,
+                    "Failed to create MongoEventRepository after {MAX_ATTEMPTS} attempts: {error:?}"
+                );
+                tracing::warn!(
+                    "Failed to create MongoEventRepository (attempt {attempt}), retrying in {backoff:?}: {error:?}"
+                );
+                tokio::time::sleep(backoff).await;
+                backoff *= 2;
+                attempt += 1;
+            }
         }
     }
 }
@@ -173,11 +200,48 @@ pub fn document_to_cloud_event(document: &bson::Document) -> Option<CloudEvent> 
 #[derive(Clone)]
 pub struct MongoEventSource {
     client: Client,
+    initialized: Arc<tokio::sync::OnceCell<()>>,
 }
 
 impl MongoEventSource {
     pub fn new(client: Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            initialized: Arc::new(tokio::sync::OnceCell::new()),
+        }
+    }
+
+    /// Creates the `events` collection and the index backing `?sources=` queries, once per process.
+    ///
+    /// Collection creation used to run on every change-stream reconnect. The index is a compound
+    /// `{aggregate_type, _id}`: `mongo-es` creates only `{aggregate_id, sequence}` and
+    /// `{aggregate_id, current_snapshot}`, so the reader's `aggregate_type` filter — which sorts by
+    /// `_id` — had nothing to use. A failure here is not fatal (queries still work, unindexed) and
+    /// leaves the cell uninitialised so the next call retries.
+    async fn ensure_initialized(&self, database: &mongodb::Database) {
+        let outcome = self
+            .initialized
+            .get_or_try_init(|| async {
+                // Errors if the collection already exists, which is the steady state.
+                let _ = database.create_collection("events").await;
+
+                database
+                    .collection::<bson::Document>("events")
+                    .create_index(
+                        mongodb::IndexModel::builder()
+                            .keys(doc! { "aggregate_type": 1, "_id": 1 })
+                            .build(),
+                    )
+                    .await
+                    .map(|_| ())
+            })
+            .await;
+
+        if let Err(error) = outcome {
+            tracing::warn!(
+                "Failed to initialize the events collection; queries filtering on `sources` will be unindexed: {error}"
+            );
+        }
     }
 }
 
@@ -192,16 +256,19 @@ impl EventSource for MongoEventSource {
             .default_database()
             .ok_or_else(|| EventBusError::Source("No default database configured on MongoDB client".to_string()))?;
 
-        let _ = database.create_collection("events").await;
+        self.ensure_initialized(&database).await;
         let collection = database.collection::<bson::Document>("events");
 
         let mut options = mongodb::options::ChangeStreamOptions::default();
         if let SubscribePosition::From(ref pos) = from {
             // Reconnect using the serialized BSON ResumeToken so MongoDB replays all changes
             // starting immediately after the last successfully acknowledged event.
-            if let Ok(resume_token) = bson::from_slice::<mongodb::change_stream::event::ResumeToken>(&pos.0) {
-                options.resume_after = Some(resume_token);
-            }
+            //
+            // A position that does not decode is reported rather than ignored: falling through to a
+            // live stream would silently skip every event since the checkpoint.
+            let resume_token = bson::from_slice::<mongodb::change_stream::event::ResumeToken>(&pos.0)
+                .map_err(|_| EventBusError::UnsupportedPosition)?;
+            options.resume_after = Some(resume_token);
         }
 
         let change_stream = collection
@@ -234,6 +301,14 @@ impl EventSource for MongoEventSource {
     }
 }
 
+/// Hard ceiling on documents read from MongoDB for a single catch-up query.
+///
+/// `event_types`, `since` and `until` cannot be expressed in the query and are applied in Rust
+/// after reading, so without this cap a highly selective filter (`?until=<old date>` on a large
+/// collection, say) degrades into a full scan. Reaching the ceiling sets
+/// [`HistoryAscendingResult::truncated`] rather than silently returning a short result.
+const MAX_DOCUMENTS_EXAMINED: usize = 10_000;
+
 #[async_trait]
 impl EventHistoryReader for MongoEventSource {
     async fn history_ascending(
@@ -247,9 +322,11 @@ impl EventHistoryReader for MongoEventSource {
             .default_database()
             .ok_or_else(|| EventBusError::Source("No default database configured on MongoDB client".to_string()))?;
 
+        self.ensure_initialized(&database).await;
         let collection = database.collection::<bson::Document>("events");
 
         let mut gap_detected = false;
+        let mut truncated = false;
         let mut target_object_id: Option<mongodb::bson::oid::ObjectId> = None;
 
         let mut base_query = doc! {};
@@ -300,14 +377,34 @@ impl EventHistoryReader for MongoEventSource {
         let mut events = Vec::new();
 
         if limit == Some(0) {
-            return Ok(HistoryAscendingResult { events, gap_detected });
+            return Ok(HistoryAscendingResult {
+                events,
+                gap_detected,
+                truncated,
+            });
         }
+
+        // `event_types`, `since` and `until` are absent from `base_query` and applied in Rust via
+        // `filter.matches` below, so a database-level limit caps documents *examined*, not matches
+        // *found*. Push the caller's limit into the query only when `base_query` expresses the whole
+        // filter; otherwise fall back to `MAX_DOCUMENTS_EXAMINED` and report truncation.
+        let filter_fully_pushed = filter.event_types.is_empty() && filter.since.is_none() && filter.until.is_none();
 
         if let Some(target_id) = target_object_id {
             // Case A: Resume from target_id: scan index in ascending order for matching documents created after target_id.
             let mut query = base_query;
             query.insert("_id", doc! { "$gt": target_id });
-            let find_options = mongodb::options::FindOptions::builder().sort(doc! { "_id": 1 }).build();
+
+            // One past the requested limit, so "exactly `limit` matched" is distinguishable from
+            // "stopped early with more available".
+            let scan_limit = match limit {
+                Some(max_limit) if filter_fully_pushed => max_limit.saturating_add(1).min(MAX_DOCUMENTS_EXAMINED),
+                _ => MAX_DOCUMENTS_EXAMINED,
+            };
+            let find_options = FindOptions::builder()
+                .sort(doc! { "_id": 1 })
+                .limit(scan_limit as i64)
+                .build();
 
             let mut cursor = collection
                 .find(query)
@@ -315,11 +412,13 @@ impl EventHistoryReader for MongoEventSource {
                 .await
                 .map_err(|error| EventBusError::Source(error.to_string()))?;
 
+            let mut examined = 0usize;
             while cursor
                 .advance()
                 .await
                 .map_err(|error| EventBusError::Source(error.to_string()))?
             {
+                examined += 1;
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| EventBusError::Source(error.to_string()))?;
@@ -327,18 +426,33 @@ impl EventHistoryReader for MongoEventSource {
                     if filter.matches(&cloud_event) {
                         events.push(cloud_event);
                         if let Some(max_limit) = limit {
-                            if events.len() >= max_limit {
+                            if events.len() > max_limit {
+                                // A further match exists beyond the requested window.
+                                events.truncate(max_limit);
+                                truncated = true;
                                 break;
                             }
                         }
                     }
                 }
             }
+
+            // The scan ran into its ceiling rather than exhausting the collection, so matching
+            // events may exist past the last one returned.
+            if examined >= scan_limit {
+                truncated = true;
+            }
         } else if let Some(max_limit) = limit {
             // Case B: No last_event_id, but a limit is requested. Fetch the latest matching documents using descending sort,
             // then reverse the resulting vector so the consumer receives them in ascending (chronological) order.
-            let find_options = mongodb::options::FindOptions::builder()
+            let scan_limit = if filter_fully_pushed {
+                max_limit.min(MAX_DOCUMENTS_EXAMINED)
+            } else {
+                MAX_DOCUMENTS_EXAMINED
+            };
+            let find_options = FindOptions::builder()
                 .sort(doc! { "_id": -1 })
+                .limit(scan_limit as i64)
                 .build();
 
             let mut cursor = collection
@@ -347,11 +461,13 @@ impl EventHistoryReader for MongoEventSource {
                 .await
                 .map_err(|error| EventBusError::Source(error.to_string()))?;
 
+            let mut examined = 0usize;
             while cursor
                 .advance()
                 .await
                 .map_err(|error| EventBusError::Source(error.to_string()))?
             {
+                examined += 1;
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| EventBusError::Source(error.to_string()))?;
@@ -365,10 +481,19 @@ impl EventHistoryReader for MongoEventSource {
                 }
             }
 
+            // Returning the *latest* `max_limit` events is what was asked for, so a short result is
+            // only a gap when the bounded scan is what cut it short.
+            if events.len() < max_limit && examined >= scan_limit {
+                truncated = true;
+            }
+
             events.reverse();
         } else {
             // Case C: Unbounded query without last_event_id: scan matching documents in natural chronological order.
-            let find_options = mongodb::options::FindOptions::builder().sort(doc! { "_id": 1 }).build();
+            let find_options = FindOptions::builder()
+                .sort(doc! { "_id": 1 })
+                .limit(MAX_DOCUMENTS_EXAMINED as i64)
+                .build();
 
             let mut cursor = collection
                 .find(base_query)
@@ -376,11 +501,13 @@ impl EventHistoryReader for MongoEventSource {
                 .await
                 .map_err(|error| EventBusError::Source(error.to_string()))?;
 
+            let mut examined = 0usize;
             while cursor
                 .advance()
                 .await
                 .map_err(|error| EventBusError::Source(error.to_string()))?
             {
+                examined += 1;
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| EventBusError::Source(error.to_string()))?;
@@ -390,9 +517,17 @@ impl EventHistoryReader for MongoEventSource {
                     }
                 }
             }
+
+            if examined >= MAX_DOCUMENTS_EXAMINED {
+                truncated = true;
+            }
         }
 
-        Ok(HistoryAscendingResult { events, gap_detected })
+        Ok(HistoryAscendingResult {
+            events,
+            gap_detected,
+            truncated,
+        })
     }
 }
 

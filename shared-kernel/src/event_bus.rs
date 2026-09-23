@@ -164,8 +164,13 @@ pub enum EventBusError {
     Lagged(u64),
     #[error("Event source error: {0}")]
     Source(String),
+    /// Returned by an [`EventSource`] given a [`Position`] it cannot interpret — a resume token
+    /// that does not decode, or one issued by a different adapter.
     #[error("Position-based subscription is unsupported")]
     UnsupportedPosition,
+    /// Part of the [`EventSource`]/[`EventHistoryReader`] SPI vocabulary, for adapters whose
+    /// backing stream can terminate. Neither shipped adapter constructs it: [`EventBusHandle`]
+    /// owns the broadcast sender for the process's lifetime, so the in-process bus never closes.
     #[error("Event bus stream closed")]
     Closed,
 }
@@ -218,7 +223,71 @@ pub trait EventHistoryReader: Send + Sync + 'static {
     ) -> Result<HistoryAscendingResult, EventBusError>;
 }
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
+use std::time::{Duration, Instant};
+
+/// How long a published event's identifier is remembered for duplicate suppression.
+///
+/// In `MongoDB` deployments every event reaches the bus twice: once from in-process
+/// [`Query::dispatch`] at commit time, and once from the change stream. The two copies are
+/// separated by the change stream's delivery lag, which stretches to the reconnect backoff
+/// (up to 10s) and beyond during an outage — so the window that has to cover them is a
+/// *duration*, not an event count.
+const DEDUP_WINDOW_TTL: Duration = Duration::from_secs(600);
+
+/// Hard cap on remembered identifiers, bounding memory when [`DEDUP_WINDOW_TTL`] would otherwise
+/// retain more than this under sustained throughput.
+const DEDUP_WINDOW_MAX_ENTRIES: usize = 50_000;
+
+/// Recently published event identifiers, evicted by age and by count.
+///
+/// This replaces a linear scan of the 500-event history ring-buffer. That scan cost O(500) string
+/// comparisons under the history write lock on every publish — twice per event in `MongoDB` mode —
+/// and its window was far too short to span a change-stream outage: once more than 500 events had
+/// been published in the interim, the replayed copies were broadcast a second time.
+#[derive(Debug)]
+struct DedupWindow {
+    ids: HashSet<String>,
+    order: VecDeque<(String, Instant)>,
+    ttl: Duration,
+    max_entries: usize,
+}
+
+impl DedupWindow {
+    fn new() -> Self {
+        Self::with_limits(DEDUP_WINDOW_TTL, DEDUP_WINDOW_MAX_ENTRIES)
+    }
+
+    fn with_limits(ttl: Duration, max_entries: usize) -> Self {
+        Self {
+            ids: HashSet::new(),
+            order: VecDeque::new(),
+            ttl,
+            max_entries,
+        }
+    }
+
+    /// Records `id`, returning `false` if it was already inside the window — i.e. a duplicate.
+    fn insert(&mut self, id: &str) -> bool {
+        let now = Instant::now();
+
+        while let Some((_, recorded_at)) = self.order.front() {
+            let expired = now.duration_since(*recorded_at) >= self.ttl;
+            if !expired && self.order.len() <= self.max_entries {
+                break;
+            }
+            if let Some((oldest_id, _)) = self.order.pop_front() {
+                self.ids.remove(&oldest_id);
+            }
+        }
+
+        if !self.ids.insert(id.to_string()) {
+            return false;
+        }
+        self.order.push_back((id.to_string(), now));
+        true
+    }
+}
 
 /// In-process event bus handle backed by Tokio broadcast channel and recent event history ring-buffer.
 #[derive(Clone)]
@@ -227,6 +296,7 @@ pub struct EventBusHandle {
     history: Arc<std::sync::RwLock<VecDeque<CloudEvent>>>,
     history_capacity: usize,
     history_reader: Arc<std::sync::RwLock<Option<Arc<dyn EventHistoryReader>>>>,
+    dedup: Arc<std::sync::RwLock<DedupWindow>>,
 }
 
 impl EventBusHandle {
@@ -242,6 +312,7 @@ impl EventBusHandle {
             history: Arc::new(std::sync::RwLock::new(VecDeque::with_capacity(500))),
             history_capacity: 500,
             history_reader: Arc::new(std::sync::RwLock::new(None)),
+            dedup: Arc::new(std::sync::RwLock::new(DedupWindow::new())),
         }
     }
 
@@ -263,34 +334,52 @@ impl Default for EventBusHandle {
 
 /// Result of querying historical events in ascending order.
 ///
-/// Contains the list of matching [`CloudEvent`]s and a `gap_detected` flag indicating
-/// whether a requested `last_event_id` was absent from memory/storage (e.g. evicted ring-buffer).
+/// Contains the list of matching [`CloudEvent`]s plus two independent gap signals:
+/// `gap_detected` (the requested `last_event_id` was absent from memory/storage) and
+/// `truncated` (catch-up stopped before all matching events were read).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct HistoryAscendingResult {
     pub events: Vec<CloudEvent>,
     /// Set to `true` if `last_event_id` was specified but could not be found in retained history.
     pub gap_detected: bool,
+    /// Set to `true` if the reader stopped on a limit rather than on exhausting matching events,
+    /// meaning further events exist between the last returned event and the present.
+    ///
+    /// Resuming from `last_event_id` and hitting the limit leaves a hole: the caller chains
+    /// straight to the live tail, so everything between the last returned event and subscribe
+    /// time is delivered by neither stream. Returning fewer than the requested number of
+    /// *latest* events (no `last_event_id`) is not truncation — that is the caller's own limit.
+    pub truncated: bool,
 }
 
 impl EventBusHandle {
     /// Publishes a [`CloudEvent`] to all active subscribers and synchronously appends it to the in-memory ring-buffer.
     ///
-    /// If an event with the same ID is already present in the history buffer, it is dropped as a duplicate.
+    /// Events carry deterministic identifiers, and in `MongoDB` deployments each one reaches the bus
+    /// twice — from in-process [`Query::dispatch`] and from the change stream. The second copy is
+    /// dropped if it falls inside the [`DedupWindow`], which is sized to span a change-stream
+    /// outage rather than the much shorter history ring-buffer.
     pub fn publish(&self, event: CloudEvent) {
-        let mut lock = match self.history.write() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-
-        if lock.iter().rev().any(|existing_event| existing_event.id == event.id) {
-            return;
+        {
+            let mut dedup = match self.dedup.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if !dedup.insert(&event.id) {
+                return;
+            }
         }
 
-        if lock.len() >= self.history_capacity {
-            lock.pop_front();
+        {
+            let mut lock = match self.history.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if lock.len() >= self.history_capacity {
+                lock.pop_front();
+            }
+            lock.push_back(event.clone());
         }
-        lock.push_back(event.clone());
-        drop(lock);
 
         let _ = self.sender.send(Arc::new(event));
     }
@@ -317,6 +406,10 @@ impl EventBusHandle {
     /// - If missing/evicted, the latest `limit` events are returned and `gap_detected` is set to `true`.
     ///
     /// When `limit` is `None`, all matching events are returned without truncation.
+    ///
+    /// Resuming from a found `last_event_id` and stopping on `limit` sets
+    /// [`HistoryAscendingResult::truncated`]: further matching events exist that this call does not
+    /// return, and a caller chaining to a live subscription will not see them.
     ///
     /// # Errors
     ///
@@ -349,6 +442,7 @@ impl EventBusHandle {
         };
 
         let mut gap_detected = false;
+        let mut truncated = false;
 
         let events: Vec<CloudEvent> = if let Some(last_id) = last_event_id {
             // Find the position of the last acknowledged event in the in-memory ring buffer.
@@ -356,7 +450,14 @@ impl EventBusHandle {
                 // Resume strictly after last_id in chronological order.
                 let iter = lock.iter().skip(pos + 1).filter(|event| filter.matches(event));
                 match limit {
-                    Some(max_count) => iter.take(max_count).cloned().collect(),
+                    Some(max_count) => {
+                        // Take one extra to distinguish "exactly max_count matched" from
+                        // "stopped early with more available", which is the truncation signal.
+                        let mut collected: Vec<CloudEvent> = iter.take(max_count + 1).cloned().collect();
+                        truncated = collected.len() > max_count;
+                        collected.truncate(max_count);
+                        collected
+                    }
                     None => iter.cloned().collect(),
                 }
             } else {
@@ -384,7 +485,11 @@ impl EventBusHandle {
             }
         };
 
-        Ok(HistoryAscendingResult { events, gap_detected })
+        Ok(HistoryAscendingResult {
+            events,
+            gap_detected,
+            truncated,
+        })
     }
 
     /// Attaches an external [`EventSource`] (such as a database Change Stream) to feed the bus in a background task.
@@ -397,6 +502,7 @@ impl EventBusHandle {
             let mut backoff_millis = 100u64;
             let mut last_position: Option<Position> = None;
             let mut failed_resume_attempts: usize = 0;
+            let mut consecutive_open_failures: usize = 0;
             loop {
                 // Initial connect starts from Live; subsequent reconnects resume from the last known stream position.
                 let position = match last_position.clone() {
@@ -408,6 +514,7 @@ impl EventBusHandle {
                     Ok(mut stream) => {
                         backoff_millis = 100;
                         failed_resume_attempts = 0;
+                        consecutive_open_failures = 0;
                         while let Some(item) = stream.next().await {
                             match item {
                                 Ok(source_event) => {
@@ -426,7 +533,21 @@ impl EventBusHandle {
                         tracing::warn!("EventSource stream ended, reconnecting...");
                     }
                     Err(err) => {
-                        tracing::error!("Failed to open EventSource stream: {:?}", err);
+                        // Change streams need a replica set, so on a standalone mongod `open` fails
+                        // permanently while the rest of the application works. Report the first
+                        // failure loudly and the repeats quietly, rather than an `error!` every 10s
+                        // for the lifetime of the process.
+                        if consecutive_open_failures == 0 {
+                            tracing::error!("Failed to open EventSource stream: {:?}", err);
+                        } else {
+                            tracing::debug!(
+                                "Failed to open EventSource stream ({} consecutive failures): {:?}",
+                                consecutive_open_failures + 1,
+                                err
+                            );
+                        }
+                        consecutive_open_failures += 1;
+
                         if last_position.is_some() {
                             failed_resume_attempts += 1;
                             if failed_resume_attempts >= 3 {
@@ -920,5 +1041,153 @@ mod tests {
 
         let received = subscriber.next().await.unwrap().unwrap();
         assert_eq!(received.time, Some(expected_time));
+    }
+
+    #[tokio::test]
+    async fn history_ascending_reports_truncation_when_resume_hits_the_limit() {
+        let handle = EventBusHandle::new(16);
+        for sequence in 1..=5 {
+            handle.publish(build_cloud_event(
+                "credential",
+                "cred-1",
+                sequence,
+                "CredentialSigned",
+                serde_json::json!({}),
+                None,
+            ));
+        }
+
+        let filter = EventFilter::default();
+
+        // Three events follow `cred-1:2`, so a limit of two stops short of exhausting them.
+        let result = handle
+            .history_ascending(&filter, Some("credential:cred-1:2"), Some(2))
+            .await
+            .unwrap();
+        assert_eq!(result.events.len(), 2);
+        assert!(result.truncated);
+        assert!(!result.gap_detected);
+
+        // A limit that exactly covers the remaining events is not truncation.
+        let result = handle
+            .history_ascending(&filter, Some("credential:cred-1:2"), Some(3))
+            .await
+            .unwrap();
+        assert_eq!(result.events.len(), 3);
+        assert!(!result.truncated);
+
+        // Neither is a limit wider than what remains.
+        let result = handle
+            .history_ascending(&filter, Some("credential:cred-1:2"), Some(100))
+            .await
+            .unwrap();
+        assert_eq!(result.events.len(), 3);
+        assert!(!result.truncated);
+    }
+
+    #[tokio::test]
+    async fn history_ascending_does_not_report_truncation_for_the_latest_events() {
+        let handle = EventBusHandle::new(16);
+        for sequence in 1..=5 {
+            handle.publish(build_cloud_event(
+                "credential",
+                "cred-1",
+                sequence,
+                "CredentialSigned",
+                serde_json::json!({}),
+                None,
+            ));
+        }
+
+        // Without `last_event_id` the caller asked for the latest N; older events being left out
+        // is the requested semantics, not a gap.
+        let result = handle
+            .history_ascending(&EventFilter::default(), None, Some(2))
+            .await
+            .unwrap();
+        assert_eq!(result.events.len(), 2);
+        assert!(!result.truncated);
+
+        // An unresolvable `last_event_id` falls back to the same "latest N" shape, and is already
+        // signalled by `gap_detected`.
+        let result = handle
+            .history_ascending(&EventFilter::default(), Some("credential:cred-1:999"), Some(2))
+            .await
+            .unwrap();
+        assert!(result.gap_detected);
+        assert!(!result.truncated);
+    }
+
+    #[test]
+    fn dedup_window_evicts_by_count() {
+        let mut window = DedupWindow::with_limits(Duration::from_secs(600), 3);
+
+        assert!(window.insert("a"));
+        assert!(window.insert("b"));
+        assert!(window.insert("c"));
+        // Still inside the window.
+        assert!(!window.insert("a"));
+
+        // "d" pushes the window past its cap, evicting the oldest entry.
+        assert!(window.insert("d"));
+        assert!(window.insert("a"), "oldest entry should have been evicted");
+    }
+
+    #[test]
+    fn dedup_window_evicts_by_age() {
+        let mut window = DedupWindow::with_limits(Duration::ZERO, DEDUP_WINDOW_MAX_ENTRIES);
+
+        assert!(window.insert("a"));
+        // A zero TTL expires every entry before the next insert is checked.
+        assert!(window.insert("a"));
+    }
+
+    #[tokio::test]
+    async fn publish_suppresses_duplicates_beyond_the_history_ring_buffer() {
+        let handle = EventBusHandle::new(4096);
+
+        let replayed = build_cloud_event(
+            "credential",
+            "cred-0",
+            1,
+            "CredentialSigned",
+            serde_json::json!({}),
+            None,
+        );
+        handle.publish(replayed.clone());
+
+        // Fill well past the 500-event history ring-buffer, as a change-stream outage would.
+        for sequence in 1..=600 {
+            handle.publish(build_cloud_event(
+                "credential",
+                "cred-filler",
+                sequence,
+                "CredentialSigned",
+                serde_json::json!({}),
+                None,
+            ));
+        }
+
+        let mut subscriber = handle.subscribe(EventFilter::default());
+
+        // The change stream replays the event the in-process dispatch already published. It is long
+        // gone from the ring-buffer, but still inside the dedup window.
+        handle.publish(replayed.clone());
+
+        let follow_up = build_cloud_event(
+            "credential",
+            "cred-1",
+            1,
+            "CredentialSigned",
+            serde_json::json!({}),
+            None,
+        );
+        handle.publish(follow_up.clone());
+
+        let received = subscriber.next().await.unwrap().unwrap();
+        assert_eq!(
+            received.id, follow_up.id,
+            "replayed duplicate should not have been broadcast"
+        );
     }
 }

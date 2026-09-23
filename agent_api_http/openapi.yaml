@@ -719,6 +719,23 @@ paths:
       tags:
       - Events
       summary: Stream domain events as CloudEvents via SSE with Catch-Up.
+      description: |-
+        # Delivery guarantee
+
+        This is a **live feed, not a source of truth.** Catch-up is bounded by `limit`
+        (clamped to 1000) and, on MongoDB, by a ceiling on documents scanned;
+        resume ordering uses the event store's `_id`, which is assignment order rather than commit
+        order, so a reconnecting subscriber can miss events. Gaps are *signalled* — `lagged` when
+        `Last-Event-ID` could not be resolved, `truncated` when catch-up stopped on a limit — but
+        they are not prevented.
+
+        Suitable for a UI activity feed. Not suitable for a projection, a sync, or an audit consumer:
+        those must reconcile against the REST endpoints rather than treat this stream as complete.
+
+        All of the above assumes a MongoDB event store, which is the default. On a PostgreSQL or
+        in-memory store the endpoint is weaker and nothing in the response says so: catch-up comes from
+        a 500-event in-process ring buffer rather than the event store, that buffer is empty after every
+        restart, and the stream carries only events this replica dispatched.
       operationId: events_sse_handler
       parameters:
       - name: types
@@ -741,7 +758,7 @@ paths:
           type: string
       - name: limit
         in: query
-        description: Optional limit on historical events; defaults to 100, set to 0 for live-only stream
+        description: Optional limit on historical events; defaults to 100, clamped to 1000, set to 0 for live-only stream
         required: false
         schema:
           type: integer
