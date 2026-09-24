@@ -720,13 +720,12 @@ paths:
       - Events
       summary: Stream domain events as CloudEvents via SSE with Catch-Up.
       description: |-
-        # Delivery guarantee
+        # Note on delivery guarantee
 
-        A **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber can
-        miss events; gaps are signalled where detectable (`lagged`, `truncated`), not prevented. Weaker
-        again on a non-MongoDB event store, with nothing in the response to say which one is serving.
+        This is a **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber could
+        miss events. Gaps are signalled where detectable (`lagged`, `truncated`), not prevented.
 
-        Suitable for a UI activity feed; projections, syncs and audit consumers must reconcile against
+        This endpoint is suitable for a UI activity feed. Projections, syncs and audit consumers must reconcile against
         the REST endpoints. Full detail in `problem-details/events`.
       operationId: events_sse_handler
       parameters:
