@@ -168,9 +168,9 @@ pub enum EventBusError {
     /// that does not decode, or one issued by a different adapter.
     #[error("Position-based subscription is unsupported")]
     UnsupportedPosition,
-    /// Part of the [`EventSource`]/[`EventHistoryReader`] SPI vocabulary, for adapters whose
-    /// backing stream can terminate. Neither shipped adapter constructs it: [`EventBusHandle`]
-    /// owns the broadcast sender for the process's lifetime, so the in-process bus never closes.
+    /// Reserved for [`EventSource`] and [`EventHistoryReader`] implementations whose backing
+    /// stream can terminate. Neither shipped adapter constructs it: [`EventBusHandle`] owns the
+    /// broadcast sender for the process's lifetime, so the in-process bus never closes.
     #[error("Event bus stream closed")]
     Closed,
 }

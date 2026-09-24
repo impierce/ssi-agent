@@ -32,7 +32,7 @@ Ensure that the resume token or position identifier was obtained from a valid pr
 
 This error occurs when the internal broadcast channel or event streaming bus has shut down, usually during application termination or reconfiguration. The system returns a `503 Service Unavailable` error.
 
-Neither shipped event store adapter produces it: the in-process bus owns its broadcast sender for the lifetime of the process, so it does not close while the service is running. It remains part of the adapter SPI for backends whose stream can terminate.
+Neither event store that ships today produces it: the internal bus holds its channel open for the lifetime of the service, so it never closes while the service is running. The error stays defined for future event store integrations whose connection to the underlying stream can drop.
 
 ### Resolution
 

@@ -84,20 +84,12 @@ pub fn router(state: Arc<EventsState>) -> Router {
 ///
 /// # Delivery guarantee
 ///
-/// This is a **live feed, not a source of truth.** Catch-up is bounded by `limit`
-/// (clamped to 1000) and, on MongoDB, by a ceiling on documents scanned;
-/// resume ordering uses the event store's `_id`, which is assignment order rather than commit
-/// order, so a reconnecting subscriber can miss events. Gaps are *signalled* — `lagged` when
-/// `Last-Event-ID` could not be resolved, `truncated` when catch-up stopped on a limit — but
-/// they are not prevented.
+/// A **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber can
+/// miss events; gaps are signalled where detectable (`lagged`, `truncated`), not prevented. Weaker
+/// again on a non-MongoDB event store, with nothing in the response to say which one is serving.
 ///
-/// Suitable for a UI activity feed. Not suitable for a projection, a sync, or an audit consumer:
-/// those must reconcile against the REST endpoints rather than treat this stream as complete.
-///
-/// All of the above assumes a MongoDB event store, which is the default. On a PostgreSQL or
-/// in-memory store the endpoint is weaker and nothing in the response says so: catch-up comes from
-/// a 500-event in-process ring buffer rather than the event store, that buffer is empty after every
-/// restart, and the stream carries only events this replica dispatched.
+/// Suitable for a UI activity feed; projections, syncs and audit consumers must reconcile against
+/// the REST endpoints. Full detail in `problem-details/events`.
 #[utoipa::path(
     get,
     path = "/events",
@@ -235,9 +227,6 @@ pub async fn events_sse_handler(
     let catchup_stream = futures::stream::iter(catchup_items);
 
     // 5. Seamlessly transition to live stream, deduplicating any events that arrived during catch-up.
-    // `contains` rather than `remove`: removing on the first match makes the filter one-shot per id,
-    // so a genuine duplicate of a replayed event reaches the client. The set is bounded by the
-    // clamped catch-up limit, so retaining it for the connection's lifetime is cheap.
     let live_stream = live_subscription
         .filter(move |result| {
             let is_duplicate = match result {
