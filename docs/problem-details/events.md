@@ -20,7 +20,7 @@ Verify that the underlying database cluster is healthy, accessible, and properly
 
 ## Unsupported Position
 
-This error is returned when an event subscription request provides a resume position or format that is not supported by the configured event store adapter. The system returns a `400 Bad Request` error.
+This error is returned when an event subscription request provides a resume position or format that is not supported by the configured event store adapter — a resume token that does not decode, or one issued by a different adapter. The system returns a `400 Bad Request` error.
 
 ### Resolution
 
@@ -33,3 +33,23 @@ This error occurs when the internal broadcast channel or event streaming bus has
 ### Resolution
 
 Wait for the service to finish restarting and reconnect.
+
+## Catch-Up Truncated
+
+This is not an error response but an SSE `truncated` event frame, emitted when historical catch-up stopped early because more events matched than could be sent. The connection continues into the live stream, so events between the last one replayed and the moment the subscription opened were not delivered.
+
+The frame carries a `resume_after` cursor, both in its payload and as the frame's own `id`.
+
+### Resolution
+
+Reconnect using `resume_after` as the `Last-Event-ID` to continue from that point, repeating until no `truncated` frame is emitted. A browser `EventSource` does this automatically, since the cursor is the frame's `id`. Clients maintaining cached projections should instead refresh state against the primary REST API endpoints.
+
+## Delivery guarantees
+
+`GET /v0/events` is a **live feed, not a source of truth.**
+
+- Catch-up is bounded by the `limit` parameter, which defaults to 100 and is capped at 1000. A `truncated` frame tells you when more events matched than were sent, and carries a cursor to continue from.
+- A subscriber that reconnects can miss events. Where that is detectable the stream says so, with a `lagged` or `truncated` frame, but it is not detectable in every case.
+- These guarantees assume the default MongoDB event store. On other event stores the stream is best-effort and considerably more limited, and nothing in the response distinguishes them.
+
+Use it for an activity feed, a notification channel, or anything else that tolerates a missed event. Do not build a projection, a synchronisation process or an audit trail on it — those must reconcile against the REST API endpoints rather than treat this stream as complete.

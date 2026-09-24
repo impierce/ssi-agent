@@ -719,6 +719,14 @@ paths:
       tags:
       - Events
       summary: Stream domain events as CloudEvents via SSE with Catch-Up.
+      description: |-
+        # Note on delivery guarantee
+
+        This is a **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber could
+        miss events. Gaps are signalled where detectable (`lagged`, `truncated`), not prevented.
+
+        This endpoint is suitable for a UI activity feed. Projections, syncs and audit consumers must reconcile against
+        the REST endpoints. Full detail in `problem-details/events`.
       operationId: events_sse_handler
       parameters:
       - name: types
@@ -741,7 +749,7 @@ paths:
           type: string
       - name: limit
         in: query
-        description: Optional limit on historical events; defaults to 100, set to 0 for live-only stream
+        description: Optional limit on historical events; defaults to 100, clamped to 1000, set to 0 for live-only stream
         required: false
         schema:
           type: integer

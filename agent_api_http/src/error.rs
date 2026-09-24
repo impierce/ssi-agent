@@ -162,11 +162,16 @@ impl IntoApiErrorExt for EventBusError {
                 .type_url(type_url("events#event-bus-lagged"))
                 .message(format!("Subscriber lagged behind by {dropped} events"))
                 .finish(),
-            EventBusError::Source(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Event Source Error")
-                .type_url(type_url("events#event-source-error"))
-                .message(format!("Event source error: {error}"))
-                .finish(),
+            // Driver errors carry hostnames, ports, replica-set topology and auth failure detail.
+            // Log them in full; return a fixed `detail`. The problem-details shape is unchanged.
+            EventBusError::Source(error) => {
+                tracing::error!(error = %error, "Event source error");
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Event Source Error")
+                    .type_url(type_url("events#event-source-error"))
+                    .message("The event source is unavailable")
+                    .finish()
+            }
             EventBusError::UnsupportedPosition => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Unsupported Position")
                 .type_url(type_url("events#unsupported-position"))
@@ -321,7 +326,7 @@ pub mod tests {
                 "type": format!("{DOCUMENTATION_URL}problem-details/events#event-source-error"),
                 "title": "Event Source Error",
                 "status": 500,
-                "detail": "Event source error: MongoDB error"
+                "detail": "The event source is unavailable"
             }),
         );
 

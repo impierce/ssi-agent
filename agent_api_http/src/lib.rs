@@ -146,6 +146,16 @@ where
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
 }
 
+/// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
+/// events route — which stays outside the trace layer so SSE payloads are not logged.
+pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
+    if uri_contains_null_byte(request.uri()) {
+        return Err(null_byte_rejection().into_axum_response());
+    }
+
+    Ok(next.run(request).await)
+}
+
 // This middleware logs the request body before passing it on.
 async fn log_request_body(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
     let request = buffer_request_body(request).await?;
@@ -159,7 +169,7 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 
     debug!("Path segments and query string: `{}`", parts.uri);
 
-    if path_contains_null_byte(parts.uri.path()) {
+    if uri_contains_null_byte(&parts.uri) {
         return Err(null_byte_rejection().into_axum_response());
     }
 
@@ -186,10 +196,17 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 /// (`unsupported Unicode escape sequence`). Both surface far downstream as a `500`, so requests
 /// carrying one are turned away here instead.
 ///
-/// A URI spells a `NUL` as `%00`; the path is still percent-encoded at this point, so it is matched
-/// in that form rather than decoded first.
-fn path_contains_null_byte(path: &str) -> bool {
-    path.as_bytes()
+/// A URI spells a `NUL` as `%00`, and both path and query are still percent-encoded here, so they
+/// are matched in that form rather than decoded first. The query is included because
+/// `Uri::path()` excludes it.
+fn uri_contains_null_byte(uri: &http::Uri) -> bool {
+    uri.path_and_query()
+        .is_some_and(|path_and_query| encoded_null_byte(path_and_query.as_str()))
+}
+
+fn encoded_null_byte(percent_encoded: &str) -> bool {
+    percent_encoded
+        .as_bytes()
         .windows(3)
         .any(|window| window[0] == b'%' && &window[1..] == b"00")
 }
@@ -303,9 +320,15 @@ mod tests {
 
     #[test]
     fn null_bytes_are_detected_in_every_spelling() {
-        assert!(path_contains_null_byte("/v0/credentials/%00"));
-        assert!(!path_contains_null_byte("/v0/credentials/00"));
-        assert!(!path_contains_null_byte("/v0/credentials/abc"));
+        let uri = |raw: &str| raw.parse::<http::Uri>().unwrap();
+        assert!(uri_contains_null_byte(&uri("/v0/credentials/%00")));
+        assert!(!uri_contains_null_byte(&uri("/v0/credentials/00")));
+        assert!(!uri_contains_null_byte(&uri("/v0/credentials/abc")));
+
+        // `Uri::path()` excludes the query string, so these were previously missed entirely.
+        assert!(uri_contains_null_byte(&uri("/v0/events?subject=%00")));
+        assert!(uri_contains_null_byte(&uri("/v0/events?types=a&sources=b%00c")));
+        assert!(!uri_contains_null_byte(&uri("/v0/events?subject=abc")));
 
         assert!(body_contains_null_byte(b"{\"id\": \"a\0b\"}"));
         assert!(body_contains_null_byte(br#"{"id": "a\u0000b"}"#));
