@@ -164,13 +164,11 @@ pub enum EventBusError {
     Lagged(u64),
     #[error("Event source error: {0}")]
     Source(String),
-    /// Returned by an [`EventSource`] given a [`Position`] it cannot interpret — a resume token
-    /// that does not decode, or one issued by a different adapter.
+    /// Returned by an [`EventSource`] given a [`Position`] it cannot interpret.
     #[error("Position-based subscription is unsupported")]
     UnsupportedPosition,
     /// Reserved for [`EventSource`] and [`EventHistoryReader`] implementations whose backing
-    /// stream can terminate. Neither shipped adapter constructs it: [`EventBusHandle`] owns the
-    /// broadcast sender for the process's lifetime, so the in-process bus never closes.
+    /// stream can terminate; the in-process bus never closes.
     #[error("Event bus stream closed")]
     Closed,
 }
@@ -228,23 +226,14 @@ use std::time::{Duration, Instant};
 
 /// How long a published event's identifier is remembered for duplicate suppression.
 ///
-/// In `MongoDB` deployments every event reaches the bus twice: once from in-process
-/// [`Query::dispatch`] at commit time, and once from the change stream. The two copies are
-/// separated by the change stream's delivery lag, which stretches to the reconnect backoff
-/// (up to 10s) and beyond during an outage — so the window that has to cover them is a
-/// *duration*, not an event count.
+/// A duration rather than an event count because the gap it has to span is one: the change
+/// stream's delivery lag behind in-process dispatch, which stretches to the reconnect backoff.
 const DEDUP_WINDOW_TTL: Duration = Duration::from_secs(600);
 
-/// Hard cap on remembered identifiers, bounding memory when [`DEDUP_WINDOW_TTL`] would otherwise
-/// retain more than this under sustained throughput.
+/// Caps memory when [`DEDUP_WINDOW_TTL`] would retain more than this under sustained throughput.
 const DEDUP_WINDOW_MAX_ENTRIES: usize = 50_000;
 
 /// Recently published event identifiers, evicted by age and by count.
-///
-/// This replaces a linear scan of the 500-event history ring-buffer. That scan cost O(500) string
-/// comparisons under the history write lock on every publish — twice per event in `MongoDB` mode —
-/// and its window was far too short to span a change-stream outage: once more than 500 events had
-/// been published in the interim, the replayed copies were broadcast a second time.
 #[derive(Debug)]
 struct DedupWindow {
     ids: HashSet<String>,
@@ -342,23 +331,24 @@ pub struct HistoryAscendingResult {
     pub events: Vec<CloudEvent>,
     /// Set to `true` if `last_event_id` was specified but could not be found in retained history.
     pub gap_detected: bool,
-    /// Set to `true` if the reader stopped on a limit rather than on exhausting matching events,
-    /// meaning further events exist between the last returned event and the present.
+    /// Set when the reader stopped on a limit rather than on exhausting matching events.
     ///
-    /// Resuming from `last_event_id` and hitting the limit leaves a hole: the caller chains
-    /// straight to the live tail, so everything between the last returned event and subscribe
-    /// time is delivered by neither stream. Returning fewer than the requested number of
-    /// *latest* events (no `last_event_id`) is not truncation — that is the caller's own limit.
+    /// Returning fewer than the requested number of *latest* events (no `last_event_id`) is not
+    /// truncation — that is the caller's own limit.
     pub truncated: bool,
+    /// Where a truncated resume should continue from, as a `last_event_id` value.
+    ///
+    /// Tracks the last event *examined* rather than the last returned, so that a scan which
+    /// matched nothing still advances instead of repeating itself on the next attempt.
+    pub resume_after: Option<String>,
 }
 
 impl EventBusHandle {
     /// Publishes a [`CloudEvent`] to all active subscribers and synchronously appends it to the in-memory ring-buffer.
     ///
-    /// Events carry deterministic identifiers, and in `MongoDB` deployments each one reaches the bus
-    /// twice — from in-process [`Query::dispatch`] and from the change stream. The second copy is
-    /// dropped if it falls inside the [`DedupWindow`], which is sized to span a change-stream
-    /// outage rather than the much shorter history ring-buffer.
+    /// In `MongoDB` deployments each event reaches the bus twice — from in-process
+    /// [`Query::dispatch`] and from the change stream — so the second copy is dropped if it falls
+    /// inside the [`DedupWindow`].
     pub fn publish(&self, event: CloudEvent) {
         {
             let mut dedup = match self.dedup.write() {
@@ -407,10 +397,6 @@ impl EventBusHandle {
     ///
     /// When `limit` is `None`, all matching events are returned without truncation.
     ///
-    /// Resuming from a found `last_event_id` and stopping on `limit` sets
-    /// [`HistoryAscendingResult::truncated`]: further matching events exist that this call does not
-    /// return, and a caller chaining to a live subscription will not see them.
-    ///
     /// # Errors
     ///
     /// Returns an [`EventBusError`] if the underlying [`EventHistoryReader`] fails.
@@ -450,10 +436,11 @@ impl EventBusHandle {
                 // Resume strictly after last_id in chronological order.
                 let iter = lock.iter().skip(pos + 1).filter(|event| filter.matches(event));
                 match limit {
+                    // A live-only request asked for no catch-up, so nothing is truncated.
+                    Some(0) => Vec::new(),
                     Some(max_count) => {
-                        // Take one extra to distinguish "exactly max_count matched" from
-                        // "stopped early with more available", which is the truncation signal.
-                        let mut collected: Vec<CloudEvent> = iter.take(max_count + 1).cloned().collect();
+                        // One extra distinguishes "exactly max_count matched" from "stopped early".
+                        let mut collected: Vec<CloudEvent> = iter.take(max_count.saturating_add(1)).cloned().collect();
                         truncated = collected.len() > max_count;
                         collected.truncate(max_count);
                         collected
@@ -485,10 +472,13 @@ impl EventBusHandle {
             }
         };
 
+        let resume_after = events.last().map(|event| event.id.clone());
+
         Ok(HistoryAscendingResult {
             events,
             gap_detected,
             truncated,
+            resume_after,
         })
     }
 
@@ -533,10 +523,8 @@ impl EventBusHandle {
                         tracing::warn!("EventSource stream ended, reconnecting...");
                     }
                     Err(err) => {
-                        // Change streams need a replica set, so on a standalone mongod `open` fails
-                        // permanently while the rest of the application works. Report the first
-                        // failure loudly and the repeats quietly, rather than an `error!` every 10s
-                        // for the lifetime of the process.
+                        // Change streams need a replica set, so on a standalone mongod this fails
+                        // permanently. Report the first failure loudly and the repeats quietly.
                         if consecutive_open_failures == 0 {
                             tracing::error!("Failed to open EventSource stream: {:?}", err);
                         } else {
@@ -1156,7 +1144,7 @@ mod tests {
         );
         handle.publish(replayed.clone());
 
-        // Fill well past the 500-event history ring-buffer, as a change-stream outage would.
+        // Fill well past the 500-event history ring-buffer.
         for sequence in 1..=600 {
             handle.publish(build_cloud_event(
                 "credential",
@@ -1170,8 +1158,7 @@ mod tests {
 
         let mut subscriber = handle.subscribe(EventFilter::default());
 
-        // The change stream replays the event the in-process dispatch already published. It is long
-        // gone from the ring-buffer, but still inside the dedup window.
+        // Replayed by the change stream: long gone from the ring-buffer, still inside the window.
         handle.publish(replayed.clone());
 
         let follow_up = build_cloud_event(
@@ -1189,5 +1176,37 @@ mod tests {
             received.id, follow_up.id,
             "replayed duplicate should not have been broadcast"
         );
+    }
+
+    #[tokio::test]
+    async fn history_ascending_treats_a_zero_limit_as_live_only() {
+        let handle = EventBusHandle::new(16);
+        for sequence in 1..=5 {
+            handle.publish(build_cloud_event(
+                "credential",
+                "cred-1",
+                sequence,
+                "CredentialSigned",
+                serde_json::json!({}),
+                None,
+            ));
+        }
+
+        // `?limit=0` asks for no catch-up at all, so events existing after the resume point is not
+        // truncation. The MongoDB reader returns early for the same reason.
+        let result = handle
+            .history_ascending(&EventFilter::default(), Some("credential:cred-1:2"), Some(0))
+            .await
+            .unwrap();
+        assert!(result.events.is_empty());
+        assert!(!result.truncated, "a live-only request must not report truncation");
+
+        // Without a resume point the other branches already behaved this way.
+        let result = handle
+            .history_ascending(&EventFilter::default(), None, Some(0))
+            .await
+            .unwrap();
+        assert!(result.events.is_empty());
+        assert!(!result.truncated);
     }
 }

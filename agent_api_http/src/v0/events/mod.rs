@@ -52,9 +52,8 @@ impl From<EventBusHandle> for EventsState {
 /// Number of historical catch-up events returned when the client does not ask for a `limit`.
 const DEFAULT_CATCHUP_LIMIT: usize = 100;
 
-/// Upper bound on historical catch-up events per request. A larger client-supplied `limit` is
-/// clamped rather than rejected: catch-up is materialised into two `Vec`s before anything is
-/// streamed, so an unclamped `limit` buffers the whole matching collection twice, per request.
+/// Upper bound on historical catch-up events per request; a larger `limit` is clamped rather than
+/// rejected. Catch-up is fully materialised before anything streams, so this bounds memory.
 const MAX_CATCHUP_LIMIT: usize = 1000;
 
 #[derive(Debug, Deserialize)]
@@ -75,8 +74,8 @@ pub fn router(state: Arc<EventsState>) -> Router {
                 .route("/events", get(events_sse_handler))
                 .with_state(state),
         )
-        // This route is merged after the trace layer, which is what carries the null-byte rejection
-        // for every other route, so it applies the URI half of that check itself.
+        // Merged after the trace layer that carries the null-byte rejection for other routes, so
+        // it applies the URI half of that check itself.
         .layer(axum::middleware::from_fn(crate::reject_null_byte_uri))
 }
 
@@ -210,17 +209,25 @@ pub async fn events_sse_handler(
         });
     }
 
-    // 4a. Catch-up stopped on a limit rather than on exhausting matches, so events between the last
-    // one above and this subscription's start are in neither stream. Signal it instead of letting
-    // the client chain to the live tail believing it is caught up.
+    // 4a. Catch-up stopped on a limit, so events between the last one above and this
+    // subscription's start are in neither stream.
     if catchup_result.truncated {
-        catchup_items.push(Ok(sse::Event::default().event("truncated").data(
+        let mut frame = sse::Event::default().event("truncated").data(
             json!({
                 "warning": "Catch-up truncated; events between the last catch-up event and the live stream were not delivered",
                 "limit": limit,
+                "resume_after": catchup_result.resume_after,
             })
             .to_string(),
-        )));
+        );
+
+        // A browser `EventSource` takes its next `Last-Event-ID` from the frame's `id` and never
+        // from the payload, so without this a reconnect repeats the query that truncated.
+        if let Some(resume_after) = catchup_result.resume_after.as_deref() {
+            frame = frame.id(resume_after);
+        }
+
+        catchup_items.push(Ok(frame));
     }
 
     let catchup_stream = futures::stream::iter(catchup_items);
@@ -249,7 +256,7 @@ pub async fn events_sse_handler(
                 .event("lagged")
                 .data(json!({ "dropped": dropped_count }).to_string())),
             Err(err) => {
-                // Driver errors carry hostnames, ports, replica-set topology and auth detail.
+                // Driver errors carry hostnames, ports and auth detail.
                 tracing::error!(error = %err, "Event bus error on live SSE stream");
                 Ok(sse::Event::default()
                     .event("error")
@@ -557,11 +564,11 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    /// Records the `limit` the handler passed down, so the clamp can be asserted through the
-    /// public route rather than by reaching into the handler.
+    /// Records the `limit` the handler passed down, so the clamp can be asserted via the route.
     struct RecordingReader {
         observed_limit: Arc<std::sync::Mutex<Option<Option<usize>>>>,
         truncated: bool,
+        resume_after: Option<String>,
     }
 
     #[async_trait::async_trait]
@@ -577,6 +584,7 @@ mod tests {
                 events: Vec::new(),
                 gap_detected: false,
                 truncated: self.truncated,
+                resume_after: self.resume_after.clone(),
             })
         }
     }
@@ -587,6 +595,7 @@ mod tests {
         bus_handle.set_history_reader(Arc::new(RecordingReader {
             observed_limit: observed_limit.clone(),
             truncated: false,
+            resume_after: None,
         }));
 
         let app = router(Arc::new(bus_handle.into()));
@@ -606,7 +615,6 @@ mod tests {
         assert_eq!(observe_limit("").await, Some(DEFAULT_CATCHUP_LIMIT));
         assert_eq!(observe_limit("?limit=5").await, Some(5));
         assert_eq!(observe_limit("?limit=0").await, Some(0));
-        // An unclamped limit would materialise the whole matching collection twice, per request.
         assert_eq!(observe_limit("?limit=4294967295").await, Some(MAX_CATCHUP_LIMIT));
     }
 
@@ -616,6 +624,7 @@ mod tests {
         bus_handle.set_history_reader(Arc::new(RecordingReader {
             observed_limit: Arc::new(std::sync::Mutex::new(None)),
             truncated: true,
+            resume_after: Some("credential:cred-9:42".to_string()),
         }));
 
         let app = router(Arc::new(bus_handle.into()));
@@ -642,6 +651,11 @@ mod tests {
             .unwrap_or_default();
 
         assert!(body_str.contains("event: truncated"), "unexpected frame: {body_str}");
+        assert!(
+            body_str.contains("id: credential:cred-9:42"),
+            "truncated frame carries no resume cursor: {body_str}"
+        );
+        assert!(body_str.contains("\"resume_after\":\"credential:cred-9:42\""));
     }
 
     #[tokio::test]
@@ -682,8 +696,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_events_sse_rejects_null_byte_in_query() {
-        // The events route sits outside the trace layer that carries the null-byte rejection, so it
-        // wears the check as its own middleware.
         let bus_handle = EventBusHandle::new(16);
         let app = router(Arc::new(bus_handle.into()));
 

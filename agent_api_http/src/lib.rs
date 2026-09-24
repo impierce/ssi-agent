@@ -146,11 +146,8 @@ where
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
 }
 
-/// Rejects a `NUL` in the request URI without buffering the body or logging anything.
-///
-/// The events route is merged after the trace layer so SSE payloads stay out of the logs, which
-/// also left it outside the null-byte rejection. It applies this in its own router instead, so the
-/// check travels with the route rather than with the merge site.
+/// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
+/// events route — which stays outside the trace layer so SSE payloads are not logged.
 pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
     if uri_contains_null_byte(request.uri()) {
         return Err(null_byte_rejection().into_axum_response());
@@ -199,11 +196,9 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 /// (`unsupported Unicode escape sequence`). Both surface far downstream as a `500`, so requests
 /// carrying one are turned away here instead.
 ///
-/// A URI spells a `NUL` as `%00`. Both the path and the query string are still percent-encoded at
-/// this point, so they are matched in that form rather than decoded first.
-///
-/// The query string is included because `Uri::path()` excludes it, which left every query
-/// parameter in the API unchecked.
+/// A URI spells a `NUL` as `%00`, and both path and query are still percent-encoded here, so they
+/// are matched in that form rather than decoded first. The query is included because
+/// `Uri::path()` excludes it.
 fn uri_contains_null_byte(uri: &http::Uri) -> bool {
     uri.path_and_query()
         .is_some_and(|path_and_query| encoded_null_byte(path_and_query.as_str()))
