@@ -8601,7 +8601,7 @@ dependencies = [
 [[package]]
 name = "oid4vc-core"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=be4e047#be4e04735c0566e61964bba8e88b2c036373adcc"
+source = "git+https://github.com/impierce/openid4vc?rev=42b37c8#42b37c8020d4a7dab1dded682ed434dd3eebe1fc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8627,13 +8627,15 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "serde_with 2.3.3",
+ "tracing",
  "url",
+ "utoipa",
 ]
 
 [[package]]
 name = "oid4vc-manager"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=be4e047#be4e04735c0566e61964bba8e88b2c036373adcc"
+source = "git+https://github.com/impierce/openid4vc?rev=42b37c8#42b37c8020d4a7dab1dded682ed434dd3eebe1fc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8660,13 +8662,14 @@ dependencies = [
  "siopv2",
  "tokio",
  "tower-http 0.4.4",
+ "tracing",
  "url",
 ]
 
 [[package]]
 name = "oid4vci"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=be4e047#be4e04735c0566e61964bba8e88b2c036373adcc"
+source = "git+https://github.com/impierce/openid4vc?rev=42b37c8#42b37c8020d4a7dab1dded682ed434dd3eebe1fc"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8688,6 +8691,7 @@ dependencies = [
  "serde_with 3.21.0",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
  "url",
  "utoipa",
 ]
@@ -8695,7 +8699,7 @@ dependencies = [
 [[package]]
 name = "oid4vp"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=be4e047#be4e04735c0566e61964bba8e88b2c036373adcc"
+source = "git+https://github.com/impierce/openid4vc?rev=42b37c8#42b37c8020d4a7dab1dded682ed434dd3eebe1fc"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8721,6 +8725,7 @@ dependencies = [
  "serde_with 3.21.0",
  "thiserror 1.0.69",
  "tokio",
+ "tracing",
  "url",
 ]
 
@@ -11698,7 +11703,7 @@ dependencies = [
 [[package]]
 name = "siopv2"
 version = "0.1.0"
-source = "git+https://github.com/impierce/openid4vc?rev=be4e047#be4e04735c0566e61964bba8e88b2c036373adcc"
+source = "git+https://github.com/impierce/openid4vc?rev=42b37c8#42b37c8020d4a7dab1dded682ed434dd3eebe1fc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -11719,6 +11724,7 @@ dependencies = [
  "serde_urlencoded",
  "serde_with 3.21.0",
  "tokio",
+ "tracing",
  "url",
 ]
 
