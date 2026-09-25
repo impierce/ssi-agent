@@ -1,6 +1,9 @@
 use crate::{
     metadata::{info::__path_info, version::__path_version},
-    probes::{liveness::__path_healthz, readiness::__path_readyz},
+    probes::{
+        liveness::{__path_healthz, __path_livez},
+        readiness::__path_readyz,
+    },
 };
 use axum::{
     http::{header, StatusCode},
@@ -12,7 +15,7 @@ use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(version, info, healthz, readyz, openapi_yaml),
+    paths(version, info, healthz, livez, readyz, openapi_yaml),
     tags(
         (name = "Metadata", description = "Inspect application build and runtime metadata."),
         (name = "Probes", description = "Inspect application liveness and readiness."),
@@ -130,6 +133,7 @@ mod tests {
             BTreeSet::from([
                 ("get".to_string(), "/healthz".to_string(), "healthz".to_string()),
                 ("get".to_string(), "/info".to_string(), "info".to_string()),
+                ("get".to_string(), "/livez".to_string(), "livez".to_string()),
                 (
                     "get".to_string(),
                     "/openapi.yaml".to_string(),
@@ -140,7 +144,7 @@ mod tests {
             ])
         );
         assert!(api_http_operations.is_subset(&published_operations));
-        assert_eq!(published_operations.len(), api_http_operations.len() + 5);
+        assert_eq!(published_operations.len(), api_http_operations.len() + 6);
 
         let sponsoring_configuration = api_http
             .paths

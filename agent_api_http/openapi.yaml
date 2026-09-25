@@ -13,7 +13,7 @@ paths:
     get:
       tags:
       - Probes
-      summary: A simple liveness probe following application monitoring conventions.
+      summary: An alias for the liveness probe.
       operationId: healthz
       responses:
         '200':
@@ -31,6 +31,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Info'
+  /livez:
+    get:
+      tags:
+      - Probes
+      summary: A simple liveness probe following application monitoring conventions.
+      operationId: livez
+      responses:
+        '200':
+          description: Application is alive
   /openapi.yaml:
     get:
       tags:
