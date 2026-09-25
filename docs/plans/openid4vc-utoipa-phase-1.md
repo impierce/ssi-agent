@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed Phase 1 implementation plan for the `impierce/openid4vc` repository.
+Completed in `impierce/openid4vc` revision `42b37c8` and consumed by UniCore.
 
 ## Goal
 
@@ -11,9 +11,9 @@ public protocol endpoints. The work must remain feature-gated so downstream
 users that do not generate OpenAPI documents do not acquire a mandatory
 `utoipa` dependency.
 
-The first consumer is `impierce/ssi-agent`, currently pinned to revision
-`be4e047`. UniCore will not add its protocol endpoint annotations until this
-work has landed and the dependency revision has been updated.
+The first consumer is `impierce/ssi-agent`, which was pinned to revision
+`be4e047` when this plan was written and now consumes the completed work at
+revision `42b37c8`.
 
 ## Scope
 
@@ -409,4 +409,3 @@ After merge, provide the commit SHA to the UniCore change. The first downstream
 commit should only update the pinned `openid4vc` revision and run the UniCore
 workspace checks. Endpoint annotations belong in later commits so failures can
 be attributed cleanly to either dependency integration or local OpenAPI work.
-

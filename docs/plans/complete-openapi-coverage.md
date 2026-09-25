@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed implementation plan for review.
+Implementation in progress.
+
+- Phase 1 is complete upstream and UniCore is pinned to `openid4vc` revision
+  `42b37c8`.
+- Phase 2 is complete, including the subsequently added `/livez` probe.
+- Phase 3 is the next implementation milestone.
 
 ## Context
 
@@ -19,8 +24,8 @@ This plan addresses the requirements captured in:
 - [ssi-agent issue #351](https://github.com/impierce/ssi-agent/issues/351), which
   defines the eventual runtime split between the management and public/protocol
   APIs.
-- `TODO.md`, which requires every endpoint to appear in a complete OpenAPI
-  document while retaining a smaller, less protocol-heavy default document.
+- The repository goal that every endpoint appear in a complete OpenAPI document
+  while retaining a smaller, less protocol-heavy default document.
 
 The documentation split comes first. Splitting the HTTP server is a separate,
 follow-up change because it alters deployment and security behavior.
@@ -33,11 +38,13 @@ Generate two OpenAPI documents from Rust types:
 
 | Artifact | Contents |
 | --- | --- |
-| `agent_api_http/openapi.yaml` | Every currently documented operation, plus `GET /public/sponsoring-configuration`, `GET /version`, `GET /info`, `GET /healthz`, and `GET /readyz` |
+| `agent_api_http/openapi.yaml` | Every previously documented operation, plus `GET /public/sponsoring-configuration`, `GET /version`, `GET /info`, `GET /healthz`, `GET /livez`, `GET /readyz`, and `GET /openapi.yaml` |
 | `agent_api_http/openapi-full.yaml` | Everything in `openapi.yaml`, plus every standardized protocol endpoint |
 
-The existing operations in `openapi.yaml` remain unchanged. The six explicitly
-requested general-purpose endpoints are additive changes to that artifact.
+The existing operations in `openapi.yaml` remain unchanged. The seven
+general-purpose endpoints are additive changes to that artifact. Six come from
+`agent_application::OperationalApi`; the sponsoring configuration is registered
+in `agent_api_http::ApiDoc`.
 
 ### Composition instead of YAML merging
 
@@ -49,7 +56,7 @@ component names earlier, and avoids a second YAML merge implementation.
 ### Generator ownership
 
 The final generators should live in `agent_application` because that crate owns
-`/version`, `/info`, `/healthz`, and `/readyz` and already depends on
+`/version`, `/info`, `/healthz`, `/livez`, and `/readyz` and already depends on
 `agent_api_http`. Moving those handlers into `agent_api_http`, or adding fake
 documentation-only handlers there, would invert or blur the existing dependency
 direction.
@@ -68,7 +75,9 @@ agent_application::PublishedApiDoc
     /version
     /info
     /healthz
+    /livez
     /readyz
+    /openapi.yaml
             |
             v
 agent_application::FullApiDoc
@@ -89,6 +98,7 @@ agent_application::FullApiDoc
 | `GET` | `/version` | `agent_application::metadata` |
 | `GET` | `/info` | `agent_application::metadata` |
 | `GET` | `/healthz` | `agent_application::probes` |
+| `GET` | `/livez` | `agent_application::probes` |
 | `GET` | `/readyz` | `agent_application::probes` |
 | `GET` | `/openapi.yaml` | `agent_application::openapi` |
 
@@ -119,11 +129,11 @@ UniCore route, and the complete-coverage requirement permits no omissions.
 | `GET` | `/request/{request_id}` | OID4VP/SIOPv2 request object |
 | `POST` | `/redirect` | OID4VP/SIOPv2 response |
 
-This is 19 protocol operations. Together with the six shared operations, it
-accounts for the operations currently routed but absent from the generated
-specification, plus the new opt-in endpoint that serves the published document.
+This is 19 protocol operations. Together with the seven shared operations, it
+accounts for the previously undocumented routes plus the new `/livez` and
+disabled-by-default `/openapi.yaml` runtime routes.
 
-## Phase 1: add OpenAPI schemas to `openid4vc`
+## Phase 1: add OpenAPI schemas to `openid4vc` (complete)
 
 Complete and merge the standalone plan in
 [`openid4vc-utoipa-phase-1.md`](./openid4vc-utoipa-phase-1.md) before modifying
@@ -137,7 +147,7 @@ After it lands:
 4. Run the UniCore workspace tests before starting endpoint annotations, so an
    upstream schema regression is separated from local documentation changes.
 
-## Phase 2: add the six shared endpoints to `openapi.yaml`
+## Phase 2: add the seven shared endpoints to `openapi.yaml` (complete)
 
 ### Public sponsoring configuration
 
@@ -154,11 +164,11 @@ After it lands:
 1. Derive `ToSchema` for `Version` and `Info`.
 2. Ensure `ApplicationProfile`, nested by `Info`, has a schema or an explicit
    schema representation.
-3. Add path annotations with operation IDs `version`, `info`, `healthz`, and
-   `readyz`, matching their handler names.
+3. Add path annotations with operation IDs `version`, `info`, `healthz`,
+   `livez`, and `readyz`, matching their handler names.
 4. Document `/readyz` with both `200` and `503`; document `/healthz` as an empty
-   `200` response.
-5. Define `OperationalApi` in `agent_application` and register these four
+   `200` response and `/livez` as the canonical liveness probe.
+5. Define `OperationalApi` in `agent_application` and register these five
    operations.
 
 ### Runtime OpenAPI document
@@ -182,12 +192,33 @@ After it lands:
 4. Retain the existing title, license, external documentation, server, and
    semantic-release version patching.
 5. Remove the old writer only after a regression test proves that the only
-   OpenAPI diff is the six intended operations and their schemas.
+   OpenAPI diff is the seven intended operations and their schemas.
 
 ## Phase 3: annotate protocol endpoints
 
 Add `#[utoipa::path]` annotations to all 19 protocol operations and collect them
 in `agent_api_http::ProtocolApi`.
+
+Start this phase by adding the audited route manifest and its completeness test.
+The test should initially identify all 19 missing operations and become green as
+the annotations are registered. This moves the most important Phase 4 boundary
+forward and prevents the implementation from silently omitting a route.
+
+Implement the operations in these cohesive groups:
+
+| Group | Operations | Runtime owner |
+| --- | ---: | --- |
+| DID and DID Configuration | 2 | `agent_api_http::v0::identity` |
+| Issuance, metadata, status list, and VCT metadata | 8 | `agent_api_http::v0::issuance` |
+| Authorization | 5 | `agent_api_http::v0::authorization` |
+| Holder callbacks | 2 | `agent_api_http::v0::holder` |
+| OID4VP and SIOPv2 | 2 | `agent_api_http::v0::verification` |
+
+Annotate the endpoints already backed by upstream `openid4vc` wire types first,
+then introduce the local documentation DTOs and schema adapters listed below.
+Give `/linked-verifiable-presentations/{presentation_id}` a dedicated handler
+wrapper instead of documenting the reused `presentation_signed` handler under a
+second identity. This keeps each HTTP operation ID aligned with one handler.
 
 Each operation must specify:
 
@@ -199,6 +230,12 @@ Each operation must specify:
 - Required bearer authentication and relevant response headers.
 - A standards-oriented tag: `DID`, `OAuth 2.0`, `OpenID4VCI`, `OID4VP / SIOPv2`,
   `Status List`, or `SD-JWT VC`.
+
+These naming requirements apply to the 19 new protocol operations. Existing
+published operation IDs remain stable in this work because changing them changes
+function names in generated clients. In particular, legacy IDs such as
+`remove-templates-from-catalog` require a separately reviewed compatibility
+migration rather than an incidental rename in this feature.
 
 ### Local schema work
 
@@ -243,7 +280,8 @@ Add tests that operate on the generated `OpenApi` values before serialization:
 5. Assert that the difference between the two sets is exactly the 19 protocol
    operations listed above.
 6. Assert globally unique operation IDs.
-7. Assert snake_case operation IDs and handler-name parity.
+7. Assert snake_case operation IDs and handler-name parity for the 19 newly
+   documented protocol operations.
 8. Parse both serialized YAML files as OpenAPI after generation.
 9. Generate each file twice and assert stable output.
 
@@ -277,13 +315,17 @@ it changes the externally reachable security boundary.
 
 ## Delivery sequence
 
-1. `openid4vc`: schema feature and types from the extracted Phase 1 plan.
-2. `ssi-agent`: bump the pinned `openid4vc` revision only.
-3. `ssi-agent`: add the six shared operations and transfer generation to
+1. Complete: `openid4vc` schema feature and types from the extracted Phase 1
+   plan.
+2. Complete: bump the pinned `openid4vc` revision only.
+3. Complete: add the seven shared operations and transfer generation to
    `PublishedApiDoc`.
-4. `ssi-agent`: annotate the 19 protocol operations and add `FullApiDoc`.
-5. `ssi-agent`: add completeness tests and documentation/collection consumers.
-6. `ssi-agent`: implement the optional two-listener runtime split.
+4. Next: add the audited manifest, annotate the 19 protocol operations, add
+   `ProtocolApi` and `FullApiDoc`, and generate `openapi-full.yaml`.
+5. Add the remaining completeness tests and update documentation and collection
+   consumers. Decide explicitly whether Bruno and API fuzzing consume the
+   published document or the protocol-heavy full document.
+6. In a separate change, implement the optional two-listener runtime split.
 
 Keeping the revision bump isolated makes upstream integration failures easy to
 identify. Keeping the listener split last makes the documentation changes safe
@@ -291,13 +333,14 @@ to release independently.
 
 ## Acceptance criteria
 
-- `openapi.yaml` contains its existing operations plus the six shared
+- `openapi.yaml` contains its existing operations plus the seven shared
   operations and no standardized protocol operations.
 - `openapi-full.yaml` contains every operation served by the complete UniCore
   application router.
 - The full document differs from the published document by exactly the audited
   19 protocol operations.
-- Every operation has a unique, snake_case ID matching its handler.
+- Every operation ID is globally unique. Every newly documented protocol
+  operation has a snake_case ID matching its handler.
 - Request bodies and responses use their real media types.
 - The two generated files are deterministic and parse as valid OpenAPI.
 - `cargo fmt --all` passes.
