@@ -5,7 +5,7 @@ use serde_with::skip_serializing_none;
 include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 
 #[skip_serializing_none]
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Version {
     /// The current version of the application.
     version: Option<String>,
@@ -14,6 +14,15 @@ pub struct Version {
 }
 
 /// Returns the `version` and the `git_commit_hash` of the application.
+#[utoipa::path(
+    get,
+    path = "/version",
+    operation_id = "version",
+    tags = ["Metadata"],
+    responses(
+        (status = 200, description = "Application version information", body = Version),
+    )
+)]
 pub async fn version() -> Json<Version> {
     let version = version_inner();
     Json(version)

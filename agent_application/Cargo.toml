@@ -41,3 +41,7 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-opentelemetry = "0.32"
 tracing-subscriber.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+tower.workspace = true

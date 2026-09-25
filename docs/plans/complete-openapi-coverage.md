@@ -36,7 +36,7 @@ Generate two OpenAPI documents from Rust types:
 | `agent_api_http/openapi.yaml` | Every currently documented operation, plus `GET /public/sponsoring-configuration`, `GET /version`, `GET /info`, `GET /healthz`, and `GET /readyz` |
 | `agent_api_http/openapi-full.yaml` | Everything in `openapi.yaml`, plus every standardized protocol endpoint |
 
-The existing operations in `openapi.yaml` remain unchanged. The five explicitly
+The existing operations in `openapi.yaml` remain unchanged. The six explicitly
 requested general-purpose endpoints are additive changes to that artifact.
 
 ### Composition instead of YAML merging
@@ -90,6 +90,7 @@ agent_application::FullApiDoc
 | `GET` | `/info` | `agent_application::metadata` |
 | `GET` | `/healthz` | `agent_application::probes` |
 | `GET` | `/readyz` | `agent_application::probes` |
+| `GET` | `/openapi.yaml` | `agent_application::openapi` |
 
 `/readyz` is included even though issue #351 does not name it: it is a real
 UniCore route, and the complete-coverage requirement permits no omissions.
@@ -118,9 +119,9 @@ UniCore route, and the complete-coverage requirement permits no omissions.
 | `GET` | `/request/{request_id}` | OID4VP/SIOPv2 request object |
 | `POST` | `/redirect` | OID4VP/SIOPv2 response |
 
-This is 19 protocol operations. Together with the five shared operations, it
-accounts for the 24 operations currently routed but absent from the generated
-specification.
+This is 19 protocol operations. Together with the six shared operations, it
+accounts for the operations currently routed but absent from the generated
+specification, plus the new opt-in endpoint that serves the published document.
 
 ## Phase 1: add OpenAPI schemas to `openid4vc`
 
@@ -136,7 +137,7 @@ After it lands:
 4. Run the UniCore workspace tests before starting endpoint annotations, so an
    upstream schema regression is separated from local documentation changes.
 
-## Phase 2: add the five shared endpoints to `openapi.yaml`
+## Phase 2: add the six shared endpoints to `openapi.yaml`
 
 ### Public sponsoring configuration
 
@@ -160,6 +161,16 @@ After it lands:
 5. Define `OperationalApi` in `agent_application` and register these four
    operations.
 
+### Runtime OpenAPI document
+
+1. Keep a production OpenAPI builder that applies the semantic-release version
+   patch and is shared by file generation and the runtime handler.
+2. Add `GET /openapi.yaml` with operation ID `openapi_yaml` and an
+   `application/yaml` response.
+3. Register the route only when `UNICORE__SERVE_OPENAPI_ENABLED=true`; keep
+   it disabled by default.
+4. Include `/openapi.yaml` in the published document itself.
+
 ### Published document
 
 1. Define `PublishedApiDoc` in `agent_application` by composing the existing
@@ -171,7 +182,7 @@ After it lands:
 4. Retain the existing title, license, external documentation, server, and
    semantic-release version patching.
 5. Remove the old writer only after a regression test proves that the only
-   OpenAPI diff is the five intended operations and their schemas.
+   OpenAPI diff is the six intended operations and their schemas.
 
 ## Phase 3: annotate protocol endpoints
 
@@ -268,7 +279,7 @@ it changes the externally reachable security boundary.
 
 1. `openid4vc`: schema feature and types from the extracted Phase 1 plan.
 2. `ssi-agent`: bump the pinned `openid4vc` revision only.
-3. `ssi-agent`: add the five shared operations and transfer generation to
+3. `ssi-agent`: add the six shared operations and transfer generation to
    `PublishedApiDoc`.
 4. `ssi-agent`: annotate the 19 protocol operations and add `FullApiDoc`.
 5. `ssi-agent`: add completeness tests and documentation/collection consumers.
@@ -280,7 +291,7 @@ to release independently.
 
 ## Acceptance criteria
 
-- `openapi.yaml` contains its existing operations plus the five shared
+- `openapi.yaml` contains its existing operations plus the six shared
   operations and no standardized protocol operations.
 - `openapi-full.yaml` contains every operation served by the complete UniCore
   application router.
@@ -292,4 +303,5 @@ to release independently.
 - `cargo fmt --all` passes.
 - `cargo clippy --all-targets --all-features -- -D warnings` passes.
 - `cargo test --workspace` passes.
-- The runtime behavior and listener topology remain unchanged until Phase 5.
+- The listener topology remains unchanged until Phase 5; the only earlier
+  runtime addition is the disabled-by-default `/openapi.yaml` route.

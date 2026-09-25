@@ -20,6 +20,17 @@ impl ReadinessState {
     }
 }
 
+/// A readiness probe that reports whether persisted events are compatible.
+#[utoipa::path(
+    get,
+    path = "/readyz",
+    operation_id = "readyz",
+    tags = ["Probes"],
+    responses(
+        (status = 200, description = "Application is ready"),
+        (status = 503, description = "Application is not ready"),
+    )
+)]
 pub async fn readyz(State(readiness): State<ReadinessState>) -> impl IntoResponse {
     if readiness.is_ready() {
         StatusCode::OK

@@ -24,23 +24,3 @@ use utoipa::OpenApi;
     )
 )]
 pub struct ApiDoc;
-
-/// Applies manual adjustments to the generated OpenAPI specification.
-#[allow(dead_code)]
-fn patch_generated_openapi(mut spec: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
-    spec.info.version = std::env::var("APP_VERSION").unwrap_or_else(|_| "0.0.0-semantically-released".to_string());
-    spec
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Generates an openapi.yaml file from the annotations in the code.
-    #[test]
-    fn generate_openapi_spec() {
-        let openapi = patch_generated_openapi(ApiDoc::openapi());
-        let yaml = openapi.to_yaml().unwrap();
-        std::fs::write("openapi.yaml", yaml).unwrap();
-    }
-}

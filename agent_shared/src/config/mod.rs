@@ -178,6 +178,8 @@ pub struct ApplicationConfiguration {
     pub redirect_uri: Url,
     #[config(default)]
     pub cors_enabled: bool,
+    #[config(default)]
+    pub serve_openapi_enabled: bool,
     #[config(
         default,
         development_default = "HashMap::from(
@@ -1091,6 +1093,7 @@ mod tests {
               "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
+              "serve_openapi_enabled": false,
               "did_methods": {
                 "did:jwk": {
                   "enabled": true,
@@ -1495,6 +1498,21 @@ mod tests {
                 assert_eq!(serialized.get("log_format").unwrap(), &json!("text"));
             },
         );
+    }
+
+    #[test]
+    #[serial]
+    fn test_serve_openapi_enabled_environment_variable() {
+        temp_env::with_var("UNICORE__SERVE_OPENAPI_ENABLED", Some("true"), || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+            assert!(config.serve_openapi_enabled);
+        });
     }
 
     #[test]

@@ -1,4 +1,5 @@
 mod metadata;
+pub mod openapi;
 mod probes;
 pub mod telemetry;
 
@@ -429,6 +430,8 @@ where
         .route("/readyz", axum::routing::get(readyz))
         .with_state(readiness);
     let app = probes_router.merge(app);
+
+    let app = openapi::router(config().serve_openapi_enabled).merge(app);
 
     // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
     app.route_layer(axum::middleware::from_fn(track_metrics))

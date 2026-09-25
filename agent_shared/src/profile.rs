@@ -3,7 +3,7 @@ use std::env;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 
-#[derive(Clone, Copy, Debug, Display, EnumString, Serialize)]
+#[derive(Clone, Copy, Debug, Display, EnumString, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ApplicationProfile {

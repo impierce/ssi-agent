@@ -9,7 +9,7 @@ use serde_with::skip_serializing_none;
 use url::Url;
 
 #[skip_serializing_none]
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SponsoringConfiguration {
     pub name: String,
     #[serde(default)]
@@ -17,6 +17,20 @@ pub struct SponsoringConfiguration {
     pub iota_address: String,
 }
 
+/// Get the public sponsoring configuration
+///
+/// Returns the public display name, optional logo, and IOTA address used by sponsored identities.
+#[utoipa::path(
+    get,
+    path = "/sponsoring-configuration",
+    operation_id = "sponsoring_configuration",
+    tags = ["Public"],
+    responses(
+        (status = 200, description = "Sponsoring configuration retrieved successfully", body = SponsoringConfiguration),
+        (status = 404, description = "No sponsoring IOTA address is configured"),
+        (status = 500, description = "No display configuration is available"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub async fn sponsoring_configuration() -> Result<Response, StatusCode> {
     let configuration = config().clone();

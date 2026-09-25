@@ -9,6 +9,62 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
+  /healthz:
+    get:
+      tags:
+      - Probes
+      summary: A simple liveness probe following application monitoring conventions.
+      operationId: healthz
+      responses:
+        '200':
+          description: Application is alive
+  /info:
+    get:
+      tags:
+      - Metadata
+      summary: Returns the `version`, application `uptime` among other build metadata.
+      operationId: info
+      responses:
+        '200':
+          description: Application information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+  /openapi.yaml:
+    get:
+      tags:
+      - OpenAPI
+      summary: Get the OpenAPI document
+      description: Returns the OpenAPI description of the endpoints published by this application.
+      operationId: openapi_yaml
+      responses:
+        '200':
+          description: OpenAPI document
+          content:
+            application/yaml:
+              schema:
+                type: string
+        '500':
+          description: OpenAPI document serialization failed
+  /public/sponsoring-configuration:
+    get:
+      tags:
+      - Public
+      summary: Get the public sponsoring configuration
+      description: Returns the public display name, optional logo, and IOTA address used by sponsored identities.
+      operationId: sponsoring_configuration
+      responses:
+        '200':
+          description: Sponsoring configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SponsoringConfiguration'
+        '404':
+          description: No sponsoring IOTA address is configured
+        '500':
+          description: No display configuration is available
   /public/templates:
     get:
       tags:
@@ -25,6 +81,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PublicTemplate'
+  /readyz:
+    get:
+      tags:
+      - Probes
+      summary: A readiness probe that reports whether persisted events are compatible.
+      operationId: readyz
+      responses:
+        '200':
+          description: Application is ready
+        '503':
+          description: Application is not ready
   /v0/add-linked-domains:
     post:
       tags:
@@ -1549,6 +1616,19 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+  /version:
+    get:
+      tags:
+      - Metadata
+      summary: Returns the `version` and the `git_commit_hash` of the application.
+      operationId: version
+      responses:
+        '200':
+          description: Application version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
 components:
   schemas:
     AcceptConnectionChangesRequest:
@@ -1576,6 +1656,11 @@ components:
           items:
             type: string
           default: []
+    ApplicationProfile:
+      type: string
+      enum:
+      - production
+      - development
     AuthorizationRequestResponse:
       type: object
       required:
@@ -2250,6 +2335,32 @@ components:
       enum:
       - individual
       - organization
+    Info:
+      allOf:
+      - $ref: '#/components/schemas/Version'
+      - type: object
+        required:
+        - app
+        - profile
+        - uptime
+        properties:
+          app:
+            type: string
+          docker_build_timestamp:
+            type:
+            - string
+            - 'null'
+            description: The timestamp when the Docker image was built.
+          profile:
+            $ref: '#/components/schemas/ApplicationProfile'
+          release_channel:
+            type:
+            - string
+            - 'null'
+            description: 'The release channel of the application. Possible values are: `stable`, `next`, `beta`, `canary`.'
+          uptime:
+            type: string
+            description: The current uptime of the application in a human-friendly format.
     IotaMetadata:
       type: object
       description: Metadata for IOTA-based DID Documents.
@@ -2892,6 +3003,21 @@ components:
       - Default
       - Runtime
       - None
+    SponsoringConfiguration:
+      type: object
+      required:
+      - name
+      - iota_address
+      properties:
+        iota_address:
+          type: string
+        logo_uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+        name:
+          type: string
     SupportedDidMethod:
       type: string
       description: DID methods supported by UniCore
@@ -3126,6 +3252,19 @@ components:
           format: date-time
         valid:
           type: boolean
+    Version:
+      type: object
+      properties:
+        git_commit_hash:
+          type:
+          - string
+          - 'null'
+          description: The git commit hash from which the application was built.
+        version:
+          type:
+          - string
+          - 'null'
+          description: The current version of the application.
     Visibility:
       type: string
       enum:
@@ -3158,6 +3297,12 @@ tags:
   description: Manage requests for verifiable presentations and their responses.
 - name: Public
   description: Endpoints that are publicly reachable without authentication, used to expose publicly available information or communicate with external systems.
+- name: Metadata
+  description: Inspect application build and runtime metadata.
+- name: Probes
+  description: Inspect application liveness and readiness.
+- name: OpenAPI
+  description: Inspect the OpenAPI description of this application.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation

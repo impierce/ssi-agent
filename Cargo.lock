@@ -159,10 +159,12 @@ dependencies = [
  "serde_with 3.21.0",
  "shared-kernel",
  "tokio",
+ "tower 0.4.13",
  "tower-http 0.6.11",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "utoipa",
  "verification-authorization",
 ]
 
