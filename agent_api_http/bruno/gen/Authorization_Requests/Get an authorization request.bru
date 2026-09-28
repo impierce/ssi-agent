@@ -59,34 +59,6 @@ example {
 }
 
 example {
-  name: 400 Response
-  description: Invalid path parameter
-
-  request: {
-    url: {{BASE_URL}}/v0/authorization_requests/:authorization_request_id
-    method: GET
-    mode: none
-    params:path: {
-      authorization_request_id:
-    }
-  }
-
-  response: {
-    status: {
-      code: 400
-      text: Bad Request
-    }
-
-    body: {
-      type: text
-      content: '''
-
-      '''
-    }
-  }
-}
-
-example {
   name: 404 Response
   description: Authorization request not found
 

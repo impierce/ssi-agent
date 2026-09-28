@@ -52,10 +52,7 @@ example {
           "credentialExpiration": "",
           "dataModel": "w3c_vc_data_model_v1-1",
           "description": "",
-          "display": {
-            "logo": "",
-            "name": ""
-          },
+          "display": "",
           "holderAuthorization": {
             "pre_authorized": false,
             "tx_code_constraints": ""
@@ -71,62 +68,6 @@ example {
           "type": [],
           "visibility": "private"
         }
-      '''
-    }
-  }
-}
-
-example {
-  name: 400 Response
-  description: Invalid path parameter
-
-  request: {
-    url: {{BASE_URL}}/v0/get-template-by-id/:id
-    method: GET
-    mode: none
-    params:path: {
-      id:
-    }
-  }
-
-  response: {
-    status: {
-      code: 400
-      text: Bad Request
-    }
-
-    body: {
-      type: text
-      content: '''
-
-      '''
-    }
-  }
-}
-
-example {
-  name: 404 Response
-  description: Template not found
-
-  request: {
-    url: {{BASE_URL}}/v0/get-template-by-id/:id
-    method: GET
-    mode: none
-    params:path: {
-      id:
-    }
-  }
-
-  response: {
-    status: {
-      code: 404
-      text: Not Found
-    }
-
-    body: {
-      type: text
-      content: '''
-
       '''
     }
   }

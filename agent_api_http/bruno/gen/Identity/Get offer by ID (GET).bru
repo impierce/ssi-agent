@@ -1,7 +1,7 @@
 meta {
-  name: Get offer by ID
+  name: Get offer by ID (GET)
   type: http
-  seq: 11
+  seq: 9
   tags: [
     Identity
     Holder
@@ -61,34 +61,6 @@ example {
           "status": "Pending",
           "token_response": ""
         }
-      '''
-    }
-  }
-}
-
-example {
-  name: 400 Response
-  description: Invalid path parameter
-
-  request: {
-    url: {{BASE_URL}}/v0/holder/offers/:received_offer_id
-    method: GET
-    mode: none
-    params:path: {
-      received_offer_id:
-    }
-  }
-
-  response: {
-    status: {
-      code: 400
-      text: Bad Request
-    }
-
-    body: {
-      type: text
-      content: '''
-
       '''
     }
   }

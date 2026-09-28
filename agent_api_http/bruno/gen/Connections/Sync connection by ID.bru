@@ -51,33 +51,3 @@ example {
     }
   }
 }
-
-example {
-  name: 400 Response
-  description: Malformed JSON request body
-
-  request: {
-    url: {{BASE_URL}}/v0/connections/sync-connection
-    method: POST
-    mode: json
-    body:json: {
-      {
-        "id": ""
-      }
-    }
-  }
-
-  response: {
-    status: {
-      code: 400
-      text: Bad Request
-    }
-
-    body: {
-      type: text
-      content: '''
-
-      '''
-    }
-  }
-}

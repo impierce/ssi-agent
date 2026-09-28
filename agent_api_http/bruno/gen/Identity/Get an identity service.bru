@@ -1,7 +1,7 @@
 meta {
   name: Get an identity service
   type: http
-  seq: 21
+  seq: 18
   tags: [
     Identity
   ]
@@ -46,47 +46,10 @@ example {
       content: '''
         {
           "id": "",
-          "origins": [
-            "https://example.org/"
-          ],
-          "presentations": [
-            {
-              "holder": "",
-              "presentation_id": "",
-              "url": ""
-            }
-          ],
+          "presentation_ids": [],
           "resource": "",
           "service": ""
         }
-      '''
-    }
-  }
-}
-
-example {
-  name: 400 Response
-  description: Invalid path parameter
-
-  request: {
-    url: {{BASE_URL}}/v0/services/:service_id
-    method: GET
-    mode: none
-    params:path: {
-      service_id:
-    }
-  }
-
-  response: {
-    status: {
-      code: 400
-      text: Bad Request
-    }
-
-    body: {
-      type: text
-      content: '''
-
       '''
     }
   }
