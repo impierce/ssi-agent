@@ -36,9 +36,9 @@ impl ServiceCommand {
             Self::AddLinkedDomains { .. } => "identity.services.linked_domains.add",
             Self::RenewLinkedDomainsCredentials { .. } => "identity.services.linked_domains.renew",
             Self::RemoveLinkedDomains { .. } => "identity.services.linked_domains.remove",
-            Self::AddLinkedVerifiablePresentations { .. } => "identity.services.linked_verifiable_presentation.add",
+            Self::AddLinkedVerifiablePresentations { .. } => "identity.services.linked_verifiable_presentations.add",
             Self::RemoveLinkedVerifiablePresentations { .. } => {
-                "identity.services.linked_verifiable_presentation.remove"
+                "identity.services.linked_verifiable_presentations.remove"
             }
         }
     }

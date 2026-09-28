@@ -628,8 +628,8 @@ mod tests {
         for operation in [
             "identity.services.linked_domains.add",
             "identity.services.linked_domains.remove",
-            "identity.services.linked_verifiable_presentation.add",
-            "identity.services.linked_verifiable_presentation.remove",
+            "identity.services.linked_verifiable_presentations.add",
+            "identity.services.linked_verifiable_presentations.remove",
         ] {
             assert!(requests.iter().any(|request| matches!(
                 &request.caller,
