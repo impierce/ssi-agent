@@ -42,22 +42,21 @@ impl View<Service> for Service {
                 self.is_deleted.clone_from(is_deleted);
                 self.origins.clone_from(origins);
             }
-            LinkedVerifiablePresentationServiceDeleted { service_id } => {
+            LinkedVerifiablePresentationsAdded {
+                service_id,
+                presentations,
+                is_deleted,
+            }
+            | LinkedVerifiablePresentationsRemoved {
+                service_id,
+                presentations,
+                is_deleted,
+            } => {
                 self.service_id.clone_from(service_id);
                 self.service = None;
                 self.resource = None;
-                self.presentation_ids.clear();
-                self.is_deleted = true;
-            }
-            LinkedVerifiablePresentationServiceCreated {
-                service_id,
-                presentation_ids,
-                service,
-            } => {
-                self.service_id.clone_from(service_id);
-                self.presentation_ids.clone_from(presentation_ids);
-                self.is_deleted = false;
-                self.service.replace(service.clone());
+                self.presentations.clone_from(presentations);
+                self.is_deleted.clone_from(is_deleted);
             }
         }
     }

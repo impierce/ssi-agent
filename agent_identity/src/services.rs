@@ -3,6 +3,8 @@ use crate::connection::{
     error::ConnectionError,
 };
 use crate::dns::CnameResolver;
+use crate::document::aggregate::{Document, Status};
+use crate::service::error::ServiceError;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
@@ -11,7 +13,8 @@ use identity_iota::{
     core::{FromJson, Object, ToJson},
     credential::{
         Credential, DecodedJwtPresentation, FailFast, Jwt, JwtCredentialValidationOptions, JwtCredentialValidator,
-        JwtCredentialValidatorUtils, JwtPresentationValidationOptions, JwtPresentationValidator, StatusCheck,
+        JwtCredentialValidatorUtils, JwtPresentationValidationOptions, JwtPresentationValidator,
+        JwtPresentationValidatorUtils, StatusCheck,
     },
     document::CoreDocument,
 };
@@ -22,6 +25,7 @@ use reqwest::{redirect, Client};
 use std::collections::{BTreeSet, HashMap};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::net::lookup_host;
 use tracing::{info, warn};
@@ -40,6 +44,12 @@ pub struct LinkedDid {
     pub domain_linkage_error: Option<String>,
 }
 
+#[async_trait::async_trait]
+pub trait LinkedVerifiablePresentationSource: Send + Sync {
+    async fn signed_presentation(&self, presentation_id: &str) -> anyhow::Result<Option<Jwt>>;
+    async fn holder_document(&self, holder: &CoreDID) -> anyhow::Result<Option<Document>>;
+}
+
 impl LinkedDid {
     /// A DID whose domain linkage could not be established.
     pub fn unverified(did: DIDUrl, error: impl Into<String>) -> Self {
@@ -49,6 +59,16 @@ impl LinkedDid {
             domain_linkage_error: Some(error.into()),
         }
     }
+}
+
+pub(crate) fn document_can_link(document: &Document, iota_sponsoring_enabled: bool) -> bool {
+    document.document.is_some()
+        && document.status != Status::Disabled
+        && document.did_method.is_some_and(|method| method.supports_update())
+        && document
+            .iota_metadata
+            .as_ref()
+            .is_none_or(|metadata| metadata.is_funded || iota_sponsoring_enabled)
 }
 
 /// Identity services.
@@ -64,6 +84,7 @@ pub struct IdentityServices {
     /// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
     pub allow_local_network_outbound: bool,
     pub iota_sponsoring_enabled: bool,
+    linked_verifiable_presentation_source: OnceLock<Arc<dyn LinkedVerifiablePresentationSource>>,
 }
 
 impl IdentityServices {
@@ -76,7 +97,66 @@ impl IdentityServices {
             client: Client::new(),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
             iota_sponsoring_enabled,
+            linked_verifiable_presentation_source: OnceLock::new(),
         }
+    }
+
+    pub fn set_linked_verifiable_presentation_source(
+        &self,
+        source: Arc<dyn LinkedVerifiablePresentationSource>,
+    ) -> Result<(), Arc<dyn LinkedVerifiablePresentationSource>> {
+        self.linked_verifiable_presentation_source.set(source)
+    }
+
+    pub async fn validate_local_verifiable_presentation(&self, presentation_id: &str) -> Result<String, ServiceError> {
+        let source = self
+            .linked_verifiable_presentation_source
+            .get()
+            .ok_or_else(|| ServiceError::PresentationNotFound(presentation_id.to_owned()))?;
+        let presentation = source
+            .signed_presentation(presentation_id)
+            .await
+            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?
+            .ok_or_else(|| ServiceError::PresentationNotFound(presentation_id.to_owned()))?;
+        let holder = JwtPresentationValidatorUtils::extract_holder::<CoreDID>(&presentation)
+            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?;
+        let local_document = source
+            .holder_document(&holder)
+            .await
+            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?
+            .filter(|document| document_can_link(document, self.iota_sponsoring_enabled))
+            .ok_or_else(|| {
+                ServiceError::PresentationInvalid(
+                    presentation_id.to_owned(),
+                    format!("holder DID `{holder}` has no enabled document that can publish services"),
+                )
+            })?;
+        let holder_document = local_document
+            .document
+            .as_ref()
+            .expect("publishable document has content");
+        let decoded: DecodedJwtPresentation<Jwt> = JwtPresentationValidator::with_signature_verifier(SignatureVerifier)
+            .validate(
+                &presentation,
+                holder_document,
+                &JwtPresentationValidationOptions::default(),
+            )
+            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?;
+        let holder_url = holder.to_string();
+        if decoded.presentation.verifiable_credential.iter().any(|credential_jwt| {
+            unverified_credential(credential_jwt).is_none_or(|credential| {
+                !credential
+                    .credential_subject
+                    .iter()
+                    .any(|subject| subject.id.as_ref().is_some_and(|id| id.as_str() == holder_url))
+            })
+        }) {
+            return Err(ServiceError::PresentationInvalid(
+                presentation_id.to_owned(),
+                format!("holder DID `{holder}` is not the subject of every embedded credential"),
+            ));
+        }
+        Ok(holder_url)
     }
 
     #[cfg(feature = "test_utils")]
@@ -280,9 +360,18 @@ impl IdentityServices {
         url: &Url,
     ) -> anyhow::Result<(Vec<LinkedCredentialValidation>, Option<String>)> {
         let presentation_jwt = Jwt::from(self.fetch_linked_verifiable_presentation(url).await?);
+        self.validated_credentials_from_jwt(holder_document, &presentation_jwt)
+            .await
+    }
+
+    async fn validated_credentials_from_jwt(
+        &self,
+        holder_document: &CoreDocument,
+        presentation_jwt: &Jwt,
+    ) -> anyhow::Result<(Vec<LinkedCredentialValidation>, Option<String>)> {
         let validated: Result<DecodedJwtPresentation<Jwt>, _> =
             JwtPresentationValidator::with_signature_verifier(SignatureVerifier).validate(
-                &presentation_jwt,
+                presentation_jwt,
                 holder_document,
                 &JwtPresentationValidationOptions::default(),
             );
@@ -290,9 +379,9 @@ impl IdentityServices {
         let (credential_jwts, presentation_error) = match validated {
             Ok(presentation) => (presentation.presentation.verifiable_credential, None),
             Err(error) => {
-                warn!("Failed to validate the linked presentation at '{url}': {error}");
+                warn!("Failed to validate linked presentation: {error}");
                 (
-                    unverified_presented_credentials(&presentation_jwt),
+                    unverified_presented_credentials(presentation_jwt),
                     Some(error.to_string()),
                 )
             }
@@ -491,6 +580,19 @@ fn unverified_credential(credential_jwt: &Jwt) -> Option<Credential> {
             if let Some(value) = claims.get(claim) {
                 credential.insert(field.to_owned(), value.clone());
             }
+        }
+    }
+    if let Some(subject_id) = claims.get("sub") {
+        match credential.get_mut("credentialSubject") {
+            Some(serde_json::Value::Object(subject)) => {
+                subject.entry("id".to_owned()).or_insert_with(|| subject_id.clone());
+            }
+            Some(serde_json::Value::Array(subjects)) if subjects.len() == 1 => {
+                if let Some(serde_json::Value::Object(subject)) = subjects.first_mut() {
+                    subject.entry("id".to_owned()).or_insert_with(|| subject_id.clone());
+                }
+            }
+            _ => {}
         }
     }
     if !credential.contains_key("issuanceDate") {

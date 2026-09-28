@@ -1,40 +1,40 @@
 meta {
-  name: Delete a template
+  name: Remove linked verifiable presentations
   type: http
-  seq: 6
+  seq: 19
   tags: [
-    Library
-    Templates
+    Identity
   ]
 }
 
 post {
-  url: {{BASE_URL}}/v0/delete-template
+  url: {{BASE_URL}}/v0/remove-linked-verifiable-presentations
   body: json
   auth: inherit
 }
 
 body:json {
   {
-    "id": ""
+    "presentationIds": []
   }
 }
 
 docs {
-  Deletes a template by marking its status as `Deleted`. Deleted templates will no longer appear in any views.
+  Withdraws the given presentations while preserving all others in their existing order. Unknown
+  IDs and duplicates are no-ops; removing a holder's last presentation removes its DID service.
 }
 
 example {
   name: 204 Response
-  description: Template deleted successfully
+  description: Presentations withdrawn
 
   request: {
-    url: {{BASE_URL}}/v0/delete-template
+    url: {{BASE_URL}}/v0/remove-linked-verifiable-presentations
     method: POST
     mode: json
     body:json: {
       {
-        "id": ""
+        "presentationIds": []
       }
     }
   }
@@ -55,24 +55,24 @@ example {
 }
 
 example {
-  name: 400 Response
-  description: Malformed JSON request body, or a missing template ID
+  name: 401 Response
+  description: Authentication required
 
   request: {
-    url: {{BASE_URL}}/v0/delete-template
+    url: {{BASE_URL}}/v0/remove-linked-verifiable-presentations
     method: POST
     mode: json
     body:json: {
       {
-        "id": ""
+        "presentationIds": []
       }
     }
   }
 
   response: {
     status: {
-      code: 400
-      text: Bad Request
+      code: 401
+      text: Unauthorized
     }
 
     body: {
@@ -85,24 +85,24 @@ example {
 }
 
 example {
-  name: 404 Response
-  description: Template not found
+  name: 403 Response
+  description: Operation forbidden
 
   request: {
-    url: {{BASE_URL}}/v0/delete-template
+    url: {{BASE_URL}}/v0/remove-linked-verifiable-presentations
     method: POST
     mode: json
     body:json: {
       {
-        "id": ""
+        "presentationIds": []
       }
     }
   }
 
   response: {
     status: {
-      code: 404
-      text: Not Found
+      code: 403
+      text: Forbidden
     }
 
     body: {
@@ -116,15 +116,15 @@ example {
 
 example {
   name: 422 Response
-  description: Request body does not match the expected schema
+  description: Empty presentation ID list
 
   request: {
-    url: {{BASE_URL}}/v0/delete-template
+    url: {{BASE_URL}}/v0/remove-linked-verifiable-presentations
     method: POST
     mode: json
     body:json: {
       {
-        "id": ""
+        "presentationIds": []
       }
     }
   }

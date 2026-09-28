@@ -31,7 +31,7 @@ pub struct Service {
     #[serde(rename = "id")]
     pub service_id: String,
     pub service: Option<DocumentService>,
-    pub presentation_ids: Vec<String>,
+    pub presentations: Vec<LinkedVerifiablePresentation>,
     pub resource: Option<ServiceResource>,
     pub is_deleted: bool,
     /// The origins the published Domain Linkage Credentials claim, sorted and deduplicated. These
@@ -39,12 +39,22 @@ pub struct Service {
     pub origins: Vec<Url>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct LinkedVerifiablePresentation {
+    pub presentation_id: String,
+    /// The DID that signed the presentation and is the subject of its credentials.
+    pub holder: String,
+    /// The absolute URL at which the presentation was published when it was added.
+    #[schema(value_type = String)]
+    pub url: Url,
+}
+
 pub const LINKED_DOMAINS_VALIDITY_DAYS: u32 = 365;
 pub const LINKED_DOMAINS_RENEWAL_WINDOW_DAYS: i64 = 30;
 
 impl Service {
     pub fn is_active(&self) -> bool {
-        self.service.is_some() && !self.is_deleted
+        !self.is_deleted && (self.service.is_some() || !self.presentations.is_empty())
     }
 
     pub fn needs_renewal(&self, now: Timestamp) -> bool {
@@ -63,6 +73,43 @@ impl Service {
                 expiration.is_none_or(|expiration| expiration <= threshold)
             })
     }
+}
+
+fn linked_verifiable_presentation_url(public_url: &Url, presentation_id: &str) -> Result<Url, ServiceError> {
+    let mut url = public_url.clone();
+    url.path_segments_mut()
+        .map_err(|_| ServiceError::InvalidUrlError(public_url.to_string()))?
+        .pop_if_empty()
+        .push("linked-verifiable-presentations")
+        .push(presentation_id);
+    Ok(url)
+}
+
+pub(crate) fn linked_verifiable_presentation_service(
+    service_id: &str,
+    document_did: &str,
+    presentations: &[LinkedVerifiablePresentation],
+) -> Result<DocumentService, ServiceError> {
+    use ServiceError::*;
+
+    if presentations.is_empty() {
+        return Err(EmptyPresentationIds);
+    }
+    let endpoints = presentations
+        .iter()
+        .map(|presentation| presentation.url.as_str().parse::<identity_core::common::Url>())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| InvalidUrlError(error.to_string()))?;
+    let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(endpoints));
+
+    DocumentService::builder(Default::default())
+        .id(format!("{document_did}#{service_id}")
+            .parse::<DIDUrl>()
+            .map_err(|error| InvalidDidError(error.to_string()))?)
+        .type_("LinkedVerifiablePresentation")
+        .service_endpoint(service_endpoint)
+        .build()
+        .map_err(|error| ServiceBuilderError(error.to_string()))
 }
 
 /// Decodes a Domain Linkage Credential JWT's claims **without verifying its signature**.
@@ -377,50 +424,60 @@ impl Aggregate for Service {
                     origins: remaining,
                 }])
             }
-            DeleteLinkedVerifiablePresentationService { service_id } => {
-                if !self.is_active() {
-                    return Err(NotFound);
-                }
-                Ok(vec![LinkedVerifiablePresentationServiceDeleted { service_id }])
-            }
-            CreateLinkedVerifiablePresentationService {
+            AddLinkedVerifiablePresentations {
                 service_id,
                 presentation_ids,
             } => {
-                if self.is_active() {
-                    return Err(AlreadyExists);
+                if presentation_ids.is_empty() {
+                    return Err(EmptyPresentationIds);
                 }
-                let origin = &services.public_url;
-
-                let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(
-                    presentation_ids
-                        .clone()
-                        .into_iter()
-                        .map(|presentation_id| {
-                            // TODO: Find a better way to construct the URL
-                            format!("{origin}linked-verifiable-presentations/{presentation_id}")
-                                .parse::<identity_core::common::Url>()
-                        })
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|err| InvalidUrlError(err.to_string()))?,
-                ));
-
-                // Create a new service.
-                let service = DocumentService::builder(Default::default())
-                    // This service is DID method-agnostic. When added to an enabled DID Document,
-                    // its placeholder value is replaced with the appropriate DID method-specific identifier.
-                    .id(format!("did:place:holder#{service_id}")
-                        .parse::<DIDUrl>()
-                        .map_err(|err| InvalidDidError(err.to_string()))?)
-                    .type_("LinkedVerifiablePresentation")
-                    .service_endpoint(service_endpoint)
-                    .build()
-                    .map_err(|err| ServiceBuilderError(err.to_string()))?;
-
-                Ok(vec![LinkedVerifiablePresentationServiceCreated {
+                let mut presentations = self.presentations.clone();
+                for presentation_id in presentation_ids {
+                    if presentations
+                        .iter()
+                        .any(|presentation| presentation.presentation_id == presentation_id)
+                    {
+                        continue;
+                    }
+                    let holder = services
+                        .validate_local_verifiable_presentation(&presentation_id)
+                        .await?;
+                    presentations.push(LinkedVerifiablePresentation {
+                        url: linked_verifiable_presentation_url(&services.public_url, &presentation_id)?,
+                        presentation_id,
+                        holder,
+                    });
+                }
+                if presentations == self.presentations {
+                    return Ok(());
+                }
+                Ok(vec![LinkedVerifiablePresentationsAdded {
                     service_id,
-                    presentation_ids,
-                    service,
+                    presentations,
+                    is_deleted: false,
+                }])
+            }
+            RemoveLinkedVerifiablePresentations {
+                service_id,
+                presentation_ids,
+            } => {
+                if presentation_ids.is_empty() {
+                    return Err(EmptyPresentationIds);
+                }
+                let presentations = self
+                    .presentations
+                    .iter()
+                    .filter(|presentation| !presentation_ids.contains(&presentation.presentation_id))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if presentations == self.presentations {
+                    return Ok(());
+                }
+                let is_deleted = presentations.is_empty();
+                Ok(vec![LinkedVerifiablePresentationsRemoved {
+                    service_id,
+                    presentations,
+                    is_deleted,
                 }])
             }
         }?;
@@ -471,22 +528,21 @@ impl Aggregate for Service {
                 self.is_deleted = is_deleted;
                 self.origins = origins;
             }
-            LinkedVerifiablePresentationServiceDeleted { service_id } => {
+            LinkedVerifiablePresentationsAdded {
+                service_id,
+                presentations,
+                is_deleted,
+            }
+            | LinkedVerifiablePresentationsRemoved {
+                service_id,
+                presentations,
+                is_deleted,
+            } => {
                 self.service_id = service_id;
                 self.service = None;
                 self.resource = None;
-                self.presentation_ids.clear();
-                self.is_deleted = true;
-            }
-            LinkedVerifiablePresentationServiceCreated {
-                service_id,
-                service,
-                presentation_ids,
-            } => {
-                self.service_id = service_id;
-                self.presentation_ids = presentation_ids;
-                self.is_deleted = false;
-                self.service.replace(service);
+                self.presentations = presentations;
+                self.is_deleted = is_deleted;
             }
         }
     }
@@ -498,7 +554,7 @@ pub mod service_tests {
     // production builder it wraps, and an explicit import says which one this module means.
     use super::test_utils::{
         linked_domains_resource, linked_domains_service, linked_domains_service_entry, linked_domains_service_id,
-        linked_verifiable_presentation_service, linked_verifiable_presentation_service_id,
+        linked_verifiable_presentation_service_id,
     };
     use crate::document::aggregate::test_utils::both_verification_methods;
     use agent_shared::config::set_config;
@@ -831,21 +887,41 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_linked_verifiable_presentation_service(
-        linked_verifiable_presentation_service_id: String,
-        linked_verifiable_presentation_service: DocumentService,
-    ) {
+    async fn removing_presentations_keeps_the_remaining_order(linked_verifiable_presentation_service_id: String) {
+        let presentations = ["a", "b", "c"].map(|id| LinkedVerifiablePresentation {
+            presentation_id: id.into(),
+            holder: "did:web:my-domain.example.org".into(),
+            url: format!("https://my-domain.example.org/linked-verifiable-presentations/{id}")
+                .parse()
+                .unwrap(),
+        });
         ServiceTestFramework::with(IdentityServices::default())
-            .given_no_previous_events()
-            .when(ServiceCommand::CreateLinkedVerifiablePresentationService {
+            .given(vec![ServiceEvent::LinkedVerifiablePresentationsAdded {
                 service_id: linked_verifiable_presentation_service_id.clone(),
-                presentation_ids: vec!["presentation-1".to_string()],
-            })
-            .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationServiceCreated {
-                service_id: linked_verifiable_presentation_service_id,
-                presentation_ids: vec!["presentation-1".to_string()],
-                service: linked_verifiable_presentation_service,
+                presentations: presentations.to_vec(),
+                is_deleted: false,
             }])
+            .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
+                service_id: linked_verifiable_presentation_service_id.clone(),
+                presentation_ids: vec!["b".into(), "missing".into()],
+            })
+            .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
+                service_id: linked_verifiable_presentation_service_id,
+                presentations: vec![presentations[0].clone(), presentations[2].clone()],
+                is_deleted: false,
+            }])
+    }
+
+    #[test]
+    fn presentation_url_treats_the_id_as_one_encoded_path_segment() {
+        let url =
+            linked_verifiable_presentation_url(&"https://example.org/unicore/".parse().unwrap(), "contains/?# a space")
+                .unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "https://example.org/unicore/linked-verifiable-presentations/contains%2F%3F%23%20a%20space"
+        );
     }
 }
 
@@ -895,16 +971,23 @@ mod replay_tests {
     }
 
     #[test]
-    fn linked_presentation_removal_and_recreation_replay_consistently() {
-        let created = ServiceEvent::LinkedVerifiablePresentationServiceCreated {
+    fn linked_verifiable_presentation_removal_and_recreation_replay_consistently() {
+        let presentations = vec![LinkedVerifiablePresentation {
+            presentation_id: "presentation-1".into(),
+            holder: "did:web:my-domain.example.org".into(),
+            url: "https://my-domain.example.org/linked-verifiable-presentations/presentation-1"
+                .parse()
+                .unwrap(),
+        }];
+        let created = ServiceEvent::LinkedVerifiablePresentationsAdded {
             service_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
-            presentation_ids: vec!["presentation-1".into()],
-            service: test_utils::linked_verifiable_presentation_service(
-                test_utils::linked_verifiable_presentation_service_id(),
-            ),
+            presentations: presentations.clone(),
+            is_deleted: false,
         };
-        let removed = ServiceEvent::LinkedVerifiablePresentationServiceDeleted {
+        let removed = ServiceEvent::LinkedVerifiablePresentationsRemoved {
             service_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
+            presentations: vec![],
+            is_deleted: true,
         };
         let mut aggregate = Service::default();
         let mut projection = Service::default();
@@ -929,7 +1012,6 @@ mod replay_tests {
 pub mod test_utils {
     use super::*;
     use crate::state::{LINKED_DOMAINS_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
-    use identity_document::service::Service;
     use rstest::*;
 
     #[fixture]
@@ -953,26 +1035,6 @@ pub mod test_utils {
             &linked_domains_service_id,
             &["https://my-domain.example.org".parse().unwrap()],
         )
-    }
-
-    #[fixture]
-    pub fn linked_verifiable_presentation_service(
-        linked_verifiable_presentation_service_id: String,
-    ) -> DocumentService {
-        let origin = "https://my-domain.example.org";
-
-        Service::builder(Default::default())
-            .id(format!("did:place:holder#{linked_verifiable_presentation_service_id}")
-                .parse()
-                .unwrap())
-            .type_("LinkedVerifiablePresentation")
-            .service_endpoint(ServiceEndpoint::from(OrderedSet::from_iter(vec![format!(
-                "{origin}/linked-verifiable-presentations/presentation-1"
-            )
-            .parse::<identity_core::common::Url>()
-            .unwrap()])))
-            .build()
-            .unwrap()
     }
 
     #[fixture]

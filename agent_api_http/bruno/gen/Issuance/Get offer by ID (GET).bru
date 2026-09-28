@@ -1,5 +1,5 @@
 meta {
-  name: Get offer by ID
+  name: Get offer by ID (GET)
   type: http
   seq: 11
   tags: [
@@ -63,6 +63,34 @@ example {
           "successful_issuances": 0,
           "tx_code": ""
         }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Invalid path parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/offers/:offer_id
+    method: GET
+    mode: none
+    params:path: {
+      offer_id:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
       '''
     }
   }

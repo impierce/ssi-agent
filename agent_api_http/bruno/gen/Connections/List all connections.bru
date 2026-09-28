@@ -68,6 +68,36 @@ example {
   }
 }
 
+example {
+  name: 400 Response
+  description: Invalid query parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/connections
+    method: GET
+    mode: formUrlEncoded
+    body:form-urlencoded: {
+      did:
+      display:
+      url:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
 script:post-response {
   const items = res.getBody();
   if (Array.isArray(items) && items.length > 0) {

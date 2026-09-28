@@ -1,7 +1,7 @@
 meta {
   name: Get DID document by ID
   type: http
-  seq: 2
+  seq: 4
   tags: [
     Identity
   ]
@@ -55,6 +55,34 @@ example {
           "status": "SignAndValidate",
           "with_fixed_algorithm": "ES256"
         }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Invalid path parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/documents/:document_id
+    method: GET
+    mode: none
+    params:path: {
+      document_id:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
       '''
     }
   }

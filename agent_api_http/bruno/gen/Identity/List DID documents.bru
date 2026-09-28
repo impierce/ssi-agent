@@ -1,7 +1,7 @@
 meta {
   name: List DID documents
   type: http
-  seq: 1
+  seq: 3
   tags: [
     Identity
   ]
@@ -57,6 +57,34 @@ example {
             "with_fixed_algorithm": "ES256"
           }
         ]
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Invalid query parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/documents
+    method: GET
+    mode: none
+    params:query: {
+      ~did_method:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
       '''
     }
   }

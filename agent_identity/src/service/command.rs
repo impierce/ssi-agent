@@ -22,16 +22,18 @@ pub enum ServiceCommand {
     },
     /// Unlinks the given origins. Removing an origin that is not linked is a no-op. Removing the
     /// last remaining origin deletes the service.
-    RemoveLinkedDomains {
-        service_id: String,
-        origins: Vec<Url>,
-    },
-    CreateLinkedVerifiablePresentationService {
+    RemoveLinkedDomains { service_id: String, origins: Vec<Url> },
+    /// Publishes the given presentations in addition to any already published. Adding an already
+    /// published presentation is a no-op and creates the service when necessary.
+    AddLinkedVerifiablePresentations {
         service_id: String,
         presentation_ids: Vec<String>,
     },
-    DeleteLinkedVerifiablePresentationService {
+    /// Stops publishing the given presentations. Removing an unpublished presentation is a no-op;
+    /// removing the last published presentation deletes the service.
+    RemoveLinkedVerifiablePresentations {
         service_id: String,
+        presentation_ids: Vec<String>,
     },
 }
 
@@ -41,11 +43,9 @@ impl ServiceCommand {
             Self::AddLinkedDomains { .. } => "identity.services.linked_domains.add",
             Self::RenewLinkedDomainsCredentials { .. } => "identity.services.linked_domains.renew",
             Self::RemoveLinkedDomains { .. } => "identity.services.linked_domains.remove",
-            Self::CreateLinkedVerifiablePresentationService { .. } => {
-                "identity.services.linked_verifiable_presentation.create"
-            }
-            Self::DeleteLinkedVerifiablePresentationService { .. } => {
-                "identity.services.linked_verifiable_presentation.delete"
+            Self::AddLinkedVerifiablePresentations { .. } => "identity.services.linked_verifiable_presentation.add",
+            Self::RemoveLinkedVerifiablePresentations { .. } => {
+                "identity.services.linked_verifiable_presentation.remove"
             }
         }
     }
@@ -55,8 +55,8 @@ impl ServiceCommand {
             Self::AddLinkedDomains { service_id, .. }
             | Self::RenewLinkedDomainsCredentials { service_id, .. }
             | Self::RemoveLinkedDomains { service_id, .. }
-            | Self::CreateLinkedVerifiablePresentationService { service_id, .. }
-            | Self::DeleteLinkedVerifiablePresentationService { service_id } => service_id,
+            | Self::AddLinkedVerifiablePresentations { service_id, .. }
+            | Self::RemoveLinkedVerifiablePresentations { service_id, .. } => service_id,
         }
     }
 }

@@ -1,16 +1,16 @@
 use super::{
-    aggregate::{Service, ServiceResource},
+    aggregate::{linked_verifiable_presentation_service, Service, ServiceResource},
     command::ServiceCommand,
     error::ServiceError,
 };
 use crate::dns::CnameCheck;
 use crate::{
-    document::{
-        aggregate::{Document, Status},
-        command::DocumentCommand,
+    document::command::DocumentCommand,
+    services::{document_can_link, linked_dids_by_origin},
+    state::{
+        publish_decentrally_hosted_documents, query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID,
+        LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
     },
-    services::linked_dids_by_origin,
-    state::{publish_decentrally_hosted_documents, query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID},
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
 use identity_did::DID as _;
@@ -53,15 +53,6 @@ pub async fn execute(
     execute_locked(state, command).await
 }
 
-fn can_link(document: &Document, iota_sponsoring_enabled: bool) -> bool {
-    document.status != Status::Disabled
-        && document.did_method.is_some_and(|method| method.supports_update())
-        && document
-            .iota_metadata
-            .as_ref()
-            .is_none_or(|metadata| metadata.is_funded || iota_sponsoring_enabled)
-}
-
 async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> Result<(), ServiceManagementError> {
     let documents = query_all_documents(state, |_| true).await?;
     match &mut command {
@@ -75,7 +66,7 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
         } => {
             *verification_methods = documents
                 .values()
-                .filter(|document| can_link(document, state.services.iota_sponsoring_enabled))
+                .filter(|document| document_can_link(document, state.services.iota_sponsoring_enabled))
                 .filter_map(|document| document.document.as_ref())
                 .flat_map(|document| document.methods(None).into_iter().cloned())
                 .collect();
@@ -103,26 +94,44 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
             if !document.did_method.is_some_and(|method| method.supports_update()) {
                 continue;
             }
-            let command = if !service.is_active() {
-                if core_document.resolve_service(service.service_id.as_str()).is_none() {
-                    continue;
+            let current = core_document.resolve_service(service.service_id.as_str());
+            let desired = if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
+                let presentations = service
+                    .presentations
+                    .iter()
+                    .filter(|presentation| presentation.holder == core_document.id().as_str())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if service.is_active()
+                    && document_can_link(document, state.services.iota_sponsoring_enabled)
+                    && !presentations.is_empty()
+                {
+                    Some(linked_verifiable_presentation_service(
+                        &service.service_id,
+                        core_document.id().as_str(),
+                        &presentations,
+                    )?)
+                } else {
+                    None
                 }
-                DocumentCommand::RemoveService {
-                    service_id: service.service_id.clone(),
-                }
-            } else {
-                if !can_link(document, state.services.iota_sponsoring_enabled) {
-                    continue;
-                }
+            } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
                 let mut entry = service.service.clone().expect("active service has an entry");
                 entry.set_id(core_document.id().to_url().join(format!("#{}", service.service_id))?)?;
-                if core_document.resolve_service(service.service_id.as_str()) == Some(&entry) {
-                    continue;
-                }
-                DocumentCommand::AddService {
+                Some(entry)
+            } else if service.is_active() {
+                continue;
+            } else {
+                None
+            };
+            let command = match desired {
+                Some(entry) if current != Some(&entry) => DocumentCommand::AddService {
                     service_id: service.service_id.clone(),
                     service: Box::new(entry),
-                }
+                },
+                None if current.is_some() => DocumentCommand::RemoveService {
+                    service_id: service.service_id.clone(),
+                },
+                _ => continue,
             };
             public_command_handler(&document.document_id, &state.command.document, command).await?;
         }
@@ -301,7 +310,7 @@ pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
         .is_some_and(|service| service.needs_renewal((state.services.linkage_clock)()))
     {
         let eligible_documents = query_all_documents(state, |(_, document)| {
-            can_link(document, state.services.iota_sponsoring_enabled)
+            document_can_link(document, state.services.iota_sponsoring_enabled)
         })
         .await?;
         if eligible_documents.is_empty() {

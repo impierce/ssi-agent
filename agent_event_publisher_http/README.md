@@ -109,8 +109,8 @@ SourceUpdated,
 LinkedDomainsAdded
 LinkedDomainsRemoved
 LinkedDomainsCredentialsRenewed
-LinkedVerifiablePresentationServiceCreated
-LinkedVerifiablePresentationServiceDeleted
+LinkedVerifiablePresentationsAdded
+LinkedVerifiablePresentationsRemoved
 ```
 
 #### `template`

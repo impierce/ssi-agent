@@ -6,8 +6,11 @@ use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
-use agent_holder::services::HolderServices;
-use agent_identity::services::IdentityServices;
+use agent_holder::{presentation::aggregate::Presentation, services::HolderServices};
+use agent_identity::{
+    document::aggregate::Document,
+    services::{IdentityServices, LinkedVerifiablePresentationSource},
+};
 use agent_issuance::{
     application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
@@ -27,7 +30,7 @@ use probes::{
     readiness::{readyz, ReadinessState},
 };
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
@@ -45,6 +48,45 @@ pub struct ApplicationState {
     pub api: ApiState,
     pub event_verification: EventVerification,
     readiness: ReadinessState,
+}
+
+struct ApplicationLinkedVerifiablePresentationSource {
+    identity: Weak<IdentityState>,
+    holder: Weak<HolderState>,
+}
+
+#[async_trait::async_trait]
+impl LinkedVerifiablePresentationSource for ApplicationLinkedVerifiablePresentationSource {
+    async fn signed_presentation(
+        &self,
+        presentation_id: &str,
+    ) -> anyhow::Result<Option<identity_credential::credential::Jwt>> {
+        let state = self
+            .holder
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("holder state is unavailable"))?;
+        Ok(
+            agent_shared::handlers::public_query_handler(presentation_id, &state.query.presentation)
+                .await?
+                .and_then(|Presentation { signed, .. }| signed),
+        )
+    }
+
+    async fn holder_document(&self, holder: &identity_did::CoreDID) -> anyhow::Result<Option<Document>> {
+        let state = self
+            .identity
+            .upgrade()
+            .ok_or_else(|| anyhow::anyhow!("identity state is unavailable"))?;
+        Ok(agent_identity::state::query_all_documents(&state, |(_, document)| {
+            document
+                .document
+                .as_ref()
+                .is_some_and(|document| document.id() == holder)
+        })
+        .await?
+        .into_values()
+        .next())
+    }
 }
 
 impl ApplicationState {
@@ -367,6 +409,14 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     info!("Application url: {}", config().application_url);
 
     info!("Public url: {}", config().public_url);
+
+    identity_state
+        .services
+        .set_linked_verifiable_presentation_source(Arc::new(ApplicationLinkedVerifiablePresentationSource {
+            identity: Arc::downgrade(&identity_state),
+            holder: Arc::downgrade(&holder_state),
+        }))
+        .map_err(|_| io::Error::other("linked presentation source already initialized"))?;
 
     agent_authorization::state::initialize(&authorization_state)
         .await

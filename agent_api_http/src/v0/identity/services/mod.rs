@@ -4,7 +4,7 @@ pub mod linked_vp;
 use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
 use agent_identity::{
-    service::aggregate::{Service, ServiceResource},
+    service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
     state::IdentityState,
 };
 use axum::{
@@ -26,7 +26,7 @@ struct ServiceResponse {
     /// TODO: Replace this generic object schema with a schema for `identity_document::service::Service`.
     #[schema(value_type = Option<Object>)]
     service: Option<DocumentService>,
-    presentation_ids: Vec<String>,
+    presentations: Vec<LinkedVerifiablePresentation>,
     /// TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.
     #[schema(value_type = Option<Object>)]
     resource: Option<ServiceResource>,
@@ -42,7 +42,7 @@ impl From<Service> for ServiceResponse {
         Self {
             service_id: service.service_id,
             service: service.service,
-            presentation_ids: service.presentation_ids,
+            presentations: service.presentations,
             resource: service.resource,
             origins: service.origins,
         }
@@ -123,8 +123,8 @@ mod tests {
         dns::CnameResolver,
         document::aggregate::Document,
         service::lifecycle::{maintain_services, spawn_maintenance},
-        services::IdentityServices,
-        state::{initialize_documents, IdentityState},
+        services::{IdentityServices, LinkedVerifiablePresentationSource},
+        state::{initialize_documents, query_all_documents, IdentityState},
     };
     use agent_secret_manager::subject::{StorageKey, Subject};
     use agent_shared::config::{config, ApplicationConfiguration, SupportedDidMethod, ToggleOptions};
@@ -133,21 +133,32 @@ mod tests {
         extract::Request,
         Router,
     };
-    use identity_core::common::Timestamp;
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use identity_core::{
+        common::{Object, Timestamp, Url as IdentityUrl},
+        convert::ToJson,
+    };
     use identity_credential::{
+        credential::{CredentialBuilder, Jwt, Subject as CredentialSubject},
         domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator},
+        presentation::{JwtPresentationOptions, PresentationBuilder},
         validator::JwtCredentialValidationOptions,
     };
+    use identity_did::CoreDID;
     use identity_document::document::CoreDocument;
-    use oid4vc_core::verifier::SignatureVerifier;
+    use jsonwebtoken::{Algorithm, Header};
+    use oid4vc_core::{verifier::SignatureVerifier, Sign as _, Subject as _};
     use serde_json::{json, Value};
     use shared_kernel::authorization::{
         Actor, ActorExtractor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
         Caller, ToActor,
     };
-    use std::sync::{
-        atomic::{AtomicBool, AtomicI64, Ordering},
-        Arc, Mutex,
+    use std::{
+        collections::HashMap,
+        sync::{
+            atomic::{AtomicBool, AtomicI64, Ordering},
+            Arc, Mutex, Weak,
+        },
     };
     use tower::ServiceExt;
     use url::Url;
@@ -196,6 +207,34 @@ mod tests {
         }
     }
 
+    struct TestLinkedVerifiablePresentationSource {
+        presentations: Mutex<HashMap<String, Jwt>>,
+        state: Weak<IdentityState>,
+    }
+
+    #[async_trait::async_trait]
+    impl LinkedVerifiablePresentationSource for TestLinkedVerifiablePresentationSource {
+        async fn signed_presentation(&self, presentation_id: &str) -> anyhow::Result<Option<Jwt>> {
+            Ok(self.presentations.lock().unwrap().get(presentation_id).cloned())
+        }
+
+        async fn holder_document(&self, holder: &CoreDID) -> anyhow::Result<Option<Document>> {
+            let state = self
+                .state
+                .upgrade()
+                .ok_or_else(|| anyhow::anyhow!("identity state dropped"))?;
+            Ok(query_all_documents(&state, |(_, document)| {
+                document
+                    .document
+                    .as_ref()
+                    .is_some_and(|document| document.id() == holder)
+            })
+            .await?
+            .into_values()
+            .next())
+        }
+    }
+
     struct Fixture {
         state: Arc<IdentityState>,
         app: Router,
@@ -203,6 +242,7 @@ mod tests {
         clock: Arc<AtomicI64>,
         authorization: Arc<RecordingAuthorization>,
         cname: Arc<StubCnameResolver>,
+        presentations: Arc<TestLinkedVerifiablePresentationSource>,
     }
 
     impl Fixture {
@@ -250,6 +290,17 @@ mod tests {
             let authorization = Arc::new(RecordingAuthorization::default());
             state.authorization_checker = authorization.clone();
             let state = Arc::new(state);
+            let presentations = Arc::new(TestLinkedVerifiablePresentationSource {
+                presentations: Mutex::new(HashMap::new()),
+                state: Arc::downgrade(&state),
+            });
+            assert!(
+                state
+                    .services
+                    .set_linked_verifiable_presentation_source(presentations.clone())
+                    .is_ok(),
+                "linked presentation source already initialized"
+            );
             let app = crate::app_with_base_path(
                 crate::ApiState {
                     identity_state: Some(state.clone()),
@@ -266,7 +317,74 @@ mod tests {
                 clock,
                 authorization,
                 cname,
+                presentations,
             }
+        }
+
+        async fn create_presentation(&self, presentation_id: &str) {
+            let holder = self
+                .state
+                .services
+                .subject
+                .identifier(
+                    SupportedDidMethod::Web.to_string().as_str(),
+                    jsonwebtoken::Algorithm::EdDSA,
+                )
+                .await
+                .unwrap();
+            self.create_presentation_for(presentation_id, &holder).await;
+        }
+
+        async fn create_presentation_for(&self, presentation_id: &str, credential_subject: &str) {
+            let method = SupportedDidMethod::Web.to_string();
+            let algorithm = Algorithm::EdDSA;
+            let holder = self
+                .state
+                .services
+                .subject
+                .identifier(&method, algorithm)
+                .await
+                .unwrap();
+            let credential = CredentialBuilder::new(Object::new())
+                .issuer(IdentityUrl::parse(holder.as_str()).unwrap())
+                .subject(CredentialSubject::with_id(
+                    IdentityUrl::parse(credential_subject).unwrap(),
+                ))
+                .build()
+                .unwrap()
+                .serialize_jwt(Default::default())
+                .unwrap();
+            let unsigned_credential = format!("e30.{}.signature", URL_SAFE_NO_PAD.encode(credential.as_bytes()));
+            let presentation = PresentationBuilder::new(IdentityUrl::parse(&holder).unwrap(), Object::new())
+                .credential(Jwt::from(unsigned_credential))
+                .build()
+                .unwrap();
+            let payload = presentation.serialize_jwt(&JwtPresentationOptions::default()).unwrap();
+            let kid = self.state.services.subject.key_id(&method, algorithm).await.unwrap();
+            let header = Header {
+                alg: algorithm,
+                typ: Some("JWT".into()),
+                kid: Some(kid),
+                ..Default::default()
+            };
+            let message = [
+                URL_SAFE_NO_PAD.encode(header.to_json_vec().unwrap()),
+                URL_SAFE_NO_PAD.encode(payload.as_bytes()),
+            ]
+            .join(".");
+            let signature = self
+                .state
+                .services
+                .subject
+                .sign(&message, &method, algorithm)
+                .await
+                .unwrap();
+            let signed_presentation = Jwt::from(format!("{message}.{}", URL_SAFE_NO_PAD.encode(signature)));
+            self.presentations
+                .presentations
+                .lock()
+                .unwrap()
+                .insert(presentation_id.into(), signed_presentation);
         }
 
         async fn request(&self, method: &str, path: &str, body: Option<Value>) -> (u16, Vec<u8>) {
@@ -419,9 +537,12 @@ mod tests {
         fixture
             .remove_linked_domains(&[fixture.configuration.public_url.as_str()], 204)
             .await;
-        fixture.post("remove-linked-verifiable-presentation", None, 404).await;
         fixture
-            .post("services/linked-vp", Some(json!({"presentationIds": []})), 405)
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["missing"]})),
+                204,
+            )
             .await;
 
         fixture.link_own_origin(204).await;
@@ -430,18 +551,19 @@ mod tests {
         fixture
             .validate(&[fixture.configuration.public_url.origin().ascii_serialization().as_str()])
             .await;
+        fixture.create_presentation("presentation-1").await;
         fixture
             .post(
-                "create-linked-verifiable-presentation",
+                "add-linked-verifiable-presentations",
                 Some(json!({"presentationIds": ["presentation-1"]})),
                 204,
             )
             .await;
         fixture
             .post(
-                "create-linked-verifiable-presentation",
+                "add-linked-verifiable-presentations",
                 Some(json!({"presentationIds": ["presentation-1"]})),
-                409,
+                204,
             )
             .await;
         let document = fixture.did().await;
@@ -473,7 +595,13 @@ mod tests {
         );
         let after_removal: Value = serde_json::from_slice(&fixture.did().await).unwrap();
         assert_eq!(after_removal["service"].as_array().unwrap().len(), 1);
-        fixture.post("remove-linked-verifiable-presentation", None, 204).await;
+        fixture
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["presentation-1"]})),
+                204,
+            )
+            .await;
         fixture.restart().await;
         assert_eq!(fixture.did().await, original);
         assert_eq!(
@@ -484,9 +612,10 @@ mod tests {
             404
         );
         fixture.link_own_origin(204).await;
+        fixture.create_presentation("presentation-2").await;
         fixture
             .post(
-                "create-linked-verifiable-presentation",
+                "add-linked-verifiable-presentations",
                 Some(json!({"presentationIds": ["presentation-2"]})),
                 204,
             )
@@ -499,8 +628,8 @@ mod tests {
         for operation in [
             "identity.services.linked_domains.add",
             "identity.services.linked_domains.remove",
-            "identity.services.linked_verifiable_presentation.create",
-            "identity.services.linked_verifiable_presentation.delete",
+            "identity.services.linked_verifiable_presentation.add",
+            "identity.services.linked_verifiable_presentation.remove",
         ] {
             assert!(requests.iter().any(|request| matches!(
                 &request.caller,
@@ -510,6 +639,138 @@ mod tests {
                 AuthorizationOperation::Command { operation_name, .. } if *operation_name == operation
             )));
         }
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn linked_verifiable_presentations_are_incremental_ordered_and_idempotent() {
+        let fixture = Fixture::new().await;
+        for id in ["c", "b", "a"] {
+            fixture.create_presentation(id).await;
+        }
+
+        fixture
+            .post(
+                "add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["c"]})),
+                204,
+            )
+            .await;
+        fixture
+            .post(
+                "add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["b", "a", "b"]})),
+                204,
+            )
+            .await;
+
+        let document: Value = serde_json::from_slice(&fixture.did().await).unwrap();
+        assert_eq!(
+            document["service"][0]["serviceEndpoint"],
+            json!([
+                "https://example.org/unicore/linked-verifiable-presentations/c",
+                "https://example.org/unicore/linked-verifiable-presentations/b",
+                "https://example.org/unicore/linked-verifiable-presentations/a"
+            ])
+        );
+
+        fixture
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["b", "unknown"]})),
+                204,
+            )
+            .await;
+        let document: Value = serde_json::from_slice(&fixture.did().await).unwrap();
+        assert_eq!(
+            document["service"][0]["serviceEndpoint"],
+            json!([
+                "https://example.org/unicore/linked-verifiable-presentations/c",
+                "https://example.org/unicore/linked-verifiable-presentations/a"
+            ])
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn linked_verifiable_presentation_add_is_atomic_and_rejects_invalid_input() {
+        let fixture = Fixture::new().await;
+        fixture.create_presentation("valid").await;
+
+        let (_, missing) = fixture
+            .request(
+                "POST",
+                "/unicore/v0/add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["valid", "missing"]})),
+            )
+            .await;
+        let missing: Value = serde_json::from_slice(&missing).unwrap();
+        assert_eq!(missing["status"], 422);
+        assert!(missing["type"]
+            .as_str()
+            .unwrap()
+            .ends_with("identity#presentation-not-found"));
+        let document: Value = serde_json::from_slice(&fixture.did().await).unwrap();
+        assert!(document.get("service").is_none());
+
+        fixture
+            .create_presentation_for("wrong-subject", "did:example:somebody-else")
+            .await;
+        let (_, invalid) = fixture
+            .request(
+                "POST",
+                "/unicore/v0/add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["wrong-subject"]})),
+            )
+            .await;
+        let invalid: Value = serde_json::from_slice(&invalid).unwrap();
+        assert_eq!(invalid["status"], 422);
+        assert!(invalid["type"]
+            .as_str()
+            .unwrap()
+            .ends_with("identity#presentation-invalid"));
+
+        fixture
+            .post(
+                "add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": []})),
+                422,
+            )
+            .await;
+        fixture
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": []})),
+                422,
+            )
+            .await;
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn concurrent_linked_verifiable_presentation_adds_do_not_lose_updates() {
+        let fixture = Fixture::new().await;
+        fixture.create_presentation("first").await;
+        fixture.create_presentation("second").await;
+        let (first, second) = tokio::join!(
+            fixture.request(
+                "POST",
+                "/unicore/v0/add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["first"]})),
+            ),
+            fixture.request(
+                "POST",
+                "/unicore/v0/add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["second"]})),
+            ),
+        );
+        assert_eq!((first.0, second.0), (204, 204));
+
+        let document: Value = serde_json::from_slice(&fixture.did().await).unwrap();
+        let endpoints = document["service"][0]["serviceEndpoint"].as_array().unwrap();
+        assert_eq!(endpoints.len(), 2);
+        assert!(endpoints.iter().any(|url| url.as_str().unwrap().ends_with("/first")));
+        assert!(endpoints.iter().any(|url| url.as_str().unwrap().ends_with("/second")));
     }
 
     #[tokio::test(start_paused = true)]
@@ -653,10 +914,14 @@ mod tests {
                 r#"{"origins":["https://example.org"]}"#,
             ),
             ("GET", "verify-linked-domains", "{}"),
-            ("POST", "remove-linked-verifiable-presentation", "{}"),
             (
                 "POST",
-                "create-linked-verifiable-presentation",
+                "remove-linked-verifiable-presentations",
+                r#"{"presentationIds":["presentation-1"]}"#,
+            ),
+            (
+                "POST",
+                "add-linked-verifiable-presentations",
                 r#"{"presentationIds":["presentation-1"]}"#,
             ),
         ] {
@@ -689,12 +954,18 @@ mod tests {
         );
         fixture
             .post(
-                "create-linked-verifiable-presentation",
+                "add-linked-verifiable-presentations",
                 Some(json!({"presentationIds": ["presentation-1"]})),
                 403,
             )
             .await;
-        fixture.post("remove-linked-verifiable-presentation", None, 403).await;
+        fixture
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["presentation-1"]})),
+                403,
+            )
+            .await;
         assert_eq!(fixture.did().await, original);
         assert_eq!(
             fixture
@@ -741,9 +1012,10 @@ mod tests {
     async fn removals_also_strip_services_from_disabled_documents() {
         let fixture = Fixture::new().await;
         fixture.link_own_origin(204).await;
+        fixture.create_presentation("presentation-1").await;
         fixture
             .post(
-                "create-linked-verifiable-presentation",
+                "add-linked-verifiable-presentations",
                 Some(json!({"presentationIds": ["presentation-1"]})),
                 204,
             )
@@ -758,7 +1030,13 @@ mod tests {
         fixture
             .remove_linked_domains(&[fixture.configuration.public_url.as_str()], 204)
             .await;
-        fixture.post("remove-linked-verifiable-presentation", None, 204).await;
+        fixture
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["presentation-1"]})),
+                204,
+            )
+            .await;
         let documents: Vec<Document> =
             serde_json::from_slice(&fixture.request("GET", "/unicore/v0/documents", None).await.1).unwrap();
         assert!(documents[0].document.as_ref().unwrap().service().is_empty());

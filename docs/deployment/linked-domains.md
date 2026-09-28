@@ -61,8 +61,8 @@ domain themselves. The former `domain_linkage_enabled` setting is ignored with a
 | `POST /v0/add-linked-domains` | Link one or more origins; body: `{"origins":["example.org"]}`. |
 | `POST /v0/remove-linked-domains` | Unlink one or more origins; body: `{"origins":["example.org"]}`. |
 | `GET /v0/verify-linked-domains` | Check every linked domain the way an external verifier would. |
-| `POST /v0/create-linked-verifiable-presentation` | Add a linked presentation service; body: `{"presentationIds":["presentation-1"]}`. |
-| `POST /v0/remove-linked-verifiable-presentation` | Remove the linked presentation service, retaining the presentations themselves. No request body. |
+| `POST /v0/add-linked-verifiable-presentations` | Publish presentations in addition to those already linked; body: `{"presentationIds":["presentation-1"]}`. |
+| `POST /v0/remove-linked-verifiable-presentations` | Withdraw presentations while retaining all other linked presentations; body: `{"presentationIds":["presentation-1"]}`. |
 
 Each entry in `origins` is either a bare host (`example.org`, read as `https://example.org`) or a full
 origin (`http://example.org:8080`). Only the origin is kept: any path is discarded, so
