@@ -1,7 +1,7 @@
 use crate::{error::IntoApiErrorExt, extractors::RequestActor};
 use agent_identity::{
     service::{command::ServiceCommand, lifecycle},
-    state::{IdentityState, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID},
+    state::IdentityState,
 };
 use axum::{extract::State, Json};
 use http_api_problem::ApiError;
@@ -44,10 +44,7 @@ pub(crate) async fn add_linked_verifiable_presentations(
     lifecycle::execute(
         &state,
         actor,
-        ServiceCommand::AddLinkedVerifiablePresentations {
-            service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
-            presentation_ids,
-        },
+        ServiceCommand::AddLinkedVerifiablePresentations { presentation_ids },
     )
     .await
     .map_err(|error| error.into_api_error())?;
@@ -79,10 +76,7 @@ pub(crate) async fn remove_linked_verifiable_presentations(
     lifecycle::execute(
         &state,
         actor,
-        ServiceCommand::RemoveLinkedVerifiablePresentations {
-            service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
-            presentation_ids,
-        },
+        ServiceCommand::RemoveLinkedVerifiablePresentations { presentation_ids },
     )
     .await
     .map_err(|error| error.into_api_error())?;

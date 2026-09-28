@@ -1,5 +1,5 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
-use crate::services::IdentityServices;
+use crate::{services::IdentityServices, state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::{
@@ -424,10 +424,7 @@ impl Aggregate for Service {
                     origins: remaining,
                 }])
             }
-            AddLinkedVerifiablePresentations {
-                service_id,
-                presentation_ids,
-            } => {
+            AddLinkedVerifiablePresentations { presentation_ids } => {
                 if presentation_ids.is_empty() {
                     return Err(EmptyPresentationIds);
                 }
@@ -452,15 +449,12 @@ impl Aggregate for Service {
                     return Ok(());
                 }
                 Ok(vec![LinkedVerifiablePresentationsAdded {
-                    service_id,
+                    service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
                     presentations,
                     is_deleted: false,
                 }])
             }
-            RemoveLinkedVerifiablePresentations {
-                service_id,
-                presentation_ids,
-            } => {
+            RemoveLinkedVerifiablePresentations { presentation_ids } => {
                 if presentation_ids.is_empty() {
                     return Err(EmptyPresentationIds);
                 }
@@ -475,7 +469,7 @@ impl Aggregate for Service {
                 }
                 let is_deleted = presentations.is_empty();
                 Ok(vec![LinkedVerifiablePresentationsRemoved {
-                    service_id,
+                    service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
                     presentations,
                     is_deleted,
                 }])
@@ -902,7 +896,6 @@ pub mod service_tests {
                 is_deleted: false,
             }])
             .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
-                service_id: linked_verifiable_presentation_service_id.clone(),
                 presentation_ids: vec!["b".into(), "missing".into()],
             })
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {

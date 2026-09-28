@@ -1,10 +1,9 @@
+use crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID;
 use identity_iota::verification::VerificationMethod;
-use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
 use url::Url;
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug)]
 pub enum ServiceCommand {
     /// Links the given origins, in addition to any already linked. Adding an origin that is already
     /// linked is a no-op; there is no cap and no conflict.
@@ -25,16 +24,10 @@ pub enum ServiceCommand {
     RemoveLinkedDomains { service_id: String, origins: Vec<Url> },
     /// Publishes the given presentations in addition to any already published. Adding an already
     /// published presentation is a no-op and creates the service when necessary.
-    AddLinkedVerifiablePresentations {
-        service_id: String,
-        presentation_ids: Vec<String>,
-    },
+    AddLinkedVerifiablePresentations { presentation_ids: Vec<String> },
     /// Stops publishing the given presentations. Removing an unpublished presentation is a no-op;
     /// removing the last published presentation deletes the service.
-    RemoveLinkedVerifiablePresentations {
-        service_id: String,
-        presentation_ids: Vec<String>,
-    },
+    RemoveLinkedVerifiablePresentations { presentation_ids: Vec<String> },
 }
 
 impl ServiceCommand {
@@ -54,9 +47,10 @@ impl ServiceCommand {
         match self {
             Self::AddLinkedDomains { service_id, .. }
             | Self::RenewLinkedDomainsCredentials { service_id, .. }
-            | Self::RemoveLinkedDomains { service_id, .. }
-            | Self::AddLinkedVerifiablePresentations { service_id, .. }
-            | Self::RemoveLinkedVerifiablePresentations { service_id, .. } => service_id,
+            | Self::RemoveLinkedDomains { service_id, .. } => service_id,
+            Self::AddLinkedVerifiablePresentations { .. } | Self::RemoveLinkedVerifiablePresentations { .. } => {
+                LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID
+            }
         }
     }
 }
