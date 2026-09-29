@@ -71,6 +71,7 @@ pub(crate) async fn add_linked_verifiable_presentations(
     request_body = LinkedVerifiablePresentationsRequest,
     responses(
         (status = 204, description = "Presentations withdrawn"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 401, description = "Authentication required"),
         (status = 403, description = "Operation forbidden"),
         (status = 422, description = "Empty presentation ID list"),

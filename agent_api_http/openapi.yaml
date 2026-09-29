@@ -1408,6 +1408,8 @@ paths:
       responses:
         '204':
           description: Presentations withdrawn
+        '400':
+          description: Malformed JSON request body
         '401':
           description: Authentication required
         '403':
