@@ -564,6 +564,7 @@ impl Default for Authorization {
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+#[schema(as = ProfileLogo)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,

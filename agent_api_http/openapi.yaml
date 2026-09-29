@@ -2319,7 +2319,7 @@ components:
         logo:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/Logo'
+          - $ref: '#/components/schemas/TemplateLogo'
         name:
           type: string
     Document:
@@ -2735,18 +2735,6 @@ components:
         url:
           type: string
           format: uri
-    Logo:
-      type: object
-      properties:
-        alt_text:
-          type:
-          - string
-          - 'null'
-        uri:
-          type:
-          - string
-          - 'null'
-          format: uri
     LogoProperties:
       type: object
       properties:
@@ -2930,7 +2918,7 @@ components:
         logo:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/Logo'
+          - $ref: '#/components/schemas/ProfileLogo'
     PendingChanges:
       type: object
       required:
@@ -2984,9 +2972,21 @@ components:
         logo:
           oneOf:
           - type: 'null'
-          - $ref: '#/components/schemas/Logo'
+          - $ref: '#/components/schemas/ProfileLogo'
         source:
           $ref: '#/components/schemas/Source'
+    ProfileLogo:
+      type: object
+      properties:
+        alt_text:
+          type:
+          - string
+          - 'null'
+        uri:
+          type:
+          - string
+          - 'null'
+          format: uri
     PropertyAttribute:
       type: object
       required:
@@ -3258,6 +3258,17 @@ components:
             type: string
         visibility:
           $ref: '#/components/schemas/Visibility'
+    TemplateLogo:
+      type: object
+      required:
+      - uri
+      properties:
+        alt_text:
+          type:
+          - string
+          - 'null'
+        uri:
+          type: string
     TxCodeConstraints:
       type: object
       properties:
