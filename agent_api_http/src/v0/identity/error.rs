@@ -83,6 +83,21 @@ impl IntoApiErrorExt for ServiceError {
                 (StatusCode::BAD_REQUEST, "No eligible signing DID", "no-linked-dids")
             }
             ServiceError::EmptyOriginsError => (StatusCode::BAD_REQUEST, "No Origins Given", "no-origins"),
+            ServiceError::EmptyPresentationIds => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "No Presentation IDs Given",
+                "empty-presentation-ids",
+            ),
+            ServiceError::PresentationNotFound(_) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "Presentation Not Found",
+                "presentation-not-found",
+            ),
+            ServiceError::PresentationInvalid(_, _) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "Presentation Invalid",
+                "presentation-invalid",
+            ),
             // TODO: Implement appropriate Problem Details responses
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,

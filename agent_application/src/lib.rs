@@ -6,8 +6,8 @@ use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 use agent_event_publisher_http::EventPublisherHttp;
 use agent_event_publisher_nats::EventPublisherNats;
-use agent_holder::services::HolderServices;
-use agent_identity::services::IdentityServices;
+use agent_holder::{presentation::aggregate::Presentation, services::HolderServices};
+use agent_identity::services::{IdentityServices, LinkedVerifiablePresentationSource};
 use agent_issuance::{
     application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
@@ -45,6 +45,23 @@ pub struct ApplicationState {
     pub api: ApiState,
     pub event_verification: EventVerification,
     readiness: ReadinessState,
+}
+
+/// Publishes the holder's own signed presentations as Linked Verifiable Presentations.
+struct HolderPresentations(Arc<HolderState>);
+
+#[async_trait::async_trait]
+impl LinkedVerifiablePresentationSource for HolderPresentations {
+    async fn signed_presentation(
+        &self,
+        presentation_id: &str,
+    ) -> anyhow::Result<Option<identity_credential::credential::Jwt>> {
+        Ok(
+            agent_shared::handlers::public_query_handler(presentation_id, &self.0.query.presentation)
+                .await?
+                .and_then(|Presentation { signed, .. }| signed),
+        )
+    }
 }
 
 impl ApplicationState {
@@ -104,11 +121,16 @@ pub async fn run() -> io::Result<()> {
 
 pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     agent_shared::config::warn_deprecated_settings();
-    let identity_services = Arc::new(IdentityServices::new(
-        subject.clone(),
-        config().public_url.clone(),
-        config().iota_sponsoring_service_url.is_some(),
-    ));
+    let identity_services = |holder_state: &Arc<HolderState>| {
+        Arc::new(IdentityServices {
+            linked_verifiable_presentations: Arc::new(HolderPresentations(holder_state.clone())),
+            ..IdentityServices::new(
+                subject.clone(),
+                config().public_url.clone(),
+                config().iota_sponsoring_service_url.is_some(),
+            )
+        })
+    };
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));
     let issuance_services = Arc::new(IssuanceServices::new(subject.clone()));
     let holder_services = Arc::new(HolderServices::new(subject.clone()));
@@ -198,10 +220,19 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
+                let holder_state = Arc::new(
+                    agent_store::holder_state(&builder, holder_services, &event_bus, holder_event_publishers).await,
+                );
+
                 let states = (
                     Arc::new(
-                        agent_store::identity_state(&builder, identity_services, &event_bus, identity_event_publishers)
-                            .await,
+                        agent_store::identity_state(
+                            &builder,
+                            identity_services(&holder_state),
+                            &event_bus,
+                            identity_event_publishers,
+                        )
+                        .await,
                     ),
                     library_state,
                     Arc::new(
@@ -215,9 +246,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                         .await,
                     ),
                     issuance_state,
-                    Arc::new(
-                        agent_store::holder_state(&builder, holder_services, &event_bus, holder_event_publishers).await,
-                    ),
+                    holder_state,
                     verification_state,
                 );
                 event_verification = EventVerification::Postgres(builder);
@@ -267,10 +296,19 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
+                let holder_state = Arc::new(
+                    agent_store::holder_state(&builder, holder_services, &event_bus, holder_event_publishers).await,
+                );
+
                 let states = (
                     Arc::new(
-                        agent_store::identity_state(&builder, identity_services, &event_bus, identity_event_publishers)
-                            .await,
+                        agent_store::identity_state(
+                            &builder,
+                            identity_services(&holder_state),
+                            &event_bus,
+                            identity_event_publishers,
+                        )
+                        .await,
                     ),
                     library_state,
                     Arc::new(
@@ -284,9 +322,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                         .await,
                     ),
                     issuance_state,
-                    Arc::new(
-                        agent_store::holder_state(&builder, holder_services, &event_bus, holder_event_publishers).await,
-                    ),
+                    holder_state,
                     verification_state,
                 );
                 event_verification = EventVerification::MongoDb(builder);
@@ -329,11 +365,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
+                let holder_state = Arc::new(
+                    agent_store::holder_state(&InMemory, holder_services, &event_bus, holder_event_publishers).await,
+                );
+
                 let states = (
                     Arc::new(
                         agent_store::identity_state(
                             &InMemory,
-                            identity_services,
+                            identity_services(&holder_state),
                             &event_bus,
                             identity_event_publishers,
                         )
@@ -351,10 +391,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                         .await,
                     ),
                     issuance_state,
-                    Arc::new(
-                        agent_store::holder_state(&InMemory, holder_services, &event_bus, holder_event_publishers)
-                            .await,
-                    ),
+                    holder_state,
                     verification_state,
                 );
                 event_verification = EventVerification::InMemory;

@@ -19,7 +19,9 @@ use connections::{
 use documents::{get_document, get_documents};
 use services::{
     linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
-    linked_vp::{create_linked_verifiable_presentation, remove_linked_verifiable_presentation},
+    linked_vp::{
+        add_linked_verifiable_presentations, linked_verifiable_presentation, remove_linked_verifiable_presentations,
+    },
     service, services,
 };
 use std::sync::Arc;
@@ -46,16 +48,20 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))
                 .route(
-                    "/create-linked-verifiable-presentation",
-                    post(create_linked_verifiable_presentation),
+                    "/add-linked-verifiable-presentations",
+                    post(add_linked_verifiable_presentations),
                 )
                 .route("/add-linked-domains", post(add_linked_domains))
                 .route("/remove-linked-domains", post(remove_linked_domains))
                 .route("/verify-linked-domains", get(verify_linked_domains))
                 .route(
-                    "/remove-linked-verifiable-presentation",
-                    post(remove_linked_verifiable_presentation),
+                    "/remove-linked-verifiable-presentations",
+                    post(remove_linked_verifiable_presentations),
                 ),
+        )
+        .route(
+            "/linked-verifiable-presentations/{presentation_id}",
+            get(linked_verifiable_presentation),
         )
         .with_state(identity_state)
 }

@@ -704,8 +704,8 @@ pub enum ServiceEvent {
     LinkedDomainsAdded,
     LinkedDomainsRemoved,
     LinkedDomainsCredentialsRenewed,
-    LinkedVerifiablePresentationServiceCreated,
-    LinkedVerifiablePresentationServiceDeleted,
+    LinkedVerifiablePresentationsAdded,
+    LinkedVerifiablePresentationsRemoved,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]

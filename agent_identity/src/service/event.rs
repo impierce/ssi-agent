@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;
 
-use super::aggregate::ServiceResource;
+use super::aggregate::{LinkedVerifiablePresentation, ServiceResource};
 
 #[derive(Clone, Debug, Deserialize, Serialize, Derivative, Display)]
 #[derivative(PartialEq)]
@@ -37,13 +37,13 @@ pub enum ServiceEvent {
         is_deleted: bool,
         origins: Vec<Url>,
     },
-    LinkedVerifiablePresentationServiceDeleted {
+    LinkedVerifiablePresentationsAdded {
         service_id: String,
+        presentations: Vec<LinkedVerifiablePresentation>,
     },
-    LinkedVerifiablePresentationServiceCreated {
+    LinkedVerifiablePresentationsRemoved {
         service_id: String,
         presentation_ids: Vec<String>,
-        service: DocumentService,
     },
 }
 

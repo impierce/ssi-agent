@@ -41,9 +41,5 @@ pub fn router(holder_state: Arc<HolderState>) -> Router {
         )
         // TODO: move this behind some sort of authentication?
         .route("/credential_offer", get(openid4vci::offers_params))
-        .route(
-            "/linked-verifiable-presentations/{presentation_id}",
-            get(presentation_signed),
-        )
         .with_state(holder_state)
 }
