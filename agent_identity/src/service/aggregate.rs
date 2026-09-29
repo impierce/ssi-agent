@@ -73,6 +73,43 @@ impl Service {
                 expiration.is_none_or(|expiration| expiration <= threshold)
             })
     }
+
+    fn is_published(&self, presentation_id: &str) -> bool {
+        self.presentations
+            .iter()
+            .any(|presentation| presentation.presentation_id == presentation_id)
+    }
+
+    /// Shared by the aggregate and its projection, so both replay the delta identically.
+    pub(crate) fn apply_linked_verifiable_presentations_added(
+        &mut self,
+        service_id: String,
+        presentations: Vec<LinkedVerifiablePresentation>,
+    ) {
+        self.service_id = service_id;
+        self.service = None;
+        self.resource = None;
+        for presentation in presentations {
+            if !self.is_published(&presentation.presentation_id) {
+                self.presentations.push(presentation);
+            }
+        }
+        self.is_deleted = false;
+    }
+
+    /// Shared by the aggregate and its projection, so both replay the delta identically.
+    pub(crate) fn apply_linked_verifiable_presentations_removed(
+        &mut self,
+        service_id: String,
+        presentation_ids: &[String],
+    ) {
+        self.service_id = service_id;
+        self.service = None;
+        self.resource = None;
+        self.presentations
+            .retain(|presentation| !presentation_ids.contains(&presentation.presentation_id));
+        self.is_deleted = self.presentations.is_empty();
+    }
 }
 
 fn linked_verifiable_presentation_url(public_url: &Url, presentation_id: &str) -> Result<Url, ServiceError> {
@@ -428,50 +465,49 @@ impl Aggregate for Service {
                 if presentation_ids.is_empty() {
                     return Err(EmptyPresentationIds);
                 }
-                let mut presentations = self.presentations.clone();
+                let mut added: Vec<LinkedVerifiablePresentation> = vec![];
                 for presentation_id in presentation_ids {
-                    if presentations
-                        .iter()
-                        .any(|presentation| presentation.presentation_id == presentation_id)
+                    if self.is_published(&presentation_id)
+                        || added
+                            .iter()
+                            .any(|presentation| presentation.presentation_id == presentation_id)
                     {
                         continue;
                     }
                     let holder = services
                         .validate_local_verifiable_presentation(&presentation_id)
                         .await?;
-                    presentations.push(LinkedVerifiablePresentation {
+                    added.push(LinkedVerifiablePresentation {
                         url: linked_verifiable_presentation_url(&services.public_url, &presentation_id)?,
                         presentation_id,
                         holder,
                     });
                 }
-                if presentations == self.presentations {
+                if added.is_empty() {
                     return Ok(());
                 }
                 Ok(vec![LinkedVerifiablePresentationsAdded {
                     service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
-                    presentations,
-                    is_deleted: false,
+                    presentations: added,
                 }])
             }
             RemoveLinkedVerifiablePresentations { presentation_ids } => {
                 if presentation_ids.is_empty() {
                     return Err(EmptyPresentationIds);
                 }
-                let presentations = self
+                let removed: Vec<String> = self
                     .presentations
                     .iter()
-                    .filter(|presentation| !presentation_ids.contains(&presentation.presentation_id))
+                    .map(|presentation| &presentation.presentation_id)
+                    .filter(|presentation_id| presentation_ids.contains(presentation_id))
                     .cloned()
-                    .collect::<Vec<_>>();
-                if presentations == self.presentations {
+                    .collect();
+                if removed.is_empty() {
                     return Ok(());
                 }
-                let is_deleted = presentations.is_empty();
                 Ok(vec![LinkedVerifiablePresentationsRemoved {
                     service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
-                    presentations,
-                    is_deleted,
+                    presentation_ids: removed,
                 }])
             }
         }?;
@@ -525,19 +561,11 @@ impl Aggregate for Service {
             LinkedVerifiablePresentationsAdded {
                 service_id,
                 presentations,
-                is_deleted,
-            }
-            | LinkedVerifiablePresentationsRemoved {
+            } => self.apply_linked_verifiable_presentations_added(service_id, presentations),
+            LinkedVerifiablePresentationsRemoved {
                 service_id,
-                presentations,
-                is_deleted,
-            } => {
-                self.service_id = service_id;
-                self.service = None;
-                self.resource = None;
-                self.presentations = presentations;
-                self.is_deleted = is_deleted;
-            }
+                presentation_ids,
+            } => self.apply_linked_verifiable_presentations_removed(service_id, &presentation_ids),
         }
     }
 }
@@ -893,15 +921,81 @@ pub mod service_tests {
             .given(vec![ServiceEvent::LinkedVerifiablePresentationsAdded {
                 service_id: linked_verifiable_presentation_service_id.clone(),
                 presentations: presentations.to_vec(),
-                is_deleted: false,
             }])
             .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
                 presentation_ids: vec!["b".into(), "missing".into()],
             })
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
                 service_id: linked_verifiable_presentation_service_id,
-                presentations: vec![presentations[0].clone(), presentations[2].clone()],
-                is_deleted: false,
+                presentation_ids: vec!["b".into()],
+            }])
+    }
+
+    #[test]
+    fn applying_presentation_deltas_keeps_order_and_skips_published_ones() {
+        let presentation = |id: &str| LinkedVerifiablePresentation {
+            presentation_id: id.into(),
+            holder: "did:web:my-domain.example.org".into(),
+            url: format!("https://my-domain.example.org/linked-verifiable-presentations/{id}")
+                .parse()
+                .unwrap(),
+        };
+        let service_id = || LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string();
+        let mut service = Service::default();
+
+        service.apply(ServiceEvent::LinkedVerifiablePresentationsAdded {
+            service_id: service_id(),
+            presentations: vec![presentation("a"), presentation("b"), presentation("c")],
+        });
+        service.apply(ServiceEvent::LinkedVerifiablePresentationsAdded {
+            service_id: service_id(),
+            presentations: vec![presentation("c"), presentation("d")],
+        });
+        assert_eq!(service.presentations, ["a", "b", "c", "d"].map(presentation).to_vec());
+
+        service.apply(ServiceEvent::LinkedVerifiablePresentationsRemoved {
+            service_id: service_id(),
+            presentation_ids: vec!["b".into(), "d".into()],
+        });
+        assert_eq!(service.presentations, ["a", "c"].map(presentation).to_vec());
+        assert!(!service.is_deleted);
+
+        service.apply(ServiceEvent::LinkedVerifiablePresentationsRemoved {
+            service_id: service_id(),
+            presentation_ids: vec!["a".into(), "c".into()],
+        });
+        assert!(service.presentations.is_empty());
+        assert!(service.is_deleted);
+
+        service.apply(ServiceEvent::LinkedVerifiablePresentationsAdded {
+            service_id: service_id(),
+            presentations: vec![presentation("e")],
+        });
+        assert!(!service.is_deleted);
+        assert!(service.is_active());
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn removing_the_last_presentations_deletes_the_service(linked_verifiable_presentation_service_id: String) {
+        let presentation = LinkedVerifiablePresentation {
+            presentation_id: "a".into(),
+            holder: "did:web:my-domain.example.org".into(),
+            url: "https://my-domain.example.org/linked-verifiable-presentations/a"
+                .parse()
+                .unwrap(),
+        };
+        ServiceTestFramework::with(IdentityServices::default())
+            .given(vec![ServiceEvent::LinkedVerifiablePresentationsAdded {
+                service_id: linked_verifiable_presentation_service_id.clone(),
+                presentations: vec![presentation],
+            }])
+            .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
+                presentation_ids: vec!["a".into(), "a".into()],
+            })
+            .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
+                service_id: linked_verifiable_presentation_service_id,
+                presentation_ids: vec!["a".into()],
             }])
     }
 
@@ -975,12 +1069,10 @@ mod replay_tests {
         let created = ServiceEvent::LinkedVerifiablePresentationsAdded {
             service_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
             presentations: presentations.clone(),
-            is_deleted: false,
         };
         let removed = ServiceEvent::LinkedVerifiablePresentationsRemoved {
             service_id: crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.into(),
-            presentations: vec![],
-            is_deleted: true,
+            presentation_ids: vec!["presentation-1".into()],
         };
         let mut aggregate = Service::default();
         let mut projection = Service::default();

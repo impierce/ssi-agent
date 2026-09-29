@@ -45,19 +45,11 @@ impl View<Service> for Service {
             LinkedVerifiablePresentationsAdded {
                 service_id,
                 presentations,
-                is_deleted,
-            }
-            | LinkedVerifiablePresentationsRemoved {
+            } => self.apply_linked_verifiable_presentations_added(service_id.clone(), presentations.clone()),
+            LinkedVerifiablePresentationsRemoved {
                 service_id,
-                presentations,
-                is_deleted,
-            } => {
-                self.service_id.clone_from(service_id);
-                self.service = None;
-                self.resource = None;
-                self.presentations.clone_from(presentations);
-                self.is_deleted.clone_from(is_deleted);
-            }
+                presentation_ids,
+            } => self.apply_linked_verifiable_presentations_removed(service_id.clone(), presentation_ids),
         }
     }
 }

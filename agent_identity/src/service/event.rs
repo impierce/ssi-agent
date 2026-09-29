@@ -40,12 +40,10 @@ pub enum ServiceEvent {
     LinkedVerifiablePresentationsAdded {
         service_id: String,
         presentations: Vec<LinkedVerifiablePresentation>,
-        is_deleted: bool,
     },
     LinkedVerifiablePresentationsRemoved {
         service_id: String,
-        presentations: Vec<LinkedVerifiablePresentation>,
-        is_deleted: bool,
+        presentation_ids: Vec<String>,
     },
 }
 
