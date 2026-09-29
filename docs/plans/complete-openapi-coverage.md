@@ -249,7 +249,7 @@ scoped by the module that contains them.
 | `auth_authorize` | `GET /auth/authorize` |
 | `auth_token` | `POST /auth/token` |
 | `credential_offer` | `GET /credential_offer` |
-| `linked_verifiable_presentation` | `GET /linked-verifiable-presentations/{presentation_id}` |
+| `get_linked_verifiable_presentation_by_id` | `GET /linked-verifiable-presentations/{presentation_id}` |
 | `request_object` | `GET /request/{request_id}` |
 | `redirect` | `POST /redirect` |
 

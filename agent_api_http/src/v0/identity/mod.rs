@@ -20,7 +20,8 @@ use documents::{get_document, get_documents};
 use services::{
     linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
     linked_vp::{
-        add_linked_verifiable_presentations, linked_verifiable_presentation, remove_linked_verifiable_presentations,
+        add_linked_verifiable_presentations, get_linked_verifiable_presentation_by_id,
+        remove_linked_verifiable_presentations,
     },
     service, services,
 };
@@ -61,7 +62,7 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         )
         .route(
             "/linked-verifiable-presentations/{presentation_id}",
-            get(linked_verifiable_presentation),
+            get(get_linked_verifiable_presentation_by_id),
         )
         .with_state(identity_state)
 }

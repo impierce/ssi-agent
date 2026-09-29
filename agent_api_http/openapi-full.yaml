@@ -362,7 +362,7 @@ paths:
         Serves a published presentation to anyone resolving its holder's DID document, without
         authentication, as defined by [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
         Presentations that are not published answer `404`.
-      operationId: linked_verifiable_presentation
+      operationId: get_linked_verifiable_presentation_by_id
       parameters:
       - name: presentation_id
         in: path

@@ -272,7 +272,7 @@ mod tests {
             (
                 "get",
                 "/linked-verifiable-presentations/{presentation_id}",
-                "linked_verifiable_presentation",
+                "get_linked_verifiable_presentation_by_id",
             ),
             ("get", "/request/{request_id}", "request_object"),
             ("post", "/redirect", "redirect"),

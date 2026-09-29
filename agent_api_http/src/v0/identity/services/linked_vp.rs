@@ -100,7 +100,7 @@ pub(crate) async fn remove_linked_verifiable_presentations(
 #[utoipa::path(
     get,
     path = "/linked-verifiable-presentations/{presentation_id}",
-    operation_id = "linked_verifiable_presentation",
+    operation_id = "get_linked_verifiable_presentation_by_id",
     tags = ["DID", PROTOCOL_TAG],
     params(
         ("presentation_id" = String, Path, description = "Credential presentation ID"),
@@ -112,7 +112,7 @@ pub(crate) async fn remove_linked_verifiable_presentations(
         (status = 500, description = "The presentation could not be retrieved"),
     )
 )]
-pub(crate) async fn linked_verifiable_presentation(
+pub(crate) async fn get_linked_verifiable_presentation_by_id(
     State(state): State<Arc<IdentityState>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
