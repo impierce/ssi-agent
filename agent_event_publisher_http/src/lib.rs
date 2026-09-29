@@ -533,7 +533,21 @@ mod tests {
     use agent_issuance::offer::event::OfferEvent;
     use agent_shared::config::{set_config, Events};
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
+    /// `dispatch` sends requests from a detached task, so wait until they arrive (or give up after a timeout).
+    async fn wait_for_requests(mock_server: &MockServer, count: usize) -> Vec<Request> {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+
+        loop {
+            let received_requests = mock_server.received_requests().await.unwrap();
+            if received_requests.len() >= count || tokio::time::Instant::now() >= deadline {
+                return received_requests;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn it_works() {
@@ -577,11 +591,8 @@ mod tests {
         // Dispatch the event.
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
-        // Wait for the request to arrive at the mock server endpoint.
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        let received_requests = mock_server.received_requests().await;
-        let received_request = received_requests.as_ref().unwrap().first().unwrap();
+        let received_requests = wait_for_requests(&mock_server, 1).await;
+        let received_request = received_requests.first().expect("the event should be dispatched");
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());
