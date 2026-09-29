@@ -9,7 +9,10 @@ use crate::v0::issuance::public_offers::{
     __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer, __path_take_public_offer_offline,
     __path_take_public_offer_online,
 };
-use utoipa::OpenApi;
+use utoipa::{
+    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    Modify, OpenApi,
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -35,3 +38,39 @@ use utoipa::OpenApi;
     )
 )]
 pub struct IssuanceApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        crate::v0::issuance::credential_issuer::well_known::oauth_authorization_server::oauth_authorization_server,
+        crate::v0::issuance::credential_issuer::well_known::openid_credential_issuer::openid_credential_issuer,
+        crate::v0::issuance::credential_issuer::credential::credential,
+        crate::v0::issuance::nonce::nonce,
+        crate::v0::issuance::credential_issuer::notification::notification,
+        crate::v0::issuance::credential_issuer::credential_offer::credential_offer_uri,
+        crate::v0::issuance::credential_issuer::token_status_list::token_status_list,
+        crate::v0::issuance::ietf_oauth_sd_jwt_vc::type_metadata,
+    ),
+    modifiers(&AccessTokenSecurity)
+)]
+pub struct IssuanceProtocolApi;
+
+/// Registers the OAuth 2.0 access token issued by `/auth/token` as a bearer security scheme.
+struct AccessTokenSecurity;
+
+impl Modify for AccessTokenSecurity {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        openapi
+            .components
+            .get_or_insert_with(Default::default)
+            .add_security_scheme(
+                "access_token",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .description(Some("Access token issued by the `/auth/token` endpoint."))
+                        .build(),
+                ),
+            );
+    }
+}

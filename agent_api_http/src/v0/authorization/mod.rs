@@ -2,6 +2,7 @@
 pub mod authorization_server;
 
 pub mod error;
+pub mod openapi;
 
 use crate::v0::authorization::authorization_server::consent::{get_consent, post_consent};
 use crate::API_VERSION;

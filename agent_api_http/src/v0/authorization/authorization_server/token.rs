@@ -1,5 +1,6 @@
 use crate::v0::authorization::AuthorizationState;
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_authorization::application::token_issuance_service::TokenIssuanceService;
 use agent_issuance::state::IssuanceState;
 use axum::{
@@ -8,9 +9,32 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
-use oid4vci::token_request::TokenRequest;
+use oid4vci::{
+    errors::{OID4VCError, TokenErrorResponse},
+    token_request::TokenRequest,
+    token_response::TokenResponse,
+};
 use std::sync::Arc;
 
+/// Request an access token
+///
+/// Exchanges an authorization code or a pre-authorized code for an access token, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-endpoint).
+#[utoipa::path(
+    post,
+    path = "/auth/token",
+    operation_id = "auth_token",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    request_body(content = TokenRequest, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 200, description = "Access token issued", body = TokenResponse),
+        (status = 400, description = "The token request is invalid", body = OID4VCError<TokenErrorResponse>),
+        (status = 401, description = "The client is invalid", body = OID4VCError<TokenErrorResponse>),
+        (status = 415, description = "The request body is not `application/x-www-form-urlencoded`"),
+        (status = 422, description = "The request body is not a valid token request"),
+        (status = 500, description = "The access token could not be issued"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State((authorization_state, issuance_state)): State<(Arc<AuthorizationState>, Arc<IssuanceState>)>,

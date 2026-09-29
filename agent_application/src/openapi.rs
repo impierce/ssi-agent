@@ -36,6 +36,19 @@ pub fn published_openapi() -> utoipa::openapi::OpenApi {
     patch_generated_openapi(PublishedApiDoc::openapi())
 }
 
+/// The published document plus every standardized protocol endpoint.
+pub struct FullApiDoc;
+
+impl OpenApi for FullApiDoc {
+    fn openapi() -> utoipa::openapi::OpenApi {
+        PublishedApiDoc::openapi().merge_from(agent_api_http::v0::openapi::ProtocolApi::openapi())
+    }
+}
+
+pub fn full_openapi() -> utoipa::openapi::OpenApi {
+    patch_generated_openapi(FullApiDoc::openapi())
+}
+
 fn patch_generated_openapi(mut spec: utoipa::openapi::OpenApi) -> utoipa::openapi::OpenApi {
     spec.info.version = std::env::var("APP_VERSION").unwrap_or_else(|_| "0.0.0-semantically-released".to_string());
     spec
@@ -80,7 +93,8 @@ mod tests {
 
     type Operation = (String, String, String);
 
-    fn operations(document: &OpenApiDocument) -> BTreeSet<Operation> {
+    /// Every operation of the document together with its tags.
+    fn tagged_operations(document: &OpenApiDocument) -> Vec<(Operation, Vec<String>)> {
         document
             .paths
             .paths
@@ -100,13 +114,23 @@ mod tests {
                 .filter_map(|(method, operation)| {
                     operation.map(|operation| {
                         (
-                            method.to_string(),
-                            path.clone(),
-                            operation.operation_id.clone().unwrap_or_default(),
+                            (
+                                method.to_string(),
+                                path.clone(),
+                                operation.operation_id.clone().unwrap_or_default(),
+                            ),
+                            operation.tags.clone().unwrap_or_default(),
                         )
                     })
                 })
             })
+            .collect()
+    }
+
+    fn operations(document: &OpenApiDocument) -> BTreeSet<Operation> {
+        tagged_operations(document)
+            .into_iter()
+            .map(|(operation, _)| operation)
             .collect()
     }
 
@@ -205,11 +229,168 @@ mod tests {
         assert!(body.contains("operationId: openapi_yaml"));
     }
 
+    /// The audited `(method, path, operation_id)` manifest of the standardized protocol operations. Axum cannot
+    /// enumerate its routes, so any change to the protocol routers must be reflected here.
+    fn protocol_operations() -> BTreeSet<Operation> {
+        [
+            ("get", "/.well-known/did.json", "well_known_did_json"),
+            (
+                "get",
+                "/.well-known/did-configuration.json",
+                "well_known_did_configuration_json",
+            ),
+            (
+                "get",
+                "/.well-known/oauth-authorization-server",
+                "well_known_oauth_authorization_server",
+            ),
+            (
+                "get",
+                "/.well-known/openid-credential-issuer",
+                "well_known_openid_credential_issuer",
+            ),
+            ("post", "/openid4vci/credential", "openid4vci_credential"),
+            ("post", "/openid4vci/nonce", "openid4vci_nonce"),
+            ("post", "/openid4vci/notification", "openid4vci_notification"),
+            (
+                "get",
+                "/openid4vci/credential-offer/{offer_id}",
+                "openid4vci_credential_offer",
+            ),
+            ("get", "/ietf-oauth-token-status-list/{path}", "token_status_list"),
+            (
+                "get",
+                "/vct/{credential_configuration_id}/{version}",
+                "vct_type_metadata",
+            ),
+            ("get", "/auth/consent", "get_consent"),
+            ("post", "/auth/consent", "post_consent"),
+            ("post", "/auth/par", "auth_par"),
+            ("get", "/auth/authorize", "auth_authorize"),
+            ("post", "/auth/token", "auth_token"),
+            ("get", "/credential_offer", "credential_offer"),
+            (
+                "get",
+                "/linked-verifiable-presentations/{presentation_id}",
+                "linked_verifiable_presentation",
+            ),
+            ("get", "/request/{request_id}", "request_object"),
+            ("post", "/redirect", "redirect"),
+        ]
+        .into_iter()
+        .map(|(method, path, operation_id)| (method.to_string(), path.to_string(), operation_id.to_string()))
+        .collect()
+    }
+
+    #[test]
+    fn full_api_adds_exactly_the_protocol_operations() {
+        let published = PublishedApiDoc::openapi();
+        let full = FullApiDoc::openapi();
+
+        let published_operations = operations(&published);
+        let full_operations = operations(&full);
+        assert!(published_operations.is_subset(&full_operations));
+
+        let protocol_additions: BTreeSet<_> = full_operations.difference(&published_operations).cloned().collect();
+        assert_eq!(protocol_additions, protocol_operations());
+        assert!(published_operations.is_disjoint(&protocol_operations()));
+
+        let operation_ids: Vec<_> = full_operations
+            .iter()
+            .map(|(_, _, operation_id)| operation_id)
+            .collect();
+        let unique_operation_ids: BTreeSet<_> = operation_ids.iter().collect();
+        assert_eq!(
+            operation_ids.len(),
+            unique_operation_ids.len(),
+            "operation IDs must be unique"
+        );
+
+        assert!(full.info == published.info);
+        assert!(full.servers == published.servers);
+    }
+
+    #[test]
+    fn only_protocol_operations_carry_the_protocol_tag() {
+        use agent_api_http::v0::openapi::PROTOCOL_TAG;
+
+        let protocol_operations = protocol_operations();
+
+        for (operation, tags) in tagged_operations(&FullApiDoc::openapi()) {
+            if protocol_operations.contains(&operation) {
+                // The standard's own tag comes first, because client generators group operations by their first tag.
+                assert!(
+                    tags.len() >= 2 && tags.last().map(String::as_str) == Some(PROTOCOL_TAG),
+                    "{operation:?} should end with the `{PROTOCOL_TAG}` tag after its standard's tag, got {tags:?}"
+                );
+                assert_eq!(tags.iter().filter(|tag| *tag == PROTOCOL_TAG).count(), 1);
+            } else {
+                assert!(
+                    !tags.iter().any(|tag| tag == PROTOCOL_TAG),
+                    "{operation:?} is not a protocol operation"
+                );
+            }
+        }
+
+        let full = FullApiDoc::openapi();
+        let tag_names: Vec<_> = full.tags.iter().flatten().map(|tag| tag.name.as_str()).collect();
+        assert!(tag_names.contains(&PROTOCOL_TAG));
+        assert!(!PublishedApiDoc::openapi()
+            .tags
+            .iter()
+            .flatten()
+            .any(|tag| tag.name == PROTOCOL_TAG));
+    }
+
+    #[test]
+    fn protocol_schemas_do_not_shadow_published_schemas() {
+        let published = PublishedApiDoc::openapi();
+        let protocol = agent_api_http::v0::openapi::ProtocolApi::openapi();
+        let full = FullApiDoc::openapi();
+
+        let schemas = |document: &OpenApiDocument| {
+            document
+                .components
+                .as_ref()
+                .map(|components| components.schemas.clone())
+                .unwrap_or_default()
+        };
+        let published_schemas = schemas(&published);
+        let full_schemas = schemas(&full);
+
+        // `merge_from` silently keeps the first schema of a given name, so a name collision must be an identical
+        // schema.
+        let shadowed: Vec<_> = schemas(&protocol)
+            .into_iter()
+            .filter(|(name, schema)| {
+                published_schemas.get(name).is_some_and(|published_schema| {
+                    serde_json::to_value(published_schema).unwrap() != serde_json::to_value(schema).unwrap()
+                })
+            })
+            .map(|(name, _)| name)
+            .collect();
+        assert!(
+            shadowed.is_empty(),
+            "protocol schemas differ from published schemas of the same name: {shadowed:?}"
+        );
+        assert!(schemas(&protocol).keys().all(|name| full_schemas.contains_key(name)));
+    }
+
     #[test]
     fn generate_openapi_spec() {
-        let openapi = published_openapi();
-        let yaml = openapi.to_yaml().unwrap();
-        let output_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../agent_api_http/openapi.yaml");
-        std::fs::write(output_path, yaml).unwrap();
+        let output_directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../agent_api_http");
+
+        for (file_name, openapi) in [
+            ("openapi.yaml", published_openapi()),
+            ("openapi-full.yaml", full_openapi()),
+        ] {
+            let yaml = openapi.to_yaml().unwrap();
+            assert_eq!(
+                yaml,
+                openapi.to_yaml().unwrap(),
+                "{file_name} must serialize deterministically"
+            );
+            std::fs::write(output_directory.join(file_name), yaml).unwrap();
+        }
     }
 }

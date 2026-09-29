@@ -12,7 +12,32 @@ use hyper::header;
 use oauth_tsl::relying_party::StatusListTokenResponseType;
 
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 
+/// Get a status list token
+///
+/// Returns a gzip-encoded Status List Token, as defined by
+/// [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+#[utoipa::path(
+    get,
+    path = "/ietf-oauth-token-status-list/{path}",
+    operation_id = "token_status_list",
+    tags = ["Status List", PROTOCOL_TAG],
+    params(
+        ("path" = String, Path, description = "Status list ID"),
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Status List Token as a compact JWT",
+            body = String,
+            content_type = "application/statuslist+jwt",
+            headers(("Content-Encoding" = String, description = "Always `gzip`")),
+        ),
+        (status = 404, description = "The status list does not exist"),
+        (status = 500, description = "The status list token could not be created"),
+    )
+)]
 pub async fn token_status_list(
     State(state): State<Arc<IssuanceState>>,
     Path(status_list_id): Path<String>,

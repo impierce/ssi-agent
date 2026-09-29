@@ -1,4 +1,5 @@
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_authorization::application::oauth2_authorization_service::{
     OAuth2AuthorizationService, OAuth2AuthorizationServiceResponse,
 };
@@ -14,6 +15,32 @@ use http::header;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use std::sync::Arc;
 
+/// Authorize a pushed authorization request
+///
+/// Starts the authorization of a pushed authorization request by reference, as defined by
+/// [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html#name-authorization-request). The user agent is
+/// redirected to the consent page, or back to the client once consent has been given.
+#[utoipa::path(
+    get,
+    path = "/auth/authorize",
+    operation_id = "auth_authorize",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    params(AuthorizationRequestByReference),
+    responses(
+        (
+            status = 302,
+            description = "Redirect to the client's redirect URI",
+            headers(("Location" = String, description = "The client's redirect URI")),
+        ),
+        (
+            status = 303,
+            description = "Redirect to the consent page",
+            headers(("Location" = String, description = "The consent page URI")),
+        ),
+        (status = 400, description = "The query string is invalid"),
+        (status = 500, description = "The authorization request could not be processed"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorize(
     State(state): State<Arc<AuthorizationState>>,

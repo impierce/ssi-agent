@@ -8,6 +8,7 @@ use hyper::{header, StatusCode};
 use std::sync::Arc;
 
 use crate::handlers::public_query_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
 
 /// Get a signed credential presentation
 ///
@@ -43,4 +44,32 @@ pub(crate) async fn presentation_signed(
             .into_response()),
         _ => Err(ApiError::new(StatusCode::NOT_FOUND)),
     }
+}
+
+/// Get a linked verifiable presentation
+///
+/// Retrieves the compact JWT representation of a presentation that is published through the `LinkedVerifiablePresentation`
+/// service of a DID document, as defined by
+/// [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
+#[utoipa::path(
+    get,
+    path = "/linked-verifiable-presentations/{presentation_id}",
+    operation_id = "linked_verifiable_presentation",
+    tags = ["DID", PROTOCOL_TAG],
+    params(
+        ("presentation_id" = String, Path, description = "Credential presentation ID"),
+    ),
+    responses(
+        (status = 200, description = "Signed credential presentation", body = String, content_type = "application/jwt"),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Signed credential presentation not found"),
+        (status = 500, description = "The presentation could not be retrieved"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn linked_verifiable_presentation(
+    state: State<Arc<HolderState>>,
+    presentation_id: Path<String>,
+) -> Result<Response, ApiError> {
+    presentation_signed(state, presentation_id).await
 }

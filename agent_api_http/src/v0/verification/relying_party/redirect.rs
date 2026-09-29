@@ -1,4 +1,5 @@
 use crate::handlers::public_command_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -13,6 +14,53 @@ use http_api_problem::ApiError;
 use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
 use std::sync::Arc;
 
+/// An authorization response sent to the relying party, either as a SIOPv2 ID Token or as an OID4VP VP Token.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AuthorizationResponseForm {
+    IdToken(IdTokenAuthorizationResponse),
+    VpToken(VpTokenAuthorizationResponse),
+}
+
+/// A [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#name-self-issued-openid-provider-a)
+/// authorization response.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+pub(crate) struct IdTokenAuthorizationResponse {
+    /// The `state` of the authorization request, which identifies it.
+    state: String,
+    /// The Self-Issued ID Token as a compact JWT.
+    id_token: String,
+}
+
+/// An [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-response) authorization
+/// response.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+pub(crate) struct VpTokenAuthorizationResponse {
+    /// The `state` of the authorization request, which identifies it.
+    state: String,
+    /// JSON-encoded object that maps each DCQL credential query ID to a non-empty array of presentations.
+    vp_token: String,
+}
+
+/// Submit an authorization response
+///
+/// Receives and verifies the authorization response of a SIOPv2 or OID4VP authorization request, sent with the
+/// `direct_post` response mode.
+#[utoipa::path(
+    post,
+    path = "/redirect",
+    operation_id = "redirect",
+    tags = ["OID4VP / SIOPv2", PROTOCOL_TAG],
+    request_body(content = AuthorizationResponseForm, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 200, description = "Authorization response verified"),
+        (status = 400, description = "The authorization response is malformed or has no `state`"),
+        (status = 500, description = "The authorization response could not be verified"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<Arc<VerificationState>>,

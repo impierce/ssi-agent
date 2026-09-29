@@ -17,7 +17,10 @@ use axum::routing::get;
 use axum::{routing::post, Router};
 use holder::{
     credentials::{credential, post_credentials},
-    presentations::{get_presentations, post_presentations, presentation, presentation_signed::presentation_signed},
+    presentations::{
+        get_presentations, post_presentations, presentation,
+        presentation_signed::{linked_verifiable_presentation, presentation_signed},
+    },
 };
 use std::sync::Arc;
 
@@ -43,7 +46,7 @@ pub fn router(holder_state: Arc<HolderState>) -> Router {
         .route("/credential_offer", get(openid4vci::offers_params))
         .route(
             "/linked-verifiable-presentations/{presentation_id}",
-            get(presentation_signed),
+            get(linked_verifiable_presentation),
         )
         .with_state(holder_state)
 }

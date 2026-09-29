@@ -9,10 +9,32 @@ use hyper::header;
 use std::sync::Arc;
 
 use crate::handlers::public_query_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
 
+/// Get a request object
+///
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
-/// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved.
-/// As described here: https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-
+/// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved, as
+/// described in [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-).
+#[utoipa::path(
+    get,
+    path = "/request/{request_id}",
+    operation_id = "request_object",
+    tags = ["OID4VP / SIOPv2", PROTOCOL_TAG],
+    params(
+        ("request_id" = String, Path, description = "Authorization request ID"),
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Signed authorization request object",
+            body = String,
+            content_type = "application/oauth-authz-req+jwt",
+        ),
+        (status = 404, description = "The authorization request does not exist"),
+        (status = 500, description = "The authorization request could not be retrieved"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn request(
     State(verification_state): State<Arc<VerificationState>>,
