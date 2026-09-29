@@ -6,8 +6,13 @@ Implementation in progress.
 
 - Phase 1 is complete upstream and UniCore is pinned to `openid4vc` revision
   `42b37c8`.
+- Phase 1 was re-pinned to `openid4vc` revision `634dc44` (documentation-only
+  change upstream).
 - Phase 2 is complete, including the subsequently added `/livez` probe.
-- Phase 3 is the next implementation milestone.
+- Phase 3 is complete: all 19 protocol operations are annotated, collected in
+  `ProtocolApi`, and generated into `openapi-full.yaml` by `FullApiDoc`. The
+  audited route manifest and the operation-ID uniqueness check landed with it.
+- Phase 4 is the next implementation milestone.
 
 ## Context
 
@@ -217,13 +222,40 @@ Implement the operations in these cohesive groups:
 Annotate the endpoints already backed by upstream `openid4vc` wire types first,
 then introduce the local documentation DTOs and schema adapters listed below.
 Give `/linked-verifiable-presentations/{presentation_id}` a dedicated handler
-wrapper instead of documenting the reused `presentation_signed` handler under a
-second identity. This keeps each HTTP operation ID aligned with one handler.
+wrapper, because `presentation_signed` already carries the path annotation of
+the management route and a handler can only carry one.
+
+The protocol operation IDs mirror their route paths, because generated clients
+derive their function names from them (e.g. `authAuthorize()`). Well-known
+endpoints are prefixed with `well_known_`, and generic names are prefixed with
+their path segment. Handler names are not renamed to match: they are already
+scoped by the module that contains them.
+
+| Operation ID | Route |
+| --- | --- |
+| `well_known_did_json` | `GET /.well-known/did.json` |
+| `well_known_did_configuration_json` | `GET /.well-known/did-configuration.json` |
+| `well_known_oauth_authorization_server` | `GET /.well-known/oauth-authorization-server` |
+| `well_known_openid_credential_issuer` | `GET /.well-known/openid-credential-issuer` |
+| `openid4vci_credential` | `POST /openid4vci/credential` |
+| `openid4vci_nonce` | `POST /openid4vci/nonce` |
+| `openid4vci_notification` | `POST /openid4vci/notification` |
+| `openid4vci_credential_offer` | `GET /openid4vci/credential-offer/{offer_id}` |
+| `token_status_list` | `GET /ietf-oauth-token-status-list/{path}` |
+| `vct_type_metadata` | `GET /vct/{credential_configuration_id}/{version}` |
+| `get_consent` | `GET /auth/consent` |
+| `post_consent` | `POST /auth/consent` |
+| `auth_par` | `POST /auth/par` |
+| `auth_authorize` | `GET /auth/authorize` |
+| `auth_token` | `POST /auth/token` |
+| `credential_offer` | `GET /credential_offer` |
+| `linked_verifiable_presentation` | `GET /linked-verifiable-presentations/{presentation_id}` |
+| `request_object` | `GET /request/{request_id}` |
+| `redirect` | `POST /redirect` |
 
 Each operation must specify:
 
-- An operation ID that is snake_case and exactly matches the handler name. Rename
-  a handler when necessary rather than introducing a second HTTP-facing name.
+- A snake_case operation ID from the table above.
 - The actual request encoding: JSON, query, URL-encoded form, HTML, compact JWT,
   or bytes as appropriate.
 - Success and error status codes currently emitted by the handler.
@@ -254,12 +286,24 @@ Keep UniCore-specific wire types in UniCore:
   `id_token`) and OID4VP (`state`, `vp_token`) alternatives. Do not force the
   generic `oid4vc_core::AuthorizationResponse<E>` through `utoipa` solely for
   this endpoint.
-- Reuse the custom DID document OpenAPI schema code already present in
-  `agent_identity`.
+- Replace the untyped DID document schema in `agent_identity` with a minimal
+  DID Core schema (`DidDocument`, `DidVerificationMethod`, `DidService`) and
+  use it for both `/.well-known/did.json` and the existing `Document.document`
+  field.
 - Add local schema adapters for Domain Linkage Configuration and SD-JWT VC type
   metadata if their external crates do not expose `ToSchema`.
 - Describe compact JWT and gzip status-list bodies as strings/binary content
   with their exact media types rather than pretending they are JSON objects.
+
+### Schema name collisions
+
+`utoipa` merges components by name and silently keeps one schema when two
+different types share a name. Three `Logo` types collided: the profile logo in
+`agent_shared`, the template logo in `agent_library`, and the credential
+configuration logo in `oid4vci`. The two local schemas are published as
+`ProfileLogo` and `TemplateLogo`; the upstream schema keeps `Logo`. This also
+fixes the template `Display.logo` reference, which previously resolved to the
+profile logo. A test asserts that component names stay unambiguous.
 
 ### Full document
 
@@ -280,8 +324,8 @@ Add tests that operate on the generated `OpenApi` values before serialization:
 5. Assert that the difference between the two sets is exactly the 19 protocol
    operations listed above.
 6. Assert globally unique operation IDs.
-7. Assert snake_case operation IDs and handler-name parity for the 19 newly
-   documented protocol operations.
+7. Assert snake_case operation IDs for the 19 newly documented protocol
+   operations.
 8. Parse both serialized YAML files as OpenAPI after generation.
 9. Generate each file twice and assert stable output.
 
@@ -340,7 +384,7 @@ to release independently.
 - The full document differs from the published document by exactly the audited
   19 protocol operations.
 - Every operation ID is globally unique. Every newly documented protocol
-  operation has a snake_case ID matching its handler.
+  operation has a snake_case ID that mirrors its route path.
 - Request bodies and responses use their real media types.
 - The two generated files are deterministic and parse as valid OpenAPI.
 - `cargo fmt --all` passes.
