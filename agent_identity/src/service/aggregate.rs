@@ -1,5 +1,8 @@
 use super::{command::ServiceCommand, error::ServiceError, event::ServiceEvent};
-use crate::{services::IdentityServices, state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID};
+use crate::{
+    services::{validate_linked_verifiable_presentation, IdentityServices},
+    state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
+};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::{
@@ -74,7 +77,7 @@ impl Service {
             })
     }
 
-    fn is_published(&self, presentation_id: &str) -> bool {
+    pub fn is_published(&self, presentation_id: &str) -> bool {
         self.presentations
             .iter()
             .any(|presentation| presentation.presentation_id == presentation_id)
@@ -87,8 +90,6 @@ impl Service {
         presentations: Vec<LinkedVerifiablePresentation>,
     ) {
         self.service_id = service_id;
-        self.service = None;
-        self.resource = None;
         for presentation in presentations {
             if !self.is_published(&presentation.presentation_id) {
                 self.presentations.push(presentation);
@@ -104,8 +105,6 @@ impl Service {
         presentation_ids: &[String],
     ) {
         self.service_id = service_id;
-        self.service = None;
-        self.resource = None;
         self.presentations
             .retain(|presentation| !presentation_ids.contains(&presentation.presentation_id));
         self.is_deleted = self.presentations.is_empty();
@@ -461,7 +460,11 @@ impl Aggregate for Service {
                     origins: remaining,
                 }])
             }
-            AddLinkedVerifiablePresentations { presentation_ids } => {
+            AddLinkedVerifiablePresentations {
+                presentation_ids,
+                signed_presentations,
+                linkable_documents,
+            } => {
                 if presentation_ids.is_empty() {
                     return Err(EmptyPresentationIds);
                 }
@@ -474,9 +477,11 @@ impl Aggregate for Service {
                     {
                         continue;
                     }
-                    let holder = services
-                        .validate_local_verifiable_presentation(&presentation_id)
-                        .await?;
+                    let holder = validate_linked_verifiable_presentation(
+                        &presentation_id,
+                        signed_presentations.get(&presentation_id),
+                        &linkable_documents,
+                    )?;
                     added.push(LinkedVerifiablePresentation {
                         url: linked_verifiable_presentation_url(&services.public_url, &presentation_id)?,
                         presentation_id,

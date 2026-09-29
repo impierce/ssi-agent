@@ -124,7 +124,7 @@ mod tests {
         document::aggregate::Document,
         service::lifecycle::{maintain_services, spawn_maintenance},
         services::{IdentityServices, LinkedVerifiablePresentationSource},
-        state::{initialize_documents, query_all_documents, IdentityState},
+        state::{initialize_documents, IdentityState},
     };
     use agent_secret_manager::subject::{StorageKey, Subject};
     use agent_shared::config::{config, ApplicationConfiguration, SupportedDidMethod, ToggleOptions};
@@ -144,7 +144,6 @@ mod tests {
         presentation::{JwtPresentationOptions, PresentationBuilder},
         validator::JwtCredentialValidationOptions,
     };
-    use identity_did::CoreDID;
     use identity_document::document::CoreDocument;
     use jsonwebtoken::{Algorithm, Header};
     use oid4vc_core::{verifier::SignatureVerifier, Sign as _, Subject as _};
@@ -157,7 +156,7 @@ mod tests {
         collections::HashMap,
         sync::{
             atomic::{AtomicBool, AtomicI64, Ordering},
-            Arc, Mutex, Weak,
+            Arc, Mutex,
         },
     };
     use tower::ServiceExt;
@@ -207,31 +206,15 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
     struct TestLinkedVerifiablePresentationSource {
         presentations: Mutex<HashMap<String, Jwt>>,
-        state: Weak<IdentityState>,
     }
 
     #[async_trait::async_trait]
     impl LinkedVerifiablePresentationSource for TestLinkedVerifiablePresentationSource {
         async fn signed_presentation(&self, presentation_id: &str) -> anyhow::Result<Option<Jwt>> {
             Ok(self.presentations.lock().unwrap().get(presentation_id).cloned())
-        }
-
-        async fn holder_document(&self, holder: &CoreDID) -> anyhow::Result<Option<Document>> {
-            let state = self
-                .state
-                .upgrade()
-                .ok_or_else(|| anyhow::anyhow!("identity state dropped"))?;
-            Ok(query_all_documents(&state, |(_, document)| {
-                document
-                    .document
-                    .as_ref()
-                    .is_some_and(|document| document.id() == holder)
-            })
-            .await?
-            .into_values()
-            .next())
         }
     }
 
@@ -267,6 +250,7 @@ mod tests {
             .into();
             let clock = Arc::new(AtomicI64::new(Timestamp::now_utc().to_unix()));
             let cname = Arc::new(StubCnameResolver::default());
+            let presentations = Arc::new(TestLinkedVerifiablePresentationSource::default());
             let mut services = IdentityServices::new(
                 Arc::new(Subject::test_subject().await),
                 configuration.public_url.clone(),
@@ -274,6 +258,7 @@ mod tests {
             );
             services.allow_local_network_outbound = true;
             services.cname_resolver = cname.clone();
+            services.linked_verifiable_presentations = presentations.clone();
             services.linkage_clock = {
                 let clock = clock.clone();
                 Arc::new(move || Timestamp::from_unix(clock.load(Ordering::SeqCst)).unwrap())
@@ -290,17 +275,6 @@ mod tests {
             let authorization = Arc::new(RecordingAuthorization::default());
             state.authorization_checker = authorization.clone();
             let state = Arc::new(state);
-            let presentations = Arc::new(TestLinkedVerifiablePresentationSource {
-                presentations: Mutex::new(HashMap::new()),
-                state: Arc::downgrade(&state),
-            });
-            assert!(
-                state
-                    .services
-                    .set_linked_verifiable_presentation_source(presentations.clone())
-                    .is_ok(),
-                "linked presentation source already initialized"
-            );
             let app = crate::app_with_base_path(
                 crate::ApiState {
                     identity_state: Some(state.clone()),
@@ -332,10 +306,11 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            self.create_presentation_for(presentation_id, &holder).await;
+            self.create_presentation_for(presentation_id, &[&holder]).await;
         }
 
-        async fn create_presentation_for(&self, presentation_id: &str, credential_subject: &str) {
+        /// Signs a presentation by the deployment's `did:web` holder with one credential per subject.
+        async fn create_presentation_for(&self, presentation_id: &str, credential_subjects: &[&str]) {
             let method = SupportedDidMethod::Web.to_string();
             let algorithm = Algorithm::EdDSA;
             let holder = self
@@ -345,20 +320,21 @@ mod tests {
                 .identifier(&method, algorithm)
                 .await
                 .unwrap();
-            let credential = CredentialBuilder::new(Object::new())
-                .issuer(IdentityUrl::parse(holder.as_str()).unwrap())
-                .subject(CredentialSubject::with_id(
-                    IdentityUrl::parse(credential_subject).unwrap(),
-                ))
-                .build()
-                .unwrap()
-                .serialize_jwt(Default::default())
-                .unwrap();
-            let unsigned_credential = format!("e30.{}.signature", URL_SAFE_NO_PAD.encode(credential.as_bytes()));
-            let presentation = PresentationBuilder::new(IdentityUrl::parse(&holder).unwrap(), Object::new())
-                .credential(Jwt::from(unsigned_credential))
-                .build()
-                .unwrap();
+            let mut presentation = PresentationBuilder::new(IdentityUrl::parse(&holder).unwrap(), Object::new());
+            for credential_subject in credential_subjects {
+                let credential = CredentialBuilder::new(Object::new())
+                    .issuer(IdentityUrl::parse(holder.as_str()).unwrap())
+                    .subject(CredentialSubject::with_id(
+                        IdentityUrl::parse(*credential_subject).unwrap(),
+                    ))
+                    .build()
+                    .unwrap()
+                    .serialize_jwt(Default::default())
+                    .unwrap();
+                let unsigned_credential = format!("e30.{}.signature", URL_SAFE_NO_PAD.encode(credential.as_bytes()));
+                presentation = presentation.credential(Jwt::from(unsigned_credential));
+            }
+            let presentation = presentation.build().unwrap();
             let payload = presentation.serialize_jwt(&JwtPresentationOptions::default()).unwrap();
             let kid = self.state.services.subject.key_id(&method, algorithm).await.unwrap();
             let header = Header {
@@ -693,6 +669,49 @@ mod tests {
 
     #[tokio::test]
     #[serial_test::serial]
+    async fn linked_verifiable_presentations_are_only_served_while_published() {
+        let fixture = Fixture::new().await;
+        fixture.create_presentation("published").await;
+        fixture.create_presentation("unpublished").await;
+        let served = |presentation_id: &'static str| {
+            let fixture = &fixture;
+            async move {
+                fixture
+                    .request(
+                        "GET",
+                        &format!("/unicore/linked-verifiable-presentations/{presentation_id}"),
+                        None,
+                    )
+                    .await
+            }
+        };
+
+        assert_eq!(served("published").await.0, 404);
+        fixture
+            .post(
+                "add-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["published"]})),
+                204,
+            )
+            .await;
+        let (status, body) = served("published").await;
+        assert_eq!(status, 200);
+        let expected = fixture.presentations.presentations.lock().unwrap()["published"].clone();
+        assert_eq!(String::from_utf8(body).unwrap(), expected.as_str());
+        assert_eq!(served("unpublished").await.0, 404);
+
+        fixture
+            .post(
+                "remove-linked-verifiable-presentations",
+                Some(json!({"presentationIds": ["published"]})),
+                204,
+            )
+            .await;
+        assert_eq!(served("published").await.0, 404);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
     async fn linked_verifiable_presentation_add_is_atomic_and_rejects_invalid_input() {
         let fixture = Fixture::new().await;
         fixture.create_presentation("valid").await;
@@ -714,21 +733,27 @@ mod tests {
         assert!(document.get("service").is_none());
 
         fixture
-            .create_presentation_for("wrong-subject", "did:example:somebody-else")
+            .create_presentation_for("wrong-subject", &["did:example:somebody-else"])
             .await;
-        let (_, invalid) = fixture
-            .request(
-                "POST",
-                "/unicore/v0/add-linked-verifiable-presentations",
-                Some(json!({"presentationIds": ["wrong-subject"]})),
-            )
-            .await;
-        let invalid: Value = serde_json::from_slice(&invalid).unwrap();
-        assert_eq!(invalid["status"], 422);
-        assert!(invalid["type"]
-            .as_str()
-            .unwrap()
-            .ends_with("identity#presentation-invalid"));
+        fixture.create_presentation_for("no-credentials", &[]).await;
+        for presentation_id in ["wrong-subject", "no-credentials"] {
+            let (_, invalid) = fixture
+                .request(
+                    "POST",
+                    "/unicore/v0/add-linked-verifiable-presentations",
+                    Some(json!({"presentationIds": [presentation_id]})),
+                )
+                .await;
+            let invalid: Value = serde_json::from_slice(&invalid).unwrap();
+            assert_eq!(invalid["status"], 422, "{presentation_id}");
+            assert!(
+                invalid["type"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with("identity#presentation-invalid"),
+                "{presentation_id}"
+            );
+        }
 
         fixture
             .post(

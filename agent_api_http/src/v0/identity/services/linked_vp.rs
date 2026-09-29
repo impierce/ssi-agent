@@ -3,9 +3,13 @@ use agent_identity::{
     service::{command::ServiceCommand, lifecycle},
     state::IdentityState,
 };
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Path, State},
+    response::{IntoResponse, Response},
+    Json,
+};
 use http_api_problem::ApiError;
-use hyper::StatusCode;
+use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -44,7 +48,11 @@ pub(crate) async fn add_linked_verifiable_presentations(
     lifecycle::execute(
         &state,
         actor,
-        ServiceCommand::AddLinkedVerifiablePresentations { presentation_ids },
+        ServiceCommand::AddLinkedVerifiablePresentations {
+            presentation_ids,
+            signed_presentations: Default::default(),
+            linkable_documents: vec![],
+        },
     )
     .await
     .map_err(|error| error.into_api_error())?;
@@ -81,4 +89,24 @@ pub(crate) async fn remove_linked_verifiable_presentations(
     .await
     .map_err(|error| error.into_api_error())?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Serves a published presentation to anyone resolving its holder's DID document, without
+/// authentication. Presentations that are not published answer `404`.
+pub(crate) async fn linked_verifiable_presentation(
+    State(state): State<Arc<IdentityState>>,
+    Path(presentation_id): Path<String>,
+) -> Result<Response, ApiError> {
+    match lifecycle::published_linked_verifiable_presentation(&state, &presentation_id)
+        .await
+        .map_err(|error| error.into_api_error())?
+    {
+        Some(presentation) => Ok((
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/jwt")],
+            presentation.as_str().to_owned(),
+        )
+            .into_response()),
+        None => Err(ApiError::new(StatusCode::NOT_FOUND)),
+    }
 }

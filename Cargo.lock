@@ -152,7 +152,6 @@ dependencies = [
  "chrono",
  "did_manager",
  "identity_credential",
- "identity_did",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",

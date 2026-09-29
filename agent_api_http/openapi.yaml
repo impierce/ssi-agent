@@ -1119,6 +1119,10 @@ paths:
                 type: string
         '400':
           description: Invalid path parameter
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
         '404':
           description: Signed credential presentation not found
   /v0/list-all-templates:

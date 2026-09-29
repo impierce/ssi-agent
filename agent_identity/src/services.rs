@@ -25,7 +25,6 @@ use reqwest::{redirect, Client};
 use std::collections::{BTreeSet, HashMap};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::net::lookup_host;
 use tracing::{info, warn};
@@ -44,10 +43,20 @@ pub struct LinkedDid {
     pub domain_linkage_error: Option<String>,
 }
 
+/// Where the signed presentations that can be published as Linked Verifiable Presentations come from.
 #[async_trait::async_trait]
 pub trait LinkedVerifiablePresentationSource: Send + Sync {
     async fn signed_presentation(&self, presentation_id: &str) -> anyhow::Result<Option<Jwt>>;
-    async fn holder_document(&self, holder: &CoreDID) -> anyhow::Result<Option<Document>>;
+}
+
+/// Offers no presentations, for deployments and tests that do not publish any.
+pub struct NoLinkedVerifiablePresentations;
+
+#[async_trait::async_trait]
+impl LinkedVerifiablePresentationSource for NoLinkedVerifiablePresentations {
+    async fn signed_presentation(&self, _presentation_id: &str) -> anyhow::Result<Option<Jwt>> {
+        Ok(None)
+    }
 }
 
 impl LinkedDid {
@@ -71,6 +80,53 @@ pub(crate) fn document_can_link(document: &Document, iota_sponsoring_enabled: bo
             .is_none_or(|metadata| metadata.is_funded || iota_sponsoring_enabled)
 }
 
+/// Checks that a presentation can be published as a Linked Verifiable Presentation and returns its
+/// holder DID. The holder must own one of the `linkable_documents`, have signed the presentation,
+/// and be the subject of every credential in it; a presentation without credentials is rejected.
+pub(crate) fn validate_linked_verifiable_presentation(
+    presentation_id: &str,
+    presentation: Option<&Jwt>,
+    linkable_documents: &[CoreDocument],
+) -> Result<String, ServiceError> {
+    let invalid = |reason: String| ServiceError::PresentationInvalid(presentation_id.to_owned(), reason);
+    let presentation = presentation.ok_or_else(|| ServiceError::PresentationNotFound(presentation_id.to_owned()))?;
+    let holder = JwtPresentationValidatorUtils::extract_holder::<CoreDID>(presentation)
+        .map_err(|error| invalid(error.to_string()))?;
+    let holder_document = linkable_documents
+        .iter()
+        .find(|document| document.id() == &holder)
+        .ok_or_else(|| {
+            invalid(format!(
+                "holder DID `{holder}` has no enabled document that can publish services"
+            ))
+        })?;
+    let decoded: DecodedJwtPresentation<Jwt> = JwtPresentationValidator::with_signature_verifier(SignatureVerifier)
+        .validate(
+            presentation,
+            holder_document,
+            &JwtPresentationValidationOptions::default(),
+        )
+        .map_err(|error| invalid(error.to_string()))?;
+    let credentials = decoded.presentation.verifiable_credential;
+    if credentials.is_empty() {
+        return Err(invalid("the presentation contains no credentials".to_owned()));
+    }
+    let holder_url = holder.to_string();
+    if credentials.iter().any(|credential_jwt| {
+        unverified_credential(credential_jwt).is_none_or(|credential| {
+            !credential
+                .credential_subject
+                .iter()
+                .any(|subject| subject.id.as_ref().is_some_and(|id| id.as_str() == holder_url))
+        })
+    }) {
+        return Err(invalid(format!(
+            "holder DID `{holder}` is not the subject of every embedded credential"
+        )));
+    }
+    Ok(holder_url)
+}
+
 /// Identity services.
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
@@ -84,7 +140,7 @@ pub struct IdentityServices {
     /// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
     pub allow_local_network_outbound: bool,
     pub iota_sponsoring_enabled: bool,
-    linked_verifiable_presentation_source: OnceLock<Arc<dyn LinkedVerifiablePresentationSource>>,
+    pub linked_verifiable_presentations: Arc<dyn LinkedVerifiablePresentationSource>,
 }
 
 impl IdentityServices {
@@ -97,66 +153,8 @@ impl IdentityServices {
             client: Client::new(),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
             iota_sponsoring_enabled,
-            linked_verifiable_presentation_source: OnceLock::new(),
+            linked_verifiable_presentations: Arc::new(NoLinkedVerifiablePresentations),
         }
-    }
-
-    pub fn set_linked_verifiable_presentation_source(
-        &self,
-        source: Arc<dyn LinkedVerifiablePresentationSource>,
-    ) -> Result<(), Arc<dyn LinkedVerifiablePresentationSource>> {
-        self.linked_verifiable_presentation_source.set(source)
-    }
-
-    pub async fn validate_local_verifiable_presentation(&self, presentation_id: &str) -> Result<String, ServiceError> {
-        let source = self
-            .linked_verifiable_presentation_source
-            .get()
-            .ok_or_else(|| ServiceError::PresentationNotFound(presentation_id.to_owned()))?;
-        let presentation = source
-            .signed_presentation(presentation_id)
-            .await
-            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?
-            .ok_or_else(|| ServiceError::PresentationNotFound(presentation_id.to_owned()))?;
-        let holder = JwtPresentationValidatorUtils::extract_holder::<CoreDID>(&presentation)
-            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?;
-        let local_document = source
-            .holder_document(&holder)
-            .await
-            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?
-            .filter(|document| document_can_link(document, self.iota_sponsoring_enabled))
-            .ok_or_else(|| {
-                ServiceError::PresentationInvalid(
-                    presentation_id.to_owned(),
-                    format!("holder DID `{holder}` has no enabled document that can publish services"),
-                )
-            })?;
-        let holder_document = local_document
-            .document
-            .as_ref()
-            .expect("publishable document has content");
-        let decoded: DecodedJwtPresentation<Jwt> = JwtPresentationValidator::with_signature_verifier(SignatureVerifier)
-            .validate(
-                &presentation,
-                holder_document,
-                &JwtPresentationValidationOptions::default(),
-            )
-            .map_err(|error| ServiceError::PresentationInvalid(presentation_id.to_owned(), error.to_string()))?;
-        let holder_url = holder.to_string();
-        if decoded.presentation.verifiable_credential.iter().any(|credential_jwt| {
-            unverified_credential(credential_jwt).is_none_or(|credential| {
-                !credential
-                    .credential_subject
-                    .iter()
-                    .any(|subject| subject.id.as_ref().is_some_and(|id| id.as_str() == holder_url))
-            })
-        }) {
-            return Err(ServiceError::PresentationInvalid(
-                presentation_id.to_owned(),
-                format!("holder DID `{holder}` is not the subject of every embedded credential"),
-            ));
-        }
-        Ok(holder_url)
     }
 
     #[cfg(feature = "test_utils")]
@@ -360,18 +358,9 @@ impl IdentityServices {
         url: &Url,
     ) -> anyhow::Result<(Vec<LinkedCredentialValidation>, Option<String>)> {
         let presentation_jwt = Jwt::from(self.fetch_linked_verifiable_presentation(url).await?);
-        self.validated_credentials_from_jwt(holder_document, &presentation_jwt)
-            .await
-    }
-
-    async fn validated_credentials_from_jwt(
-        &self,
-        holder_document: &CoreDocument,
-        presentation_jwt: &Jwt,
-    ) -> anyhow::Result<(Vec<LinkedCredentialValidation>, Option<String>)> {
         let validated: Result<DecodedJwtPresentation<Jwt>, _> =
             JwtPresentationValidator::with_signature_verifier(SignatureVerifier).validate(
-                presentation_jwt,
+                &presentation_jwt,
                 holder_document,
                 &JwtPresentationValidationOptions::default(),
             );
@@ -379,9 +368,9 @@ impl IdentityServices {
         let (credential_jwts, presentation_error) = match validated {
             Ok(presentation) => (presentation.presentation.verifiable_credential, None),
             Err(error) => {
-                warn!("Failed to validate linked presentation: {error}");
+                warn!("Failed to validate the linked presentation at '{url}': {error}");
                 (
-                    unverified_presented_credentials(presentation_jwt),
+                    unverified_presented_credentials(&presentation_jwt),
                     Some(error.to_string()),
                 )
             }

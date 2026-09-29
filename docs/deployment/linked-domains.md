@@ -64,6 +64,11 @@ domain themselves. The former `domain_linkage_enabled` setting is ignored with a
 | `POST /v0/add-linked-verifiable-presentations` | Publish presentations in addition to those already linked; body: `{"presentationIds":["presentation-1"]}`. |
 | `POST /v0/remove-linked-verifiable-presentations` | Withdraw presentations while retaining all other linked presentations; body: `{"presentationIds":["presentation-1"]}`. |
 
+A published presentation is served publicly, without authentication, at
+`/linked-verifiable-presentations/{presentationId}`. That URL answers `404` for any presentation
+that is not published, including one that has been withdrawn; the holder can still read it through
+the authenticated `GET /v0/holder/presentations/{presentationId}/signed`.
+
 Each entry in `origins` is either a bare host (`example.org`, read as `https://example.org`) or a full
 origin (`http://example.org:8080`). Only the origin is kept: any path is discarded, so
 `https://example.org/app/` and `https://example.org` link the same domain. IP addresses and opaque

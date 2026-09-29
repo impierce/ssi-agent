@@ -14,6 +14,7 @@ use crate::{
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
 use identity_did::DID as _;
+use identity_iota::credential::Jwt;
 use serde::Serialize;
 use shared_kernel::authorization::{
     Actor, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
@@ -55,6 +56,12 @@ pub async fn execute(
 
 async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> Result<(), ServiceManagementError> {
     let documents = query_all_documents(state, |_| true).await?;
+    let linkable_documents = || {
+        documents
+            .values()
+            .filter(|document| document_can_link(document, state.services.iota_sponsoring_enabled))
+            .filter_map(|document| document.document.as_ref())
+    };
     match &mut command {
         // Unlinking deliberately needs no verification methods: it keeps the remaining origins'
         // existing credentials rather than re-signing, so it still works once signing keys are gone.
@@ -64,12 +71,26 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
         | ServiceCommand::RenewLinkedDomainsCredentials {
             verification_methods, ..
         } => {
-            *verification_methods = documents
-                .values()
-                .filter(|document| document_can_link(document, state.services.iota_sponsoring_enabled))
-                .filter_map(|document| document.document.as_ref())
+            *verification_methods = linkable_documents()
                 .flat_map(|document| document.methods(None).into_iter().cloned())
                 .collect();
+        }
+        ServiceCommand::AddLinkedVerifiablePresentations {
+            presentation_ids,
+            signed_presentations,
+            linkable_documents: documents,
+        } => {
+            for presentation_id in presentation_ids.iter() {
+                if let Some(presentation) = state
+                    .services
+                    .linked_verifiable_presentations
+                    .signed_presentation(presentation_id)
+                    .await?
+                {
+                    signed_presentations.insert(presentation_id.clone(), presentation);
+                }
+            }
+            *documents = linkable_documents().cloned().collect();
         }
         _ => {}
     }
@@ -137,6 +158,26 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
         }
     }
     publish_decentrally_hosted_documents(state).await
+}
+
+/// The signed presentation behind a published Linked Verifiable Presentation. Presentations that
+/// were never published, or have been withdrawn, are not served even though the holder still has them.
+pub async fn published_linked_verifiable_presentation(
+    state: &IdentityState,
+    presentation_id: &str,
+) -> Result<Option<Jwt>, ServiceManagementError> {
+    let published = public_query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service)
+        .await
+        .map_err(anyhow::Error::from)?
+        .is_some_and(|service| service.is_published(presentation_id));
+    if !published {
+        return Ok(None);
+    }
+    Ok(state
+        .services
+        .linked_verifiable_presentations
+        .signed_presentation(presentation_id)
+        .await?)
 }
 
 async fn linked_domains(state: &IdentityState) -> anyhow::Result<Option<Service>> {
