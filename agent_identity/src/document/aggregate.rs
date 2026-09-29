@@ -1,5 +1,5 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
-use crate::document::openapi::{algorithm, core_document};
+use crate::document::openapi::{algorithm, DidDocument};
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
@@ -63,7 +63,7 @@ pub enum Status {
 pub struct Document {
     #[serde(rename = "id")]
     pub document_id: String,
-    #[schema(schema_with = core_document)]
+    #[schema(value_type = Option<DidDocument>)]
     pub document: Option<CoreDocument>,
     pub did_method: Option<SupportedDidMethod>,
     // Applicable only for DID documents whose methods mandate a fixed verification algorithm,

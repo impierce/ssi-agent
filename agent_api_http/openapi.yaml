@@ -2189,6 +2189,128 @@ components:
           type:
           - string
           - 'null'
+    DidDocument:
+      type: object
+      description: A DID document as defined by W3C DID Core.
+      required:
+      - id
+      properties:
+        alsoKnownAs:
+          type: array
+          items:
+            type: string
+            format: uri
+        assertionMethod:
+          type: array
+          items:
+            oneOf:
+            - type: string
+              description: A reference to a verification method.
+            - $ref: '#/components/schemas/DidVerificationMethod'
+        authentication:
+          type: array
+          items:
+            oneOf:
+            - type: string
+              description: A reference to a verification method.
+            - $ref: '#/components/schemas/DidVerificationMethod'
+        capabilityDelegation:
+          type: array
+          items:
+            oneOf:
+            - type: string
+              description: A reference to a verification method.
+            - $ref: '#/components/schemas/DidVerificationMethod'
+        capabilityInvocation:
+          type: array
+          items:
+            oneOf:
+            - type: string
+              description: A reference to a verification method.
+            - $ref: '#/components/schemas/DidVerificationMethod'
+        controller:
+          oneOf:
+          - type: string
+            description: The DID of the controller.
+          - type: array
+            items:
+              type: string
+              description: The DID of a controller.
+        id:
+          type: string
+          description: The DID subject.
+        keyAgreement:
+          type: array
+          items:
+            oneOf:
+            - type: string
+              description: A reference to a verification method.
+            - $ref: '#/components/schemas/DidVerificationMethod'
+        service:
+          type: array
+          items:
+            $ref: '#/components/schemas/DidService'
+        verificationMethod:
+          type: array
+          items:
+            $ref: '#/components/schemas/DidVerificationMethod'
+      additionalProperties: true
+    DidService:
+      type: object
+      description: A service as defined by W3C DID Core.
+      required:
+      - id
+      - type
+      - serviceEndpoint
+      properties:
+        id:
+          type: string
+          description: The DID URL identifying the service.
+        serviceEndpoint:
+          oneOf:
+          - type: string
+            format: uri
+          - type: array
+            items:
+              type: string
+              format: uri
+          - type: object
+            description: A map of service endpoints.
+            additionalProperties: true
+        type:
+          oneOf:
+          - type: string
+            description: The service type, e.g. `LinkedDomains`.
+          - type: array
+            items:
+              type: string
+              description: A service type.
+      additionalProperties: true
+    DidVerificationMethod:
+      type: object
+      description: A verification method as defined by W3C DID Core.
+      required:
+      - id
+      - type
+      - controller
+      properties:
+        controller:
+          type: string
+          description: The DID of the controller.
+        id:
+          type: string
+          description: The DID URL identifying the verification method.
+        publicKeyJwk:
+          type: object
+          description: The public key as a JSON Web Key.
+          additionalProperties: true
+        publicKeyMultibase:
+          type: string
+          description: The multibase-encoded public key.
+        type:
+          type: string
+          description: The verification method type, e.g. `JsonWebKey2020`.
+      additionalProperties: true
     Display:
       type: object
       required:
@@ -2211,7 +2333,9 @@ components:
           - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
         document:
-          type: object
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DidDocument'
         id:
           type: string
         iota_metadata:
