@@ -118,7 +118,6 @@ pub(crate) enum ClaimDisclosabilitySchema {
     responses(
         (status = 200, description = "SD-JWT VC type metadata", body = TypeMetadataSchema),
         (status = 404, description = "The credential configuration does not exist"),
-        (status = 500, description = "The type metadata could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

@@ -169,6 +169,7 @@ impl IntoApiErrorExt for PublicOfferError {
 }
 
 pub enum PublicError {
+    AuthorizationError(OID4VCError<AuthorizationErrorResponse>),
     TokenError(OID4VCError<TokenErrorResponse>),
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
@@ -180,6 +181,11 @@ pub enum PublicError {
 impl axum::response::IntoResponse for PublicError {
     fn into_response(self) -> axum::response::Response {
         match self {
+            // Returned instead of redirecting, because the redirect URI cannot be trusted when the authorization
+            // request itself is invalid (RFC 6749, section 4.1.2.1).
+            PublicError::AuthorizationError(oid4vc_error) => {
+                (StatusCode::BAD_REQUEST, axum::Json(oid4vc_error)).into_response()
+            }
             PublicError::TokenError(oid4vc_error) => {
                 let status = oid4vc_error.error.status_code();
                 (status, axum::Json(oid4vc_error)).into_response()
@@ -313,6 +319,12 @@ impl From<StatusListError> for PublicError {
 impl From<CredentialErrorResponse> for PublicError {
     fn from(err: CredentialErrorResponse) -> Self {
         PublicError::CredentialError(OID4VCError::new(err))
+    }
+}
+
+impl From<AuthorizationErrorResponse> for PublicError {
+    fn from(err: AuthorizationErrorResponse) -> Self {
+        PublicError::AuthorizationError(OID4VCError::new(err))
     }
 }
 

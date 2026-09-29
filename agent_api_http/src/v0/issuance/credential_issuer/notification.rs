@@ -45,7 +45,6 @@ use tracing::info;
             example = json!({"error": "invalid_token"}),
         ),
         (status = 415, description = "The request body is not `application/json`"),
-        (status = 500, description = "The notification could not be stored"),
     )
 )]
 #[axum_macros::debug_handler]

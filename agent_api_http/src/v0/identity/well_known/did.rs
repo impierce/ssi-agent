@@ -27,7 +27,6 @@ use crate::v0::openapi::PROTOCOL_TAG;
     responses(
         (status = 200, description = "DID document", body = DidDocument),
         (status = 404, description = "No enabled `did:web` DID document exists"),
-        (status = 500, description = "The DID document could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

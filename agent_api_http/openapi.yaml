@@ -54,8 +54,6 @@ paths:
             application/yaml:
               schema:
                 type: string
-        '500':
-          description: OpenAPI document serialization failed
   /public/sponsoring-configuration:
     get:
       tags:
@@ -72,8 +70,6 @@ paths:
                 $ref: '#/components/schemas/SponsoringConfiguration'
         '404':
           description: No sponsoring IOTA address is configured
-        '500':
-          description: No display configuration is available
   /public/templates:
     get:
       tags:
@@ -426,7 +422,7 @@ paths:
           description: ''
         '400':
           description: Malformed JSON request body
-  /v0/connections/{id}:
+  /v0/connections/{connection_id}:
     get:
       tags:
       - Connections
@@ -434,7 +430,7 @@ paths:
       description: Retrieve a specific connection by its unique identifier.
       operationId: get_connection_by_id
       parameters:
-      - name: id
+      - name: connection_id
         in: path
         required: true
         schema:
@@ -980,7 +976,7 @@ paths:
           description: Malformed JSON request body
         '422':
           description: Request body does not match the expected schema, or the credential could not be decoded
-  /v0/holder/credentials/{holder_credential_id}:
+  /v0/holder/credentials/{credential_id}:
     get:
       tags:
       - Identity
@@ -989,7 +985,7 @@ paths:
       description: Retrieves a credential held by your organisation by its ID.
       operationId: get_holder_credential_by_id
       parameters:
-      - name: holder_credential_id
+      - name: credential_id
         in: path
         required: true
         schema:
@@ -1022,6 +1018,31 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OfferView'
+  /v0/holder/offers/{offer_id}:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get offer by ID
+      description: Retrieves an offer received by your organisation by its ID.
+      operationId: get_holder_offer_by_id
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferView'
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Offer not found
   /v0/holder/offers/{offer_id}/accept:
     post:
       tags:
@@ -1078,31 +1099,6 @@ paths:
           description: Credential offer not found
         '409':
           description: The credential offer has already been accepted or rejected
-  /v0/holder/offers/{received_offer_id}:
-    get:
-      tags:
-      - Identity
-      - Holder
-      summary: Get offer by ID
-      description: Retrieves an offer received by your organisation by its ID.
-      operationId: get_holder_offer_by_id
-      parameters:
-      - name: received_offer_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Offer retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OfferView'
-        '400':
-          description: Invalid path parameter
-        '404':
-          description: Offer not found
   /v0/holder/presentations:
     get:
       tags:

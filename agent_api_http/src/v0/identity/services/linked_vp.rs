@@ -109,7 +109,6 @@ pub(crate) async fn remove_linked_verifiable_presentations(
         (status = 200, description = "Signed credential presentation", body = String, content_type = "application/jwt"),
         (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "The presentation is not published"),
-        (status = 500, description = "The presentation could not be retrieved"),
     )
 )]
 pub(crate) async fn get_linked_verifiable_presentation_by_id(

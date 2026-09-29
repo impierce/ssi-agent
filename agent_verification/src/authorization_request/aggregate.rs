@@ -237,7 +237,9 @@ impl Aggregate for AuthorizationRequest {
                                 validated: true,
                             }])
                         } else {
-                            Err(MissingAuthorizationRequest)
+                            Err(InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
+                                "The authorization request is not an OID4VP authorization request."
+                            )))
                         }
                     }
                 }

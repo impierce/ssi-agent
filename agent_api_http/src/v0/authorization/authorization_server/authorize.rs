@@ -37,8 +37,7 @@ use std::sync::Arc;
             description = "Redirect to the consent page",
             headers(("Location" = String, description = "The consent page URI")),
         ),
-        (status = 400, description = "The query string is invalid"),
-        (status = 500, description = "The authorization request could not be processed"),
+        (status = 400, description = "The query string is invalid, or the authorization request is unknown, expired, or for another client"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -46,11 +45,7 @@ pub(crate) async fn authorize(
     State(state): State<Arc<AuthorizationState>>,
     Query(authorization_request): Query<AuthorizationRequestByReference>,
 ) -> Result<Response, PublicError> {
-    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?
-    {
+    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request).await? {
         OAuth2AuthorizationServiceResponse::RedirectToConsent(location) => Ok(Redirect::to(&location).into_response()),
         OAuth2AuthorizationServiceResponse::RedirectToClient(location) => {
             Ok((StatusCode::FOUND, [(header::LOCATION, location.to_string())]).into_response())

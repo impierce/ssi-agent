@@ -32,7 +32,6 @@ use std::sync::Arc;
         (status = 401, description = "The client is invalid", body = OID4VCError<TokenErrorResponse>),
         (status = 415, description = "The request body is not `application/x-www-form-urlencoded`"),
         (status = 422, description = "The request body is not a valid token request"),
-        (status = 500, description = "The access token could not be issued"),
     )
 )]
 #[axum_macros::debug_handler]

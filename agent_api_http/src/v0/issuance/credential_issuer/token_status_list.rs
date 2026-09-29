@@ -35,7 +35,6 @@ use crate::v0::openapi::PROTOCOL_TAG;
             headers(("Content-Encoding" = String, description = "Always `gzip`")),
         ),
         (status = 404, description = "The status list does not exist"),
-        (status = 500, description = "The status list token could not be created"),
     )
 )]
 pub async fn token_status_list(

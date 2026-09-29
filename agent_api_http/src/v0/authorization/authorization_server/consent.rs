@@ -29,8 +29,7 @@ use tracing::info;
     ),
     responses(
         (status = 200, description = "Consent page", body = String, content_type = "text/html"),
-        (status = 400, description = "The query string is invalid"),
-        (status = 500, description = "The consent page could not be rendered"),
+        (status = 400, description = "The query string is invalid, or the `request_uri` does not refer to a pending authorization request"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -43,10 +42,7 @@ pub(crate) async fn get_consent(
         client_name,
         authorization_details,
         request_uri,
-    } = ConsentQueryService::prepare_consent_page_data(&state, request_uri)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?;
+    } = ConsentQueryService::prepare_consent_page_data(&state, request_uri).await?;
 
     Ok(HtmlTemplate(ConsentPageTemplate {
         client_name,
@@ -80,9 +76,9 @@ pub struct ConsentForm {
             description = "Redirect to the client's redirect URI",
             headers(("Location" = String, description = "The client's redirect URI")),
         ),
+        (status = 400, description = "The `request_uri` does not refer to a pending authorization request"),
         (status = 415, description = "The request body is not `application/x-www-form-urlencoded`"),
         (status = 422, description = "The request body is not a valid consent form"),
-        (status = 500, description = "The consent could not be recorded"),
     )
 )]
 pub async fn post_consent(
@@ -93,11 +89,7 @@ pub async fn post_consent(
         consent_given,
     }): Form<ConsentForm>,
 ) -> Result<Response, PublicError> {
-    match ConsentService::handle_consent(&state, client_id, request_uri, consent_given)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?
-    {
+    match ConsentService::handle_consent(&state, client_id, request_uri, consent_given).await? {
         ConsentServiceResponse::Found(location) => {
             info!("Redirecting to location: {}", location);
 

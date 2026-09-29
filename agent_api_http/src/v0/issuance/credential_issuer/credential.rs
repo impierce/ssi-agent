@@ -65,7 +65,6 @@ const POLLING_INTERVAL_MS: u64 = 100;
         ),
         (status = 415, description = "The request body is not `application/json`"),
         (status = 422, description = "The request body is not a valid credential request"),
-        (status = 500, description = "The credentials could not be issued"),
     )
 )]
 #[axum_macros::debug_handler]

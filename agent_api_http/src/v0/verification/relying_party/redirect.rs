@@ -1,4 +1,4 @@
-use crate::handlers::public_command_handler;
+use crate::handlers::{public_command_handler, public_query_handler};
 use crate::v0::openapi::PROTOCOL_TAG;
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
@@ -57,8 +57,8 @@ pub(crate) struct VpTokenAuthorizationResponse {
     request_body(content = AuthorizationResponseForm, content_type = "application/x-www-form-urlencoded"),
     responses(
         (status = 200, description = "Authorization response verified"),
-        (status = 400, description = "The authorization response is malformed or has no `state`"),
-        (status = 500, description = "The authorization response could not be verified"),
+        (status = 400, description = "The authorization response is malformed, has no `state`, or is invalid"),
+        (status = 404, description = "No authorization request exists for the `state`"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -77,6 +77,14 @@ pub(crate) async fn redirect(
         // TODO: Return a standardized error response.
         return Err(ApiError::new(StatusCode::BAD_REQUEST));
     };
+
+    // Without this check, the command would run against a fresh aggregate for an unknown `state`.
+    public_query_handler(
+        &authorization_request_id,
+        &verification_state.query.authorization_request,
+    )
+    .await?
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
 
     let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
@@ -231,5 +239,48 @@ pub mod tests {
 
         // Assert that the event was dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);
+    }
+
+    #[rstest::rstest]
+    #[case::unknown_state("id_token=&state=unknown", false, StatusCode::NOT_FOUND)]
+    #[case::invalid_id_token("id_token=&state={state}", true, StatusCode::BAD_REQUEST)]
+    #[case::invalid_vp_token("vp_token=%7B%7D&state={state}", true, StatusCode::BAD_REQUEST)]
+    #[serial_test::serial]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn invalid_authorization_responses_are_client_errors(
+        #[case] form: &str,
+        #[case] existing_authorization_request: bool,
+        #[case] expected_status: StatusCode,
+    ) {
+        let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus, vec![]).await);
+
+        let mut app = router(verification_state);
+
+        let form = if existing_authorization_request {
+            let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+            let state = form_url_encoded_authorization_request.split("%2F").last().unwrap();
+            form.replace("{state}", state)
+        } else {
+            form.to_string()
+        };
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/redirect")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(form))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), expected_status);
     }
 }

@@ -28,7 +28,6 @@ use std::sync::Arc;
     responses(
         (status = 200, description = "Credential offer", body = CredentialOfferParameters),
         (status = 404, description = "The credential offer does not exist or cannot be resolved"),
-        (status = 500, description = "The credential offer could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

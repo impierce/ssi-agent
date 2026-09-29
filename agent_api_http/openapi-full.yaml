@@ -28,8 +28,6 @@ paths:
                 $ref: '#/components/schemas/DomainLinkageConfiguration'
         '404':
           description: No domain is linked
-        '500':
-          description: The DID Configuration resource could not be retrieved
   /.well-known/did.json:
     get:
       tags:
@@ -49,8 +47,6 @@ paths:
                 $ref: '#/components/schemas/DidDocument'
         '404':
           description: No enabled `did:web` DID document exists
-        '500':
-          description: The DID document could not be retrieved
   /.well-known/oauth-authorization-server:
     get:
       tags:
@@ -70,8 +66,6 @@ paths:
                 $ref: '#/components/schemas/AuthorizationServerMetadata'
         '404':
           description: The authorization server metadata is not configured
-        '500':
-          description: The authorization server metadata could not be retrieved
   /.well-known/openid-credential-issuer:
     get:
       tags:
@@ -91,8 +85,6 @@ paths:
                 $ref: '#/components/schemas/CredentialIssuerMetadata'
         '404':
           description: The credential issuer metadata is not configured
-        '500':
-          description: The credential issuer metadata could not be retrieved
   /auth/authorize:
     get:
       tags:
@@ -131,9 +123,7 @@ paths:
                 type: string
               description: The consent page URI
         '400':
-          description: The query string is invalid
-        '500':
-          description: The authorization request could not be processed
+          description: The query string is invalid, or the authorization request is unknown, expired, or for another client
   /auth/consent:
     get:
       tags:
@@ -157,9 +147,7 @@ paths:
               schema:
                 type: string
         '400':
-          description: The query string is invalid
-        '500':
-          description: The consent page could not be rendered
+          description: The query string is invalid, or the `request_uri` does not refer to a pending authorization request
     post:
       tags:
       - OAuth 2.0
@@ -181,12 +169,12 @@ paths:
               schema:
                 type: string
               description: The client's redirect URI
+        '400':
+          description: The `request_uri` does not refer to a pending authorization request
         '415':
           description: The request body is not `application/x-www-form-urlencoded`
         '422':
           description: The request body is not a valid consent form
-        '500':
-          description: The consent could not be recorded
   /auth/par:
     post:
       tags:
@@ -220,11 +208,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/PushedAuthorizationResponse'
         '400':
-          description: The request body is not `application/x-www-form-urlencoded`
+          description: The request body is not `application/x-www-form-urlencoded`, or the authorization request is invalid
+        '401':
+          description: The client is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OID4VCError_TokenErrorResponse'
         '422':
           description: The request body is not a valid authorization request
-        '500':
-          description: The authorization request could not be processed
   /auth/token:
     post:
       tags:
@@ -264,8 +256,6 @@ paths:
           description: The request body is not `application/x-www-form-urlencoded`
         '422':
           description: The request body is not a valid token request
-        '500':
-          description: The access token could not be issued
   /credential_offer:
     get:
       tags:
@@ -295,8 +285,6 @@ paths:
           description: Credential offer received
         '400':
           description: Neither parameter is present, or the credential offer is invalid
-        '500':
-          description: The credential offer could not be stored
   /healthz:
     get:
       tags:
@@ -337,8 +325,6 @@ paths:
                 type: string
         '404':
           description: The status list does not exist
-        '500':
-          description: The status list token could not be created
   /info:
     get:
       tags:
@@ -381,8 +367,6 @@ paths:
           description: Invalid path parameter
         '404':
           description: The presentation is not published
-        '500':
-          description: The presentation could not be retrieved
   /livez:
     get:
       tags:
@@ -406,8 +390,6 @@ paths:
             application/yaml:
               schema:
                 type: string
-        '500':
-          description: OpenAPI document serialization failed
   /openid4vci/credential:
     post:
       tags:
@@ -452,8 +434,6 @@ paths:
           description: The request body is not `application/json`
         '422':
           description: The request body is not a valid credential request
-        '500':
-          description: The credentials could not be issued
       security:
       - access_token: []
   /openid4vci/credential-offer/{offer_id}:
@@ -482,8 +462,6 @@ paths:
                 $ref: '#/components/schemas/CredentialOfferParameters'
         '404':
           description: The credential offer does not exist or cannot be resolved
-        '500':
-          description: The credential offer could not be retrieved
   /openid4vci/nonce:
     post:
       tags:
@@ -506,8 +484,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NonceResponse'
-        '500':
-          description: The nonce could not be generated
   /openid4vci/notification:
     post:
       tags:
@@ -549,8 +525,6 @@ paths:
                 error: invalid_token
         '415':
           description: The request body is not `application/json`
-        '500':
-          description: The notification could not be stored
       security:
       - access_token: []
   /public/sponsoring-configuration:
@@ -569,8 +543,6 @@ paths:
                 $ref: '#/components/schemas/SponsoringConfiguration'
         '404':
           description: No sponsoring IOTA address is configured
-        '500':
-          description: No display configuration is available
   /public/templates:
     get:
       tags:
@@ -618,9 +590,9 @@ paths:
         '200':
           description: Authorization response verified
         '400':
-          description: The authorization response is malformed or has no `state`
-        '500':
-          description: The authorization response could not be verified
+          description: The authorization response is malformed, has no `state`, or is invalid
+        '404':
+          description: No authorization request exists for the `state`
   /request/{request_id}:
     get:
       tags:
@@ -648,8 +620,6 @@ paths:
                 type: string
         '404':
           description: The authorization request does not exist
-        '500':
-          description: The authorization request could not be retrieved
   /v0/add-linked-domains:
     post:
       tags:
@@ -975,7 +945,7 @@ paths:
           description: ''
         '400':
           description: Malformed JSON request body
-  /v0/connections/{id}:
+  /v0/connections/{connection_id}:
     get:
       tags:
       - Connections
@@ -983,7 +953,7 @@ paths:
       description: Retrieve a specific connection by its unique identifier.
       operationId: get_connection_by_id
       parameters:
-      - name: id
+      - name: connection_id
         in: path
         required: true
         schema:
@@ -1529,7 +1499,7 @@ paths:
           description: Malformed JSON request body
         '422':
           description: Request body does not match the expected schema, or the credential could not be decoded
-  /v0/holder/credentials/{holder_credential_id}:
+  /v0/holder/credentials/{credential_id}:
     get:
       tags:
       - Identity
@@ -1538,7 +1508,7 @@ paths:
       description: Retrieves a credential held by your organisation by its ID.
       operationId: get_holder_credential_by_id
       parameters:
-      - name: holder_credential_id
+      - name: credential_id
         in: path
         required: true
         schema:
@@ -1571,6 +1541,31 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OfferView'
+  /v0/holder/offers/{offer_id}:
+    get:
+      tags:
+      - Identity
+      - Holder
+      summary: Get offer by ID
+      description: Retrieves an offer received by your organisation by its ID.
+      operationId: get_holder_offer_by_id
+      parameters:
+      - name: offer_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Offer retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferView'
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: Offer not found
   /v0/holder/offers/{offer_id}/accept:
     post:
       tags:
@@ -1627,31 +1622,6 @@ paths:
           description: Credential offer not found
         '409':
           description: The credential offer has already been accepted or rejected
-  /v0/holder/offers/{received_offer_id}:
-    get:
-      tags:
-      - Identity
-      - Holder
-      summary: Get offer by ID
-      description: Retrieves an offer received by your organisation by its ID.
-      operationId: get_holder_offer_by_id
-      parameters:
-      - name: received_offer_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Offer retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OfferView'
-        '400':
-          description: Invalid path parameter
-        '404':
-          description: Offer not found
   /v0/holder/presentations:
     get:
       tags:
@@ -2225,8 +2195,6 @@ paths:
                 $ref: '#/components/schemas/TypeMetadata'
         '404':
           description: The credential configuration does not exist
-        '500':
-          description: The type metadata could not be retrieved
   /version:
     get:
       tags:

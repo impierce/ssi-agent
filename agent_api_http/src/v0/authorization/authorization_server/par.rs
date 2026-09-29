@@ -13,8 +13,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use oid4vci::{
-    authorization_request::AuthorizationRequest, interactive_authorization_response::InteractiveAuthorizationResponse,
-    wallet::PushedAuthorizationResponse, InteractiveAuthorizationFollowUpRequest, InteractiveAuthorizationRequest,
+    authorization_request::AuthorizationRequest,
+    errors::{OID4VCError, TokenErrorResponse},
+    interactive_authorization_response::InteractiveAuthorizationResponse,
+    wallet::PushedAuthorizationResponse,
+    InteractiveAuthorizationFollowUpRequest, InteractiveAuthorizationRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -48,9 +51,12 @@ pub enum AuthorizationRequestDto {
             body = InteractiveAuthorizationResponse,
         ),
         (status = 201, description = "Pushed authorization response", body = PushedAuthorizationResponse),
-        (status = 400, description = "The request body is not `application/x-www-form-urlencoded`"),
+        (
+            status = 400,
+            description = "The request body is not `application/x-www-form-urlencoded`, or the authorization request is invalid",
+        ),
+        (status = 401, description = "The client is invalid", body = OID4VCError<TokenErrorResponse>),
         (status = 422, description = "The request body is not a valid authorization request"),
-        (status = 500, description = "The authorization request could not be processed"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -67,9 +73,7 @@ pub(crate) async fn par(
                     &state,
                     interactive_authorization_request,
                 )
-                .await
-                // TODO: implement proper error handling
-                .map_err(|_err| PublicError::InternalServerError)?;
+                .await?;
 
             Ok((StatusCode::OK, Json(interactive_authorization_response)).into_response())
         }
@@ -87,9 +91,7 @@ pub(crate) async fn par(
                     openid4vp_response,
                     code_verifier,
                 )
-                .await
-                // TODO: implement proper error handling
-                .map_err(|_err| PublicError::InternalServerError)?;
+                .await?;
 
             Ok((StatusCode::OK, Json(interactive_authorization_follow_up_response)).into_response())
         }
@@ -101,9 +103,7 @@ pub(crate) async fn par(
 
             let authorization_response =
                 PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
-                    .await
-                    // TODO: implement proper error handling
-                    .map_err(|_err| PublicError::InternalServerError)?;
+                    .await?;
 
             Ok((StatusCode::CREATED, Json(authorization_response)).into_response())
         }

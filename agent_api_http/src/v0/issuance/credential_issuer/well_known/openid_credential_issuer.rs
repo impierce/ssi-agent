@@ -28,7 +28,6 @@ use crate::v0::openapi::PROTOCOL_TAG;
     responses(
         (status = 200, description = "Credential issuer metadata", body = CredentialIssuerMetadata),
         (status = 404, description = "The credential issuer metadata is not configured"),
-        (status = 500, description = "The credential issuer metadata could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

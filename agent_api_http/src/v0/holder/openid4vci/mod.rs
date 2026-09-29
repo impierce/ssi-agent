@@ -36,7 +36,6 @@ pub(crate) struct CredentialOfferQuery {
     responses(
         (status = 200, description = "Credential offer received"),
         (status = 400, description = "Neither parameter is present, or the credential offer is invalid"),
-        (status = 500, description = "The credential offer could not be stored"),
     )
 )]
 #[axum_macros::debug_handler]

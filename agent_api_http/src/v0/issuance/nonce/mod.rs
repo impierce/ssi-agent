@@ -29,7 +29,6 @@ use std::sync::Arc;
             body = NonceResponse,
             headers(("Cache-Control" = String, description = "Always `no-store`")),
         ),
-        (status = 500, description = "The nonce could not be generated"),
     )
 )]
 #[axum_macros::debug_handler]

@@ -72,7 +72,6 @@ pub fn router(enabled: bool) -> Router {
     tags = ["OpenAPI"],
     responses(
         (status = 200, description = "OpenAPI document", body = String, content_type = "application/yaml"),
-        (status = 500, description = "OpenAPI document serialization failed"),
     )
 )]
 async fn openapi_yaml() -> Result<impl IntoResponse, StatusCode> {

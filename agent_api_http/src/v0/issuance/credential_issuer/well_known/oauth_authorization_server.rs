@@ -27,7 +27,6 @@ use crate::v0::openapi::PROTOCOL_TAG;
     responses(
         (status = 200, description = "Authorization server metadata", body = AuthorizationServerMetadata),
         (status = 404, description = "The authorization server metadata is not configured"),
-        (status = 500, description = "The authorization server metadata could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

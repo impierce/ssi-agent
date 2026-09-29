@@ -32,7 +32,6 @@ use crate::v0::openapi::PROTOCOL_TAG;
             content_type = "application/oauth-authz-req+jwt",
         ),
         (status = 404, description = "The authorization request does not exist"),
-        (status = 500, description = "The authorization request could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

@@ -109,7 +109,7 @@ pub(crate) async fn post_credentials(
 /// Retrieves a credential held by your organisation by its ID.
 #[utoipa::path(
     get,
-    path = "/holder/credentials/{holder_credential_id}",
+    path = "/holder/credentials/{credential_id}",
     operation_id = "get_holder_credential_by_id",
     tags = ["Identity", "Holder"],
     responses(

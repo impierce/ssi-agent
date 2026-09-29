@@ -28,7 +28,6 @@ pub struct SponsoringConfiguration {
     responses(
         (status = 200, description = "Sponsoring configuration retrieved successfully", body = SponsoringConfiguration),
         (status = 404, description = "No sponsoring IOTA address is configured"),
-        (status = 500, description = "No display configuration is available"),
     )
 )]
 #[axum_macros::debug_handler]

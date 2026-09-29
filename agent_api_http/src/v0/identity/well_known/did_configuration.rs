@@ -41,7 +41,6 @@ pub(crate) struct DomainLinkageConfigurationSchema {
     responses(
         (status = 200, description = "DID Configuration resource", body = DomainLinkageConfigurationSchema),
         (status = 404, description = "No domain is linked"),
-        (status = 500, description = "The DID Configuration resource could not be retrieved"),
     )
 )]
 #[axum_macros::debug_handler]

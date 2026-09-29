@@ -51,7 +51,7 @@ pub(crate) async fn offers(
 /// Retrieves an offer received by your organisation by its ID.
 #[utoipa::path(
     get,
-    path = "/holder/offers/{received_offer_id}",
+    path = "/holder/offers/{offer_id}",
     operation_id = "get_holder_offer_by_id",
     tags = ["Identity", "Holder"],
     responses(
