@@ -3,6 +3,8 @@ use crate::connection::{
     error::ConnectionError,
 };
 use crate::dns::CnameResolver;
+use crate::document::aggregate::{Document, Status};
+use crate::service::error::ServiceError;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
@@ -11,7 +13,8 @@ use identity_iota::{
     core::{FromJson, Object, ToJson},
     credential::{
         Credential, DecodedJwtPresentation, FailFast, Jwt, JwtCredentialValidationOptions, JwtCredentialValidator,
-        JwtCredentialValidatorUtils, JwtPresentationValidationOptions, JwtPresentationValidator, StatusCheck,
+        JwtCredentialValidatorUtils, JwtPresentationValidationOptions, JwtPresentationValidator,
+        JwtPresentationValidatorUtils, StatusCheck,
     },
     document::CoreDocument,
 };
@@ -40,6 +43,22 @@ pub struct LinkedDid {
     pub domain_linkage_error: Option<String>,
 }
 
+/// Where the signed presentations that can be published as Linked Verifiable Presentations come from.
+#[async_trait::async_trait]
+pub trait LinkedVerifiablePresentationSource: Send + Sync {
+    async fn signed_presentation(&self, presentation_id: &str) -> anyhow::Result<Option<Jwt>>;
+}
+
+/// Offers no presentations, for deployments and tests that do not publish any.
+pub struct NoLinkedVerifiablePresentations;
+
+#[async_trait::async_trait]
+impl LinkedVerifiablePresentationSource for NoLinkedVerifiablePresentations {
+    async fn signed_presentation(&self, _presentation_id: &str) -> anyhow::Result<Option<Jwt>> {
+        Ok(None)
+    }
+}
+
 impl LinkedDid {
     /// A DID whose domain linkage could not be established.
     pub fn unverified(did: DIDUrl, error: impl Into<String>) -> Self {
@@ -49,6 +68,63 @@ impl LinkedDid {
             domain_linkage_error: Some(error.into()),
         }
     }
+}
+
+pub(crate) fn document_can_link(document: &Document, iota_sponsoring_enabled: bool) -> bool {
+    document.document.is_some()
+        && document.status != Status::Disabled
+        && document.did_method.is_some_and(|method| method.supports_update())
+        && document
+            .iota_metadata
+            .as_ref()
+            .is_none_or(|metadata| metadata.is_funded || iota_sponsoring_enabled)
+}
+
+/// Checks that a presentation can be published as a Linked Verifiable Presentation and returns its
+/// holder DID. The holder must own one of the `linkable_documents`, have signed the presentation,
+/// and be the subject of every credential in it; a presentation without credentials is rejected.
+pub(crate) fn validate_linked_verifiable_presentation(
+    presentation_id: &str,
+    presentation: Option<&Jwt>,
+    linkable_documents: &[CoreDocument],
+) -> Result<String, ServiceError> {
+    let invalid = |reason: String| ServiceError::PresentationInvalid(presentation_id.to_owned(), reason);
+    let presentation = presentation.ok_or_else(|| ServiceError::PresentationNotFound(presentation_id.to_owned()))?;
+    let holder = JwtPresentationValidatorUtils::extract_holder::<CoreDID>(presentation)
+        .map_err(|error| invalid(error.to_string()))?;
+    let holder_document = linkable_documents
+        .iter()
+        .find(|document| document.id() == &holder)
+        .ok_or_else(|| {
+            invalid(format!(
+                "holder DID `{holder}` has no enabled document that can publish services"
+            ))
+        })?;
+    let decoded: DecodedJwtPresentation<Jwt> = JwtPresentationValidator::with_signature_verifier(SignatureVerifier)
+        .validate(
+            presentation,
+            holder_document,
+            &JwtPresentationValidationOptions::default(),
+        )
+        .map_err(|error| invalid(error.to_string()))?;
+    let credentials = decoded.presentation.verifiable_credential;
+    if credentials.is_empty() {
+        return Err(invalid("the presentation contains no credentials".to_owned()));
+    }
+    let holder_url = holder.to_string();
+    if credentials.iter().any(|credential_jwt| {
+        unverified_credential(credential_jwt).is_none_or(|credential| {
+            !credential
+                .credential_subject
+                .iter()
+                .any(|subject| subject.id.as_ref().is_some_and(|id| id.as_str() == holder_url))
+        })
+    }) {
+        return Err(invalid(format!(
+            "holder DID `{holder}` is not the subject of every embedded credential"
+        )));
+    }
+    Ok(holder_url)
 }
 
 /// Identity services.
@@ -64,6 +140,7 @@ pub struct IdentityServices {
     /// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
     pub allow_local_network_outbound: bool,
     pub iota_sponsoring_enabled: bool,
+    pub linked_verifiable_presentations: Arc<dyn LinkedVerifiablePresentationSource>,
 }
 
 impl IdentityServices {
@@ -76,6 +153,7 @@ impl IdentityServices {
             client: Client::new(),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
             iota_sponsoring_enabled,
+            linked_verifiable_presentations: Arc::new(NoLinkedVerifiablePresentations),
         }
     }
 
@@ -491,6 +569,19 @@ fn unverified_credential(credential_jwt: &Jwt) -> Option<Credential> {
             if let Some(value) = claims.get(claim) {
                 credential.insert(field.to_owned(), value.clone());
             }
+        }
+    }
+    if let Some(subject_id) = claims.get("sub") {
+        match credential.get_mut("credentialSubject") {
+            Some(serde_json::Value::Object(subject)) => {
+                subject.entry("id".to_owned()).or_insert_with(|| subject_id.clone());
+            }
+            Some(serde_json::Value::Array(subjects)) if subjects.len() == 1 => {
+                if let Some(serde_json::Value::Object(subject)) = subjects.first_mut() {
+                    subject.entry("id".to_owned()).or_insert_with(|| subject_id.clone());
+                }
+            }
+            _ => {}
         }
     }
     if !credential.contains_key("issuanceDate") {

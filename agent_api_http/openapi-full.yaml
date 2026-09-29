@@ -359,9 +359,9 @@ paths:
       - Protocol
       summary: Get a linked verifiable presentation
       description: |-
-        Retrieves the compact JWT representation of a presentation that is published through the `LinkedVerifiablePresentation`
-        service of a DID document, as defined by
-        [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
+        Serves a published presentation to anyone resolving its holder's DID document, without
+        authentication, as defined by [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
+        Presentations that are not published answer `404`.
       operationId: linked_verifiable_presentation
       parameters:
       - name: presentation_id
@@ -380,7 +380,7 @@ paths:
         '400':
           description: Invalid path parameter
         '404':
-          description: Signed credential presentation not found
+          description: The presentation is not published
         '500':
           description: The presentation could not be retrieved
   /livez:
@@ -689,6 +689,33 @@ paths:
           description: Operation forbidden
         '422':
           description: Request body does not match the expected schema
+  /v0/add-linked-verifiable-presentations:
+    post:
+      tags:
+      - Identity
+      summary: Add linked verifiable presentations
+      description: |-
+        Publishes the given presentations after the presentations, signatures, holders and credential
+        subjects have been validated. Existing IDs and duplicates are no-ops; new IDs retain request
+        order after presentations that were already published.
+      operationId: add_linked_verifiable_presentations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkedVerifiablePresentationsRequest'
+        required: true
+      responses:
+        '204':
+          description: Presentations published
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '422':
+          description: Empty list, missing presentation, or invalid presentation
   /v0/add-templates-to-catalog:
     post:
       tags:
@@ -972,30 +999,6 @@ paths:
           description: Invalid path parameter
         '404':
           description: Connection not found
-  /v0/create-linked-verifiable-presentation:
-    post:
-      tags:
-      - Identity
-      operationId: create_linked_verifiable_presentation
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LinkedVPEndpointRequest'
-        required: true
-      responses:
-        '204':
-          description: Linked presentation service created
-        '400':
-          description: Malformed JSON request body
-        '401':
-          description: Authentication required
-        '403':
-          description: Operation forbidden
-        '409':
-          description: Service already exists
-        '422':
-          description: Request body does not match the expected schema
   /v0/create-new-catalog:
     post:
       tags:
@@ -1741,6 +1744,10 @@ paths:
                 type: string
         '400':
           description: Invalid path parameter
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
         '404':
           description: Signed credential presentation not found
   /v0/list-all-templates:
@@ -2008,20 +2015,32 @@ paths:
           description: Operation forbidden
         '422':
           description: Request body does not match the expected schema
-  /v0/remove-linked-verifiable-presentation:
+  /v0/remove-linked-verifiable-presentations:
     post:
       tags:
       - Identity
-      operationId: remove_linked_verifiable_presentation
+      summary: Remove linked verifiable presentations
+      description: |-
+        Withdraws the given presentations while preserving all others in their existing order. Unknown
+        IDs and duplicates are no-ops; removing a holder's last presentation removes its DID service.
+      operationId: remove_linked_verifiable_presentations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkedVerifiablePresentationsRequest'
+        required: true
       responses:
         '204':
-          description: Linked presentation service removed
+          description: Presentations withdrawn
+        '400':
+          description: Malformed JSON request body
         '401':
           description: Authentication required
         '403':
           description: Operation forbidden
-        '404':
-          description: Service not found
+        '422':
+          description: Empty presentation ID list
   /v0/remove-templates-from-catalog:
     post:
       tags:
@@ -4178,7 +4197,22 @@ components:
         valid:
           type: boolean
           description: Whether every linked domain verified.
-    LinkedVPEndpointRequest:
+    LinkedVerifiablePresentation:
+      type: object
+      required:
+      - presentation_id
+      - holder
+      - url
+      properties:
+        holder:
+          type: string
+          description: The DID that signed the presentation and is the subject of its credentials.
+        presentation_id:
+          type: string
+        url:
+          type: string
+          description: The absolute URL at which the presentation was published when it was added.
+    LinkedVerifiablePresentationsRequest:
       type: object
       required:
       - presentationIds
@@ -4187,7 +4221,8 @@ components:
           type: array
           items:
             type: string
-          description: Presentation IDs served by the linked verifiable presentation service.
+          description: Presentation IDs to publish or withdraw.
+          minItems: 1
     LinkedVpValidation:
       type: object
       required:
@@ -4751,7 +4786,7 @@ components:
       type: object
       required:
       - id
-      - presentation_ids
+      - presentations
       - origins
       properties:
         id:
@@ -4766,10 +4801,10 @@ components:
             either of the specification's two shapes. This field is the one to read.
           example:
           - https://example.org/
-        presentation_ids:
+        presentations:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/LinkedVerifiablePresentation'
         resource:
           type:
           - object
