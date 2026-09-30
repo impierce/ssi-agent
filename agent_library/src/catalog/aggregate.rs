@@ -162,6 +162,10 @@ impl Aggregate for Catalog {
                 }]
             }
             DeleteCatalog { catalog_id } => {
+                if self.deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
+
                 vec![CatalogDeleted { id: catalog_id }]
             }
         };
@@ -449,6 +453,24 @@ pub mod catalog_tests {
                 catalog_id: catalog_id.clone(),
             })
             .then_expect_events(vec![CatalogEvent::CatalogDeleted { id: catalog_id }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_delete_catalog_twice(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
+        CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
+            .given(vec![
+                CatalogEvent::CatalogCreated {
+                    id: catalog_id.clone(),
+                    display,
+                    visibility,
+                },
+                CatalogEvent::CatalogDeleted { id: catalog_id.clone() },
+            ])
+            .when(CatalogCommand::DeleteCatalog {
+                catalog_id: catalog_id.clone(),
+            })
+            .then_expect_error_message(&CatalogError::CatalogNotFound(catalog_id).to_string())
     }
 }
 

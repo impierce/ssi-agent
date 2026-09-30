@@ -173,6 +173,7 @@ mod tests {
         Mock, MockServer, ResponseTemplate,
     };
 
+    #[test]
     #[serial]
     fn test_check_jwt_status_claim() {
         temp_env::with_vars(

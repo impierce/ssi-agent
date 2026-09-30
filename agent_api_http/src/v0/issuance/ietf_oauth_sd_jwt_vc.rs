@@ -215,3 +215,99 @@ fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::v0::issuance::{
+        credentials::tests::{create_test_template_with_status_and_format, setup_library_state},
+        router,
+    };
+    use agent_issuance::services::IssuanceServices;
+    use agent_library::template::aggregate::Status;
+    use agent_secret_manager::service::Service as _;
+    use agent_store::{in_memory::InMemory, issuance_state};
+    use axum::{
+        body::{to_bytes, Body},
+        extract::Request,
+        http::StatusCode,
+        Router,
+    };
+    use serde_json::Value;
+    use tower::ServiceExt;
+
+    /// Returns the issuance router and the ID of its only credential configuration, which uses the `vc+sd-jwt` format
+    /// since only SD-JWT credential configurations describe their claims.
+    async fn setup() -> (Router, String) {
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_status_and_format(&library_state, Status::Published, None, "vc+sd-jwt").await;
+
+        let credential_configuration_id = public_query_handler(SERVER_CONFIG_ID, &issuance_state.query.server_config)
+            .await
+            .unwrap()
+            .unwrap()
+            .credential_configurations
+            .into_keys()
+            .next()
+            .unwrap();
+
+        (router((issuance_state, library_state)), credential_configuration_id)
+    }
+
+    async fn get(app: &Router, encoded_credential_configuration_id: &str) -> (StatusCode, Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/vct/{encoded_credential_configuration_id}/1.0"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+    }
+
+    #[tokio::test]
+    async fn type_metadata_is_derived_from_the_credential_configuration() {
+        let (app, credential_configuration_id) = setup().await;
+
+        let (status, type_metadata) = get(&app, &URL_SAFE_NO_PAD.encode(&credential_configuration_id)).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            type_metadata,
+            serde_json::json!({
+                "name": credential_configuration_id,
+                "display": [{ "locale": "", "name": "Verifiable Credential" }],
+                "claims": [
+                    { "path": ["credentialSubject", "id"], "sd": "always" },
+                    { "path": ["credentialSubject", "first_name"], "sd": "always" },
+                    { "path": ["credentialSubject", "last_name"], "sd": "always" },
+                ]
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn unknown_or_malformed_credential_configuration_ids_are_not_found() {
+        let (app, _) = setup().await;
+
+        for encoded_credential_configuration_id in [URL_SAFE_NO_PAD.encode("unknown"), "a".to_string()] {
+            let (status, _) = get(&app, &encoded_credential_configuration_id).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{encoded_credential_configuration_id}");
+        }
+    }
+}

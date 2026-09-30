@@ -793,4 +793,27 @@ pub mod document_tests {
                 connection_id: "abcd1234".to_string(),
             }]);
     }
+
+    #[test]
+    fn test_remove_connection_twice() {
+        ConnectionTestFramework::with(IdentityServices::default())
+            .given(vec![
+                ConnectionEvent::ConnectionAdded {
+                    connection_id: "abcd1234".to_string(),
+                    display: None,
+                    url: "https://example.com".parse().unwrap(),
+                    dids: vec![],
+                    validations: vec![],
+                    first_interacted_at: None,
+                    last_interacted_at: None,
+                },
+                ConnectionEvent::ConnectionRemoved {
+                    connection_id: "abcd1234".to_string(),
+                },
+            ])
+            .when(ConnectionCommand::RemoveConnection {
+                connection_id: "abcd1234".to_string(),
+            })
+            .then_expect_error_message(&ConnectionError::ConnectionNotFound.to_string());
+    }
 }
