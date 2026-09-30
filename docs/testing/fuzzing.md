@@ -44,6 +44,7 @@ The stack uses its own compose project name and publishes the agent on port `309
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `FUZZ_SPEC` | `published` | `published` fuzzes `openapi.yaml`; `full` fuzzes `openapi-full.yaml`, which adds the standardized protocol endpoints |
 | `FUZZ_MAX_EXAMPLES` | `50` | Test cases generated per operation |
 | `FUZZ_SEED` | _(none)_ | Reproduce an earlier run |
 | `FUZZ_KEEP_UP` | `0` | Leave the stack running afterwards for inspection |
@@ -77,7 +78,21 @@ normally reach third parties. Two measures keep a run self-contained:
 - The runner excludes the three operations that reach out regardless of configuration:
   `GET /v0/verify-linked-domains` (resolves each linked origin's DID configuration and does a CNAME
   lookup), `POST /v0/connections` (fetches credential-issuer metadata from the supplied URL), and
-  `POST /v0/connections/sync-connection` (fetches state from the remote agent).
+  `POST /v0/connections/sync-connection` (fetches state from the remote agent). With
+  `FUZZ_SPEC=full`, it also excludes `GET /credential_offer`, which fetches the offer from
+  `credential_offer_uri` and the issuer's metadata.
+
+## Published or full specification
+
+The protocol endpoints are defined by external standards and rarely change, so the nightly run
+fuzzes the published specification only. Their handlers and error mapping can still change, so run
+the full specification after changing them, and before a release:
+
+```bash
+FUZZ_SPEC=full ./scripts/fuzz-openapi.sh
+```
+
+In CI, pick `full` for the `spec` input of a manual run.
 
 ## In CI
 
@@ -86,5 +101,6 @@ testing explores different inputs on every run, so a failure is a finding to tri
 verdict on whichever commit happened to trigger it — gating pull requests on it would produce flakes
 and, soon after, a disabled workflow.
 
-Trigger a run from the Actions tab; `max_examples`, `seed`, and `extra_args` are exposed as inputs.
+Trigger a run from the Actions tab; `spec`, `max_examples`, `seed`, and `extra_args` are exposed as
+inputs.
 Findings appear in the job summary, with the full reports attached as a `fuzz-reports` artifact.
