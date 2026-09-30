@@ -204,31 +204,12 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
     }
 
+    /// Fetches the domain's DID configuration and validates each linked DID against it.
+    ///
+    /// Returns an error when the DID configuration cannot be fetched or parsed, e.g. because its
+    /// owner has not linked the domain, so callers can tell that apart from a configuration whose
+    /// linked DIDs fail validation.
     pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
-        // TODO: This essentially disables domain linkage fetching when running locally, where there
-        // is usually nothing published to fetch and `DomainLinkageConfiguration::from_json_value`
-        // rejects the empty `linked_dids` list. The failure is swallowed and treated as no linked
-        // DIDs, rather than failing the whole connection flow.
-        // See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md` for more context and the future plan
-        // to use `rcgen`.
-        #[cfg(feature = "allow-localhost")]
-        {
-            match self.fetch_linked_dids_strict(url).await {
-                Ok(linked_dids) => Ok(linked_dids),
-                Err(_) => Ok(vec![]),
-            }
-        }
-
-        #[cfg(not(feature = "allow-localhost"))]
-        {
-            self.fetch_linked_dids_strict(url).await
-        }
-    }
-
-    /// Fetches and validates linked DIDs without the local-development fallback used by connection
-    /// discovery. Runtime self-verification must retain fetch failures so callers can distinguish a
-    /// missing deployment route from a published configuration that simply lacks a DID.
-    pub(crate) async fn fetch_linked_dids_strict(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
         let config = self.fetch_domain_linkage_configuration(url).await?;
         let linked_dids = extract_linked_dids(&config);
 
@@ -1313,7 +1294,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(not(feature = "allow-localhost"))]
     async fn test_fetch_linked_dids_empty_fails() {
         let mock_server = MockServer::start().await;
 
@@ -1584,38 +1564,5 @@ mod tests {
                     && record.lines().any(|line| line == format!("version = \"{version}\""))
             })
             .unwrap_or_else(|| panic!("missing {name} {version} from Cargo.lock"))
-    }
-
-    #[cfg(feature = "allow-localhost")]
-    pub mod allow_localhost_tests {
-        use super::*;
-
-        #[tokio::test]
-        // DISCLAIMER: The DID Configuration specification strictly requires a non-empty `linked_dids` array.
-        // This test asserts that the parser's validation error is intentionally swallowed, returning an
-        // empty list instead. This is a deliberate bypass to prevent local HTTP testing from failing
-        // due to domain linkage requirements. See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`
-        // for the full context.
-        async fn test_fetch_linked_dids_empty_succeeds_with_fallback() {
-            let mock_server = MockServer::start().await;
-
-            Mock::given(method("GET"))
-                .and(path("/.well-known/did-configuration.json"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "@context": "https://identity.foundation/.well-known/did-configuration/v1",
-                    "linked_dids": []
-                })))
-                .mount(&mock_server)
-                .await;
-
-            let subject = Arc::new(Subject::new().await);
-            let services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
-
-            let issuer_url: Url = mock_server.uri().parse().unwrap();
-            let result = services.fetch_linked_dids(&issuer_url).await;
-
-            // When allow-localhost is on, the error is swallowed and fallback is returned.
-            assert!(result.unwrap().is_empty());
-        }
     }
 }

@@ -8,6 +8,6 @@ pub enum ConnectionError {
     CredentialIssuerMetadataFetchFailed(String),
     #[error("Domain Missing for connection '{0}'")]
     MissingDomain(String),
-    #[error("Failed to fetch DID Configurations")]
+    #[error("{0}")]
     DIDResolutionFailed(String),
 }
