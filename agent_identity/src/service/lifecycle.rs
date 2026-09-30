@@ -276,7 +276,7 @@ pub async fn verify(
                 vec!["no Domain Linkage Credential was issued for this origin".to_string()],
             )
         } else {
-            match state.services.fetch_linked_dids_strict(&origin).await {
+            match state.services.fetch_linked_dids(&origin).await {
                 Ok(actual) => {
                     let problems: Vec<String> = expected_dids
                         .iter()

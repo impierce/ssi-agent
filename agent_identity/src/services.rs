@@ -21,7 +21,7 @@ use identity_iota::{
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
-use reqwest::{redirect, Client};
+use reqwest::{redirect, Client, StatusCode};
 use std::collections::{BTreeSet, HashMap};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -33,6 +33,18 @@ use url::{Host, Url};
 const OUTBOUND_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const LINKED_VP_RESPONSE_LIMIT: usize = 5 * 1024 * 1024;
 const DID_CONFIGURATION_RESPONSE_LIMIT: usize = 1024 * 1024;
+
+/// Why a domain's DID configuration could not be fetched or parsed.
+#[derive(Debug, thiserror::Error)]
+pub enum DidConfigurationError {
+    /// The domain does not publish a DID configuration (`404`/`410`), so it links no DIDs.
+    #[error("{0}")]
+    NotFound(String),
+    /// The DID configuration could not be retrieved or understood, which says nothing about the
+    /// DIDs the domain links.
+    #[error("{0}")]
+    Unavailable(String),
+}
 
 /// A DID extracted from a domain's DID configuration, together with the outcome of its domain
 /// linkage verification.
@@ -204,31 +216,12 @@ impl IdentityServices {
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
     }
 
-    pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
-        // TODO: This essentially disables domain linkage fetching when running locally, where there
-        // is usually nothing published to fetch and `DomainLinkageConfiguration::from_json_value`
-        // rejects the empty `linked_dids` list. The failure is swallowed and treated as no linked
-        // DIDs, rather than failing the whole connection flow.
-        // See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md` for more context and the future plan
-        // to use `rcgen`.
-        #[cfg(feature = "allow-localhost")]
-        {
-            match self.fetch_linked_dids_strict(url).await {
-                Ok(linked_dids) => Ok(linked_dids),
-                Err(_) => Ok(vec![]),
-            }
-        }
-
-        #[cfg(not(feature = "allow-localhost"))]
-        {
-            self.fetch_linked_dids_strict(url).await
-        }
-    }
-
-    /// Fetches and validates linked DIDs without the local-development fallback used by connection
-    /// discovery. Runtime self-verification must retain fetch failures so callers can distinguish a
-    /// missing deployment route from a published configuration that simply lacks a DID.
-    pub(crate) async fn fetch_linked_dids_strict(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
+    /// Fetches the domain's DID configuration and validates each linked DID against it.
+    ///
+    /// Returns an error when the DID configuration cannot be fetched or parsed, e.g. because its
+    /// owner has not linked the domain, so callers can tell that apart from a configuration whose
+    /// linked DIDs fail validation.
+    pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, DidConfigurationError> {
         let config = self.fetch_domain_linkage_configuration(url).await?;
         let linked_dids = extract_linked_dids(&config);
 
@@ -474,7 +467,7 @@ impl IdentityServices {
     async fn fetch_domain_linkage_configuration(
         &self,
         url: &Url,
-    ) -> Result<DomainLinkageConfiguration, ConnectionError> {
+    ) -> Result<DomainLinkageConfiguration, DidConfigurationError> {
         let mut url = url.clone();
         url.set_path("/.well-known/did-configuration.json");
 
@@ -483,30 +476,29 @@ impl IdentityServices {
         let addresses = resolve_outbound_url(&url, self.allow_local_network_outbound)
             .await
             .map_err(|error| {
-                ConnectionError::DIDResolutionFailed(format!(
-                    "Refused to fetch DID configuration from '{url}': {error}"
-                ))
+                DidConfigurationError::Unavailable(format!("Refused to fetch DID configuration from '{url}': {error}"))
             })?;
         let client = pinned_outbound_client(&url, &addresses)
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+            .map_err(|error| DidConfigurationError::Unavailable(error.to_string()))?;
         let response = client
             .get(url.as_str())
             .send()
             .await
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+            .map_err(|error| DidConfigurationError::Unavailable(error.to_string()))?;
         if response.status().is_redirection() {
-            return Err(ConnectionError::DIDResolutionFailed(format!(
+            return Err(DidConfigurationError::Unavailable(format!(
                 "DID configuration endpoint '{url}' responded with a redirect, which is not followed for security reasons"
             )));
         }
-        let response = response
-            .error_for_status()
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+        let response = response.error_for_status().map_err(|error| match error.status() {
+            Some(StatusCode::NOT_FOUND | StatusCode::GONE) => DidConfigurationError::NotFound(error.to_string()),
+            _ => DidConfigurationError::Unavailable(error.to_string()),
+        })?;
         let response = read_limited_response(response, DID_CONFIGURATION_RESPONSE_LIMIT, "DID configuration")
             .await
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
-        let mut response: serde_json::Value = serde_json::from_slice(&response)
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+            .map_err(|error| DidConfigurationError::Unavailable(error.to_string()))?;
+        let mut response: serde_json::Value =
+            serde_json::from_slice(&response).map_err(|error| DidConfigurationError::Unavailable(error.to_string()))?;
 
         // Remove all non-string values from `linked_dids` (JSON-LD)
         if let serde_json::Value::Object(ref mut root) = response {
@@ -517,7 +509,7 @@ impl IdentityServices {
         }
         // Deserialize to `DomainLinkageConfiguration`
         let config = DomainLinkageConfiguration::from_json_value(response).map_err(|_| {
-            ConnectionError::DIDResolutionFailed(
+            DidConfigurationError::Unavailable(
                 "failed to deserialize DomainLinkageConfiguration from JSON".to_string(),
                 // TODO: Add more detailed error info.
             )
@@ -1313,7 +1305,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(not(feature = "allow-localhost"))]
     async fn test_fetch_linked_dids_empty_fails() {
         let mock_server = MockServer::start().await;
 
@@ -1377,7 +1368,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ConnectionError::DIDResolutionFailed(message)
+            DidConfigurationError::Unavailable(message)
                 if message.contains("Refused to fetch DID configuration")
         ));
         assert!(mock_server.received_requests().await.unwrap().is_empty());
@@ -1409,7 +1400,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ConnectionError::DIDResolutionFailed(message)
+            DidConfigurationError::Unavailable(message)
                 if message.contains("responded with a redirect")
         ));
         assert_eq!(mock_server.received_requests().await.unwrap().len(), 1);
@@ -1433,7 +1424,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ConnectionError::DIDResolutionFailed(message)
+            DidConfigurationError::Unavailable(message)
                 if message.contains("response exceeds")
         ));
     }
@@ -1584,38 +1575,5 @@ mod tests {
                     && record.lines().any(|line| line == format!("version = \"{version}\""))
             })
             .unwrap_or_else(|| panic!("missing {name} {version} from Cargo.lock"))
-    }
-
-    #[cfg(feature = "allow-localhost")]
-    pub mod allow_localhost_tests {
-        use super::*;
-
-        #[tokio::test]
-        // DISCLAIMER: The DID Configuration specification strictly requires a non-empty `linked_dids` array.
-        // This test asserts that the parser's validation error is intentionally swallowed, returning an
-        // empty list instead. This is a deliberate bypass to prevent local HTTP testing from failing
-        // due to domain linkage requirements. See `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`
-        // for the full context.
-        async fn test_fetch_linked_dids_empty_succeeds_with_fallback() {
-            let mock_server = MockServer::start().await;
-
-            Mock::given(method("GET"))
-                .and(path("/.well-known/did-configuration.json"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "@context": "https://identity.foundation/.well-known/did-configuration/v1",
-                    "linked_dids": []
-                })))
-                .mount(&mock_server)
-                .await;
-
-            let subject = Arc::new(Subject::new().await);
-            let services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
-
-            let issuer_url: Url = mock_server.uri().parse().unwrap();
-            let result = services.fetch_linked_dids(&issuer_url).await;
-
-            // When allow-localhost is on, the error is swallowed and fallback is returned.
-            assert!(result.unwrap().is_empty());
-        }
     }
 }
