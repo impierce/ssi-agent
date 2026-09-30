@@ -468,6 +468,378 @@ pub mod server_config_tests {
                 credential_configurations,
             }]);
     }
+
+    async fn handle(
+        given: Vec<ServerConfigEvent>,
+        command: ServerConfigCommand,
+    ) -> Result<Vec<ServerConfigEvent>, ServerConfigError> {
+        ServerConfigTestFramework::with(IssuanceServices::default().await)
+            .given(given)
+            .when(command)
+            .inspect_result()
+    }
+
+    /// Applies the events to both the aggregate and its view, and asserts that the view stays an exact projection.
+    fn apply_all(events: Vec<ServerConfigEvent>) -> ServerConfig {
+        use crate::server_config::views::ServerConfigView;
+        use cqrs_es::{EventEnvelope, View as _};
+
+        let mut server_config = ServerConfig::default();
+        let mut view = ServerConfigView::default();
+        for (sequence, event) in events.into_iter().enumerate() {
+            view.update(&EventEnvelope {
+                aggregate_id: "server-config".to_string(),
+                sequence: sequence + 1,
+                payload: event.clone(),
+                metadata: HashMap::new(),
+            });
+            server_config.apply(event);
+        }
+
+        assert_eq!(
+            serde_json::to_value(&view).unwrap(),
+            serde_json::to_value(&server_config).unwrap()
+        );
+        server_config
+    }
+
+    fn initialized(
+        authorization_server_metadata: AuthorizationServerMetadata,
+        credential_issuer_metadata: CredentialIssuerMetadata,
+    ) -> ServerConfigEvent {
+        ServerConfigEvent::ServerMetadataInitialized {
+            authorization_server_metadata: Box::new(authorization_server_metadata),
+            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+            cryptographic_binding_methods_supported: cryptographic_binding_methods_supported(),
+            signing_algorithms_supported: signing_algorithms_supported(),
+        }
+    }
+
+    fn credential_configuration(format: &str) -> CredentialConfiguration {
+        CredentialConfiguration {
+            credential_configuration_id: credential_configuration_id(),
+            format: format.to_string(),
+            type_: vec!["VerifiableCredential".to_string()],
+            credential_metadata: CredentialMetadata {
+                display: None,
+                claims: None,
+            },
+            authorization: Authorization::default(),
+        }
+    }
+
+    /// Returns the events of a server config holding a single `jwt_vc_json` credential configuration.
+    async fn with_credential_configuration(provisioned: bool) -> Vec<ServerConfigEvent> {
+        let initialized = initialized(
+            *authorization_server_metadata(static_issuer_url()),
+            *credential_issuer_metadata(static_issuer_url()),
+        );
+        let updated = handle(
+            vec![initialized.clone()],
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration: credential_configuration("jwt_vc_json"),
+                provisioned,
+            },
+        )
+        .await
+        .unwrap();
+
+        [vec![initialized], updated].concat()
+    }
+
+    #[rstest]
+    async fn updating_the_issuer_url_moves_every_endpoint() {
+        let old_url = static_issuer_url();
+        let new_url: url::Url = "https://new-domain.example.org/unicore/".parse().unwrap();
+        let initialized = initialized(
+            AuthorizationServerMetadata {
+                issuer: old_url.clone(),
+                authorization_endpoint: Some(old_url.join("auth/authorize").unwrap()),
+                token_endpoint: Some(old_url.join("auth/token").unwrap()),
+                pushed_authorization_request_endpoint: Some(old_url.join("auth/par").unwrap()),
+                interactive_authorization_endpoint: Some(old_url.join("auth/par").unwrap()),
+                ..Default::default()
+            },
+            CredentialIssuerMetadata {
+                credential_issuer: old_url.clone(),
+                credential_endpoint: old_url.join("openid4vci/credential").unwrap(),
+                nonce_endpoint: Some(old_url.join("openid4vci/nonce").unwrap()),
+                ..Default::default()
+            },
+        );
+
+        let events = handle(
+            vec![initialized.clone()],
+            ServerConfigCommand::UpdateIssuerUrl { url: new_url.clone() },
+        )
+        .await
+        .unwrap();
+        let server_config = apply_all([vec![initialized], events].concat());
+
+        let endpoint = |path: &str| Some(new_url.join(path).unwrap());
+        let authorization_server_metadata = server_config.authorization_server_metadata;
+        assert_eq!(authorization_server_metadata.issuer, new_url);
+        assert_eq!(
+            authorization_server_metadata.authorization_endpoint,
+            endpoint("auth/authorize")
+        );
+        assert_eq!(authorization_server_metadata.token_endpoint, endpoint("auth/token"));
+        assert_eq!(
+            authorization_server_metadata.pushed_authorization_request_endpoint,
+            endpoint("auth/par")
+        );
+        assert_eq!(
+            authorization_server_metadata.interactive_authorization_endpoint,
+            endpoint("auth/par")
+        );
+
+        let credential_issuer_metadata = server_config.credential_issuer_metadata;
+        assert_eq!(credential_issuer_metadata.credential_issuer, new_url);
+        assert_eq!(
+            Some(credential_issuer_metadata.credential_endpoint),
+            endpoint("openid4vci/credential")
+        );
+        assert_eq!(credential_issuer_metadata.nonce_endpoint, endpoint("openid4vci/nonce"));
+    }
+
+    #[rstest]
+    async fn updating_the_issuer_url_does_not_add_unsupported_endpoints() {
+        let initialized = initialized(
+            AuthorizationServerMetadata {
+                issuer: static_issuer_url(),
+                ..Default::default()
+            },
+            *credential_issuer_metadata(static_issuer_url()),
+        );
+
+        let events = handle(
+            vec![initialized.clone()],
+            ServerConfigCommand::UpdateIssuerUrl {
+                url: "https://new-domain.example.org/".parse().unwrap(),
+            },
+        )
+        .await
+        .unwrap();
+        let server_config = apply_all([vec![initialized], events].concat());
+
+        let authorization_server_metadata = server_config.authorization_server_metadata;
+        assert_eq!(authorization_server_metadata.authorization_endpoint, None);
+        assert_eq!(authorization_server_metadata.token_endpoint, None);
+        assert_eq!(
+            authorization_server_metadata.pushed_authorization_request_endpoint,
+            None
+        );
+        assert_eq!(authorization_server_metadata.interactive_authorization_endpoint, None);
+        assert_eq!(server_config.credential_issuer_metadata.nonce_endpoint, None);
+    }
+
+    #[rstest]
+    async fn updating_the_issuer_display() {
+        let initialized = initialized(
+            *authorization_server_metadata(static_issuer_url()),
+            *credential_issuer_metadata(static_issuer_url()),
+        );
+        let display = Some(vec![serde_json::json!({ "name": "UniCore", "locale": "en" })]);
+
+        let events = handle(
+            vec![initialized.clone()],
+            ServerConfigCommand::UpdateIssuerDisplay {
+                display: display.clone(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            apply_all([vec![initialized], events].concat())
+                .credential_issuer_metadata
+                .display,
+            display
+        );
+    }
+
+    #[rstest]
+    async fn binding_methods_and_signing_algorithms_apply_to_every_credential_configuration() {
+        let given = with_credential_configuration(false).await;
+
+        let binding_methods_updated = handle(
+            given.clone(),
+            ServerConfigCommand::UpdateCryptographicBindingMethods {
+                cryptographic_binding_methods_supported: vec!["did:web".to_string()],
+            },
+        )
+        .await
+        .unwrap();
+        let given = [given, binding_methods_updated].concat();
+
+        let signing_algorithms_updated = handle(
+            given.clone(),
+            ServerConfigCommand::UpdateSigningAlgorithms {
+                signing_algorithms_supported: vec![Algorithm::EdDSA],
+            },
+        )
+        .await
+        .unwrap();
+        let server_config = apply_all([given, signing_algorithms_updated].concat());
+
+        assert_eq!(server_config.cryptographic_binding_methods_supported, vec!["did:web"]);
+        assert_eq!(server_config.signing_algorithms_supported, vec![Algorithm::EdDSA]);
+
+        let (_, credential_configuration, _) = &server_config.credential_configurations[&credential_configuration_id()];
+        assert_eq!(
+            server_config
+                .credential_issuer_metadata
+                .credential_configurations_supported[&credential_configuration_id()],
+            *credential_configuration
+        );
+        assert_eq!(
+            credential_configuration.cryptographic_binding_methods_supported,
+            vec!["did:web"]
+        );
+        assert_eq!(
+            credential_configuration.credential_signing_alg_values_supported,
+            vec![AlgIdentifier::String("EdDSA".to_string())]
+        );
+        assert_eq!(
+            credential_configuration.proof_types_supported[&ProofType::Jwt].proof_signing_alg_values_supported,
+            vec![AlgIdentifier::String("EdDSA".to_string())]
+        );
+    }
+
+    #[rstest]
+    async fn sd_jwt_credential_configurations_are_supported() {
+        let initialized = initialized(
+            *authorization_server_metadata(static_issuer_url()),
+            *credential_issuer_metadata(static_issuer_url()),
+        );
+
+        for format in ["vc+sd-jwt", "dc+sd-jwt"] {
+            let events = handle(
+                vec![initialized.clone()],
+                ServerConfigCommand::UpdateCredentialConfiguration {
+                    credential_configuration: credential_configuration(format),
+                    provisioned: false,
+                },
+            )
+            .await
+            .unwrap();
+            let server_config = apply_all([vec![initialized.clone()], events].concat());
+
+            let (_, credential_configuration, _) =
+                &server_config.credential_configurations[&credential_configuration_id()];
+            let credential_configuration = serde_json::to_value(credential_configuration).unwrap();
+            assert_eq!(credential_configuration["format"], format);
+
+            if format == "dc+sd-jwt" {
+                let vct = format!("vct/{}/0", URL_SAFE_NO_PAD.encode(credential_configuration_id()));
+                assert!(
+                    credential_configuration["vct"].as_str().unwrap().ends_with(&vct),
+                    "{credential_configuration}"
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    async fn unsupported_credential_formats_are_rejected() {
+        let result = handle(
+            vec![initialized(
+                *authorization_server_metadata(static_issuer_url()),
+                *credential_issuer_metadata(static_issuer_url()),
+            )],
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration: credential_configuration("ldp_vc"),
+                provisioned: false,
+            },
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(ServerConfigError::UnsupportedCredentialFormatIdentifierError(_))
+        ));
+    }
+
+    #[rstest]
+    async fn provisioned_credential_configurations_cannot_be_changed_at_runtime() {
+        let given = with_credential_configuration(true).await;
+
+        let result = handle(
+            given.clone(),
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration: credential_configuration("jwt_vc_json"),
+                provisioned: false,
+            },
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ServerConfigError::UpdateProvisionedCredentialConfigurationError)
+        ));
+
+        let result = handle(
+            given.clone(),
+            ServerConfigCommand::RemoveCredentialConfiguration {
+                credential_configuration_id: credential_configuration_id(),
+                provisioned: false,
+            },
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ServerConfigError::RemoveProvisionedCredentialConfigurationError)
+        ));
+
+        let events = handle(
+            given.clone(),
+            ServerConfigCommand::RemoveCredentialConfiguration {
+                credential_configuration_id: credential_configuration_id(),
+                provisioned: true,
+            },
+        )
+        .await
+        .unwrap();
+        let server_config = apply_all([given, events].concat());
+        assert!(server_config.credential_configurations.is_empty());
+        assert!(server_config
+            .credential_issuer_metadata
+            .credential_configurations_supported
+            .is_empty());
+    }
+
+    #[rstest]
+    async fn runtime_credential_configurations_can_be_replaced_and_removed() {
+        let given = with_credential_configuration(false).await;
+
+        let mut replacement = credential_configuration("jwt_vc_json");
+        replacement.type_.push("OpenBadgeCredential".to_string());
+        let events = handle(
+            given.clone(),
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration: replacement,
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+        let given = [given, events].concat();
+        let server_config = apply_all(given.clone());
+        assert_eq!(server_config.credential_configurations.len(), 1);
+        assert!(serde_json::to_string(&server_config.credential_configurations)
+            .unwrap()
+            .contains("OpenBadgeCredential"));
+
+        let events = handle(
+            given.clone(),
+            ServerConfigCommand::RemoveCredentialConfiguration {
+                credential_configuration_id: credential_configuration_id(),
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(apply_all([given, events].concat()).credential_configurations.is_empty());
+    }
 }
 
 #[cfg(feature = "test_utils")]

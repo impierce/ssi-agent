@@ -1176,6 +1176,95 @@ pub mod credential_tests {
             }])
     }
 
+    /// Decodes a base64url-encoded JSON segment of an SD-JWT.
+    fn decode_segment(segment: &str) -> serde_json::Value {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(segment).unwrap()).unwrap()
+    }
+
+    // SD-JWTs contain random salts, so instead of comparing them with a fixed SD-JWT, this checks their structure and
+    // that every `credentialSubject` property is concealed and can be disclosed with its original value.
+    // TODO: add a `dc+sd-jwt` case once signing no longer requires the unsigned DC SD-JWT to contain an `id`, which
+    // it never does.
+    #[rstest]
+    #[case::vc2_sd_jwt(UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(), VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone())]
+    #[case::obv3_sd_jwt(UNSIGNED_OPENBADGE_CREDENTIAL.clone(), OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone())]
+    #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone())]
+    #[serial_test::serial]
+    async fn test_sign_vc_sd_jwt_credential(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        #[case] unsigned_credential: serde_json::Value,
+        #[case] credential_configuration: CredentialConfigurationsSupportedObject,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        let events = CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: unsigned_credential.clone(),
+                },
+                credential_configuration: Box::new(credential_configuration),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .inspect_result()
+            .unwrap();
+
+        let [CredentialEvent::CredentialSigned {
+            signed_credential,
+            credential_status,
+            status: Status::Issued,
+            ..
+        }] = &events[..]
+        else {
+            panic!("unexpected events: {events:?}");
+        };
+        assert_eq!(credential_status.index, TESTINDEX);
+
+        let mut parts = signed_credential.as_str().unwrap().split('~');
+        let mut jwt = parts.next().unwrap().split('.');
+        let header = decode_segment(jwt.next().unwrap());
+        let payload = decode_segment(jwt.next().unwrap());
+        assert_eq!(header["typ"], "vc+sd-jwt");
+        assert!(header["kid"].is_string());
+        assert!(payload["iss"].is_string());
+        assert!(payload["jti"].is_string());
+        assert_eq!(payload["status"]["status_list"]["idx"], TESTINDEX);
+
+        let original_claims = unsigned_credential["credentialSubject"].as_object().unwrap();
+        let concealing_object = &payload["credentialSubject"];
+
+        let disclosures: std::collections::HashMap<String, serde_json::Value> = parts
+            .filter(|disclosure| !disclosure.is_empty())
+            .map(|disclosure| {
+                let disclosure = decode_segment(disclosure);
+                (disclosure[1].as_str().unwrap().to_string(), disclosure[2].clone())
+            })
+            .collect();
+        for (name, value) in original_claims {
+            assert_eq!(disclosures.get(name), Some(value), "claim `{name}` is not disclosable");
+            assert!(concealing_object.get(name).is_none(), "claim `{name}` is not concealed");
+        }
+        assert_eq!(
+            concealing_object["_sd"].as_array().unwrap().len(),
+            disclosures.len(),
+            "every disclosure has a digest"
+        );
+    }
+
     pub mod expiry_tests {
         use super::*;
 
