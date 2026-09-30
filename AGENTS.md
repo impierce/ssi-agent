@@ -71,6 +71,7 @@ The following commands can be used to assert code quality:
 - `cargo clippy --all-targets --all-features -- -D warnings` (check for code lints, treat all warnings as errors)
 - `cargo test generate_openapi_spec` (generate the OpenAPI specification by executing a test)
 - `cargo test --workspace` (run all tests)
+- `cargo test -p agent_application -p agent_event_publisher_nats --features agent_application/docker-tests,agent_event_publisher_nats/docker-tests` (run the integration tests that start PostgreSQL, MongoDB, NATS and `grafana/otel-lgtm` in Docker; requires a running Docker daemon)
 - `cargo llvm-cov clean --workspace && cargo llvm-cov --all-features --workspace --json --output-path coverage.raw.json` (generate code coverage report)
 
 ## Agent skills

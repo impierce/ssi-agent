@@ -53,5 +53,21 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 reqwest.workspace = true
 serde_norway.workspace = true
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
 tower.workspace = true
 
+[features]
+# Enables the integration tests that start their dependencies (databases, collectors) in Docker containers.
+docker-tests = []
+
+[[test]]
+name = "postgres"
+required-features = ["docker-tests"]
+
+[[test]]
+name = "mongodb"
+required-features = ["docker-tests"]
+
+[[test]]
+name = "telemetry"
+required-features = ["docker-tests"]

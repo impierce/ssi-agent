@@ -41,5 +41,8 @@ jobs:
       - name: Test (allow-localhost)
         run: cargo test -p agent_api_http -p agent_identity --features allow-localhost allow_localhost_tests
 
+      - name: Test (Docker-backed)
+        run: cargo test -p agent_application -p agent_event_publisher_nats --features agent_application/docker-tests,agent_event_publisher_nats/docker-tests
+
       - name: Generated files are unchanged
         run: git diff --exit-code
