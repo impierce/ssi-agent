@@ -16,23 +16,23 @@ get {
 example {
   name: 200 Response
   description: Application version information
-  
+
   request: {
     url: {{BASE_URL}}/version
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''

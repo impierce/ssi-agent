@@ -22,23 +22,23 @@ docs {
 example {
   name: 200 Response
   description: Verification result per linked domain
-  
+
   request: {
     url: {{BASE_URL}}/v0/verify-linked-domains
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -67,23 +67,23 @@ example {
 example {
   name: 401 Response
   description: Authentication required
-  
+
   request: {
     url: {{BASE_URL}}/v0/verify-linked-domains
     method: GET
     mode: none
   }
-  
+
   response: {
     status: {
       code: 401
       text: Unauthorized
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -92,23 +92,23 @@ example {
 example {
   name: 403 Response
   description: Operation forbidden
-  
+
   request: {
     url: {{BASE_URL}}/v0/verify-linked-domains
     method: GET
     mode: none
   }
-  
+
   response: {
     status: {
       code: 403
       text: Forbidden
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

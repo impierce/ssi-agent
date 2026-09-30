@@ -16,23 +16,23 @@ get {
 example {
   name: 200 Response
   description: Application is alive
-  
+
   request: {
     url: {{BASE_URL}}/healthz
     method: GET
     mode: none
   }
-  
+
   response: {
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

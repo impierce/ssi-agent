@@ -28,7 +28,7 @@ docs {
 example {
   name: 204 Response
   description: Presentations published
-  
+
   request: {
     url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
     method: POST
@@ -39,17 +39,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 204
       text: No Content
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -58,7 +58,7 @@ example {
 example {
   name: 400 Response
   description: Malformed JSON request body
-  
+
   request: {
     url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
     method: POST
@@ -69,17 +69,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -88,7 +88,7 @@ example {
 example {
   name: 401 Response
   description: Authentication required
-  
+
   request: {
     url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
     method: POST
@@ -99,17 +99,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 401
       text: Unauthorized
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -118,7 +118,7 @@ example {
 example {
   name: 403 Response
   description: Operation forbidden
-  
+
   request: {
     url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
     method: POST
@@ -129,17 +129,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 403
       text: Forbidden
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -148,7 +148,7 @@ example {
 example {
   name: 422 Response
   description: Empty list, missing presentation, or invalid presentation
-  
+
   request: {
     url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
     method: POST
@@ -159,17 +159,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 422
       text: Unprocessable Entity
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

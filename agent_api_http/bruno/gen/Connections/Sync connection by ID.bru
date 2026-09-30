@@ -25,7 +25,7 @@ docs {
 
 example {
   name: 200 Response
-  
+
   request: {
     url: {{BASE_URL}}/v0/connections/sync-connection
     method: POST
@@ -36,17 +36,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -55,7 +55,7 @@ example {
 example {
   name: 400 Response
   description: Malformed JSON request body
-  
+
   request: {
     url: {{BASE_URL}}/v0/connections/sync-connection
     method: POST
@@ -66,17 +66,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

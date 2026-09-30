@@ -21,23 +21,23 @@ docs {
 example {
   name: 200 Response
   description: All templates retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/list-all-templates
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -74,9 +74,9 @@ example {
 script:post-response {
   const items = res.getBody();
   if (Array.isArray(items) && items.length > 0) {
-    const lastId = items[items.length - 1]?.id;
-    if (lastId) {
-      bru.setVar('TEMPLATE_ID', lastId);
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('TEMPLATE_ID', newestId);
     }
   }
 }

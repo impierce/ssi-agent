@@ -14,7 +14,7 @@ get {
 }
 
 params:query {
-  ~did_method: 
+  ~did_method:
 }
 
 docs {
@@ -24,26 +24,26 @@ docs {
 example {
   name: 200 Response
   description: Documents retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/documents
     method: GET
     mode: none
     params:query: {
-      ~did_method: 
+      ~did_method:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -65,26 +65,26 @@ example {
 example {
   name: 400 Response
   description: Invalid query parameter
-  
+
   request: {
     url: {{BASE_URL}}/v0/documents
     method: GET
     mode: none
     params:query: {
-      ~did_method: 
+      ~did_method:
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -93,9 +93,9 @@ example {
 script:post-response {
   const items = res.getBody();
   if (Array.isArray(items) && items.length > 0) {
-    const lastId = items[items.length - 1]?.id;
-    if (lastId) {
-      bru.setVar('DOCUMENT_ID', lastId);
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('DOCUMENT_ID', newestId);
     }
   }
 }

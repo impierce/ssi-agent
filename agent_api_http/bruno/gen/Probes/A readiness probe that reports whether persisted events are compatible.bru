@@ -16,23 +16,23 @@ get {
 example {
   name: 200 Response
   description: Application is ready
-  
+
   request: {
     url: {{BASE_URL}}/readyz
     method: GET
     mode: none
   }
-  
+
   response: {
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -41,23 +41,23 @@ example {
 example {
   name: 503 Response
   description: Application is not ready
-  
+
   request: {
     url: {{BASE_URL}}/readyz
     method: GET
     mode: none
   }
-  
+
   response: {
     status: {
       code: 503
       text: Service Unavailable
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

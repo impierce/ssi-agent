@@ -20,23 +20,23 @@ docs {
 example {
   name: 200 Response
   description: Sponsoring configuration retrieved successfully
-  
+
   request: {
     url: {{BASE_URL}}/public/sponsoring-configuration
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -53,23 +53,23 @@ example {
 example {
   name: 404 Response
   description: No sponsoring IOTA address is configured
-  
+
   request: {
     url: {{BASE_URL}}/public/sponsoring-configuration
     method: GET
     mode: none
   }
-  
+
   response: {
     status: {
       code: 404
       text: Not Found
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

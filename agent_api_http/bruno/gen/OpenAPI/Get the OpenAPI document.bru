@@ -20,27 +20,27 @@ docs {
 example {
   name: 200 Response
   description: OpenAPI document
-  
+
   request: {
     url: {{BASE_URL}}/openapi.yaml
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/yaml
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

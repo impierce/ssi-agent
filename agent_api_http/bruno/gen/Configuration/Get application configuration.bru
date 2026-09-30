@@ -14,7 +14,7 @@ get {
 }
 
 params:query {
-  ~provisioned: 
+  ~provisioned:
 }
 
 docs {
@@ -25,26 +25,26 @@ docs {
 example {
   name: 200 Response
   description: Application configuration
-  
+
   request: {
     url: {{BASE_URL}}/v0/configuration
     method: GET
     mode: none
     params:query: {
-      ~provisioned: 
+      ~provisioned:
     }
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -57,26 +57,26 @@ example {
 example {
   name: 400 Response
   description: Invalid query parameter
-  
+
   request: {
     url: {{BASE_URL}}/v0/configuration
     method: GET
     mode: none
     params:query: {
-      ~provisioned: 
+      ~provisioned:
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

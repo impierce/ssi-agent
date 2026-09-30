@@ -22,13 +22,17 @@ populated by post-response scripts where possible and can also be set manually.
 Node.js with `npx` must be available. From the repository root, run:
 
 ```shell
-cd agent_api_http
 cargo test generate_openapi_spec
-./bruno/generate.sh
+./agent_api_http/bruno/generate.sh
 ```
 
+The `generate_openapi_spec` test lives in `agent_application`, so run it from the repository root
+(or with `-p agent_application`); running it inside `agent_api_http` matches no tests.
+
 The script imports the OpenAPI specification with `@usebruno/cli`, applies UniCore-specific
-patches, and synchronizes the result into `bruno/gen`.
+patches, and synchronizes the result into `bruno/gen`. If a patch rule no longer matches the
+generated requests (for example, because a path or path parameter was renamed in the spec), the
+script fails without touching `bruno/gen`.
 
 Treat the generated requests, folders, `bruno.json`, `collection.bru`, and the **Local
 development** environment in `gen` as generated files. Direct edits to them are overwritten the

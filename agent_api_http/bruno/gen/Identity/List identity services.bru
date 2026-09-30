@@ -16,23 +16,23 @@ get {
 example {
   name: 200 Response
   description: Identity services
-  
+
   request: {
     url: {{BASE_URL}}/v0/services
     method: GET
     mode: none
   }
-  
+
   response: {
     headers: {
       Content-Type: application/json
     }
-  
+
     status: {
       code: 200
       text: OK
     }
-  
+
     body: {
       type: json
       content: '''
@@ -54,6 +54,16 @@ example {
           }
         ]
       '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('SERVICE_ID', newestId);
     }
   }
 }

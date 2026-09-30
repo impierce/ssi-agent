@@ -22,7 +22,7 @@ body:json {
 example {
   name: 204 Response
   description: Public offer taken online successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/take-public-offer-online
     method: POST
@@ -33,17 +33,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 204
       text: No Content
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -52,7 +52,7 @@ example {
 example {
   name: 400 Response
   description: Malformed JSON request body
-  
+
   request: {
     url: {{BASE_URL}}/v0/take-public-offer-online
     method: POST
@@ -63,17 +63,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -82,7 +82,7 @@ example {
 example {
   name: 404 Response
   description: Public offer not found
-  
+
   request: {
     url: {{BASE_URL}}/v0/take-public-offer-online
     method: POST
@@ -93,17 +93,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 404
       text: Not Found
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -112,7 +112,7 @@ example {
 example {
   name: 422 Response
   description: Request body does not match the expected schema
-  
+
   request: {
     url: {{BASE_URL}}/v0/take-public-offer-online
     method: POST
@@ -123,17 +123,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 422
       text: Unprocessable Entity
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }

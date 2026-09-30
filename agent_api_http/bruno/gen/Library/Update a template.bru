@@ -38,7 +38,7 @@ docs {
 example {
   name: 204 Response
   description: Template updated successfully
-  
+
   request: {
     url: {{BASE_URL}}/v0/update-template
     method: POST
@@ -60,17 +60,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 204
       text: No Content
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -79,7 +79,7 @@ example {
 example {
   name: 400 Response
   description: Malformed JSON request body, or a missing template ID
-  
+
   request: {
     url: {{BASE_URL}}/v0/update-template
     method: POST
@@ -101,17 +101,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 400
       text: Bad Request
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -120,7 +120,7 @@ example {
 example {
   name: 404 Response
   description: Template not found
-  
+
   request: {
     url: {{BASE_URL}}/v0/update-template
     method: POST
@@ -142,17 +142,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 404
       text: Not Found
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
@@ -161,7 +161,7 @@ example {
 example {
   name: 422 Response
   description: Request body does not match the expected schema
-  
+
   request: {
     url: {{BASE_URL}}/v0/update-template
     method: POST
@@ -183,17 +183,17 @@ example {
       }
     }
   }
-  
+
   response: {
     status: {
       code: 422
       text: Unprocessable Entity
     }
-  
+
     body: {
       type: text
       content: '''
-  
+
       '''
     }
   }
