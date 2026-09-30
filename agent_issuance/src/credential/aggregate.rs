@@ -272,14 +272,13 @@ impl Aggregate for Credential {
                     uri: status_list_url.clone(),
                 }));
 
-                // The sensible default for the jti is equal to the credential root `id` field
-                let jti: Url = self
-                    .data
-                    .as_ref()
-                    .and_then(|data| data.raw.get("id"))
-                    .and_then(|id| id.as_str())
-                    .and_then(|id| Url::parse(id).ok())
-                    .ok_or(InvalidCredentialDataError)?;
+                // The sensible default for the jti is equal to the credential root `id` field. Credentials without one,
+                // such as DC SD-JWTs, get the same `urn:uuid:` identifier that W3C credentials receive as their `id`.
+                let jti: Url = match self.data.as_ref().and_then(|data| data.raw.get("id")) {
+                    Some(id) => id.as_str().and_then(|id| Url::parse(id).ok()),
+                    None => Url::parse(&format!("urn:uuid:{credential_id}")).ok(),
+                }
+                .ok_or(InvalidCredentialDataError)?;
 
                 let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
 
@@ -1091,29 +1090,6 @@ pub mod credential_tests {
             }])
     }
 
-    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`,
-    // which is used by the `.then_expect_events` method in the tests.
-    //
-    // #[case::dc_sd_jwt(
-    //     UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
-    //     DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     DC_SD_JWT.to_string()
-    // )]
-    // #[case::vc2_sd_jwt(
-    //     UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(),
-    //     VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     VC2_SD_JWT.to_string()
-    // )]
-    // #[case::obv3_sd_jwt(
-    //     UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
-    //     OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     OBV3_SD_JWT.to_string()
-    // )]
-    // #[case::elm_sd_jwt(
-    //     UNSIGNED_ELM_CREDENTIAL.clone(),
-    //     ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     ELM_SD_JWT.to_string()
-    // )]
     #[rstest]
     #[case::jwt_vc_json_vc1_1(
         UNSIGNED_VC1_1_CREDENTIAL.clone(),
@@ -1184,18 +1160,26 @@ pub mod credential_tests {
     }
 
     // SD-JWTs contain random salts, so instead of comparing them with a fixed SD-JWT, this checks their structure and
-    // that every `credentialSubject` property is concealed and can be disclosed with its original value.
-    // TODO: add a `dc+sd-jwt` case once signing no longer requires the unsigned DC SD-JWT to contain an `id`, which
-    // it never does.
+    // that every concealed claim can be disclosed with its original value.
     #[rstest]
-    #[case::vc2_sd_jwt(UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(), VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone())]
-    #[case::obv3_sd_jwt(UNSIGNED_OPENBADGE_CREDENTIAL.clone(), OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone())]
-    #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone())]
+    #[case::dc_sd_jwt(UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(), DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "dc+sd-jwt")]
+    #[case::vc2_sd_jwt(
+        UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(),
+        VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
+    #[case::obv3_sd_jwt(
+        UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
+        OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
+    #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "vc+sd-jwt")]
     #[serial_test::serial]
-    async fn test_sign_vc_sd_jwt_credential(
+    async fn test_sign_sd_jwt_credential(
         #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
+        #[case] typ: &str,
         credential_id: String,
         created_at: DateTime<Utc>,
     ) {
@@ -1213,7 +1197,7 @@ pub mod credential_tests {
                 expires_at: None,
             }])
             .when(CredentialCommand::SignCredential {
-                credential_id,
+                credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
                 proofs: None,
@@ -1238,14 +1222,25 @@ pub mod credential_tests {
         let mut jwt = parts.next().unwrap().split('.');
         let header = decode_segment(jwt.next().unwrap());
         let payload = decode_segment(jwt.next().unwrap());
-        assert_eq!(header["typ"], "vc+sd-jwt");
+        assert_eq!(header["typ"], typ);
         assert!(header["kid"].is_string());
         assert!(payload["iss"].is_string());
-        assert!(payload["jti"].is_string());
+        assert_eq!(payload["jti"], format!("urn:uuid:{credential_id}"));
         assert_eq!(payload["status"]["status_list"]["idx"], TESTINDEX);
 
-        let original_claims = unsigned_credential["credentialSubject"].as_object().unwrap();
-        let concealing_object = &payload["credentialSubject"];
+        // A DC SD-JWT conceals its claims at the top level, except registered claims such as `vct`. A W3C SD-JWT
+        // conceals the properties of its `credentialSubject`.
+        let (original_claims, concealing_object) = if typ == "dc+sd-jwt" {
+            assert_eq!(payload["vct"], unsigned_credential["vct"]);
+            let mut claims = unsigned_credential.as_object().unwrap().clone();
+            claims.remove("vct");
+            (claims, payload.clone())
+        } else {
+            (
+                unsigned_credential["credentialSubject"].as_object().unwrap().clone(),
+                payload["credentialSubject"].clone(),
+            )
+        };
 
         let disclosures: std::collections::HashMap<String, serde_json::Value> = parts
             .filter(|disclosure| !disclosure.is_empty())
@@ -1254,7 +1249,7 @@ pub mod credential_tests {
                 (disclosure[1].as_str().unwrap().to_string(), disclosure[2].clone())
             })
             .collect();
-        for (name, value) in original_claims {
+        for (name, value) in &original_claims {
             assert_eq!(disclosures.get(name), Some(value), "claim `{name}` is not disclosable");
             assert!(concealing_object.get(name).is_none(), "claim `{name}` is not concealed");
         }
@@ -1351,13 +1346,6 @@ pub mod test_utils {
     pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWxvZ28ucG5nIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.jCS4N963nNaXz0C-_cEfC_Nfaam6apAFhMCxgafHoOruoZXVQYyXVUXs6qii3tgnktZUQWcSuXXccIFy4jphCw";
     pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvZXh0ZW5zaW9ucy5qc29uIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwibG9nb191cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJjcmVkZW50aWFsU3ViamVjdCI6eyJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifSwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319fQ.7P_MfG49CYmmIM63i63i90uEr1XR9qoTh-1OgKGdW34rYmjfCeGTMwOweG_XrP1GMiR_CEm_eLDeG9V9HgsdCA";
     pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIkV1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sIm5hbWUiOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImNyZWRlbnRpYWxQcm9maWxlcyI6e30sImRpc3BsYXlQYXJhbWV0ZXIiOnsidGl0bGUiOnsiZW4iOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwifSwicHJpbWFyeUxhbmd1YWdlIjp7fSwibGFuZ3VhZ2UiOnt9LCJpbmRpdmlkdWFsRGlzcGxheSI6eyJsYW5ndWFnZSI6e30sImRpc3BsYXlEZXRhaWwiOnsicGFnZSI6MSwiaW1hZ2UiOnsiY29udGVudCI6IltQTEFDRUhPTERFUl0iLCJjb250ZW50RW5jb2RpbmciOnt9LCJjb250ZW50VHlwZSI6e319fX19LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9ldWRpdy5vcmcvY3JlZGVudGlhbHMvc2NoZW1hcy9FdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsVjNfMy5qc29uIiwidHlwZSI6Ikpzb25TY2hlbWEifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6IkNyZWRlbnRpYWxTdGF0dXMiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfSwiaXNzdWVkIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.a0HBjHyJATMTACRxLfJOjU5_pHQpjpCV_k67_HIKX1gpYSs6VRCmk2nw07uXnWcHD1JL-Fu3brdAMAYzwZ2gBA";
-
-    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`
-    //
-    // pub const DC_SD_JWT: &str = "placeholder";
-    // pub const VC2_SD_JWT: &str = "placeholder";
-    // pub const OBV3_SD_JWT: &str = "placeholder";
-    // pub const ELM_SD_JWT: &str = "placeholder";
 
     lazy_static! {
         pub static ref JWT_VC_JSON_OBv3_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
