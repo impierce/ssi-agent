@@ -7,6 +7,7 @@
 
 ![Check dependencies](https://github.com/impierce/ssi-agent/actions/workflows/audit.yaml/badge.svg)
 ![Check licenses](https://github.com/impierce/ssi-agent/actions/workflows/check-licenses.yaml/badge.svg)
+[![Coverage](https://codecov.io/gh/impierce/ssi-agent/branch/beta/graph/badge.svg)](https://app.codecov.io/gh/impierce/ssi-agent/tree/beta)
 
 <!-- The "Twelve-Factor App" badge is a playful reference to the conventions we try to follow. -->
 
