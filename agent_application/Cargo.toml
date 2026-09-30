@@ -46,5 +46,12 @@ tracing-subscriber.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+
+reqwest.workspace = true
 serde_norway.workspace = true
 tower.workspace = true
+
