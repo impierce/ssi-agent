@@ -14,7 +14,8 @@ use std::sync::Arc;
 use crate::handlers::public_query_handler;
 use crate::v0::openapi::PROTOCOL_TAG;
 
-/// OpenAPI representation of `identity_credential::domain_linkage::DomainLinkageConfiguration`.
+// OpenAPI representation of `identity_credential::domain_linkage::DomainLinkageConfiguration`.
+/// A DID Configuration resource that links a domain to DIDs.
 ///
 /// See the [DID Configuration Resource](https://identity.foundation/.well-known/resources/did-configuration/#did-configuration-resource).
 #[allow(dead_code)]

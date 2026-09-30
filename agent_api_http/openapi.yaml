@@ -2367,6 +2367,25 @@ components:
           enum:
           - ES256
           - EdDSA
+    DomainLinkageConfiguration:
+      type: object
+      description: |-
+        A DID Configuration resource that links a domain to DIDs.
+
+        See the [DID Configuration Resource](https://identity.foundation/.well-known/resources/did-configuration/#did-configuration-resource).
+      required:
+      - '@context'
+      - linked_dids
+      properties:
+        '@context':
+          type: string
+          example: https://identity.foundation/.well-known/did-configuration/v1
+        linked_dids:
+          type: array
+          items:
+            type: string
+          description: Domain Linkage Credentials in the JSON Web Token Proof Format.
+          minItems: 1
     DomainLinkageValidation:
       type: object
       required:
@@ -3127,6 +3146,15 @@ components:
           items:
             type: string
           default: []
+    ServiceResource:
+      oneOf:
+      - type: object
+        required:
+        - LinkedDomains
+        properties:
+          LinkedDomains:
+            $ref: '#/components/schemas/DomainLinkageConfiguration'
+      description: The resource published for a service, keyed by the service type.
     ServiceResponse:
       type: object
       required:
@@ -3151,15 +3179,13 @@ components:
           items:
             $ref: '#/components/schemas/LinkedVerifiablePresentation'
         resource:
-          type:
-          - object
-          - 'null'
-          description: 'TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.'
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ServiceResource'
         service:
-          type:
-          - object
-          - 'null'
-          description: 'TODO: Replace this generic object schema with a schema for `identity_document::service::Service`.'
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DidService'
     Source:
       type: string
       enum:

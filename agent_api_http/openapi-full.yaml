@@ -3599,7 +3599,7 @@ components:
     DomainLinkageConfiguration:
       type: object
       description: |-
-        OpenAPI representation of `identity_credential::domain_linkage::DomainLinkageConfiguration`.
+        A DID Configuration resource that links a domain to DIDs.
 
         See the [DID Configuration Resource](https://identity.foundation/.well-known/resources/did-configuration/#did-configuration-resource).
       required:
@@ -4750,6 +4750,15 @@ components:
           items:
             type: string
           default: []
+    ServiceResource:
+      oneOf:
+      - type: object
+        required:
+        - LinkedDomains
+        properties:
+          LinkedDomains:
+            $ref: '#/components/schemas/DomainLinkageConfiguration'
+      description: The resource published for a service, keyed by the service type.
     ServiceResponse:
       type: object
       required:
@@ -4774,15 +4783,13 @@ components:
           items:
             $ref: '#/components/schemas/LinkedVerifiablePresentation'
         resource:
-          type:
-          - object
-          - 'null'
-          description: 'TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.'
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ServiceResource'
         service:
-          type:
-          - object
-          - 'null'
-          description: 'TODO: Replace this generic object schema with a schema for `identity_document::service::Service`.'
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/DidService'
     Source:
       type: string
       enum:
@@ -5047,7 +5054,7 @@ components:
     TypeMetadata:
       type: object
       description: |-
-        OpenAPI representation of `identity_credential::sd_jwt_vc::metadata::TypeMetadata`.
+        Type metadata of an SD-JWT VC credential type.
 
         See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
       properties:

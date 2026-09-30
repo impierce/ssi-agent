@@ -17,7 +17,8 @@ use oid4vci::credential_issuer::credential_configurations_supported::{
 };
 use std::sync::Arc;
 
-/// OpenAPI representation of `identity_credential::sd_jwt_vc::metadata::TypeMetadata`.
+// OpenAPI representation of `identity_credential::sd_jwt_vc::metadata::TypeMetadata`.
+/// Type metadata of an SD-JWT VC credential type.
 ///
 /// See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
 #[allow(dead_code)]
