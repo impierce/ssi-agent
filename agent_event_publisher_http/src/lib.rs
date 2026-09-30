@@ -622,4 +622,87 @@ mod tests {
         // Assert that the event was not dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);
     }
+
+    #[test]
+    fn load_creates_a_publisher_for_every_aggregate_with_target_events() {
+        use agent_shared::config as c;
+
+        // Appended rather than overwriting publisher `0`, which `it_works` configures concurrently.
+        let target_url = "https://every-aggregate.example.com/events".to_string();
+        let disabled_target_url = "https://disabled.example.com/events".to_string();
+        let events = Events {
+            access_token: vec![c::AccessTokenEvent::AccessTokenIssued],
+            authorization_code: vec![c::AuthorizationCodeEvent::AuthorizationCodeCreated],
+            client: vec![c::ClientEvent::ClientRegistered],
+            oauth2_authorization_request: vec![c::OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated],
+            connection: vec![c::ConnectionEvent::ConnectionAdded],
+            document: vec![c::DocumentEvent::DocumentCreated],
+            profile: vec![c::ProfileEvent::ProfileCreated],
+            service: vec![c::ServiceEvent::LinkedDomainsAdded],
+            template: vec![c::TemplateEvent::TemplateCreated],
+            server_config: vec![c::ServerConfigEvent::ServerMetadataInitialized],
+            credential: vec![c::CredentialEvent::UnsignedCredentialCreated],
+            offer: vec![c::OfferEvent::CredentialOfferCreated],
+            nonce: vec![c::NonceEvent::NonceGenerated],
+            status_list: vec![c::StatusListEvent::StatusListCreated],
+            holder_credential: vec![c::HolderCredentialEvent::CredentialAdded],
+            presentation: vec![c::PresentationEvent::PresentationCreated],
+            received_offer: vec![c::ReceivedOfferEvent::CredentialOfferReceived],
+            authorization_request: vec![c::AuthorizationRequestEvent::AuthorizationRequestCreated],
+        };
+        {
+            let mut configuration = set_config();
+            for (enabled, target_url) in [(true, &target_url), (false, &disabled_target_url)] {
+                configuration.event_publishers.http.push(c::EventPublisherHttp {
+                    enabled,
+                    target_url: target_url.clone(),
+                    headers: None,
+                    events: events.clone(),
+                });
+            }
+        }
+
+        let publishers = EventPublisherHttp::load().unwrap();
+        let target_url_of = |publisher: &EventPublisherHttp| {
+            publisher
+                .offer
+                .as_ref()
+                .map(|offer| offer.target_url.clone())
+                .unwrap_or_default()
+        };
+        assert!(!publishers
+            .iter()
+            .any(|publisher| target_url_of(publisher) == disabled_target_url));
+        let mut publisher = publishers
+            .into_iter()
+            .find(|publisher| target_url_of(publisher) == target_url)
+            .unwrap();
+
+        assert_eq!(
+            publisher.offer.as_ref().unwrap().target_events,
+            vec!["CredentialOfferCreated".to_string()]
+        );
+        assert!(publisher.access_token().is_some());
+        assert!(publisher.authorization_code().is_some());
+        assert!(publisher.client().is_some());
+        assert!(publisher.oauth2_authorization_request().is_some());
+        assert!(publisher.connection().is_some());
+        assert!(publisher.document().is_some());
+        assert!(publisher.profile().is_some());
+        assert!(publisher.service().is_some());
+        assert!(publisher.template().is_some());
+        assert!(publisher.server_config().is_some());
+        assert!(publisher.credential().is_some());
+        assert!(publisher.offer().is_some());
+        assert!(publisher.nonce().is_some());
+        assert!(publisher.status_list().is_some());
+        assert!(publisher.holder_credential().is_some());
+        assert!(publisher.presentation().is_some());
+        assert!(publisher.received_offer().is_some());
+        assert!(publisher.authorization_request().is_some());
+        assert!(publisher.public_offer().is_none());
+
+        // Each publisher is handed out only once.
+        assert!(publisher.offer().is_none());
+    }
 }

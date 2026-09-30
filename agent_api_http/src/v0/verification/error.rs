@@ -44,7 +44,7 @@ impl IntoApiErrorExt for AuthorizationRequestError {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::error::tests::into_json_value;
+    use crate::error::tests::{assert_problems, into_json_value};
     use serde_json::json;
 
     #[tokio::test]
@@ -63,5 +63,39 @@ pub mod tests {
                 "detail": "Missing Authorization Request error"
             }),
         );
+    }
+
+    #[test]
+    fn every_authorization_request_error_maps_to_a_problem_type() {
+        use AuthorizationRequestError::*;
+
+        let unexpected = Some("unexpected#unexpected-error");
+        assert_problems([
+            (
+                AuthorizationRequestBuilderError(anyhow::anyhow!("error")),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                unexpected,
+            ),
+            (
+                MissingAuthorizationRequest,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                unexpected,
+            ),
+            (
+                AuthorizationRequestSigningError(anyhow::anyhow!("error")),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                unexpected,
+            ),
+            (
+                InvalidSIOPv2AuthorizationResponse(anyhow::anyhow!("error")),
+                StatusCode::BAD_REQUEST,
+                None,
+            ),
+            (
+                InvalidOID4VPAuthorizationResponse(anyhow::anyhow!("error")),
+                StatusCode::BAD_REQUEST,
+                None,
+            ),
+        ]);
     }
 }
