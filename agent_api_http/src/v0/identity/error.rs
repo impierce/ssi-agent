@@ -25,11 +25,6 @@ impl IntoApiErrorExt for ConnectionError {
                 .type_url(type_url("identity#missing-domain"))
                 .message(format!("Connection with id '{connection_id}' is missing a domain"))
                 .finish(),
-            DIDResolutionFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("DID Configurations could not be resolved")
-                .type_url(type_url("identity#did-config-failed"))
-                .message(format!("Failed to resolve DID Configurations from '{url}'"))
-                .finish(),
         }
     }
 }

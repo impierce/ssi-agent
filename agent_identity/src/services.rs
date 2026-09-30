@@ -34,6 +34,11 @@ const OUTBOUND_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const LINKED_VP_RESPONSE_LIMIT: usize = 5 * 1024 * 1024;
 const DID_CONFIGURATION_RESPONSE_LIMIT: usize = 1024 * 1024;
 
+/// Why a domain's DID configuration could not be fetched or parsed.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct DidConfigurationError(pub String);
+
 /// A DID extracted from a domain's DID configuration, together with the outcome of its domain
 /// linkage verification.
 #[derive(Debug, Clone, PartialEq)]
@@ -209,7 +214,7 @@ impl IdentityServices {
     /// Returns an error when the DID configuration cannot be fetched or parsed, e.g. because its
     /// owner has not linked the domain, so callers can tell that apart from a configuration whose
     /// linked DIDs fail validation.
-    pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, ConnectionError> {
+    pub async fn fetch_linked_dids(&self, url: &Url) -> Result<Vec<LinkedDid>, DidConfigurationError> {
         let config = self.fetch_domain_linkage_configuration(url).await?;
         let linked_dids = extract_linked_dids(&config);
 
@@ -455,7 +460,7 @@ impl IdentityServices {
     async fn fetch_domain_linkage_configuration(
         &self,
         url: &Url,
-    ) -> Result<DomainLinkageConfiguration, ConnectionError> {
+    ) -> Result<DomainLinkageConfiguration, DidConfigurationError> {
         let mut url = url.clone();
         url.set_path("/.well-known/did-configuration.json");
 
@@ -464,30 +469,28 @@ impl IdentityServices {
         let addresses = resolve_outbound_url(&url, self.allow_local_network_outbound)
             .await
             .map_err(|error| {
-                ConnectionError::DIDResolutionFailed(format!(
-                    "Refused to fetch DID configuration from '{url}': {error}"
-                ))
+                DidConfigurationError(format!("Refused to fetch DID configuration from '{url}': {error}"))
             })?;
-        let client = pinned_outbound_client(&url, &addresses)
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+        let client =
+            pinned_outbound_client(&url, &addresses).map_err(|error| DidConfigurationError(error.to_string()))?;
         let response = client
             .get(url.as_str())
             .send()
             .await
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+            .map_err(|error| DidConfigurationError(error.to_string()))?;
         if response.status().is_redirection() {
-            return Err(ConnectionError::DIDResolutionFailed(format!(
+            return Err(DidConfigurationError(format!(
                 "DID configuration endpoint '{url}' responded with a redirect, which is not followed for security reasons"
             )));
         }
         let response = response
             .error_for_status()
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+            .map_err(|error| DidConfigurationError(error.to_string()))?;
         let response = read_limited_response(response, DID_CONFIGURATION_RESPONSE_LIMIT, "DID configuration")
             .await
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
-        let mut response: serde_json::Value = serde_json::from_slice(&response)
-            .map_err(|error| ConnectionError::DIDResolutionFailed(error.to_string()))?;
+            .map_err(|error| DidConfigurationError(error.to_string()))?;
+        let mut response: serde_json::Value =
+            serde_json::from_slice(&response).map_err(|error| DidConfigurationError(error.to_string()))?;
 
         // Remove all non-string values from `linked_dids` (JSON-LD)
         if let serde_json::Value::Object(ref mut root) = response {
@@ -498,7 +501,7 @@ impl IdentityServices {
         }
         // Deserialize to `DomainLinkageConfiguration`
         let config = DomainLinkageConfiguration::from_json_value(response).map_err(|_| {
-            ConnectionError::DIDResolutionFailed(
+            DidConfigurationError(
                 "failed to deserialize DomainLinkageConfiguration from JSON".to_string(),
                 // TODO: Add more detailed error info.
             )
@@ -1357,7 +1360,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ConnectionError::DIDResolutionFailed(message)
+            DidConfigurationError(message)
                 if message.contains("Refused to fetch DID configuration")
         ));
         assert!(mock_server.received_requests().await.unwrap().is_empty());
@@ -1389,7 +1392,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ConnectionError::DIDResolutionFailed(message)
+            DidConfigurationError(message)
                 if message.contains("responded with a redirect")
         ));
         assert_eq!(mock_server.received_requests().await.unwrap().len(), 1);
@@ -1413,7 +1416,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ConnectionError::DIDResolutionFailed(message)
+            DidConfigurationError(message)
                 if message.contains("response exceeds")
         ));
     }

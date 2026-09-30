@@ -1,4 +1,4 @@
-use crate::services::{IdentityServices, LinkedDid};
+use crate::services::{DidConfigurationError, IdentityServices, LinkedDid};
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Url;
@@ -279,7 +279,7 @@ impl Aggregate for Connection {
 /// the command: the connection is kept without linked DIDs and the reason is recorded.
 fn domain_linkage_validations(
     domain: &Url,
-    linked_dids: Result<Vec<LinkedDid>, ConnectionError>,
+    linked_dids: Result<Vec<LinkedDid>, DidConfigurationError>,
     now: DateTime<Utc>,
 ) -> (Vec<LinkedDid>, Vec<Validation>) {
     let domain_failure = |error: String| {
