@@ -1,0 +1,47 @@
+meta {
+  name: Get the OpenAPI document
+  type: http
+  seq: 1
+  tags: [
+    OpenAPI
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/openapi.yaml
+  body: none
+  auth: inherit
+}
+
+docs {
+  Returns the OpenAPI description of the endpoints published by this application.
+}
+
+example {
+  name: 200 Response
+  description: OpenAPI document
+
+  request: {
+    url: {{BASE_URL}}/openapi.yaml
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/yaml
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

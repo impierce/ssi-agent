@@ -56,7 +56,10 @@ example {
           "credentialExpiration": "",
           "dataModel": "w3c_vc_data_model_v1-1",
           "description": "",
-          "display": "",
+          "display": {
+            "logo": "",
+            "name": ""
+          },
           "holderAuthorization": {
             "pre_authorized": false,
             "tx_code_constraints": ""
@@ -78,8 +81,38 @@ example {
 }
 
 example {
+  name: 400 Response
+  description: Malformed JSON request body
+
+  request: {
+    url: {{BASE_URL}}/v0/duplicate-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "sourceTemplateId": "91fc790f-d876-4827-9a9d-0fb0f6766dca"
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
   name: 422 Response
-  description: Source Template Not Found
+  description: Source template not found, or the request body does not match the expected schema
 
   request: {
     url: {{BASE_URL}}/v0/duplicate-template

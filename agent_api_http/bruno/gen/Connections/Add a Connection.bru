@@ -65,3 +65,33 @@ example {
     }
   }
 }
+
+example {
+  name: 400 Response
+  description: Malformed JSON request body
+
+  request: {
+    url: {{BASE_URL}}/v0/connections
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "url": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

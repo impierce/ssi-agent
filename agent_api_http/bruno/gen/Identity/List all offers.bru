@@ -1,7 +1,7 @@
 meta {
   name: List all offers
   type: http
-  seq: 6
+  seq: 8
   tags: [
     Identity
     Holder
@@ -64,9 +64,9 @@ example {
 script:post-response {
   const items = res.getBody();
   if (Array.isArray(items) && items.length > 0) {
-    const lastId = items[items.length - 1]?.id;
-    if (lastId) {
-      bru.setVar('RECEIVED_OFFER_ID', lastId);
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('RECEIVED_OFFER_ID', newestId);
     }
   }
 }

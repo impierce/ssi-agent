@@ -1,0 +1,46 @@
+meta {
+  name: Returns the `version` and the `git_commit_hash` of the application
+  type: http
+  seq: 2
+  tags: [
+    Metadata
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/version
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Application version information
+
+  request: {
+    url: {{BASE_URL}}/version
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "git_commit_hash": "",
+          "version": ""
+        }
+      '''
+    }
+  }
+}

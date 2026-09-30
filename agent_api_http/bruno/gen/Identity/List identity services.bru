@@ -1,7 +1,7 @@
 meta {
   name: List identity services
   type: http
-  seq: 16
+  seq: 20
   tags: [
     Identity
   ]
@@ -39,12 +39,31 @@ example {
         [
           {
             "id": "",
-            "presentation_ids": [],
+            "origins": [
+              "https://example.org/"
+            ],
+            "presentations": [
+              {
+                "holder": "",
+                "presentation_id": "",
+                "url": ""
+              }
+            ],
             "resource": "",
             "service": ""
           }
         ]
       '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('SERVICE_ID', newestId);
     }
   }
 }

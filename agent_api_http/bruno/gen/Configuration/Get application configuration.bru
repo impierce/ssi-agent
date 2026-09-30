@@ -53,3 +53,31 @@ example {
     }
   }
 }
+
+example {
+  name: 400 Response
+  description: Invalid query parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/configuration
+    method: GET
+    mode: none
+    params:query: {
+      ~provisioned:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

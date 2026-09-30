@@ -46,7 +46,10 @@ example {
             "credentialExpiration": "",
             "dataModel": "w3c_vc_data_model_v1-1",
             "description": "",
-            "display": "",
+            "display": {
+              "logo": "",
+              "name": ""
+            },
             "holderAuthorization": {
               "pre_authorized": false,
               "tx_code_constraints": ""
@@ -71,9 +74,9 @@ example {
 script:post-response {
   const items = res.getBody();
   if (Array.isArray(items) && items.length > 0) {
-    const lastId = items[items.length - 1]?.id;
-    if (lastId) {
-      bru.setVar('TEMPLATE_ID', lastId);
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('TEMPLATE_ID', newestId);
     }
   }
 }

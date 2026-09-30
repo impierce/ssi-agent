@@ -8,13 +8,13 @@ meta {
 }
 
 get {
-  url: {{BASE_URL}}/v0/connections/:id
+  url: {{BASE_URL}}/v0/connections/:connection_id
   body: none
   auth: inherit
 }
 
 params:path {
-  id: {{CONNECTION_ID}}
+  connection_id: {{CONNECTION_ID}}
 }
 
 docs {
@@ -26,11 +26,11 @@ example {
   description: Connection retrieved successfully
 
   request: {
-    url: {{BASE_URL}}/v0/connections/:id
+    url: {{BASE_URL}}/v0/connections/:connection_id
     method: GET
     mode: none
     params:path: {
-      id:
+      connection_id:
     }
   }
 
@@ -57,6 +57,62 @@ example {
           "url": "",
           "validations": []
         }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Invalid path parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/connections/:connection_id
+    method: GET
+    mode: none
+    params:path: {
+      connection_id:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Connection not found
+
+  request: {
+    url: {{BASE_URL}}/v0/connections/:connection_id
+    method: GET
+    mode: none
+    params:path: {
+      connection_id:
+    }
+  }
+
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+
+    body: {
+      type: text
+      content: '''
+
       '''
     }
   }

@@ -1,7 +1,7 @@
 meta {
   name: List DID documents
   type: http
-  seq: 1
+  seq: 3
   tags: [
     Identity
   ]
@@ -50,7 +50,7 @@ example {
         [
           {
             "did_method": "",
-            "document": {},
+            "document": "",
             "id": "",
             "iota_metadata": "",
             "status": "SignAndValidate",
@@ -62,12 +62,40 @@ example {
   }
 }
 
+example {
+  name: 400 Response
+  description: Invalid query parameter
+
+  request: {
+    url: {{BASE_URL}}/v0/documents
+    method: GET
+    mode: none
+    params:query: {
+      ~did_method:
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
 script:post-response {
   const items = res.getBody();
   if (Array.isArray(items) && items.length > 0) {
-    const lastId = items[items.length - 1]?.id;
-    if (lastId) {
-      bru.setVar('DOCUMENT_ID', lastId);
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('DOCUMENT_ID', newestId);
     }
   }
 }

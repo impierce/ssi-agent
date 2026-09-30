@@ -58,3 +58,13 @@ example {
     }
   }
 }
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('CATALOG_ID', newestId);
+    }
+  }
+}
