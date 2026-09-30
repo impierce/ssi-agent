@@ -1,0 +1,176 @@
+meta {
+  name: Add linked verifiable presentations
+  type: http
+  seq: 2
+  tags: [
+    Identity
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "presentationIds": []
+  }
+}
+
+docs {
+  Publishes the given presentations after the presentations, signatures, holders and credential
+  subjects have been validated. Existing IDs and duplicates are no-ops; new IDs retain request
+  order after presentations that were already published.
+}
+
+example {
+  name: 204 Response
+  description: Presentations published
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Malformed JSON request body
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Authentication required
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 403 Response
+  description: Operation forbidden
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 403
+      text: Forbidden
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response
+  description: Empty list, missing presentation, or invalid presentation
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-verifiable-presentations
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "presentationIds": []
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

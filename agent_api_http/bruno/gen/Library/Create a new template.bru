@@ -43,7 +43,7 @@ docs {
 example {
   name: 201 Response (OpenBadges template)
   description: New template created successfully
-
+  
   request: {
     url: {{BASE_URL}}/v0/create-new-template
     method: POST
@@ -70,17 +70,17 @@ example {
       }
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 201
       text: Created
     }
-
+  
     body: {
       type: json
       content: '''
@@ -88,7 +88,10 @@ example {
           "credentialExpiration": "",
           "dataModel": "w3c_vc_data_model_v1-1",
           "description": "",
-          "display": "",
+          "display": {
+            "logo": "",
+            "name": ""
+          },
           "holderAuthorization": {
             "pre_authorized": false,
             "tx_code_constraints": ""
@@ -112,7 +115,7 @@ example {
 example {
   name: 201 Response (Standard template)
   description: New template created successfully
-
+  
   request: {
     url: {{BASE_URL}}/v0/create-new-template
     method: POST
@@ -125,17 +128,17 @@ example {
       }
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 201
       text: Created
     }
-
+  
     body: {
       type: json
       content: '''
@@ -143,7 +146,10 @@ example {
           "credentialExpiration": "",
           "dataModel": "w3c_vc_data_model_v1-1",
           "description": "",
-          "display": "",
+          "display": {
+            "logo": "",
+            "name": ""
+          },
           "holderAuthorization": {
             "pre_authorized": false,
             "tx_code_constraints": ""
@@ -159,6 +165,162 @@ example {
           "type": [],
           "visibility": "private"
         }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response (OpenBadges template)
+  description: Malformed JSON request body, or an invalid template definition
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "title": "OpenBadges template",
+        "dataModel": "open_badges_3-0",
+        "holderType": "individual",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "achievement.name": {
+              "type": "string"
+            },
+            "achievement.description": {
+              "type": "string"
+            },
+            "achievement.criteria.narrative": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response (Standard template)
+  description: Malformed JSON request body, or an invalid template definition
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "title": "Standard template",
+        "dataModel": "w3c_vc_data_model_v1-1",
+        "holderType": "individual"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response (OpenBadges template)
+  description: Request body does not match the expected schema
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "title": "OpenBadges template",
+        "dataModel": "open_badges_3-0",
+        "holderType": "individual",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "achievement.name": {
+              "type": "string"
+            },
+            "achievement.description": {
+              "type": "string"
+            },
+            "achievement.criteria.narrative": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response (Standard template)
+  description: Request body does not match the expected schema
+  
+  request: {
+    url: {{BASE_URL}}/v0/create-new-template
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "title": "Standard template",
+        "dataModel": "w3c_vc_data_model_v1-1",
+        "holderType": "individual"
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
       '''
     }
   }

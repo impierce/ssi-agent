@@ -1,0 +1,39 @@
+meta {
+  name: A simple liveness probe following application monitoring conventions
+  type: http
+  seq: 2
+  tags: [
+    Probes
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/livez
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Application is alive
+  
+  request: {
+    url: {{BASE_URL}}/livez
+    method: GET
+    mode: none
+  }
+  
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

@@ -14,9 +14,9 @@ get {
 }
 
 body:form-urlencoded {
-  did:
-  display:
-  url:
+  did: 
+  display: 
+  url: 
 }
 
 docs {
@@ -26,28 +26,28 @@ docs {
 example {
   name: 200 Response
   description: All connections retrieved successfully
-
+  
   request: {
     url: {{BASE_URL}}/v0/connections
     method: GET
     mode: formUrlEncoded
     body:form-urlencoded: {
-      did:
-      display:
-      url:
+      did: 
+      display: 
+      url: 
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 200
       text: OK
     }
-
+  
     body: {
       type: json
       content: '''
@@ -63,6 +63,36 @@ example {
             "validations": []
           }
         ]
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Invalid query parameter
+  
+  request: {
+    url: {{BASE_URL}}/v0/connections
+    method: GET
+    mode: formUrlEncoded
+    body:form-urlencoded: {
+      did: 
+      display: 
+      url: 
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
       '''
     }
   }

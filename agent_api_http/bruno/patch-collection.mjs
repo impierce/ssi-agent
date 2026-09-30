@@ -58,16 +58,16 @@ const RULES = [
   { method: 'GET', path: '/v0/holder/offers', script: extractLastIdScript('RECEIVED_OFFER_ID') },
   { method: 'POST', path: '/v0/holder/offers/{offer_id}/accept', pathVars: { offer_id: '{{RECEIVED_OFFER_ID}}' } },
   { method: 'POST', path: '/v0/holder/offers/{offer_id}/reject', pathVars: { offer_id: '{{RECEIVED_OFFER_ID}}' } },
-  { method: 'GET', path: '/v0/holder/offers/{received_offer_id}', pathVars: { received_offer_id: '{{RECEIVED_OFFER_ID}}' } },
+  { method: 'GET', path: '/v0/holder/offers/{offer_id}', pathVars: { offer_id: '{{RECEIVED_OFFER_ID}}' } },
 
   { method: 'GET', path: '/v0/holder/credentials', script: extractLastIdScript('HOLDER_CREDENTIAL_ID') },
-  { method: 'GET', path: '/v0/holder/credentials/{holder_credential_id}', pathVars: { holder_credential_id: '{{HOLDER_CREDENTIAL_ID}}' } },
+  { method: 'GET', path: '/v0/holder/credentials/{credential_id}', pathVars: { credential_id: '{{HOLDER_CREDENTIAL_ID}}' } },
 
   { method: 'GET', path: '/v0/holder/presentations', script: extractLastIdScript('PRESENTATION_ID') },
   { method: 'GET', path: '/v0/holder/presentations/{presentation_id}', pathVars: { presentation_id: '{{PRESENTATION_ID}}' } },
 
   { method: 'GET', path: '/v0/connections', script: extractLastIdScript('CONNECTION_ID') },
-  { method: 'GET', path: '/v0/connections/{id}', pathVars: { id: '{{CONNECTION_ID}}' } },
+  { method: 'GET', path: '/v0/connections/{connection_id}', pathVars: { connection_id: '{{CONNECTION_ID}}' } },
 
   { method: 'GET', path: '/v0/list-all-templates', script: extractLastIdScript('TEMPLATE_ID') },
   { method: 'GET', path: '/v0/get-template-by-id/{id}', pathVars: { id: '{{TEMPLATE_ID}}' } },

@@ -1,7 +1,7 @@
 meta {
   name: List all public templates
   type: http
-  seq: 1
+  seq: 2
   tags: [
     Public
   ]
@@ -20,23 +20,23 @@ docs {
 example {
   name: 200 Response
   description: All public templates retrieved successfully
-
+  
   request: {
     url: {{BASE_URL}}/public/templates
     method: GET
     mode: none
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 200
       text: OK
     }
-
+  
     body: {
       type: json
       content: '''
@@ -45,7 +45,10 @@ example {
             "credentialExpiration": "",
             "dataModel": "w3c_vc_data_model_v1-1",
             "description": "",
-            "display": "",
+            "display": {
+              "logo": "",
+              "name": ""
+            },
             "holderType": "individual",
             "modifiedAt": "",
             "schema": "",

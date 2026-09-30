@@ -1,0 +1,193 @@
+meta {
+  name: Link domains
+  type: http
+  seq: 1
+  tags: [
+    Identity
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/add-linked-domains
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "origins": [
+      "example.org",
+      "https://foo.example.org"
+    ]
+  }
+}
+
+docs {
+  Publishes a Domain Linkage Credential for each given origin, in addition to any already linked.
+  Linking an origin that is already linked is a no-op.
+}
+
+example {
+  name: 204 Response
+  description: Domains linked
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-domains
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "origins": [
+          "example.org",
+          "https://foo.example.org"
+        ]
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: No eligible signing DID, or an invalid origin
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-domains
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "origins": [
+          "example.org",
+          "https://foo.example.org"
+        ]
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Authentication required
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-domains
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "origins": [
+          "example.org",
+          "https://foo.example.org"
+        ]
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 403 Response
+  description: Operation forbidden
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-domains
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "origins": [
+          "example.org",
+          "https://foo.example.org"
+        ]
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 403
+      text: Forbidden
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response
+  description: Request body does not match the expected schema
+  
+  request: {
+    url: {{BASE_URL}}/v0/add-linked-domains
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "origins": [
+          "example.org",
+          "https://foo.example.org"
+        ]
+      }
+    }
+  }
+  
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}

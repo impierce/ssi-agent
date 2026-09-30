@@ -1,5 +1,5 @@
 meta {
-  name: Get offer by ID
+  name: Get offer by ID (GET)
   type: http
   seq: 11
   tags: [
@@ -14,7 +14,7 @@ get {
 }
 
 params:path {
-  offer_id:
+  offer_id: 
 }
 
 docs {
@@ -24,26 +24,26 @@ docs {
 example {
   name: 200 Response
   description: Offer retrieved successfully
-
+  
   request: {
     url: {{BASE_URL}}/v0/offers/:offer_id
     method: GET
     mode: none
     params:path: {
-      offer_id:
+      offer_id: 
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 200
       text: OK
     }
-
+  
     body: {
       type: json
       content: '''
@@ -69,28 +69,56 @@ example {
 }
 
 example {
-  name: 404 Response
-  description: Offer not found
-
+  name: 400 Response
+  description: Invalid path parameter
+  
   request: {
     url: {{BASE_URL}}/v0/offers/:offer_id
     method: GET
     mode: none
     params:path: {
-      offer_id:
+      offer_id: 
     }
   }
+  
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+  
+    body: {
+      type: text
+      content: '''
+  
+      '''
+    }
+  }
+}
 
+example {
+  name: 404 Response
+  description: Offer not found
+  
+  request: {
+    url: {{BASE_URL}}/v0/offers/:offer_id
+    method: GET
+    mode: none
+    params:path: {
+      offer_id: 
+    }
+  }
+  
   response: {
     status: {
       code: 404
       text: Not Found
     }
-
+  
     body: {
       type: text
       content: '''
-
+  
       '''
     }
   }
