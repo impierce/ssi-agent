@@ -13,8 +13,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Keeps file and line numbers in panics and backtraces, but makes test binaries much smaller and
+  # faster to link than full debug info, which also keeps the build caches small.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+# Each job builds a different feature set, so they run in parallel with their own cache. Caches are
+# only saved on pushes to the release branches, which pull requests restore from, so pull requests do
+# not evict them.
 jobs:
   build:
+    name: Format, lint and test
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +34,8 @@ jobs:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -38,11 +49,37 @@ jobs:
       - name: Test (Default features)
         run: cargo test --workspace
 
+      - name: Generated files are unchanged
+        run: git diff --exit-code
+
+  test-allow-localhost:
+    name: Test (allow-localhost)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.94.0
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
       - name: Test (allow-localhost)
         run: cargo test -p agent_api_http -p agent_identity --features allow-localhost allow_localhost_tests
 
+  test-docker:
+    name: Test (Docker-backed)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.94.0
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+
       - name: Test (Docker-backed)
         run: cargo test -p agent_application -p agent_event_publisher_nats --features agent_application/docker-tests,agent_event_publisher_nats/docker-tests
-
-      - name: Generated files are unchanged
-        run: git diff --exit-code
