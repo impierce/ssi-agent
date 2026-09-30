@@ -7,12 +7,12 @@ use agent_issuance::{
     offer::error::OfferError, public_offer::error::PublicOfferError, server_config::error::ServerConfigError,
     status_list::error::StatusListError,
 };
-use axum::{response::IntoResponse, response::Response, Json};
+use axum::Json;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::errors::{
-    AuthorizationErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse, ErrorStatusCode,
-    NotificationErrorResponse, OID4VCError, TokenErrorResponse,
+    AuthorizationErrorResponse, CredentialErrorResponse, ErrorStatusCode, NotificationErrorResponse, OID4VCError,
+    TokenErrorResponse,
 };
 
 impl IntoApiErrorExt for CredentialError {
@@ -346,42 +346,8 @@ impl From<AccessTokenValidationError> for PublicError {
     }
 }
 
-pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
-    let error: OID4VCError<AuthorizationErrorResponse> = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn token_error(error: TokenErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn credential_error(error: CredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn deferred_credential_error(error: DeferredCredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn notification_error(error: NotificationErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
 pub fn internal_server_error() -> PublicError {
     PublicError::InternalServerError
-}
-
-pub fn access_token_error(err: AccessTokenValidationError) -> PublicError {
-    PublicError::AccessTokenError(err)
 }
 
 #[cfg(test)]
@@ -390,6 +356,7 @@ pub mod tests {
     use crate::error::tests::{assert_problems, into_json_value};
     use crate::DOCUMENTATION_URL;
     use agent_library::json_schema_validation::JsonSchemaError;
+    use axum::response::IntoResponse as _;
     use oauth_tsl::error::OAuthTSLError;
     use serde_json::{json, Value};
 
