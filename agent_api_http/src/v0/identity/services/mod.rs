@@ -1329,6 +1329,61 @@ mod tests {
         fixture.remove_linked_domains(&[], 400).await;
     }
 
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn services_and_documents_are_listed_and_retrievable_by_id() {
+        let fixture = &Fixture::new().await;
+        let get = |path: String| async move {
+            let (status, body) = fixture.request("GET", &path, None).await;
+            let body = if body.is_empty() {
+                Value::Null
+            } else {
+                serde_json::from_slice(&body).unwrap()
+            };
+            (status, body)
+        };
+
+        assert_eq!(get("/unicore/v0/services".into()).await, (200, json!([])));
+
+        fixture.link_own_origin(204).await;
+        let (status, services) = get("/unicore/v0/services".into()).await;
+        assert_eq!(status, 200);
+        let services = services.as_array().unwrap();
+        assert_eq!(services.len(), 1, "{services:?}");
+        let linked_domains = &services[0];
+        assert_eq!(linked_domains["service"]["type"], "LinkedDomains");
+        assert_eq!(linked_domains["origins"], json!(["https://example.org/"]));
+
+        let service_id = linked_domains["id"].as_str().unwrap();
+        assert_eq!(
+            get(format!("/unicore/v0/services/{service_id}")).await,
+            (200, linked_domains.clone())
+        );
+        assert_eq!(get("/unicore/v0/services/unknown".into()).await.0, 404);
+
+        // A service without any origin left is deleted, and no longer listed or retrievable.
+        fixture
+            .remove_linked_domains(&[fixture.configuration.public_url.as_str()], 204)
+            .await;
+        assert_eq!(get("/unicore/v0/services".into()).await, (200, json!([])));
+        assert_eq!(get(format!("/unicore/v0/services/{service_id}")).await.0, 404);
+
+        let (status, documents) = get("/unicore/v0/documents".into()).await;
+        assert_eq!(status, 200);
+        let did_web = documents
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|document| document["did_method"] == "did:web")
+            .unwrap_or_else(|| panic!("no did:web document in {documents}"));
+        let document_id = did_web["id"].as_str().unwrap();
+        assert_eq!(
+            get(format!("/unicore/v0/documents/{document_id}")).await,
+            (200, did_web.clone())
+        );
+        assert_eq!(get("/unicore/v0/documents/unknown".into()).await.0, 404);
+    }
+
     fn decode_unverified_jwt_claims(jwt: &str) -> Value {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 

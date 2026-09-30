@@ -1334,6 +1334,94 @@ pub mod tests {
         assert_eq!(body["title"], "Signed Credential Format Mismatch");
     }
 
+    #[tokio::test]
+    async fn test_all_credentials_lists_created_credentials_and_rejects_invalid_ones() {
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        async fn send(app: &mut Router, method: http::Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                        .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+        let all_credentials = format!("{API_VERSION}/credentials");
+
+        assert_eq!(
+            send(&mut app, http::Method::GET, &all_credentials, None).await,
+            (StatusCode::OK, json!([]))
+        );
+
+        // Signed credentials must be strings.
+        let (status, body) = send(
+            &mut app,
+            http::Method::POST,
+            &all_credentials,
+            Some(json!({
+                "templateId": template_id,
+                "offerId": OFFER_ID,
+                "credential": { "credentialSubject": CREDENTIAL_SUBJECT.clone() },
+                "isSigned": true,
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["title"], "Invalid Credential Type");
+
+        // Without `expiresAt`, the template's credential expiration applies.
+        let (status, _) = send(
+            &mut app,
+            http::Method::POST,
+            &all_credentials,
+            Some(json!({
+                "templateId": template_id,
+                "offerId": OFFER_ID,
+                "credential": { "credentialSubject": CREDENTIAL_SUBJECT.clone() },
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let credential_endpoint = credentials_with_template(&mut app, &template_id).await;
+
+        let (status, credentials) = send(&mut app, http::Method::GET, &all_credentials, None).await;
+        assert_eq!(status, StatusCode::OK);
+        let credentials = credentials.as_array().unwrap();
+        assert_eq!(credentials.len(), 2);
+        let (_, newest) = send(&mut app, http::Method::GET, &credential_endpoint, None).await;
+        assert_eq!(credentials[0], newest, "credentials are listed newest first");
+
+        let (status, _) = send(
+            &mut app,
+            http::Method::PATCH,
+            &format!("{API_VERSION}/credentials/unknown"),
+            Some(json!({ "credentialStatus": "INVALID" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
     mod expiration_to_credential_expiry_tests {
         use super::*;
         use agent_library::template::aggregate::Expiration;

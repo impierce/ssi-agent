@@ -720,4 +720,74 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_credential_offer_uri_resolves_only_active_offers() {
+        let (mut app, library_state) = setup_app().await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+
+        async fn post(app: &mut Router, command: &str) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::POST)
+                        .uri(format!("{API_VERSION}/{command}"))
+                        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                        .body(Body::from(
+                            serde_json::to_vec(&serde_json::json!({ "offerId": crate::tests::OFFER_ID })).unwrap(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        }
+        async fn resolve(app: &mut Router, offer_id: &str) -> (StatusCode, Value) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::GET)
+                        .uri(format!("/openid4vci/credential-offer/{offer_id}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+
+        assert_eq!(resolve(&mut app, "unknown").await.0, StatusCode::NOT_FOUND);
+
+        // An offer without a public-offer record resolves like any other offer.
+        credentials(&mut app).await;
+        let (status, credential_offer) = resolve(&mut app, crate::tests::OFFER_ID).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            credential_offer["credential_configuration_ids"],
+            serde_json::json!([TEMPLATE_ID])
+        );
+
+        let response = app
+            .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(
+            resolve(&mut app, crate::tests::OFFER_ID).await,
+            (status, credential_offer.clone())
+        );
+
+        post(&mut app, "take-public-offer-offline").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::NOT_FOUND);
+
+        post(&mut app, "take-public-offer-online").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::OK);
+
+        post(&mut app, "delete-public-offer").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::NOT_FOUND);
+    }
 }

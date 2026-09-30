@@ -391,10 +391,19 @@ pub mod tests {
 
     mod interactive {
         use super::*;
+        use agent_authorization::services::OpenId4VpPresentationService;
         use serde_json::Value;
         use tower::ServiceExt as _;
 
         async fn app() -> Router {
+            app_with(|verification_state| Box::new(VerificationAuthorizationAdapter::new(verification_state))).await
+        }
+
+        async fn app_with(
+            presentation_service: impl FnOnce(
+                Arc<agent_verification::state::VerificationState>,
+            ) -> Box<dyn OpenId4VpPresentationService>,
+        ) -> Router {
             let issuance_state = Arc::new(
                 issuance_state(
                     &InMemory,
@@ -419,9 +428,7 @@ pub mod tests {
                     AuthorizationServices::default().await,
                     &Default::default(),
                     Default::default(),
-                    OAuth2AuthorizationRequestDomainServices::new(Box::new(VerificationAuthorizationAdapter::new(
-                        verification_state,
-                    ))),
+                    OAuth2AuthorizationRequestDomainServices::new(presentation_service(verification_state)),
                 )
                 .await,
             );
@@ -557,6 +564,53 @@ pub mod tests {
                 assert_eq!(status, StatusCode::BAD_REQUEST, "{case}: {body}");
                 assert_eq!(body["error"], "invalid_request", "{case}");
             }
+        }
+
+        #[tokio::test]
+        async fn a_verified_presentation_completes_the_interactive_authorization_with_a_code() {
+            /// Creates real OpenID4VP requests, but accepts only the presentation `{"vp_token": "verified"}`.
+            struct AcceptingPresentationService(VerificationAuthorizationAdapter);
+
+            #[async_trait::async_trait]
+            impl OpenId4VpPresentationService for AcceptingPresentationService {
+                async fn create_openid4vp_presentation_request(&self, state: String) -> anyhow::Result<Value> {
+                    self.0.create_openid4vp_presentation_request(state).await
+                }
+
+                async fn verify_openid4vp_response(&self, openid4vp_response: Value) -> anyhow::Result<()> {
+                    anyhow::ensure!(openid4vp_response == json!({ "vp_token": "verified" }));
+                    Ok(())
+                }
+            }
+
+            let app = app_with(|verification_state| {
+                Box::new(AcceptingPresentationService(VerificationAuthorizationAdapter::new(
+                    verification_state,
+                )))
+            })
+            .await;
+            let (_, body) = post_par(&app, &interactive_request(authorization_request())).await;
+            let auth_session = body["auth_session"].as_str().unwrap().to_string();
+
+            let (status, body) = post_par(
+                &app,
+                &json!(AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest(
+                    InteractiveAuthorizationFollowUpRequest {
+                        auth_session,
+                        openid4vp_response: Some(json!({ "vp_token": "verified" })),
+                        code_verifier: None,
+                    }
+                )),
+            )
+            .await;
+
+            assert_eq!(status, StatusCode::OK, "{body}");
+            let response: InteractiveAuthorizationResponse = serde_json::from_value(body).unwrap();
+            assert_eq!(response.status, InteractiveAuthorizationStatus::Ok);
+            assert!(response.code.is_some());
+            assert_eq!(response.expires_in, Some(600));
+            assert!(response.auth_session.is_none());
+            assert!(response.openid4vp_request.is_none());
         }
     }
 }

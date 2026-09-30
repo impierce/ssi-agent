@@ -1268,6 +1268,130 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_template_applies_tags_visibility_schema_and_holder_authorization() {
+        let state =
+            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        // W3C VC 1.1 templates cannot have schema properties attributes.
+        command_handler(
+            "template-to-update",
+            &state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: "template-to-update".to_string(),
+                source_template_id: None,
+                title: "Template".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+            },
+        )
+        .await
+        .unwrap();
+        let update = |request: UpdateTemplateEndpointRequest| {
+            update_template(
+                State(state.clone()),
+                RequestActor(None),
+                Json(UpdateTemplateEndpointRequest {
+                    template_id: "template-to-update".to_string(),
+                    ..request
+                }),
+            )
+        };
+
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "first_name": { "type": "string" },
+                "last_name": { "type": "string" }
+            },
+            "required": ["first_name", "last_name"]
+        });
+        let schema_properties_attributes = HashMap::from([(
+            "/last_name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                non_removable: false,
+                r#type: None,
+            },
+        )]);
+        let holder_authorization = Authorization {
+            pre_authorized: true,
+            tx_code_constraints: None,
+        };
+        let response = update(UpdateTemplateEndpointRequest {
+            tags: Some(vec!["education".to_string(), "diploma".to_string()]),
+            schema: Some(schema.clone()),
+            schema_properties_attributes: Some(schema_properties_attributes.clone()),
+            holder_authorization: Some(holder_authorization.clone()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            template.tags,
+            Some(vec!["education".to_string(), "diploma".to_string()])
+        );
+        assert_eq!(*template.schema, Some(schema));
+        assert_eq!(
+            template.schema_properties_attributes,
+            Some(schema_properties_attributes)
+        );
+        assert_eq!(template.holder_authorization, holder_authorization);
+
+        // A draft cannot be made public, but a published template can.
+        let response = update(UpdateTemplateEndpointRequest {
+            visibility: Some(Visibility::Public),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let response = update(UpdateTemplateEndpointRequest {
+            status: Some(Status::Published),
+            visibility: Some(Visibility::Public),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.status, Status::Published);
+        assert_eq!(template.visibility, Visibility::Public);
+
+        let response = delete_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(DeleteTemplateEndpointRequest {
+                template_id: String::new(),
+            }),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn delete_template_hides_template_from_get_endpoint() {
         let state =
             Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
