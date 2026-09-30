@@ -45,6 +45,20 @@ This overview is still a work in progress. You can refer to the [example.config.
 
 :::
 
+### Serve OpenAPI YAML
+
+UniCore can serve its generated OpenAPI document at `/openapi.yaml`. The route is disabled by default.
+
+| Environment variable                    | `config.yaml`                  | Default |
+| --------------------------------------- | ------------------------------ | ------- |
+| `UNICORE__SERVE_OPENAPI_ENABLED` | `serve_openapi_enabled` | `false` |
+
+#### Example
+
+```yaml
+serve_openapi_enabled: true
+```
+
 ### Application URL
 
 UniCore's application URL. This value represents the self-aware URL of the application. It is used for internal

@@ -1,4 +1,5 @@
-use agent_shared::handlers::{public_command_handler, public_query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
+use cqrs_es::AggregateError;
 use oid4vci::{
     InteractionType, InteractiveAuthorizationRequest, InteractiveAuthorizationResponse, InteractiveAuthorizationStatus,
 };
@@ -36,6 +37,8 @@ pub enum InteractiveAuthorizationError {
     MissingRedirectUriError,
     #[error("Missing `openid4vp_response` in the request")]
     MissingOpenId4VPResponseError,
+    #[error("Invalid `openid4vp_response`: {0}")]
+    InvalidOpenId4VPResponseError(String),
     #[error("Unsupported interaction types: {0}")]
     UnsupportedInteractionTypesError(String),
     #[error("Internal error: {0}")]
@@ -158,13 +161,27 @@ impl InteractiveAuthorizationService {
                 .ok_or(InteractiveAuthorizationError::MissingOpenId4VPResponseError)?,
         };
 
+        // Without this check, the command would run against a fresh aggregate for an unknown `auth_session`.
+        public_query_handler(
+            &oauth2_authorization_request_id,
+            &state.query.oauth2_authorization_request,
+        )
+        .await
+        .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?
+        .ok_or(InteractiveAuthorizationError::RequestNotFound)?;
+
         public_command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,
         )
         .await
-        .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
+        .map_err(|err| match err {
+            CommandHandlerError::Aggregate(AggregateError::UserError(err)) => {
+                InteractiveAuthorizationError::InvalidOpenId4VPResponseError(err.to_string())
+            }
+            err => InteractiveAuthorizationError::Internal(err.to_string()),
+        })?;
 
         // Get the OAuth2 authorization request that has been pushed via the `/auth/par` endpoint.
         let oauth2_authorization_request = public_query_handler(

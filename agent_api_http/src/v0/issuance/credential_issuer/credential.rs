@@ -2,7 +2,10 @@ use std::time::{Duration, Instant};
 
 use crate::{
     handlers::{public_command_handler, public_query_handler},
-    v0::issuance::error::{internal_server_error, PublicError},
+    v0::{
+        issuance::error::{internal_server_error, PublicError},
+        openapi::PROTOCOL_TAG,
+    },
 };
 use agent_issuance::{
     application::{
@@ -25,6 +28,7 @@ use axum_auth::AuthBearer;
 use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
+use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
@@ -34,6 +38,35 @@ use agent_shared::config::TEST_STATUS_LIST_ID;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
+/// Issue credentials
+///
+/// Issues the credentials of an offer in exchange for a valid access token and key proofs, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-endpoint).
+#[utoipa::path(
+    post,
+    path = "/openid4vci/credential",
+    operation_id = "openid4vci_credential",
+    tags = ["OpenID4VCI", PROTOCOL_TAG],
+    security(("access_token" = [])),
+    request_body(content = CredentialRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "Credentials issued", body = CredentialResponse),
+        (
+            status = 400,
+            description = "The credential request is invalid, or the `Authorization` header is missing",
+            body = OID4VCError<CredentialErrorResponse>,
+        ),
+        (
+            status = 401,
+            description = "The access token is invalid or expired",
+            content_type = "application/json",
+            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            example = json!({"error": "invalid_token"}),
+        ),
+        (status = 415, description = "The request body is not `application/json`"),
+        (status = 422, description = "The request body is not a valid credential request"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,

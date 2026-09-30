@@ -1,4 +1,7 @@
-use crate::{handlers::public_query_handler, v0::issuance::error::PublicError};
+use crate::{
+    handlers::public_query_handler,
+    v0::{issuance::error::PublicError, openapi::PROTOCOL_TAG},
+};
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use axum::{
     extract::{Path, State},
@@ -8,11 +11,116 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use identity_credential::sd_jwt_vc::metadata::{
     ClaimDisclosability, ClaimDisplay, ClaimMetadata, DisplayMetadata, TypeMetadata,
 };
+use oid4vc_core::claim_path_pointer::ClaimPathPointer;
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay,
 };
 use std::sync::Arc;
 
+// OpenAPI representation of `identity_credential::sd_jwt_vc::metadata::TypeMetadata`.
+/// Type metadata of an SD-JWT VC credential type.
+///
+/// See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[schema(as = TypeMetadata)]
+pub(crate) struct TypeMetadataSchema {
+    /// A human-readable name for the type.
+    name: Option<String>,
+    /// A human-readable description for the type.
+    description: Option<String>,
+    /// A URI of another type that this type extends.
+    #[schema(format = Uri)]
+    extends: Option<String>,
+    /// Integrity metadata for the extended type.
+    #[serde(rename = "extends#integrity")]
+    extends_integrity: Option<String>,
+    /// An embedded JSON Schema for the credential.
+    schema: Option<serde_json::Map<String, serde_json::Value>>,
+    /// A URI referencing a JSON Schema for the credential.
+    #[schema(format = Uri)]
+    schema_uri: Option<String>,
+    /// Integrity metadata for the referenced JSON Schema.
+    #[serde(rename = "schema_uri#integrity")]
+    schema_uri_integrity: Option<String>,
+    #[serde(default)]
+    display: Vec<TypeMetadataDisplaySchema>,
+    #[serde(default)]
+    claims: Vec<TypeMetadataClaimSchema>,
+}
+
+/// Display information for an SD-JWT VC type.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[schema(as = TypeMetadataDisplay)]
+pub(crate) struct TypeMetadataDisplaySchema {
+    /// A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
+    locale: String,
+    name: String,
+    description: Option<String>,
+    /// Rendering information, such as `simple` or `svg_templates`.
+    rendering: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// Information about particular claims of an SD-JWT VC type.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[schema(as = TypeMetadataClaim)]
+pub(crate) struct TypeMetadataClaimSchema {
+    path: ClaimPathPointer,
+    #[serde(default)]
+    display: Vec<TypeMetadataClaimDisplaySchema>,
+    /// Whether the claim must be present in the issued credential.
+    mandatory: Option<bool>,
+    /// Whether the claim is selectively disclosable.
+    #[schema(inline)]
+    sd: Option<ClaimDisclosabilitySchema>,
+    /// The ID of the claim for reference in an SVG template.
+    svg_id: Option<String>,
+}
+
+/// Display information for a claim.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[schema(as = TypeMetadataClaimDisplay)]
+pub(crate) struct TypeMetadataClaimDisplaySchema {
+    /// A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
+    locale: String,
+    label: String,
+    description: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ClaimDisclosabilitySchema {
+    Always,
+    Allowed,
+    Never,
+}
+
+/// Get SD-JWT VC type metadata
+///
+/// Returns the type metadata of a credential configuration, as defined by
+/// [SD-JWT VC](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
+#[utoipa::path(
+    get,
+    path = "/vct/{credential_configuration_id}/{version}",
+    operation_id = "vct_type_metadata",
+    tags = ["SD-JWT VC", PROTOCOL_TAG],
+    params(
+        (
+            "credential_configuration_id" = String,
+            Path,
+            description = "Base64url-encoded (without padding) credential configuration ID",
+        ),
+        ("version" = String, Path, description = "Type version (currently ignored)"),
+    ),
+    responses(
+        (status = 200, description = "SD-JWT VC type metadata", body = TypeMetadataSchema),
+        (status = 404, description = "The credential configuration does not exist"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn type_metadata(
     State(state): State<Arc<IssuanceState>>,

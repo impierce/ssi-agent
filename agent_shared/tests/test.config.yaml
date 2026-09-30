@@ -48,6 +48,8 @@ display:
       uri: https://www.impierce.com/external/impierce-icon.png
       alt_text: Impierce Icon
 
+serve_openapi_enabled: false
+
 secret_manager:
   stronghold_path: ../agent_secret_manager/tests/res/test.stronghold.dat
   # stronghold_password: <defined in .env.test>

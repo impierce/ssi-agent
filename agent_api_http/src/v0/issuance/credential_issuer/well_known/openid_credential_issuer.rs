@@ -9,11 +9,27 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
+use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde_json::json;
 use std::sync::Arc;
 
 use crate::handlers::public_query_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
 
+/// Get the Credential Issuer Metadata
+///
+/// Returns the metadata of the credential issuer as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata).
+#[utoipa::path(
+    get,
+    path = "/.well-known/openid-credential-issuer",
+    operation_id = "well_known_openid_credential_issuer",
+    tags = ["OpenID4VCI", PROTOCOL_TAG],
+    responses(
+        (status = 200, description = "Credential issuer metadata", body = CredentialIssuerMetadata),
+        (status = 404, description = "The credential issuer metadata is not configured"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn openid_credential_issuer(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {

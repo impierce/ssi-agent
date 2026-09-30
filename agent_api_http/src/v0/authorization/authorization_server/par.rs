@@ -1,4 +1,7 @@
-use crate::{utils::StringifiedForm, v0::issuance::error::PublicError};
+use crate::{
+    utils::StringifiedForm,
+    v0::{issuance::error::PublicError, openapi::PROTOCOL_TAG},
+};
 use agent_authorization::application::{
     interactive_authorization_service::InteractiveAuthorizationService,
     pushed_authorization_service::PushedAuthorizationService,
@@ -9,26 +12,53 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use oid4vci::{authorization_request::AuthorizationRequest, InteractiveAuthorizationRequest};
+use oid4vci::{
+    authorization_request::AuthorizationRequest,
+    errors::{OID4VCError, TokenErrorResponse},
+    interactive_authorization_response::InteractiveAuthorizationResponse,
+    wallet::PushedAuthorizationResponse,
+    InteractiveAuthorizationFollowUpRequest, InteractiveAuthorizationRequest,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
 #[serde(untagged)]
 pub enum AuthorizationRequestDto {
     InteractiveAuthorizationRequest(InteractiveAuthorizationRequest),
-    FollowUpInteractiveAuthorizationRequest {
-        auth_session: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        openid4vp_response: Option<serde_json::Value>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        code_verifier: Option<String>,
-    },
+    FollowUpInteractiveAuthorizationRequest(InteractiveAuthorizationFollowUpRequest),
     PushedAuthorizationRequest(AuthorizationRequest),
 }
 
-/// Handles the Pushed Authorization Request (PAR) endpoint as well as the Interactive Authorization Request flow as defined in OpenID4VCI 1.1
+/// Push an authorization request
+///
+/// Handles the Pushed Authorization Request (PAR) endpoint as defined by
+/// [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html), as well as the Interactive Authorization Request flow
+/// as defined in OpenID4VCI 1.1.
+///
+/// Nested values, such as `authorization_details`, are JSON-encoded form values.
+#[utoipa::path(
+    post,
+    path = "/auth/par",
+    operation_id = "auth_par",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    request_body(content = AuthorizationRequestDto, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (
+            status = 200,
+            description = "Interactive authorization response to an initial or follow-up interactive authorization request",
+            body = InteractiveAuthorizationResponse,
+        ),
+        (status = 201, description = "Pushed authorization response", body = PushedAuthorizationResponse),
+        (
+            status = 400,
+            description = "The request body is not `application/x-www-form-urlencoded`, or the authorization request is invalid",
+        ),
+        (status = 401, description = "The client is invalid", body = OID4VCError<TokenErrorResponse>),
+        (status = 422, description = "The request body is not a valid authorization request"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn par(
     State(state): State<Arc<AuthorizationState>>,
@@ -43,17 +73,15 @@ pub(crate) async fn par(
                     &state,
                     interactive_authorization_request,
                 )
-                .await
-                // TODO: implement proper error handling
-                .map_err(|_err| PublicError::InternalServerError)?;
+                .await?;
 
             Ok((StatusCode::OK, Json(interactive_authorization_response)).into_response())
         }
-        AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest {
+        AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest(InteractiveAuthorizationFollowUpRequest {
             auth_session,
             openid4vp_response,
             code_verifier,
-        } => {
+        }) => {
             info!("Received follow-up interactive authorization request for auth session: {auth_session}");
 
             let interactive_authorization_follow_up_response =
@@ -63,9 +91,7 @@ pub(crate) async fn par(
                     openid4vp_response,
                     code_verifier,
                 )
-                .await
-                // TODO: implement proper error handling
-                .map_err(|_err| PublicError::InternalServerError)?;
+                .await?;
 
             Ok((StatusCode::OK, Json(interactive_authorization_follow_up_response)).into_response())
         }
@@ -77,9 +103,7 @@ pub(crate) async fn par(
 
             let authorization_response =
                 PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
-                    .await
-                    // TODO: implement proper error handling
-                    .map_err(|_err| PublicError::InternalServerError)?;
+                    .await?;
 
             Ok((StatusCode::CREATED, Json(authorization_response)).into_response())
         }
@@ -229,11 +253,13 @@ pub mod tests {
                     )
                     .body(Body::from(
                         to_form_urlencoded_string(&json!(
-                            AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest {
-                                auth_session: interactive_authorization_response.auth_session.clone().unwrap(),
-                                openid4vp_response: Some(serde_json::json!({})),
-                                code_verifier: None,
-                            }
+                            AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest(
+                                InteractiveAuthorizationFollowUpRequest {
+                                    auth_session: interactive_authorization_response.auth_session.clone().unwrap(),
+                                    openid4vp_response: Some(serde_json::json!({})),
+                                    code_verifier: None,
+                                },
+                            )
                         ))
                         .unwrap(),
                     ))

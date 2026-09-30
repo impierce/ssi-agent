@@ -36,13 +36,13 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "be4e047", features = [
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "634dc44", features = [
     "utoipa",
 ] }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "be4e047" }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -103,6 +103,7 @@ sd-jwt = { package = "sd-jwt-payload", version = "0.5", default-features = false
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
+serde_norway = "0.9"
 serde_urlencoded = "0.7"
 serde_with = "3.13"
 strum = "0.26"

@@ -54,7 +54,8 @@ services:
     depends_on:
       - ssi-agent
     volumes:
-      - ../../agent_api_http/openapi.yaml:/spec/openapi.yaml:ro
+      # `openapi.yaml` or `openapi-full.yaml`, as selected by `FUZZ_SPEC` in the runner script.
+      - ../../agent_api_http/${FUZZ_SPEC_FILE:-openapi.yaml}:/spec/openapi.yaml:ro
       - ../../reports/fuzz:/reports
     # The arguments come from `scripts/fuzz-openapi.sh`.
     entrypoint: ["schemathesis"]

@@ -8,6 +8,14 @@ name: Fuzz OpenAPI
 on:
   workflow_dispatch:
     inputs:
+      spec:
+        description: "Specification to fuzz: the published API, or the full API including the standardized protocol endpoints"
+        required: false
+        type: choice
+        options:
+          - published
+          - full
+        default: published
       max_examples:
         description: "Test cases generated per API operation"
         required: false
@@ -45,6 +53,7 @@ jobs:
 
       - name: Fuzz
         env:
+          FUZZ_SPEC: ${{ inputs.spec || 'published' }}
           FUZZ_MAX_EXAMPLES: ${{ inputs.max_examples || '50' }}
           FUZZ_SEED: ${{ inputs.seed }}
           FUZZ_EXTRA_ARGS: ${{ inputs.extra_args }}

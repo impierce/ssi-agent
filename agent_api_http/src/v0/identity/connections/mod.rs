@@ -149,7 +149,7 @@ pub(crate) async fn get_connections(
 /// Retrieve a specific connection by its unique identifier.
 #[utoipa::path(
     get,
-    path = "/connections/{id}",
+    path = "/connections/{connection_id}",
     operation_id = "get_connection_by_id",
     tags = ["Connections"],
     responses(

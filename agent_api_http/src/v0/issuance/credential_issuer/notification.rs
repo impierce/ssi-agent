@@ -1,5 +1,6 @@
 use crate::handlers::{public_command_handler, public_query_handler};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
@@ -9,14 +10,43 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
+use oid4vci::errors::OID4VCError;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
 use std::sync::Arc;
 
 use tracing::info;
-/// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
-/// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
-
+/// Notify the credential issuer
+///
+/// Receives a notification about the outcome of a credential issuance, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint).
+///
+/// Errors use the HTTP status code 400 (Bad Request) and the content type `application/json`, as described in the
+/// [Notification Error Response](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response).
+#[utoipa::path(
+    post,
+    path = "/openid4vci/notification",
+    operation_id = "openid4vci_notification",
+    tags = ["OpenID4VCI", PROTOCOL_TAG],
+    security(("access_token" = [])),
+    request_body(content = NotificationRequest, content_type = "application/json"),
+    responses(
+        (status = 204, description = "Notification received"),
+        (
+            status = 400,
+            description = "The notification request or its `notification_id` is invalid, or the `Authorization` header is missing",
+            body = OID4VCError<NotificationErrorResponse>,
+        ),
+        (
+            status = 401,
+            description = "The access token is invalid or expired",
+            content_type = "application/json",
+            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            example = json!({"error": "invalid_token"}),
+        ),
+        (status = 415, description = "The request body is not `application/json`"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub async fn notification(
     State(state): State<Arc<IssuanceState>>,

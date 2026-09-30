@@ -1,4 +1,4 @@
-use crate::{error::IntoApiErrorExt, extractors::RequestActor};
+use crate::{error::IntoApiErrorExt, extractors::RequestActor, v0::openapi::PROTOCOL_TAG};
 use agent_identity::{
     service::{command::ServiceCommand, lifecycle},
     state::IdentityState,
@@ -92,9 +92,26 @@ pub(crate) async fn remove_linked_verifiable_presentations(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Get a linked verifiable presentation
+///
 /// Serves a published presentation to anyone resolving its holder's DID document, without
-/// authentication. Presentations that are not published answer `404`.
-pub(crate) async fn linked_verifiable_presentation(
+/// authentication, as defined by [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
+/// Presentations that are not published answer `404`.
+#[utoipa::path(
+    get,
+    path = "/linked-verifiable-presentations/{presentation_id}",
+    operation_id = "get_linked_verifiable_presentation_by_id",
+    tags = ["DID", PROTOCOL_TAG],
+    params(
+        ("presentation_id" = String, Path, description = "Credential presentation ID"),
+    ),
+    responses(
+        (status = 200, description = "Signed credential presentation", body = String, content_type = "application/jwt"),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "The presentation is not published"),
+    )
+)]
+pub(crate) async fn get_linked_verifiable_presentation_by_id(
     State(state): State<Arc<IdentityState>>,
     Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {

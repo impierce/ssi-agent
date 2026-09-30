@@ -21,3 +21,11 @@ use utoipa::OpenApi;
     )
 )]
 pub struct IdentityApi;
+
+#[derive(OpenApi)]
+#[openapi(paths(
+    crate::v0::identity::well_known::did::did,
+    crate::v0::identity::well_known::did_configuration::did_configuration,
+    crate::v0::identity::services::linked_vp::get_linked_verifiable_presentation_by_id,
+))]
+pub struct IdentityProtocolApi;

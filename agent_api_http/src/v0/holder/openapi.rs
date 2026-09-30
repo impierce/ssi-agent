@@ -27,3 +27,7 @@ use utoipa::OpenApi;
     )
 )]
 pub struct HolderApi;
+
+#[derive(OpenApi)]
+#[openapi(paths(crate::v0::holder::openid4vci::offers_params))]
+pub struct HolderProtocolApi;

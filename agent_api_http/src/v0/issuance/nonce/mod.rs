@@ -1,4 +1,5 @@
 use crate::handlers::public_command_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_issuance::{nonce::command::NonceCommand, state::IssuanceState};
 use agent_shared::generate_random_string;
 use axum::{
@@ -9,9 +10,27 @@ use axum::{
 
 use axum::Json;
 use http_api_problem::ApiError;
-use serde_json::json;
+use oid4vci::nonce_response::NonceResponse;
 use std::sync::Arc;
 
+/// Get a fresh nonce
+///
+/// Returns a fresh `c_nonce` to be used in key proofs, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-endpoint).
+#[utoipa::path(
+    post,
+    path = "/openid4vci/nonce",
+    operation_id = "openid4vci_nonce",
+    tags = ["OpenID4VCI", PROTOCOL_TAG],
+    responses(
+        (
+            status = 200,
+            description = "Fresh nonce",
+            body = NonceResponse,
+            headers(("Cache-Control" = String, description = "Always `no-store`")),
+        ),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
     let fresh_c_nonce = generate_random_string();
@@ -26,7 +45,7 @@ pub(crate) async fn nonce(State(state): State<Arc<IssuanceState>>) -> Result<Res
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, "no-store".parse().unwrap());
 
-    Ok((StatusCode::OK, headers, Json(json!({ "c_nonce": fresh_c_nonce }))).into_response())
+    Ok((StatusCode::OK, headers, Json(NonceResponse { c_nonce: fresh_c_nonce })).into_response())
 }
 
 #[cfg(test)]

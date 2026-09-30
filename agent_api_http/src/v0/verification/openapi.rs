@@ -11,3 +11,10 @@ use utoipa::OpenApi;
     )
 )]
 pub struct VerificationApi;
+
+#[derive(OpenApi)]
+#[openapi(paths(
+    crate::v0::verification::relying_party::request::request,
+    crate::v0::verification::relying_party::redirect::redirect,
+))]
+pub struct VerificationProtocolApi;

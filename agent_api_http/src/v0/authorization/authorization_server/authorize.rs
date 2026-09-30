@@ -1,4 +1,5 @@
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_authorization::application::oauth2_authorization_service::{
     OAuth2AuthorizationService, OAuth2AuthorizationServiceResponse,
 };
@@ -14,16 +15,37 @@ use http::header;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use std::sync::Arc;
 
+/// Authorize a pushed authorization request
+///
+/// Starts the authorization of a pushed authorization request by reference, as defined by
+/// [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html#name-authorization-request). The user agent is
+/// redirected to the consent page, or back to the client once consent has been given.
+#[utoipa::path(
+    get,
+    path = "/auth/authorize",
+    operation_id = "auth_authorize",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    params(AuthorizationRequestByReference),
+    responses(
+        (
+            status = 302,
+            description = "Redirect to the client's redirect URI",
+            headers(("Location" = String, description = "The client's redirect URI")),
+        ),
+        (
+            status = 303,
+            description = "Redirect to the consent page",
+            headers(("Location" = String, description = "The consent page URI")),
+        ),
+        (status = 400, description = "The query string is invalid, or the authorization request is unknown, expired, or for another client"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorize(
     State(state): State<Arc<AuthorizationState>>,
     Query(authorization_request): Query<AuthorizationRequestByReference>,
 ) -> Result<Response, PublicError> {
-    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?
-    {
+    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request).await? {
         OAuth2AuthorizationServiceResponse::RedirectToConsent(location) => Ok(Redirect::to(&location).into_response()),
         OAuth2AuthorizationServiceResponse::RedirectToClient(location) => {
             Ok((StatusCode::FOUND, [(header::LOCATION, location.to_string())]).into_response())

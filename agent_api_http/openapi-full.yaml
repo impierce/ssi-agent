@@ -9,6 +9,282 @@ servers:
 - url: http://localhost:3033
   description: Local development
 paths:
+  /.well-known/did-configuration.json:
+    get:
+      tags:
+      - DID
+      - Protocol
+      summary: Get the DID Configuration resource
+      description: |-
+        Returns the DID Configuration resource that links this domain to the DIDs of this application, as defined by
+        [Well Known DID Configuration](https://identity.foundation/.well-known/resources/did-configuration/).
+      operationId: well_known_did_configuration_json
+      responses:
+        '200':
+          description: DID Configuration resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainLinkageConfiguration'
+        '404':
+          description: No domain is linked
+  /.well-known/did.json:
+    get:
+      tags:
+      - DID
+      - Protocol
+      summary: Get the `did:web` DID document
+      description: |-
+        Returns the enabled `did:web` DID document of this application, as resolved by
+        [did:web](https://w3c-ccg.github.io/did-method-web/) resolvers.
+      operationId: well_known_did_json
+      responses:
+        '200':
+          description: DID document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DidDocument'
+        '404':
+          description: No enabled `did:web` DID document exists
+  /.well-known/oauth-authorization-server:
+    get:
+      tags:
+      - OAuth 2.0
+      - Protocol
+      summary: Get the OAuth 2.0 Authorization Server Metadata
+      description: |-
+        Returns the metadata of the authorization server as defined by
+        [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html).
+      operationId: well_known_oauth_authorization_server
+      responses:
+        '200':
+          description: Authorization server metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationServerMetadata'
+        '404':
+          description: The authorization server metadata is not configured
+  /.well-known/openid-credential-issuer:
+    get:
+      tags:
+      - OpenID4VCI
+      - Protocol
+      summary: Get the Credential Issuer Metadata
+      description: |-
+        Returns the metadata of the credential issuer as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata).
+      operationId: well_known_openid_credential_issuer
+      responses:
+        '200':
+          description: Credential issuer metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialIssuerMetadata'
+        '404':
+          description: The credential issuer metadata is not configured
+  /auth/authorize:
+    get:
+      tags:
+      - OAuth 2.0
+      - Protocol
+      summary: Authorize a pushed authorization request
+      description: |-
+        Starts the authorization of a pushed authorization request by reference, as defined by
+        [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html#name-authorization-request). The user agent is
+        redirected to the consent page, or back to the client once consent has been given.
+      operationId: auth_authorize
+      parameters:
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: request_uri
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '302':
+          description: Redirect to the client's redirect URI
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The client's redirect URI
+        '303':
+          description: Redirect to the consent page
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The consent page URI
+        '400':
+          description: The query string is invalid, or the authorization request is unknown, expired, or for another client
+  /auth/consent:
+    get:
+      tags:
+      - OAuth 2.0
+      - Protocol
+      summary: Get the consent page
+      description: Renders the HTML page on which the end-user grants or denies consent to a pushed authorization request.
+      operationId: get_consent
+      parameters:
+      - name: request_uri
+        in: query
+        description: The `request_uri` returned by the pushed authorization request endpoint
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Consent page
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: The query string is invalid, or the `request_uri` does not refer to a pending authorization request
+    post:
+      tags:
+      - OAuth 2.0
+      - Protocol
+      summary: Submit consent
+      description: Records whether the end-user granted consent and redirects the user agent back to the client.
+      operationId: post_consent
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConsentForm'
+        required: true
+      responses:
+        '302':
+          description: Redirect to the client's redirect URI
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The client's redirect URI
+        '400':
+          description: The `request_uri` does not refer to a pending authorization request
+        '415':
+          description: The request body is not `application/x-www-form-urlencoded`
+        '422':
+          description: The request body is not a valid consent form
+  /auth/par:
+    post:
+      tags:
+      - OAuth 2.0
+      - Protocol
+      summary: Push an authorization request
+      description: |-
+        Handles the Pushed Authorization Request (PAR) endpoint as defined by
+        [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html), as well as the Interactive Authorization Request flow
+        as defined in OpenID4VCI 1.1.
+
+        Nested values, such as `authorization_details`, are JSON-encoded form values.
+      operationId: auth_par
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequestDto'
+        required: true
+      responses:
+        '200':
+          description: Interactive authorization response to an initial or follow-up interactive authorization request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InteractiveAuthorizationResponse'
+        '201':
+          description: Pushed authorization response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushedAuthorizationResponse'
+        '400':
+          description: The request body is not `application/x-www-form-urlencoded`, or the authorization request is invalid
+        '401':
+          description: The client is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OID4VCError_TokenErrorResponse'
+        '422':
+          description: The request body is not a valid authorization request
+  /auth/token:
+    post:
+      tags:
+      - OAuth 2.0
+      - Protocol
+      summary: Request an access token
+      description: |-
+        Exchanges an authorization code or a pre-authorized code for an access token, as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-endpoint).
+      operationId: auth_token
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: The token request is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OID4VCError_TokenErrorResponse'
+        '401':
+          description: The client is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OID4VCError_TokenErrorResponse'
+        '415':
+          description: The request body is not `application/x-www-form-urlencoded`
+        '422':
+          description: The request body is not a valid token request
+  /credential_offer:
+    get:
+      tags:
+      - OpenID4VCI
+      - Protocol
+      summary: Receive a credential offer
+      description: |-
+        Receives a credential offer from a credential issuer, as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-endpoint).
+        `credential_offer` takes precedence when both parameters are present.
+      operationId: credential_offer
+      parameters:
+      - name: credential_offer
+        in: query
+        description: JSON-encoded credential offer.
+        required: false
+        schema:
+          type: string
+      - name: credential_offer_uri
+        in: query
+        description: URL from which the credential offer can be retrieved.
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Credential offer received
+        '400':
+          description: Neither parameter is present, or the credential offer is invalid
   /healthz:
     get:
       tags:
@@ -18,6 +294,37 @@ paths:
       responses:
         '200':
           description: Application is alive
+  /ietf-oauth-token-status-list/{path}:
+    get:
+      tags:
+      - Status List
+      - Protocol
+      summary: Get a status list token
+      description: |-
+        Returns a gzip-encoded Status List Token, as defined by
+        [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+      operationId: token_status_list
+      parameters:
+      - name: path
+        in: path
+        description: Status list ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Status List Token as a compact JWT
+          headers:
+            Content-Encoding:
+              schema:
+                type: string
+              description: Always `gzip`
+          content:
+            application/statuslist+jwt:
+              schema:
+                type: string
+        '404':
+          description: The status list does not exist
   /info:
     get:
       tags:
@@ -31,6 +338,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Info'
+  /linked-verifiable-presentations/{presentation_id}:
+    get:
+      tags:
+      - DID
+      - Protocol
+      summary: Get a linked verifiable presentation
+      description: |-
+        Serves a published presentation to anyone resolving its holder's DID document, without
+        authentication, as defined by [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
+        Presentations that are not published answer `404`.
+      operationId: get_linked_verifiable_presentation_by_id
+      parameters:
+      - name: presentation_id
+        in: path
+        description: Credential presentation ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Signed credential presentation
+          content:
+            application/jwt:
+              schema:
+                type: string
+        '400':
+          description: Invalid path parameter
+        '404':
+          description: The presentation is not published
   /livez:
     get:
       tags:
@@ -54,6 +390,143 @@ paths:
             application/yaml:
               schema:
                 type: string
+  /openid4vci/credential:
+    post:
+      tags:
+      - OpenID4VCI
+      - Protocol
+      summary: Issue credentials
+      description: |-
+        Issues the credentials of an offer in exchange for a valid access token and key proofs, as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-endpoint).
+      operationId: openid4vci_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRequest'
+        required: true
+      responses:
+        '200':
+          description: Credentials issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialResponse'
+        '400':
+          description: The credential request is invalid, or the `Authorization` header is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OID4VCError_CredentialErrorResponse'
+        '401':
+          description: The access token is invalid or expired
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: '`Bearer error="invalid_token"`'
+          content:
+            application/json:
+              example:
+                error: invalid_token
+        '415':
+          description: The request body is not `application/json`
+        '422':
+          description: The request body is not a valid credential request
+      security:
+      - access_token: []
+  /openid4vci/credential-offer/{offer_id}:
+    get:
+      tags:
+      - OpenID4VCI
+      - Protocol
+      summary: Get a credential offer
+      description: |-
+        Returns the credential offer referenced by a `credential_offer_uri`, as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-sending-credential-offer-by-).
+      operationId: openid4vci_credential_offer
+      parameters:
+      - name: offer_id
+        in: path
+        description: Credential offer ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Credential offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialOfferParameters'
+        '404':
+          description: The credential offer does not exist or cannot be resolved
+  /openid4vci/nonce:
+    post:
+      tags:
+      - OpenID4VCI
+      - Protocol
+      summary: Get a fresh nonce
+      description: |-
+        Returns a fresh `c_nonce` to be used in key proofs, as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-endpoint).
+      operationId: openid4vci_nonce
+      responses:
+        '200':
+          description: Fresh nonce
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: Always `no-store`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NonceResponse'
+  /openid4vci/notification:
+    post:
+      tags:
+      - OpenID4VCI
+      - Protocol
+      summary: Notify the credential issuer
+      description: |-
+        Receives a notification about the outcome of a credential issuance, as defined by
+        [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint).
+
+        Errors use the HTTP status code 400 (Bad Request) and the content type `application/json`, as described in the
+        [Notification Error Response](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response).
+      operationId: openid4vci_notification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+        required: true
+      responses:
+        '204':
+          description: Notification received
+        '400':
+          description: The notification request or its `notification_id` is invalid, or the `Authorization` header is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OID4VCError_NotificationErrorResponse'
+        '401':
+          description: The access token is invalid or expired
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+              description: '`Bearer error="invalid_token"`'
+          content:
+            application/json:
+              example:
+                error: invalid_token
+        '415':
+          description: The request body is not `application/json`
+      security:
+      - access_token: []
   /public/sponsoring-configuration:
     get:
       tags:
@@ -97,6 +570,56 @@ paths:
           description: Application is ready
         '503':
           description: Application is not ready
+  /redirect:
+    post:
+      tags:
+      - OID4VP / SIOPv2
+      - Protocol
+      summary: Submit an authorization response
+      description: |-
+        Receives and verifies the authorization response of a SIOPv2 or OID4VP authorization request, sent with the
+        `direct_post` response mode.
+      operationId: redirect
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AuthorizationResponseForm'
+        required: true
+      responses:
+        '200':
+          description: Authorization response verified
+        '400':
+          description: The authorization response is malformed, has no `state`, or is invalid
+        '404':
+          description: No authorization request exists for the `state`
+  /request/{request_id}:
+    get:
+      tags:
+      - OID4VP / SIOPv2
+      - Protocol
+      summary: Get a request object
+      description: |-
+        Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
+        `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved, as
+        described in [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-).
+      operationId: request_object
+      parameters:
+      - name: request_id
+        in: path
+        description: Authorization request ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Signed authorization request object
+          content:
+            application/oauth-authz-req+jwt:
+              schema:
+                type: string
+        '404':
+          description: The authorization request does not exist
   /v0/add-linked-domains:
     post:
       tags:
@@ -1640,6 +2163,38 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+  /vct/{credential_configuration_id}/{version}:
+    get:
+      tags:
+      - SD-JWT VC
+      - Protocol
+      summary: Get SD-JWT VC type metadata
+      description: |-
+        Returns the type metadata of a credential configuration, as defined by
+        [SD-JWT VC](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
+      operationId: vct_type_metadata
+      parameters:
+      - name: credential_configuration_id
+        in: path
+        description: Base64url-encoded (without padding) credential configuration ID
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        description: Type version (currently ignored)
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: SD-JWT VC type metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeMetadata'
+        '404':
+          description: The credential configuration does not exist
   /version:
     get:
       tags:
@@ -1680,11 +2235,121 @@ components:
           items:
             type: string
           default: []
+    AlgIdentifier:
+      oneOf:
+      - type: string
+      - type: integer
+        format: int32
+      description: A JSON Web Algorithm identifier represented by either its string or integer form.
     ApplicationProfile:
       type: string
       enum:
       - production
       - development
+    AuthorizationCode:
+      type: object
+      description: 'Grant Type `authorization_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1'
+      properties:
+        authorization_server:
+          type:
+          - string
+          - 'null'
+          format: uri
+        issuer_state:
+          type:
+          - string
+          - 'null'
+    AuthorizationDetailsClaim:
+      type: object
+      required:
+      - path
+      properties:
+        mandatory:
+          type: boolean
+        path:
+          $ref: '#/components/schemas/ClaimPathPointer'
+    AuthorizationDetailsObject:
+      type: object
+      description: |-
+        Represents an object of the `authorization_details` field of the `AuthorizationRequest` object in the Authorization Code Flow as
+        and in the `TokenRequest` object. : https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details
+      required:
+      - type
+      - credential_configuration_id
+      properties:
+        claims:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/AuthorizationDetailsClaim'
+        credential_configuration_id:
+          type: string
+        credential_identifiers:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        locations:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            format: uri
+        type:
+          $ref: '#/components/schemas/OpenidCredential'
+    AuthorizationRequest:
+      type: object
+      description: |-
+        The Authorization Request is used to request authorization as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint
+        In combination with this important paragraph: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei
+        NOTE: this Authorization Request is not to be confused with the same-named request in OpenID for Verifiable Presentations.
+      required:
+      - response_type
+      - client_id
+      properties:
+        authorization_details:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/AuthorizationDetailsObject'
+        client_id:
+          type: string
+        code_challenge:
+          type:
+          - string
+          - 'null'
+        code_challenge_method:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CodeChallengeMethod'
+        issuer_state:
+          type:
+          - string
+          - 'null'
+        redirect_uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+        response_type:
+          type: string
+        scope:
+          type:
+          - string
+          - 'null'
+        state:
+          type:
+          - string
+          - 'null'
+    AuthorizationRequestDto:
+      oneOf:
+      - $ref: '#/components/schemas/InteractiveAuthorizationRequest'
+      - $ref: '#/components/schemas/InteractiveAuthorizationFollowUpRequest'
+      - $ref: '#/components/schemas/AuthorizationRequest'
     AuthorizationRequestResponse:
       type: object
       required:
@@ -1731,6 +2396,174 @@ components:
           - string
           - 'null'
           description: Optional caller-provided identifier for the authorization request. A random value is generated when omitted.
+    AuthorizationResponseForm:
+      oneOf:
+      - $ref: '#/components/schemas/IdTokenAuthorizationResponse'
+      - $ref: '#/components/schemas/VpTokenAuthorizationResponse'
+      description: An authorization response sent to the relying party, either as a SIOPv2 ID Token or as an OID4VP VP Token.
+    AuthorizationServerMetadata:
+      type: object
+      description: |-
+        Authorization Server Metadata as defined by [RFC 8414, Section 2].
+
+        [RFC 8414, Section 2]: https://www.rfc-editor.org/rfc/rfc8414.html#section-2
+      required:
+      - issuer
+      properties:
+        authorization_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        code_challenge_methods_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        grant_types_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        interactive_authorization_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        introspection_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        introspection_endpoint_auth_methods_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        introspection_endpoint_auth_signing_alg_values_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        issuer:
+          type: string
+          format: uri
+        jwks_uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+        op_policy_uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+        op_tos_uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+        pre-authorized_grant_anonymous_access_supported:
+          type:
+          - boolean
+          - 'null'
+        pushed_authorization_request_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        registration_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        require_interactive_authorization_request:
+          type:
+          - boolean
+          - 'null'
+        require_pushed_authorization_requests:
+          type:
+          - boolean
+          - 'null'
+        response_modes_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        response_types_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        revocation_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        revocation_endpoint_auth_methods_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        revocation_endpoint_auth_signing_alg_values_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        scopes_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        service_documentation:
+          type:
+          - string
+          - 'null'
+          format: uri
+        token_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        token_endpoint_auth_methods_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        token_endpoint_auth_signing_alg_values_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        ui_locales_supported:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+    BatchCredentialIssuance:
+      type: object
+      description: Maximum batch issuance capability advertised by a Credential Issuer.
+      required:
+      - batch_size
+      properties:
+        batch_size:
+          $ref: '#/components/schemas/BatchSize'
+    BatchSize:
+      type: integer
+      format: int32
+      minimum: 2
     Catalog:
       type: object
       description: Data transfer object for Catalogs.
@@ -1786,6 +2619,59 @@ components:
             name: ''
             description: ''
             icon: null
+    ClaimDescription:
+      type: object
+      description: Metadata describing a claim addressable through a Claim Path Pointer.
+      required:
+      - path
+      properties:
+        display:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimDescriptionDisplay'
+        mandatory:
+          type: boolean
+        path:
+          $ref: '#/components/schemas/ClaimPathPointer'
+    ClaimDescriptionDisplay:
+      type: object
+      description: Localized display metadata for a claim.
+      required:
+      - name
+      properties:
+        locale:
+          type:
+          - string
+          - 'null'
+        name:
+          type: string
+    ClaimPathElement:
+      oneOf:
+      - type: string
+        description: To address a particular claim within an object, append the key (claim name) to the array.
+      - type: integer
+        format: int64
+        description: To address an element within an array, append the index to the array (as a non-negative, 0-based integer).
+        minimum: 0
+      - type: 'null'
+        description: To address all elements within an array, append a null value to the array.
+        default: null
+      description: One segment of a Claim Path Pointer.
+    ClaimPathPointer:
+      type: array
+      items:
+        oneOf:
+        - type: string
+          description: To address a particular claim within an object, append the key (claim name) to the array.
+        - type: integer
+          format: int64
+          description: To address an element within an array, append the index to the array (as a non-negative, 0-based integer).
+          minimum: 0
+        - type: 'null'
+          description: To address all elements within an array, append a null value to the array.
+          default: null
+        description: One segment of a Claim Path Pointer.
+      minItems: 1
     CloudEvent:
       type: object
       description: A CNCF CloudEvent envelope (v1.0 spec).
@@ -1842,6 +2728,12 @@ components:
         points_here:
           type: boolean
           description: Whether a `CNAME` record for the origin leads to the deployment.
+    CodeChallengeMethod:
+      type: string
+      description: PKCE code challenge methods accepted by the Authorization Server.
+      enum:
+      - S256
+      - plain
     Connection:
       type: object
       required:
@@ -1896,6 +2788,19 @@ components:
           type:
           - string
           - 'null'
+    ConsentForm:
+      type: object
+      required:
+      - client_id
+      - request_uri
+      - consent_given
+      properties:
+        client_id:
+          type: string
+        consent_given:
+          type: boolean
+        request_uri:
+          type: string
     CreateCatalogRequest:
       type: object
       properties:
@@ -2102,12 +3007,329 @@ components:
           enum:
           - Pending
           - Issued
+    CredentialConfigurationIds:
+      type: array
+      items:
+        type: string
+      minItems: 1
+    CredentialConfigurationsSupportedDisplay:
+      type: object
+      description: Localized display metadata for a supported Credential Configuration.
+      required:
+      - name
+      properties:
+        background_color:
+          type:
+          - string
+          - 'null'
+        background_image:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Image'
+        description:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+        logo:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Logo'
+        name:
+          type: string
+        text_color:
+          type:
+          - string
+          - 'null'
+    CredentialConfigurationsSupportedObject:
+      allOf:
+      - $ref: '#/components/schemas/CredentialFormats'
+        description: This field is flattened into a `format` field and optionally extra format-specific fields.
+      - type: object
+        properties:
+          credential_metadata:
+            oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/CredentialMetadata'
+          credential_signing_alg_values_supported:
+            type: array
+            items:
+              $ref: '#/components/schemas/AlgIdentifier'
+          cryptographic_binding_methods_supported:
+            type: array
+            items:
+              type: string
+          proof_types_supported:
+            type: object
+            additionalProperties:
+              $ref: '#/components/schemas/KeyProofMetadata'
+            propertyNames:
+              type: string
+              description: Key proof types supported by the Credential Issuer.
+              enum:
+              - jwt
+          scope:
+            type:
+            - string
+            - 'null'
+      description: 'Credentials Supported object as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1'
+    CredentialErrorResponse:
+      type: string
+      description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+      enum:
+      - invalid_credential_request
+      - unknown_credential_configuration
+      - unknown_credential_identifier
+      - invalid_proof
+      - invalid_nonce
+      - invalid_encryption_parameters
+      - credential_request_denied
     CredentialExpiry:
       oneOf:
       - type: string
         format: date-time
       - type: 'null'
         default: null
+    CredentialFormats:
+      oneOf:
+      - allOf:
+        - $ref: '#/components/schemas/JwtVcJsonParameters'
+        - type: object
+          required:
+          - format
+          properties:
+            format:
+              type: string
+              enum:
+              - jwt_vc_json
+      - allOf:
+        - $ref: '#/components/schemas/JwtVcJsonLdParameters'
+        - type: object
+          required:
+          - format
+          properties:
+            format:
+              type: string
+              enum:
+              - jwt_vc_json-ld
+      - allOf:
+        - $ref: '#/components/schemas/LdpVcParameters'
+        - type: object
+          required:
+          - format
+          properties:
+            format:
+              type: string
+              enum:
+              - ldp_vc
+      - allOf:
+        - $ref: '#/components/schemas/MsoMdocParameters'
+        - type: object
+          required:
+          - format
+          properties:
+            format:
+              type: string
+              enum:
+              - mso_mdoc
+      - allOf:
+        - $ref: '#/components/schemas/DcSdJwtParameters'
+        - type: object
+          required:
+          - format
+          properties:
+            format:
+              type: string
+              enum:
+              - dc+sd-jwt
+      - allOf:
+        - $ref: '#/components/schemas/VcSdJwtParameters'
+        - type: object
+          required:
+          - format
+          properties:
+            format:
+              type: string
+              enum:
+              - vc+sd-jwt
+    CredentialIdentifierOrCredentialConfigurationId:
+      oneOf:
+      - type: object
+        required:
+        - credential_identifier
+        properties:
+          credential_identifier:
+            type: string
+      - type: object
+        required:
+        - credential_configuration_id
+        properties:
+          credential_configuration_id:
+            type: string
+      description: Selects a Credential using either an issued identifier or a configuration identifier.
+    CredentialIssuerMetadata:
+      type: object
+      description: |-
+        Credential Issuer Metadata as described here:
+        https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html
+      required:
+      - credential_issuer
+      - credential_endpoint
+      properties:
+        authorization_servers:
+          type: array
+          items:
+            type: string
+            format: uri
+        batch_credential_issuance:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/BatchCredentialIssuance'
+        credential_configurations_supported:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CredentialConfigurationsSupportedObject'
+          propertyNames:
+            type: string
+        credential_endpoint:
+          type: string
+          format: uri
+        credential_identifiers_supported:
+          type:
+          - boolean
+          - 'null'
+        credential_issuer:
+          type: string
+          format: uri
+        credential_response_encryption:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialResponseEncryption'
+        deferred_credential_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        display:
+          type:
+          - array
+          - 'null'
+          items: {}
+        nonce_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        notification_endpoint:
+          type:
+          - string
+          - 'null'
+          format: uri
+        signed_metadata:
+          type:
+          - string
+          - 'null'
+    CredentialMetadata:
+      type: object
+      description: Claims and display information associated with a supported Credential Configuration.
+      properties:
+        claims:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ClaimDescription'
+        display:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/CredentialConfigurationsSupportedDisplay'
+    CredentialOfferParameters:
+      type: object
+      description: 'Credential Offer Parameters as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters'
+      required:
+      - credential_issuer
+      - credential_configuration_ids
+      properties:
+        credential_configuration_ids:
+          $ref: '#/components/schemas/CredentialConfigurationIds'
+        credential_issuer:
+          type: string
+          format: uri
+        grants:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/Grants'
+    CredentialRequest:
+      allOf:
+      - $ref: '#/components/schemas/CredentialIdentifierOrCredentialConfigurationId'
+      - type: object
+        properties:
+          proofs:
+            oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Proofs'
+      description: 'Credential Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request'
+    CredentialResponse:
+      allOf:
+      - $ref: '#/components/schemas/CredentialResponseType'
+      description: 'Credential Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response'
+    CredentialResponseEncryption:
+      type: object
+      description: Algorithms and content-encryption methods supported for encrypted Credential Responses.
+      required:
+      - alg_values_supported
+      - enc_values_supported
+      - encryption_required
+      properties:
+        alg_values_supported:
+          type: array
+          items:
+            type: string
+        enc_values_supported:
+          type: array
+          items:
+            type: string
+        encryption_required:
+          type: boolean
+    CredentialResponseObject:
+      type: object
+      description: A Credential issued in a Credential Response.
+      required:
+      - credential
+      properties:
+        credential:
+          type: string
+    CredentialResponseType:
+      oneOf:
+      - type: object
+        required:
+        - transaction_id
+        - interval
+        properties:
+          interval:
+            type: integer
+            format: int64
+            minimum: 0
+          transaction_id:
+            type: string
+      - type: object
+        required:
+        - credentials
+        properties:
+          credentials:
+            type: array
+            items:
+              $ref: '#/components/schemas/CredentialResponseObject'
+          notification_id:
+            type:
+            - string
+            - 'null'
+      description: Immediate or deferred Credential Response fields flattened into the enclosing response.
     CredentialStatus:
       type: object
       required:
@@ -2177,6 +3399,13 @@ components:
       - w3c_vc_data_model_v2-0
       - open_badges_3-0
       - european_learning_model_v3-3
+    DcSdJwtParameters:
+      type: object
+      required:
+      - vct
+      properties:
+        vct:
+          type: string
     DeleteCatalogRequest:
       type: object
       properties:
@@ -2478,6 +3707,18 @@ components:
           type:
           - string
           - 'null'
+    Grants:
+      type: object
+      description: 'Grants as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3'
+      properties:
+        authorization_code:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/AuthorizationCode'
+        urn:ietf:params:oauth:grant-type:pre-authorized_code:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/PreAuthorizedCode'
     HolderAuthorization:
       type: object
       required:
@@ -2502,6 +3743,30 @@ components:
       enum:
       - individual
       - organization
+    IdTokenAuthorizationResponse:
+      type: object
+      description: |-
+        A [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#name-self-issued-openid-provider-a)
+        authorization response.
+      required:
+      - state
+      - id_token
+      properties:
+        id_token:
+          type: string
+          description: The Self-Issued ID Token as a compact JWT.
+        state:
+          type: string
+          description: The `state` of the authorization request, which identifies it.
+    Image:
+      type: object
+      description: Background image metadata associated with a supported Credential Configuration.
+      required:
+      - uri
+      properties:
+        uri:
+          type: string
+          format: uri
     Info:
       allOf:
       - $ref: '#/components/schemas/Version'
@@ -2528,6 +3793,109 @@ components:
           uptime:
             type: string
             description: The current uptime of the application in a human-friendly format.
+    InteractionType:
+      oneOf:
+      - type: string
+        description: The Wallet supports an OpenID4VP Presentation interaction.
+        enum:
+        - urn:openid:dcp:iae:openid4vp_presentation
+      - type: string
+        description: The Wallet supports a redirect to a web-based interaction.
+        enum:
+        - urn:openid:dcp:iae:redirect_to_web
+      - type: string
+        description: Custom interaction type defined by an extension.
+      description: Interaction types supported by the Wallet as defined in Section 6.1.1.
+    InteractiveAuthorizationFollowUpRequest:
+      type: object
+      description: |-
+        A follow-up request to the Interactive Authorization Endpoint, as defined in Section 6.1.2.
+
+        Follow-up requests include the `auth_session` value received most recently from the
+        Authorization Server. Additional parameters depend on the interaction type.
+      required:
+      - auth_session
+      properties:
+        auth_session:
+          type: string
+          description: The auth_session value from the most recent IAE response.
+        code_verifier:
+          type:
+          - string
+          - 'null'
+          description: |-
+            The PKCE code verifier, required after a `urn:openid:dcp:iae:redirect_to_web`
+            interaction if PKCE was used in the initial request.
+        openid4vp_response:
+          description: |-
+            The OpenID4VP Authorization Response (JSON-encoded), present when responding
+            to a `urn:openid:dcp:iae:openid4vp_presentation` interaction.
+    InteractiveAuthorizationRequest:
+      allOf:
+      - $ref: '#/components/schemas/AuthorizationRequest'
+      - type: object
+        required:
+        - interaction_types_supported
+        properties:
+          interaction_types_supported:
+            type: string
+            description: Comma-separated list of interaction types the Wallet supports.
+      description: |-
+        The initial request to the Interactive Authorization Endpoint, as defined in Section 6.1.1.
+
+        Formed and sent in the same way as a PAR request (RFC 9126 Section 2.1), with the addition
+        of the `interaction_types_supported` parameter.
+    InteractiveAuthorizationResponse:
+      type: object
+      description: |-
+        Response from the Interactive Authorization Endpoint, as defined in Section 6.2.
+
+        The response indicates either that user interaction is required, that the authorization
+        was completed successfully (with an authorization code), or an error.
+      required:
+      - status
+      properties:
+        auth_session:
+          type:
+          - string
+          - 'null'
+          description: |-
+            A value that allows the Authorization Server to associate subsequent requests
+            with the ongoing authorization request sequence. Must be included in follow-up requests.
+        code:
+          type:
+          - string
+          - 'null'
+          description: The authorization code, present when `status` is `ok`.
+        expires_in:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: The lifetime of the `request_uri` in seconds.
+        openid4vp_request:
+          description: |-
+            An OpenID4VP Authorization Request for the Wallet to process.
+            May contain either a plain request object or a signed request (`{"request": "eyJ..."}`).
+        request_uri:
+          type:
+          - string
+          - 'null'
+          description: A request_uri for building an Authorization Request via browser redirect.
+        status:
+          $ref: '#/components/schemas/InteractiveAuthorizationStatus'
+          description: Whether an additional interaction is required or the authorization has been completed.
+        type:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/InteractionType'
+            description: The interaction type required by the Authorization Server.
+    InteractiveAuthorizationStatus:
+      type: string
+      description: The response status from the Interactive Authorization Endpoint.
+      enum:
+      - require_interaction
+      - ok
     IotaMetadata:
       type: object
       description: Metadata for IOTA-based DID Documents.
@@ -2563,6 +3931,77 @@ components:
         wallet_address:
           type: string
           example: '0x1234567890'
+    JwtVcJsonCredentialDefinition:
+      type: object
+      description: Credential definition for the `jwt_vc_json` format.
+      required:
+      - type
+      properties:
+        type:
+          type: array
+          items:
+            type: string
+    JwtVcJsonLdCredentialDefinition:
+      type: object
+      description: Credential definition for the `jwt_vc_json-ld` format.
+      required:
+      - '@context'
+      - type
+      properties:
+        '@context':
+          type: array
+          items:
+            type: string
+        type:
+          type: array
+          items:
+            type: string
+    JwtVcJsonLdParameters:
+      type: object
+      required:
+      - credential_definition
+      properties:
+        credential_definition:
+          $ref: '#/components/schemas/JwtVcJsonLdCredentialDefinition'
+    JwtVcJsonParameters:
+      type: object
+      required:
+      - credential_definition
+      properties:
+        credential_definition:
+          $ref: '#/components/schemas/JwtVcJsonCredentialDefinition'
+    KeyProofMetadata:
+      type: object
+      description: Algorithms supported by the Credential Issuer for a key proof type.
+      required:
+      - proof_signing_alg_values_supported
+      properties:
+        proof_signing_alg_values_supported:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlgIdentifier'
+    LdpVcCredentialDefinition:
+      type: object
+      description: Credential definition for the `ldp_vc` format.
+      required:
+      - '@context'
+      - type
+      properties:
+        '@context':
+          type: array
+          items:
+            type: string
+        type:
+          type: array
+          items:
+            type: string
+    LdpVcParameters:
+      type: object
+      required:
+      - credential_definition
+      properties:
+        credential_definition:
+          $ref: '#/components/schemas/LdpVcCredentialDefinition'
     LinkedCredentialValidation:
       type: object
       required:
@@ -2785,6 +4224,19 @@ components:
         url:
           type: string
           format: uri
+    Logo:
+      type: object
+      description: Logo metadata associated with a supported Credential Configuration.
+      required:
+      - uri
+      properties:
+        alt_text:
+          type:
+          - string
+          - 'null'
+        uri:
+          type: string
+          format: uri
     LogoProperties:
       type: object
       properties:
@@ -2809,6 +4261,109 @@ components:
         catalogId:
           type: string
           default: ''
+    MsoMdocParameters:
+      type: object
+      required:
+      - doctype
+      properties:
+        doctype:
+          type: string
+    NonceResponse:
+      type: object
+      description: |-
+        Nonce Response as defined by OpenID4VCI.
+
+        See <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-response>.
+      required:
+      - c_nonce
+      properties:
+        c_nonce:
+          type: string
+    NotificationErrorResponse:
+      type: string
+      description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+      enum:
+      - invalid_notification_request
+      - invalid_notification_id
+    NotificationEvent:
+      type: string
+      description: Events a Wallet can report for an issued Credential.
+      enum:
+      - credential_accepted
+      - credential_failure
+      - credential_deleted
+    NotificationRequest:
+      type: object
+      description: 'Notification Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request'
+      required:
+      - notification_id
+      - event
+      properties:
+        event:
+          $ref: '#/components/schemas/NotificationEvent'
+        event_description:
+          type:
+          - string
+          - 'null'
+        notification_id:
+          type: string
+    OID4VCError_CredentialErrorResponse:
+      type: object
+      description: OpenID4VC protocol error response with an optional human-readable description.
+      required:
+      - error
+      properties:
+        error:
+          type: string
+          description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+          enum:
+          - invalid_credential_request
+          - unknown_credential_configuration
+          - unknown_credential_identifier
+          - invalid_proof
+          - invalid_nonce
+          - invalid_encryption_parameters
+          - credential_request_denied
+        error_description:
+          type:
+          - string
+          - 'null'
+    OID4VCError_NotificationErrorResponse:
+      type: object
+      description: OpenID4VC protocol error response with an optional human-readable description.
+      required:
+      - error
+      properties:
+        error:
+          type: string
+          description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+          enum:
+          - invalid_notification_request
+          - invalid_notification_id
+        error_description:
+          type:
+          - string
+          - 'null'
+    OID4VCError_TokenErrorResponse:
+      type: object
+      description: OpenID4VC protocol error response with an optional human-readable description.
+      required:
+      - error
+      properties:
+        error:
+          type: string
+          description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+          enum:
+          - invalid_request
+          - invalid_client
+          - invalid_grant
+          - unauthorized_client
+          - unsupported_grant_type
+          - invalid_scope
+        error_description:
+          type:
+          - string
+          - 'null'
     Offer:
       type: object
       required:
@@ -2938,6 +4493,11 @@ components:
 
             At least one template ID is required. These IDs select the credential types a wallet may
             request; they do not identify credential instances or provide credential claim data.
+    OpenidCredential:
+      type: string
+      description: Represents the `openid_credential` field of the `AuthorizationDetailsObject`.
+      enum:
+      - openid_credential
     PatchCredentialEndpointRequest:
       type: object
       required:
@@ -2982,6 +4542,28 @@ components:
           oneOf:
           - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+    PreAuthorizedCode:
+      type: object
+      description: 'Grant Type `pre-authorized_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1'
+      required:
+      - pre-authorized_code
+      properties:
+        authorization_server:
+          type:
+          - string
+          - 'null'
+          format: uri
+        interval:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        pre-authorized_code:
+          type: string
+        tx_code:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TxCodeConstraints'
     PresentationView:
       type: object
       required:
@@ -3037,6 +4619,16 @@ components:
           - string
           - 'null'
           format: uri
+    Proofs:
+      type: object
+      description: One or more proofs of possession grouped by proof type.
+      required:
+      - jwt
+      properties:
+        jwt:
+          type: array
+          items:
+            type: string
     PropertyAttribute:
       type: object
       required:
@@ -3128,6 +4720,18 @@ components:
           type: array
           items:
             type: string
+    PushedAuthorizationResponse:
+      type: object
+      description: Successful Pushed Authorization Request response as defined by RFC 9126.
+      required:
+      - request_uri
+      - expires_in
+      properties:
+        expires_in:
+          type: integer
+          format: int64
+        request_uri:
+          type: string
     RemoveConnectionRequest:
       type: object
       required:
@@ -3326,6 +4930,100 @@ components:
           - 'null'
         uri:
           type: string
+    TokenErrorResponse:
+      type: string
+      description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+      enum:
+      - invalid_request
+      - invalid_client
+      - invalid_grant
+      - unauthorized_client
+      - unsupported_grant_type
+      - invalid_scope
+    TokenRequest:
+      oneOf:
+      - type: object
+        required:
+        - client_id
+        - code
+        - grant_type
+        properties:
+          authorization_details:
+            type:
+            - array
+            - 'null'
+            items:
+              $ref: '#/components/schemas/AuthorizationDetailsObject'
+          client_id:
+            type: string
+          code:
+            type: string
+          code_verifier:
+            type:
+            - string
+            - 'null'
+          grant_type:
+            type: string
+            enum:
+            - authorization_code
+          redirect_uri:
+            type:
+            - string
+            - 'null'
+            format: uri
+      - type: object
+        required:
+        - pre-authorized_code
+        - grant_type
+        properties:
+          authorization_details:
+            type:
+            - array
+            - 'null'
+            items:
+              $ref: '#/components/schemas/AuthorizationDetailsObject'
+          grant_type:
+            type: string
+            enum:
+            - urn:ietf:params:oauth:grant-type:pre-authorized_code
+          pre-authorized_code:
+            type: string
+          tx_code:
+            type:
+            - string
+            - 'null'
+      description: 'Token Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request'
+    TokenResponse:
+      type: object
+      description: 'Token Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response'
+      required:
+      - access_token
+      - token_type
+      properties:
+        access_token:
+          type: string
+        authorization_details:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/AuthorizationDetailsObject'
+        expires_in:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        refresh_token:
+          type:
+          - string
+          - 'null'
+        scope:
+          type:
+          - string
+          - 'null'
+        token_type:
+          type: string
     TxCodeConstraints:
       type: object
       properties:
@@ -3353,6 +5051,132 @@ components:
           - $serde_json::private::Number: '6'
           maximum: 255
           minimum: 0
+    TypeMetadata:
+      type: object
+      description: |-
+        Type metadata of an SD-JWT VC credential type.
+
+        See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
+      properties:
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeMetadataClaim'
+        description:
+          type:
+          - string
+          - 'null'
+          description: A human-readable description for the type.
+        display:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeMetadataDisplay'
+        extends:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: A URI of another type that this type extends.
+        extends#integrity:
+          type:
+          - string
+          - 'null'
+          description: Integrity metadata for the extended type.
+        name:
+          type:
+          - string
+          - 'null'
+          description: A human-readable name for the type.
+        schema:
+          type:
+          - object
+          - 'null'
+          description: An embedded JSON Schema for the credential.
+          additionalProperties: {}
+          propertyNames:
+            type: string
+        schema_uri:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: A URI referencing a JSON Schema for the credential.
+        schema_uri#integrity:
+          type:
+          - string
+          - 'null'
+          description: Integrity metadata for the referenced JSON Schema.
+    TypeMetadataClaim:
+      type: object
+      description: Information about particular claims of an SD-JWT VC type.
+      required:
+      - path
+      properties:
+        display:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeMetadataClaimDisplay'
+        mandatory:
+          type:
+          - boolean
+          - 'null'
+          description: Whether the claim must be present in the issued credential.
+        path:
+          $ref: '#/components/schemas/ClaimPathPointer'
+        sd:
+          oneOf:
+          - type: 'null'
+          - type: string
+            enum:
+            - always
+            - allowed
+            - never
+          description: Whether the claim is selectively disclosable.
+        svg_id:
+          type:
+          - string
+          - 'null'
+          description: The ID of the claim for reference in an SVG template.
+    TypeMetadataClaimDisplay:
+      type: object
+      description: Display information for a claim.
+      required:
+      - locale
+      - label
+      properties:
+        description:
+          type:
+          - string
+          - 'null'
+        label:
+          type: string
+        locale:
+          type: string
+          description: A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
+    TypeMetadataDisplay:
+      type: object
+      description: Display information for an SD-JWT VC type.
+      required:
+      - locale
+      - name
+      properties:
+        description:
+          type:
+          - string
+          - 'null'
+        locale:
+          type: string
+          description: A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
+        name:
+          type: string
+        rendering:
+          type:
+          - object
+          - 'null'
+          description: Rendering information, such as `simple` or `svg_templates`.
+          additionalProperties: {}
+          propertyNames:
+            type: string
     UpdateTemplateEndpointRequest:
       type: object
       properties:
@@ -3453,6 +5277,23 @@ components:
           format: date-time
         valid:
           type: boolean
+    VcSdJwtCredentialDefinition:
+      type: object
+      description: Credential definition for the `vc+sd-jwt` format.
+      required:
+      - type
+      properties:
+        type:
+          type: array
+          items:
+            type: string
+    VcSdJwtParameters:
+      type: object
+      required:
+      - credential_definition
+      properties:
+        credential_definition:
+          $ref: '#/components/schemas/VcSdJwtCredentialDefinition'
     Version:
       type: object
       properties:
@@ -3471,6 +5312,26 @@ components:
       enum:
       - private
       - public
+    VpTokenAuthorizationResponse:
+      type: object
+      description: |-
+        An [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-response) authorization
+        response.
+      required:
+      - state
+      - vp_token
+      properties:
+        state:
+          type: string
+          description: The `state` of the authorization request, which identifies it.
+        vp_token:
+          type: string
+          description: JSON-encoded object that maps each DCQL credential query ID to a non-empty array of presentations.
+  securitySchemes:
+    access_token:
+      type: http
+      scheme: bearer
+      description: Access token issued by the `/auth/token` endpoint.
 tags:
 - name: Configuration
   description: Inspect UniCore application configuration.
@@ -3504,6 +5365,20 @@ tags:
   description: Inspect application liveness and readiness.
 - name: OpenAPI
   description: Inspect the OpenAPI description of this application.
+- name: Protocol
+  description: Endpoints defined by external standards, used by wallets, verifiers and resolvers.
+- name: DID
+  description: Resolve the DID documents and domain linkage of this application.
+- name: OAuth 2.0
+  description: Authorize wallets through the OAuth 2.0 authorization server.
+- name: OpenID4VCI
+  description: Issue and receive credentials with OpenID for Verifiable Credential Issuance.
+- name: OID4VP / SIOPv2
+  description: Request and verify presentations with OpenID for Verifiable Presentations and Self-Issued OpenID Provider v2.
+- name: Status List
+  description: Retrieve credential status lists as defined by OAuth Token Status List.
+- name: SD-JWT VC
+  description: Retrieve SD-JWT VC type metadata.
 externalDocs:
   url: https://docs.impierce.com/unicore
   description: Official UniCore documentation

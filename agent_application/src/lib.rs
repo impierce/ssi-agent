@@ -1,4 +1,5 @@
 mod metadata;
+pub mod openapi;
 mod probes;
 pub mod telemetry;
 
@@ -23,7 +24,7 @@ use agent_store::{
 };
 use agent_verification::services::VerificationServices;
 use probes::{
-    liveness::healthz,
+    liveness::{healthz, livez},
     readiness::{readyz, ReadinessState},
 };
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
@@ -463,9 +464,12 @@ where
     // Add probes routes
     let probes_router = axum::Router::new()
         .route("/healthz", axum::routing::get(healthz))
+        .route("/livez", axum::routing::get(livez))
         .route("/readyz", axum::routing::get(readyz))
         .with_state(readiness);
     let app = probes_router.merge(app);
+
+    let app = openapi::router(config().serve_openapi_enabled).merge(app);
 
     // Record the OpenTelemetry HTTP request metrics (a no-op when OpenTelemetry is not enabled).
     app.route_layer(axum::middleware::from_fn(track_metrics))

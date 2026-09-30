@@ -14,6 +14,7 @@ use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
+#[schema(as = TemplateLogo)]
 pub struct Logo {
     pub uri: String,
     pub alt_text: Option<String>,

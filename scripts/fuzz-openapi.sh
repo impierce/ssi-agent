@@ -3,9 +3,10 @@
 # Fuzz the HTTP API against its own generated OpenAPI specification.
 #
 # Boots a disposable UniCore instance (agent + Postgres) with Docker Compose, points Schemathesis
-# at `agent_api_http/openapi.yaml`, and tears everything down again. The specification is the one
-# committed in this repository; CI already guarantees it is in sync with the `#[utoipa::path(...)]`
-# annotations, so there is nothing to regenerate here.
+# at `agent_api_http/openapi.yaml` (or `openapi-full.yaml` with `FUZZ_SPEC=full`), and tears
+# everything down again. The specification is the one committed in this repository; CI already
+# guarantees it is in sync with the `#[utoipa::path(...)]` annotations, so there is nothing to
+# regenerate here.
 #
 # What this looks for: places where the implementation and the specification disagree — undocumented
 # status codes, responses that do not match their schema, wrong content types, valid input rejected,
@@ -14,7 +15,8 @@
 # `ignored_auth` check is excluded rather than left to report the obvious.
 #
 # Usage:
-#   ./scripts/fuzz-openapi.sh                 # full run
+#   ./scripts/fuzz-openapi.sh                 # full run of the published specification
+#   FUZZ_SPEC=full ./scripts/fuzz-openapi.sh  # also fuzz the standardized protocol endpoints
 #   FUZZ_MAX_EXAMPLES=20 ./scripts/fuzz-openapi.sh
 #   FUZZ_SEED=12345 ./scripts/fuzz-openapi.sh # reproduce a previous run
 #   FUZZ_KEEP_UP=1 ./scripts/fuzz-openapi.sh  # leave the stack running for inspection
@@ -27,7 +29,18 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 DOCKER_DIR="$REPO_ROOT/agent_application/docker"
 REPORTS_DIR="$REPO_ROOT/reports/fuzz"
-SPEC_PATH="$REPO_ROOT/agent_api_http/openapi.yaml"
+FUZZ_SPEC="${FUZZ_SPEC:-published}"
+
+case "$FUZZ_SPEC" in
+    published) FUZZ_SPEC_FILE="openapi.yaml" ;;
+    full) FUZZ_SPEC_FILE="openapi-full.yaml" ;;
+    *)
+        echo "Error: FUZZ_SPEC must be 'published' or 'full', got '$FUZZ_SPEC'." >&2
+        exit 1
+        ;;
+esac
+
+SPEC_PATH="$REPO_ROOT/agent_api_http/$FUZZ_SPEC_FILE"
 
 # Not 3033: that is where a local development instance usually listens.
 UNICORE_FUZZ_PORT="${UNICORE_FUZZ_PORT:-3099}"
@@ -35,7 +48,7 @@ FUZZ_MAX_EXAMPLES="${FUZZ_MAX_EXAMPLES:-50}"
 FUZZ_READY_TIMEOUT="${FUZZ_READY_TIMEOUT:-120}"
 FUZZ_KEEP_UP="${FUZZ_KEEP_UP:-0}"
 
-export UNICORE_FUZZ_PORT
+export UNICORE_FUZZ_PORT FUZZ_SPEC_FILE
 
 # Operations that would reach outside the compose project even with event publishers disabled.
 # Everything else is fair game.
@@ -50,6 +63,13 @@ EXCLUDED_OPERATION_IDS=(
     # POST /v0/connections fetches credential-issuer metadata from the submitted URL.
     "add_connection"
 )
+
+if [ "$FUZZ_SPEC" = "full" ]; then
+    EXCLUDED_OPERATION_IDS+=(
+        # GET /credential_offer fetches the offer from `credential_offer_uri` and the issuer's metadata.
+        "credential_offer"
+    )
+fi
 
 compose() {
     docker compose --project-directory "$DOCKER_DIR" -f "$DOCKER_DIR/compose.fuzz.yaml" "$@"
@@ -113,7 +133,7 @@ schemathesis_args=(
     # Nothing carries over between runs of a disposable container, and disabling the example
     # database keeps the container from needing a writable working directory.
     --generation-database none
-    # One broken operation should not hide the state of the other 53.
+    # One broken operation should not hide the state of the others.
     --continue-on-failure
     # Explicit paths: the default report filenames are timestamped, and CI wants stable ones.
     --report-junit-path /reports/junit.xml
@@ -140,7 +160,7 @@ if [ -n "${FUZZ_EXTRA_ARGS:-}" ]; then
 fi
 
 excluded_operations=$((${#EXCLUDED_PATHS[@]} + ${#EXCLUDED_OPERATION_IDS[@]}))
-echo "==> Fuzzing with ${FUZZ_MAX_EXAMPLES} examples per operation (${excluded_operations} operations excluded)"
+echo "==> Fuzzing ${FUZZ_SPEC_FILE} with ${FUZZ_MAX_EXAMPLES} examples per operation (${excluded_operations} operations excluded)"
 set +e
 # Run as the invoking user so the reports on the host are not owned by root. That leaves the
 # image's own home and working directory unwritable, hence the switch to /tmp.

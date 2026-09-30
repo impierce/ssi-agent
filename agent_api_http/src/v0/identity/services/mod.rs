@@ -3,7 +3,9 @@ pub mod linked_vp;
 
 use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
+use crate::v0::identity::well_known::did_configuration::DomainLinkageConfigurationSchema;
 use agent_identity::{
+    document::openapi::DidService,
     service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
     state::IdentityState,
 };
@@ -23,18 +25,25 @@ use url::Url;
 struct ServiceResponse {
     #[serde(rename = "id")]
     service_id: String,
-    /// TODO: Replace this generic object schema with a schema for `identity_document::service::Service`.
-    #[schema(value_type = Option<Object>)]
+    #[schema(value_type = Option<DidService>)]
     service: Option<DocumentService>,
     presentations: Vec<LinkedVerifiablePresentation>,
-    /// TODO: Replace this generic object schema with a schema for `DomainLinkageConfiguration`.
-    #[schema(value_type = Option<Object>)]
+    #[schema(value_type = Option<ServiceResourceSchema>)]
     resource: Option<ServiceResource>,
     /// The origins this service links, sorted and deduplicated, or empty for a service that links
     /// none. Reported alongside `service`, whose `serviceEndpoint` carries the same origins in
     /// either of the specification's two shapes. This field is the one to read.
     #[schema(value_type = Vec<String>, example = json!(["https://example.org/"]))]
     origins: Vec<Url>,
+}
+
+// OpenAPI representation of `ServiceResource`, which serde tags externally by its variant name.
+/// The resource published for a service, keyed by the service type.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[schema(as = ServiceResource)]
+enum ServiceResourceSchema {
+    LinkedDomains(DomainLinkageConfigurationSchema),
 }
 
 impl From<Service> for ServiceResponse {
@@ -161,6 +170,28 @@ mod tests {
     };
     use tower::ServiceExt;
     use url::Url;
+
+    #[test]
+    fn service_resource_schema_matches_its_serialization() {
+        use agent_identity::service::aggregate::ServiceResource;
+        use utoipa::PartialSchema as _;
+
+        let resource = ServiceResource::LinkedDomains(DomainLinkageConfiguration::new(vec![Jwt::from(
+            "header.payload.signature".to_string(),
+        )]));
+        let serialized = serde_json::to_value(resource).unwrap();
+        assert_eq!(
+            serialized["LinkedDomains"]["linked_dids"],
+            json!(["header.payload.signature"])
+        );
+
+        let schema = serde_json::to_value(super::ServiceResourceSchema::schema()).unwrap();
+        assert_eq!(
+            schema["oneOf"][0]["properties"]["LinkedDomains"]["$ref"],
+            "#/components/schemas/DomainLinkageConfiguration",
+            "unexpected schema: {schema}"
+        );
+    }
 
     #[derive(Default)]
     struct RecordingAuthorization {
