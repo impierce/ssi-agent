@@ -27,12 +27,18 @@ downstream TypeScript client generators. Keep it:
 - `snake_case`, no dots or other namespacing (e.g. **not** `identity.services.linked_domains.add`)
 - Short, and closely mirroring the route path — e.g. `POST /v0/add-linked-domains` →
   `add_linked_domains`
-- The same as the handler function name — if they match, it's almost certainly right
+- Descriptive on its own, since it is not scoped by a module in the generated client — e.g. prefix
+  well-known endpoints with `well_known_` and generic names with their path segment
+  (`openid4vci_nonce`, `auth_token`)
 
-Look at existing entries in `agent_api_http/openapi.yaml` for the established pattern
-(`create_new_catalog`, `get_all_connections`, `send_offer_to_individual`, ...). That file is
-generated, not hand-edited — after changing an `operation_id`, regenerate it with
-`cargo test generate_openapi_spec`.
+Don't rename a handler function just to match its `operation_id`: handlers are already scoped by the
+module that contains them, so `par()` in `authorization_server/par.rs` can keep its name while its
+`operation_id` is `auth_par`.
+
+Look at existing entries in `agent_api_http/openapi.yaml` and `agent_api_http/openapi-full.yaml` for
+the established pattern (`create_new_catalog`, `get_all_connections`, `send_offer_to_individual`,
+`well_known_did_json`, ...). Those files are generated, not hand-edited — after changing an
+`operation_id`, regenerate them with `cargo test generate_openapi_spec`.
 
 Don't confuse this with `ServiceCommand::operation()` in `agent_identity/src/service/command.rs`,
 which returns dotted strings (e.g. `identity.services.linked_domains.add`) for internal CQRS

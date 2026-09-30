@@ -41,7 +41,6 @@ pub(crate) struct CredentialOfferQuery {
 #[axum_macros::debug_handler]
 pub(crate) async fn offers_params(
     State(state): State<Arc<HolderState>>,
-    // TODO: Can this be changed to `StringifiedForm`?
     Query(payload): Query<CredentialOfferQuery>,
 ) -> Result<Response, ApiError> {
     let credential_offer_result: Result<CredentialOffer, _> =
