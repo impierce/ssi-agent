@@ -2,7 +2,8 @@
 
 ## Status
 
-Implementation in progress.
+Phases 1–4 are complete. Phase 5 is tracked separately in
+[`.scratch/split-runtime-listeners`](../../.scratch/split-runtime-listeners/issues/01-split-management-and-protocol-listeners.md).
 
 - Phase 1 is complete upstream and UniCore is pinned to `openid4vc` revision
   `42b37c8`.
@@ -12,7 +13,8 @@ Implementation in progress.
 - Phase 3 is complete: all 19 protocol operations are annotated, collected in
   `ProtocolApi`, and generated into `openapi-full.yaml` by `FullApiDoc`. The
   audited route manifest and the operation-ID uniqueness check landed with it.
-- Phase 4 is the next implementation milestone.
+- Phase 4 is complete. See its section for how the YAML check deviates from the
+  original wording, and for the fuzzing and Bruno decisions.
 
 ## Context
 
@@ -329,6 +331,20 @@ Add tests that operate on the generated `OpenApi` values before serialization:
 8. Parse both serialized YAML files as OpenAPI after generation.
 9. Generate each file twice and assert stable output.
 
+Item 8 parses each written file as a generic YAML value, asserts that it equals
+the generated document and that every `$ref` resolves. It does not deserialize
+into `utoipa`'s `OpenApi` model, because that model cannot read back every
+schema it serializes, such as free-form objects in several existing management
+schemas.
+
+API fuzzing keeps using the published `openapi.yaml` by default: the nightly run
+stays focused on the management API, and the standardized endpoints rarely
+change. `FUZZ_SPEC=full` (and the `spec` input of the workflow) fuzzes
+`openapi-full.yaml` on demand, e.g. after changing a protocol handler or before
+a release. It excludes `GET /credential_offer`, which fetches from arbitrary
+URLs. Bruno keeps using the published document, since its collection is for
+working with the management API.
+
 Axum does not provide a stable public API for enumerating every registered
 route. The audited manifest is therefore an intentional test boundary. Any
 future router change must update both its documentation and the manifest.
@@ -364,12 +380,12 @@ it changes the externally reachable security boundary.
 2. Complete: bump the pinned `openid4vc` revision only.
 3. Complete: add the seven shared operations and transfer generation to
    `PublishedApiDoc`.
-4. Next: add the audited manifest, annotate the 19 protocol operations, add
+4. Complete: add the audited manifest, annotate the 19 protocol operations, add
    `ProtocolApi` and `FullApiDoc`, and generate `openapi-full.yaml`.
-5. Add the remaining completeness tests and update documentation and collection
-   consumers. Decide explicitly whether Bruno and API fuzzing consume the
-   published document or the protocol-heavy full document.
-6. In a separate change, implement the optional two-listener runtime split.
+5. Complete: add the remaining completeness tests and update documentation and
+   collection consumers.
+6. Next, in a separate change: implement the optional two-listener runtime
+   split.
 
 Keeping the revision bump isolated makes upstream integration failures easy to
 identify. Keeping the listener split last makes the documentation changes safe
