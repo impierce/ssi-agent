@@ -305,6 +305,19 @@ mod tests {
             "operation IDs must be unique"
         );
 
+        // Generated clients derive their function names from the operation IDs.
+        let is_snake_case = |operation_id: &str| {
+            operation_id.starts_with(|character: char| character.is_ascii_lowercase())
+                && operation_id
+                    .chars()
+                    .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_')
+                && !operation_id.contains("__")
+                && !operation_id.ends_with('_')
+        };
+        for (_, _, operation_id) in protocol_operations() {
+            assert!(is_snake_case(&operation_id), "`{operation_id}` is not snake_case");
+        }
+
         assert!(full.info == published.info);
         assert!(full.servers == published.servers);
     }
@@ -389,7 +402,49 @@ mod tests {
                 openapi.to_yaml().unwrap(),
                 "{file_name} must serialize deterministically"
             );
-            std::fs::write(output_directory.join(file_name), yaml).unwrap();
+            std::fs::write(output_directory.join(file_name), &yaml).unwrap();
+
+            // Parsed as a generic value rather than into `utoipa`'s model, whose `Deserialize` cannot read back
+            // every schema it serializes (e.g. free-form objects).
+            let written = std::fs::read_to_string(output_directory.join(file_name)).unwrap();
+            let parsed: serde_json::Value = serde_norway::from_str(&written)
+                .unwrap_or_else(|error| panic!("{file_name} is not valid YAML: {error}"));
+            assert_eq!(
+                parsed,
+                serde_json::to_value(&openapi).unwrap(),
+                "{file_name} must contain exactly the generated document"
+            );
+            assert!(parsed["openapi"]
+                .as_str()
+                .is_some_and(|version| version.starts_with("3.1.")));
+
+            let mut references = Vec::new();
+            collect_references(&parsed, &mut references);
+            let unresolved: BTreeSet<_> = references
+                .into_iter()
+                .filter(|reference| {
+                    reference
+                        .strip_prefix('#')
+                        .is_none_or(|pointer| parsed.pointer(pointer).is_none())
+                })
+                .collect();
+            assert!(
+                unresolved.is_empty(),
+                "{file_name} contains unresolved references: {unresolved:?}"
+            );
+        }
+    }
+
+    fn collect_references(value: &serde_json::Value, references: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(object) => {
+                if let Some(serde_json::Value::String(reference)) = object.get("$ref") {
+                    references.push(reference.clone());
+                }
+                object.values().for_each(|value| collect_references(value, references));
+            }
+            serde_json::Value::Array(array) => array.iter().for_each(|value| collect_references(value, references)),
+            _ => {}
         }
     }
 }

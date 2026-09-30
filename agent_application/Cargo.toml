@@ -46,4 +46,5 @@ tracing-subscriber.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
+serde_norway.workspace = true
 tower.workspace = true
