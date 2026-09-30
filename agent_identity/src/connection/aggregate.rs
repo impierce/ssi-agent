@@ -1,4 +1,4 @@
-use crate::services::{IdentityServices, LinkedDid};
+use crate::services::{DidConfigurationError, IdentityServices, LinkedDid};
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Url;
@@ -126,11 +126,11 @@ impl Aggregate for Connection {
             AddConnection { connection_id, url } => {
                 let metadata = services.fetch_credential_issuer_metadata(&url).await?;
                 let connection_display_properties = get_display_from_metadata(metadata.clone());
-                let linked_dids = services.fetch_linked_dids(&url).await?;
+                let linked_dids = services.fetch_linked_dids(&url).await;
                 let now = services.now();
+                let (linked_dids, mut validations) = domain_linkage_validations(&url, linked_dids, now);
                 let dids: Vec<DIDUrl> = linked_dids.iter().map(|linked| linked.did.clone()).collect();
 
-                let mut validations = domain_linkage_validations(&url, &linked_dids, now);
                 validations.extend(
                     services
                         .fetch_linked_vp_validations(&linked_dids)
@@ -158,11 +158,18 @@ impl Aggregate for Connection {
 
                 let metadata = services.fetch_credential_issuer_metadata(domain_ref).await?;
                 let new_display = get_display_from_metadata(metadata.clone());
-                let linked_dids = services.fetch_linked_dids(domain_ref).await?;
+                let linked_dids = services.fetch_linked_dids(domain_ref).await;
+                // An unavailable DID configuration says nothing about which DIDs the domain links, so
+                // only a missing one may propose removing the stored DIDs.
+                let keep_stored_dids = matches!(linked_dids, Err(DidConfigurationError::Unavailable(_)));
                 let now = services.now();
-                let new_dids: Vec<DIDUrl> = linked_dids.iter().map(|linked| linked.did.clone()).collect();
+                let (linked_dids, mut validations) = domain_linkage_validations(domain_ref, linked_dids, now);
+                let new_dids: Vec<DIDUrl> = if keep_stored_dids {
+                    self.dids.clone()
+                } else {
+                    linked_dids.iter().map(|linked| linked.did.clone()).collect()
+                };
 
-                let mut validations = domain_linkage_validations(domain_ref, &linked_dids, now);
                 validations.extend(
                     services
                         .fetch_linked_vp_validations(&linked_dids)
@@ -275,21 +282,44 @@ impl Aggregate for Connection {
 /// failed verification instead of only seeing an aggregate boolean.
 ///
 /// When no linked DIDs could be extracted at all there is nothing to report per DID, so a single
-/// domain-level result is emitted instead.
-fn domain_linkage_validations(domain: &Url, linked_dids: &[LinkedDid], now: DateTime<Utc>) -> Vec<Validation> {
-    if linked_dids.is_empty() {
-        return vec![Validation::DomainLinkage(DomainLinkageValidation {
+/// domain-level result is emitted instead. A DID configuration that cannot be resolved does not fail
+/// the command: no linked DIDs are returned and the reason is recorded.
+fn domain_linkage_validations(
+    domain: &Url,
+    linked_dids: Result<Vec<LinkedDid>, DidConfigurationError>,
+    now: DateTime<Utc>,
+) -> (Vec<LinkedDid>, Vec<Validation>) {
+    let domain_failure = |error: String| {
+        vec![Validation::DomainLinkage(DomainLinkageValidation {
             domain: domain.clone(),
             did: None,
             result: ValidationResult {
                 valid: false,
-                error: Some("No linked DIDs found in the domain's DID configuration".to_string()),
+                error: Some(error),
                 last_validated_at: now,
             },
-        })];
+        })]
+    };
+
+    let linked_dids = match linked_dids {
+        Ok(linked_dids) => linked_dids,
+        Err(error) => {
+            info!("Failed to resolve the DID configuration of {domain}: {error}");
+            return (
+                vec![],
+                domain_failure(format!("Failed to resolve the domain's DID configuration: {error}")),
+            );
+        }
+    };
+
+    if linked_dids.is_empty() {
+        return (
+            linked_dids,
+            domain_failure("No linked DIDs found in the domain's DID configuration".to_string()),
+        );
     }
 
-    linked_dids
+    let validations = linked_dids
         .iter()
         .map(|linked| {
             Validation::DomainLinkage(DomainLinkageValidation {
@@ -302,7 +332,8 @@ fn domain_linkage_validations(domain: &Url, linked_dids: &[LinkedDid], now: Date
                 },
             })
         })
-        .collect()
+        .collect();
+    (linked_dids, validations)
 }
 
 fn get_display_from_metadata(metadata: CredentialIssuerMetadata) -> Option<ConnectionDisplayProperties> {
@@ -507,6 +538,169 @@ pub mod document_tests {
                         }),
                     }),
                 }),
+                last_interacted_at: Some(mock_time),
+            }]);
+    }
+
+    /// Serves issuer metadata with the given display name, but answers the DID configuration request
+    /// with `did_configuration_status` instead of a document.
+    async fn mount_issuer_without_did_configuration(
+        mock_server: &MockServer,
+        name: &str,
+        did_configuration_status: u16,
+    ) {
+        Mock::given(method("GET"))
+            .and(path("/.well-known/openid-credential-issuer"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "credential_issuer": mock_server.uri(),
+                "credential_endpoint": format!("{}/credentials", mock_server.uri()),
+                "display": [{ "name": name, "locale": "en" }],
+                "credential_configurations_supported": {}
+            })))
+            .mount(mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did-configuration.json"))
+            .respond_with(ResponseTemplate::new(did_configuration_status))
+            .mount(mock_server)
+            .await;
+    }
+
+    /// `status_error` is how the HTTP client describes the status, e.g. `client error (404 Not Found)`.
+    fn failed_did_configuration_validation(
+        mock_server: &MockServer,
+        status_error: &str,
+        now: DateTime<Utc>,
+    ) -> Validation {
+        Validation::DomainLinkage(DomainLinkageValidation {
+            domain: mock_server.uri().parse().unwrap(),
+            did: None,
+            result: ValidationResult {
+                valid: false,
+                error: Some(format!(
+                    "Failed to resolve the domain's DID configuration: HTTP status {status_error} \
+                     for url ({}/.well-known/did-configuration.json)",
+                    mock_server.uri()
+                )),
+                last_validated_at: now,
+            },
+        })
+    }
+
+    #[test]
+    fn add_connection_without_linked_domain_records_failed_linkage() {
+        let rt = Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mock_server = rt.block_on(MockServer::start());
+        rt.block_on(mount_issuer_without_did_configuration(&mock_server, "Capella", 404));
+
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let mock_issuer: Url = mock_server.uri().parse().unwrap();
+
+        ConnectionTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(ConnectionCommand::AddConnection {
+                connection_id: "abcd1234".to_string(),
+                url: mock_issuer.clone(),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: "abcd1234".to_string(),
+                display: Some(ConnectionDisplayProperties {
+                    name: Some("Capella".to_string()),
+                    locale: Some("en".to_string()),
+                    logo: None,
+                }),
+                url: mock_issuer,
+                dids: vec![],
+                validations: vec![failed_did_configuration_validation(
+                    &mock_server,
+                    "client error (404 Not Found)",
+                    mock_time,
+                )],
+                first_interacted_at: Some(mock_time),
+                last_interacted_at: Some(mock_time),
+            }]);
+    }
+
+    #[test]
+    fn sync_connection_without_linked_domain_proposes_removing_dids() {
+        let rt = Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mock_server = rt.block_on(MockServer::start());
+        rt.block_on(mount_issuer_without_did_configuration(&mock_server, "Capella", 404));
+
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let mock_issuer: Url = mock_server.uri().parse().unwrap();
+        let display = Some(ConnectionDisplayProperties {
+            name: Some("Capella".to_string()),
+            locale: Some("en".to_string()),
+            logo: None,
+        });
+
+        ConnectionTestFramework::with(IdentityServices::default())
+            .given(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: "abcd-123".to_string(),
+                display: display.clone(),
+                url: mock_issuer.clone(),
+                dids: vec![TEST_DID.parse().unwrap()],
+                validations: vec![],
+                first_interacted_at: Some(mock_time),
+                last_interacted_at: Some(mock_time),
+            }])
+            .when(ConnectionCommand::SyncConnection {
+                connection_id: "abcd-123".to_string(),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionSynced {
+                connection_id: "abcd-123".to_string(),
+                validations: vec![failed_did_configuration_validation(
+                    &mock_server,
+                    "client error (404 Not Found)",
+                    mock_time,
+                )],
+                pending_changes: Some(PendingChanges {
+                    dids: Some(vec![]),
+                    display,
+                }),
+                last_interacted_at: Some(mock_time),
+            }]);
+    }
+
+    #[test]
+    fn sync_connection_with_unavailable_did_configuration_keeps_dids() {
+        let rt = Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mock_server = rt.block_on(MockServer::start());
+        rt.block_on(mount_issuer_without_did_configuration(&mock_server, "Capella", 503));
+
+        let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
+        let mock_issuer: Url = mock_server.uri().parse().unwrap();
+
+        ConnectionTestFramework::with(IdentityServices::default())
+            .given(vec![ConnectionEvent::ConnectionAdded {
+                connection_id: "abcd-123".to_string(),
+                display: Some(ConnectionDisplayProperties {
+                    name: Some("Capella".to_string()),
+                    locale: Some("en".to_string()),
+                    logo: None,
+                }),
+                url: mock_issuer,
+                dids: vec![TEST_DID.parse().unwrap()],
+                validations: vec![],
+                first_interacted_at: Some(mock_time),
+                last_interacted_at: Some(mock_time),
+            }])
+            .when(ConnectionCommand::SyncConnection {
+                connection_id: "abcd-123".to_string(),
+            })
+            .then_expect_events(vec![ConnectionEvent::ConnectionSynced {
+                connection_id: "abcd-123".to_string(),
+                validations: vec![failed_did_configuration_validation(
+                    &mock_server,
+                    "server error (503 Service Unavailable)",
+                    mock_time,
+                )],
+                pending_changes: None,
                 last_interacted_at: Some(mock_time),
             }]);
     }

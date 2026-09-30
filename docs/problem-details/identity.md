@@ -11,10 +11,6 @@ This error occurs when the system is unable to retrieve credential issuer metada
 This error should not occur as the domain is required to create a connection.
 This error indicates that a connection is missing a required `domain` value. The domain is necessary for establishing and verifying the connection, and without it the operation cannot proceed.
 
-## DID Configurations Could Not Be Resolved
-
-This error occurs when the system fails to resolve or fetch DID Configurations from the Connection's `/.well-known/did-configuration.json` domain endpoint.
-
 ## Opaque Origin Not Supported
 
 This error occurs when an origin supplied to `add-linked-domains` or `remove-linked-domains` has no host at all, such as a `data:` URL. A linked domain must identify a public host.
