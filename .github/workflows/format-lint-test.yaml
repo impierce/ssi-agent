@@ -23,7 +23,7 @@ env:
 # not evict them.
 jobs:
   build:
-    name: Format, lint and test
+    name: Format, Lint, Test
     runs-on: ubuntu-latest
 
     steps:
