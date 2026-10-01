@@ -12,7 +12,7 @@ use agent_issuance::{
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
 use agent_library::template::aggregate::Template;
-use agent_shared::config::config;
+use agent_shared::config::{config, EventPublisherHttp as EventPublisherHttpConfig};
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
@@ -64,9 +64,11 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Vec<Self>> {
-        config()
-            .event_publishers
-            .http
+        Self::load_from(&config().event_publishers.http)
+    }
+
+    pub fn load_from(configurations: &[EventPublisherHttpConfig]) -> anyhow::Result<Vec<Self>> {
+        configurations
             .iter()
             .filter(|c| c.enabled)
             .map(|event_publisher_http| {
@@ -531,7 +533,8 @@ mod tests {
 
     use agent_issuance::offer::aggregate::Status;
     use agent_issuance::offer::event::OfferEvent;
-    use agent_shared::config::{set_config, Events};
+    use agent_shared::config::{EventPublisherHttp as EventPublisherHttpConfig, Events};
+    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
@@ -561,18 +564,26 @@ mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        // Set the test configuration.
-        set_config().enable_event_publisher_http(0);
-        set_config().set_event_publisher_http_target_url(0, target_url.clone());
-        set_config().set_event_publisher_http_target_events(
-            0,
-            Events {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Basic YWxhZGRpbjpvcGVuc2VzYW1l"),
+        );
+        let configuration = EventPublisherHttpConfig {
+            enabled: true,
+            target_url: target_url.clone(),
+            headers: Some(headers),
+            events: Events {
                 offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
                 ..Default::default()
             },
-        );
+        };
 
-        let publisher = EventPublisherHttp::load().unwrap().into_iter().next().unwrap();
+        let publisher = EventPublisherHttp::load_from(&[configuration])
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
 
         // A new event for the `Offer` aggregate.
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
@@ -627,7 +638,6 @@ mod tests {
     fn load_creates_a_publisher_for_every_aggregate_with_target_events() {
         use agent_shared::config as c;
 
-        // Appended rather than overwriting publisher `0`, which `it_works` configures concurrently.
         let target_url = "https://every-aggregate.example.com/events".to_string();
         let disabled_target_url = "https://disabled.example.com/events".to_string();
         let events = Events {
@@ -650,19 +660,22 @@ mod tests {
             received_offer: vec![c::ReceivedOfferEvent::CredentialOfferReceived],
             authorization_request: vec![c::AuthorizationRequestEvent::AuthorizationRequestCreated],
         };
-        {
-            let mut configuration = set_config();
-            for (enabled, target_url) in [(true, &target_url), (false, &disabled_target_url)] {
-                configuration.event_publishers.http.push(c::EventPublisherHttp {
-                    enabled,
-                    target_url: target_url.clone(),
-                    headers: None,
-                    events: events.clone(),
-                });
-            }
-        }
+        let configurations = [
+            EventPublisherHttpConfig {
+                enabled: true,
+                target_url: target_url.clone(),
+                headers: None,
+                events: events.clone(),
+            },
+            EventPublisherHttpConfig {
+                enabled: false,
+                target_url: disabled_target_url.clone(),
+                headers: None,
+                events,
+            },
+        ];
 
-        let publishers = EventPublisherHttp::load().unwrap();
+        let publishers = EventPublisherHttp::load_from(&configurations).unwrap();
         let target_url_of = |publisher: &EventPublisherHttp| {
             publisher
                 .offer

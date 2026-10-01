@@ -272,11 +272,16 @@ impl Aggregate for Credential {
                     uri: status_list_url.clone(),
                 }));
 
-                // The sensible default for the jti is equal to the credential root `id` field. Credentials without one,
-                // such as DC SD-JWTs, get the same `urn:uuid:` identifier that W3C credentials receive as their `id`.
+                // Use the credential root `id` as `jti`. DC SD-JWTs have no root `id`, so derive the same
+                // `urn:uuid:` identifier that W3C credentials receive during unsigned credential creation.
                 let jti: Url = match self.data.as_ref().and_then(|data| data.raw.get("id")) {
                     Some(id) => id.as_str().and_then(|id| Url::parse(id).ok()),
-                    None => Url::parse(&format!("urn:uuid:{credential_id}")).ok(),
+                    None => match &self.credential_configuration.credential_format {
+                        CredentialFormats::DcSdJwt(_) => uuid::Uuid::parse_str(&credential_id)
+                            .ok()
+                            .and_then(|id| Url::parse(&format!("urn:uuid:{id}")).ok()),
+                        _ => None,
+                    },
                 }
                 .ok_or(InvalidCredentialDataError)?;
 
@@ -1258,6 +1263,54 @@ pub mod credential_tests {
             disclosures.len(),
             "every disclosure has a digest"
         );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_sign_credential_rejects_invalid_or_missing_jti_sources() {
+        let services = IssuanceServices::default().await;
+        let command = |credential_id: String| CredentialCommand::SignCredential {
+            credential_id,
+            subject_id: None,
+            overwrite: false,
+            proofs: None,
+            status_list_id: agent_shared::config::TEST_STATUS_LIST_ID.to_string(),
+            index: TESTINDEX,
+        };
+        let unsigned = |credential_id: String,
+                        raw: serde_json::Value,
+                        credential_configuration: CredentialConfigurationsSupportedObject| {
+            CredentialEvent::UnsignedCredentialCreated {
+                credential_id,
+                data: Data { raw },
+                credential_configuration: Box::new(credential_configuration),
+                notification_id: None,
+                created_at: Some(created_at()),
+                expires_at: None,
+            }
+        };
+
+        let invalid_id = "not-a-uuid".to_string();
+        CredentialTestFramework::with(services.clone())
+            .given(vec![unsigned(
+                invalid_id.clone(),
+                UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
+                DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+            )])
+            .when(command(invalid_id))
+            .then_expect_error_message(&InvalidCredentialDataError.to_string());
+
+        let mut w3c_without_id = UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone();
+        w3c_without_id.as_object_mut().unwrap().remove("id");
+        let credential_id = credential_id();
+        CredentialTestFramework::with(services)
+            .given(vec![unsigned(
+                credential_id.clone(),
+                w3c_without_id,
+                VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+            )])
+            .when(command(credential_id))
+            .then_expect_error_message(&InvalidCredentialDataError.to_string());
     }
 
     pub mod expiry_tests {

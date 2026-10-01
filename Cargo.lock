@@ -485,7 +485,6 @@ name = "agent_shared"
 version = "0.1.0"
 dependencies = [
  "agent_macros",
- "agent_secret_manager",
  "agent_shared",
  "anyhow",
  "async-trait",
@@ -8780,6 +8779,7 @@ dependencies = [
  "is_empty",
  "jsonwebtoken",
  "lazy_static",
+ "mockall",
  "nutype",
  "rand 0.8.6",
  "serde",
