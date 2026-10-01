@@ -121,3 +121,157 @@ impl IntoApiErrorExt for agent_identity::service::lifecycle::ServiceManagementEr
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::tests::assert_problems;
+    use agent_identity::service::lifecycle::ServiceManagementError;
+    use agent_shared::handlers::CommandHandlerError;
+    use cqrs_es::AggregateError;
+    use shared_kernel::authorization::AuthorizationError;
+
+    #[test]
+    fn connection_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                ConnectionError::ConnectionNotFound,
+                StatusCode::NOT_FOUND,
+                Some("identity#connection-not-found"),
+            ),
+            (
+                ConnectionError::CredentialIssuerMetadataFetchFailed("https://example.com".parse().unwrap()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Some("identity#credential-issuer-metadata-fetch-failed"),
+            ),
+            (
+                ConnectionError::MissingDomain("connection-1".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("identity#missing-domain"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn document_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                DocumentError::OpaqueOriginError,
+                StatusCode::BAD_REQUEST,
+                Some("identity#opaque-origin"),
+            ),
+            (
+                DocumentError::HostError,
+                StatusCode::BAD_REQUEST,
+                Some("identity#invalid-host"),
+            ),
+            (
+                DocumentError::InvalidOriginError("origin".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("identity#invalid-origin"),
+            ),
+            (
+                DocumentError::MissingDocumentError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                DocumentError::IotaPublishDocumentError("error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn profile_errors_successfully_convert_to_problem_details() {
+        assert_problems([(
+            ProfileError::ConfigurationConflict,
+            StatusCode::CONFLICT,
+            Some("conflict#resource-provisioned-by-configuration"),
+        )]);
+    }
+
+    #[test]
+    fn every_service_error_maps_to_a_problem_type() {
+        use ServiceError::*;
+
+        let error = || "error".to_string();
+        assert_problems([
+            (
+                AlreadyExists,
+                StatusCode::CONFLICT,
+                Some("identity#service-already-exists"),
+            ),
+            (NotFound, StatusCode::NOT_FOUND, Some("identity#service-not-found")),
+            (
+                EmptyLinkedDidsError,
+                StatusCode::BAD_REQUEST,
+                Some("identity#no-linked-dids"),
+            ),
+            (EmptyOriginsError, StatusCode::BAD_REQUEST, Some("identity#no-origins")),
+            (
+                EmptyPresentationIds,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("identity#empty-presentation-ids"),
+            ),
+            (
+                PresentationNotFound(error()),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("identity#presentation-not-found"),
+            ),
+            (
+                PresentationInvalid(error(), error()),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("identity#presentation-invalid"),
+            ),
+        ]);
+
+        assert_problems(
+            [
+                MissingVerificationMethodFragment(error()),
+                MissingVerificationMethodAlgorithm(error()),
+                UnsupportedVerificationMethodAlgorithm(error()),
+                InvalidUrlError(error()),
+                InvalidDidError(error()),
+                DomainLinkageCredentialBuilderError(error()),
+                SerializationError(error()),
+                SigningError(error()),
+                InvalidTimestampError,
+                InvalidServiceEndpointError(error()),
+                ProduceDocumentError(error()),
+                ServiceBuilderError(error()),
+            ]
+            .map(|error| {
+                (
+                    error,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Some("identity#service-operation-failed"),
+                )
+            }),
+        );
+    }
+
+    #[test]
+    fn service_management_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                ServiceManagementError::Authorization(AuthorizationError::Forbidden),
+                StatusCode::FORBIDDEN,
+                Some("authorization#forbidden"),
+            ),
+            (
+                ServiceManagementError::Command(CommandHandlerError::Aggregate(AggregateError::UserError(
+                    ServiceError::NotFound,
+                ))),
+                StatusCode::NOT_FOUND,
+                Some("identity#service-not-found"),
+            ),
+            (
+                ServiceManagementError::Infrastructure(anyhow::anyhow!("database unavailable")),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ]);
+    }
+}

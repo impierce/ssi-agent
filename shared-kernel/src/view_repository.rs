@@ -3,38 +3,6 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository as CoreViewRepository},
     Aggregate, View,
 };
-use tracing::debug;
-
-/// A trait for views that support soft deletion.
-///
-/// Implement this on your view types to enable the generic
-/// [`load_by_id`] query helper.
-pub trait SoftDeletable {
-    fn is_deleted(&self) -> bool;
-}
-
-/// # Errors
-///
-/// Returns `PersistenceError` if the underlying repository operation fails.
-/// Returns `Ok(None)` if the view doesn't exist or is soft-deleted.
-/// Returns `Ok(Some(view))` if the view exists and is not soft-deleted.
-pub async fn load_by_id<V, A>(repo: &BoxedViewRepository<V, A>, id: &str) -> Result<Option<V>, PersistenceError>
-where
-    V: View<A> + SoftDeletable,
-    A: Aggregate,
-{
-    match repo.0.load(id).await? {
-        Some(view) if !view.is_deleted() => {
-            debug!(view_id = id, "View loaded");
-            Ok(Some(view))
-        }
-        Some(_) => {
-            debug!(view_id = id, "View is soft-deleted, treating as not found");
-            Ok(None)
-        }
-        None => Ok(None),
-    }
-}
 
 /// A dyn-compatible wrapper trait for view repository operations.
 ///

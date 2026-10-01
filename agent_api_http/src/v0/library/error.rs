@@ -147,7 +147,7 @@ impl IntoApiErrorExt for CatalogError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::tests::into_json_value;
+    use crate::error::tests::{assert_problems, into_json_value};
     use serde_json::json;
 
     macro_rules! assert_problem_details {
@@ -360,5 +360,132 @@ mod tests {
                 "detail": "No Template found with id: `missing-id`"
             })
         );
+    }
+
+    #[test]
+    fn every_template_error_maps_to_a_problem_type() {
+        use TemplateError::*;
+
+        let error = || "error".to_string();
+        assert_problems([
+            (InvalidSchema(error()), StatusCode::BAD_REQUEST, None),
+            (
+                InvalidStatusTransition(error()),
+                StatusCode::CONFLICT,
+                Some("library#invalid-status-transition"),
+            ),
+            (
+                InvalidSchemaPropertiesAttributes(error()),
+                StatusCode::BAD_REQUEST,
+                Some("library#invalid-schema-properties-attributes"),
+            ),
+            (
+                NonRemovablePropertyViolation(error()),
+                StatusCode::CONFLICT,
+                Some("library#non-removable-property-violation"),
+            ),
+            (
+                DisallowedOpenBadgesProperties(error()),
+                StatusCode::BAD_REQUEST,
+                Some("library#disallowed-open-badges-properties"),
+            ),
+            (
+                MissingRequiredOpenBadgesProperties(error()),
+                StatusCode::BAD_REQUEST,
+                Some("library#missing-required-open-badges-properties"),
+            ),
+            (
+                InvalidRequiredPropertyType(error()),
+                StatusCode::BAD_REQUEST,
+                Some("library#invalid-required-property-type"),
+            ),
+            (
+                InvalidOpenBadgesPropertyType(error()),
+                StatusCode::BAD_REQUEST,
+                Some("library#invalid-open-badges-property-type"),
+            ),
+            (MissingTitle, StatusCode::BAD_REQUEST, Some("library#missing-title")),
+            (
+                ArchivedTemplateImmutable,
+                StatusCode::CONFLICT,
+                Some("library#archived-template-immutable"),
+            ),
+            (
+                DeletedTemplateTerminal,
+                StatusCode::CONFLICT,
+                Some("library#deleted-template-terminal"),
+            ),
+            (
+                ArchiveBeforeDeleteRequired,
+                StatusCode::CONFLICT,
+                Some("library#archive-before-delete-required"),
+            ),
+            (
+                InvalidExpiration(error()),
+                StatusCode::BAD_REQUEST,
+                Some("library#invalid-expiration"),
+            ),
+            (
+                InvalidType(error()),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("library#invalid-type"),
+            ),
+            (
+                InvalidStatusOnCreate,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("library#invalid-status-on-create"),
+            ),
+            (
+                SchemaPropertiesAttributesNotAllowed,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("library#schema-properties-attributes-not-allowed"),
+            ),
+            (
+                DuplicateSchemaPropertiesAttributeKey(error()),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("library#duplicate-schema-properties-attribute-key"),
+            ),
+            (
+                DraftTemplateCannotBePublic,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("library#draft-template-cannot-be-public"),
+            ),
+            (
+                SourceTemplateNotFound(error()),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("library#source-template-not-found"),
+            ),
+            (
+                TemplateIdMissing,
+                StatusCode::BAD_REQUEST,
+                Some("library#template-id-missing"),
+            ),
+            (
+                TemplateNotFound(error()),
+                StatusCode::NOT_FOUND,
+                Some("library#template-not-found"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn every_catalog_error_maps_to_a_problem_type() {
+        assert_problems([
+            (
+                CatalogError::TemplateNotFound("template-1".to_string()),
+                StatusCode::NOT_FOUND,
+                Some("library#catalog-template-not-found"),
+            ),
+            (
+                CatalogError::MissingCatalogName(String::new()),
+                StatusCode::BAD_REQUEST,
+                Some("library#missing-catalog-name"),
+            ),
+            (
+                CatalogError::CatalogNotFound("catalog-1".to_string()),
+                StatusCode::NOT_FOUND,
+                Some("library#catalog-not-found"),
+            ),
+        ]);
     }
 }

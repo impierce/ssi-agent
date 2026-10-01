@@ -404,6 +404,257 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
+    mod endpoints {
+        use super::*;
+        use agent_shared::handlers::command_handler as internal_command_handler;
+        use axum::{
+            body::{to_bytes, Body},
+            extract::Request,
+            Router,
+        };
+        use serde_json::{json, Value};
+        use shared_kernel::authorization::Caller;
+        use tower::ServiceExt;
+        use wiremock::{
+            matchers::{method, path},
+            Mock, MockServer, ResponseTemplate,
+        };
+
+        const CONNECTION_ID: &str = "connection-1";
+
+        async fn mock_issuer(name: &str) -> MockServer {
+            let mock_server = MockServer::start().await;
+            mount_metadata(&mock_server, name).await;
+            mock_server
+        }
+
+        async fn mount_metadata(mock_server: &MockServer, name: &str) {
+            mock_server.reset().await;
+            Mock::given(method("GET"))
+                .and(path("/.well-known/openid-credential-issuer"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "credential_issuer": mock_server.uri(),
+                    "credential_endpoint": format!("{}/credentials", mock_server.uri()),
+                    "display": [{ "name": name, "locale": "en" }],
+                    "credential_configurations_supported": {}
+                })))
+                .mount(mock_server)
+                .await;
+        }
+
+        /// Adds a connection through the command handler, since `parse_url` only accepts the mock issuer's
+        /// `http://127.0.0.1` address with the `allow-localhost` feature.
+        async fn setup(mock_server: &MockServer) -> Router {
+            let state =
+                Arc::new(identity_state(&InMemory, IdentityServices::default(), &Default::default(), vec![]).await);
+
+            internal_command_handler(
+                state.authorization_checker.clone(),
+                Caller::Internal,
+                CONNECTION_ID,
+                &state.command.connection,
+                ConnectionCommand::AddConnection {
+                    connection_id: CONNECTION_ID.to_string(),
+                    url: mock_server.uri().parse().unwrap(),
+                },
+            )
+            .await
+            .unwrap();
+
+            crate::v0::identity::router(state)
+        }
+
+        async fn get(app: &Router, uri: &str) -> (StatusCode, Value) {
+            let response = app
+                .clone()
+                .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+
+        async fn post(app: &Router, uri: &str, body: Value) -> StatusCode {
+            app.clone()
+                .oneshot(
+                    Request::post(uri)
+                        .header(http::header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status()
+        }
+
+        #[tokio::test]
+        async fn connections_can_be_listed_and_filtered() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+            let url = format!("{}/", mock_server.uri());
+
+            let (status, connections) = get(&app, "/v0/connections").await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(connections.as_array().unwrap().len(), 1);
+            assert_eq!(connections[0]["id"], CONNECTION_ID);
+            assert_eq!(connections[0]["url"], url.as_str());
+            assert_eq!(connections[0]["display"]["name"], "Issuer");
+
+            let query = serde_urlencoded::to_string([("url", &url)]).unwrap();
+            let (_, connections) = get(&app, &format!("/v0/connections?{query}")).await;
+            assert_eq!(connections.as_array().unwrap().len(), 1);
+
+            let (_, connections) = get(&app, "/v0/connections?url=https%3A%2F%2Fother.example.com%2F").await;
+            assert_eq!(connections, json!([]));
+
+            let (_, connections) = get(
+                &app,
+                "/v0/connections?did=did%3Akey%3Az6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM",
+            )
+            .await;
+            assert_eq!(connections, json!([]));
+
+            let (status, _) = get(&app, "/v0/connections?did=not-a-did").await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+
+        #[tokio::test]
+        async fn a_connection_can_be_retrieved_by_id() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+
+            let (status, connection) = get(&app, &format!("/v0/connections/{CONNECTION_ID}")).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(connection["id"], CONNECTION_ID);
+
+            let (status, _) = get(&app, "/v0/connections/unknown-connection").await;
+            assert_eq!(status, StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn synced_changes_are_pending_until_accepted() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+            let connection_uri = format!("/v0/connections/{CONNECTION_ID}");
+
+            mount_metadata(&mock_server, "Renamed Issuer").await;
+            let status = post(&app, "/v0/connections/sync-connection", json!({ "id": CONNECTION_ID })).await;
+            assert_eq!(status, StatusCode::OK);
+
+            let (_, connection) = get(&app, &connection_uri).await;
+            assert_eq!(connection["display"]["name"], "Issuer");
+            assert_eq!(connection["pending_changes"]["display"]["name"], "Renamed Issuer");
+
+            let status = post(
+                &app,
+                "/v0/connections/accept-pending-changes",
+                json!({ "id": CONNECTION_ID }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+
+            let (_, connection) = get(&app, &connection_uri).await;
+            assert_eq!(connection["display"]["name"], "Renamed Issuer");
+            assert!(connection["pending_changes"].is_null());
+
+            // Without pending changes, accepting is a no-op.
+            let status = post(
+                &app,
+                "/v0/connections/accept-pending-changes",
+                json!({ "id": CONNECTION_ID }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn a_removed_connection_is_no_longer_listed() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+
+            let status = post(
+                &app,
+                "/v0/connections/remove-connection",
+                json!({ "id": CONNECTION_ID }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+
+            let (status, _) = get(&app, &format!("/v0/connections/{CONNECTION_ID}")).await;
+            assert_eq!(status, StatusCode::NOT_FOUND);
+
+            let (_, connections) = get(&app, "/v0/connections").await;
+            assert_eq!(connections, json!([]));
+
+            let status = post(
+                &app,
+                "/v0/connections/remove-connection",
+                json!({ "id": CONNECTION_ID }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn commands_on_unknown_connections_return_not_found() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+
+            for uri in [
+                "/v0/connections/sync-connection",
+                "/v0/connections/accept-pending-changes",
+                "/v0/connections/remove-connection",
+            ] {
+                let status = post(&app, uri, json!({ "id": "unknown-connection" })).await;
+                assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+            }
+        }
+
+        #[tokio::test]
+        #[cfg(not(feature = "allow-localhost"))]
+        async fn adding_a_connection_without_a_top_level_domain_is_rejected() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+
+            let status = post(&app, "/v0/connections", json!({ "url": "a-via-lactea" })).await;
+
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+
+        #[tokio::test]
+        #[cfg(feature = "allow-localhost")]
+        async fn a_connection_can_be_added() {
+            let mock_server = mock_issuer("Issuer").await;
+            let app = setup(&mock_server).await;
+
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/v0/connections")
+                        .header(http::header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(json!({ "url": mock_server.uri() }).to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::CREATED);
+
+            let location = response.headers()[header::LOCATION].to_str().unwrap().to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let connection: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(
+                location,
+                format!("/v0/connections/{}", connection["id"].as_str().unwrap())
+            );
+            assert_eq!(connection["display"]["name"], "Issuer");
+
+            let (_, connections) = get(&app, "/v0/connections").await;
+            assert_eq!(connections.as_array().unwrap().len(), 2);
+        }
+    }
+
     #[test]
     #[cfg(not(feature = "allow-localhost"))]
     fn invalid_input_no_tld_fails() {

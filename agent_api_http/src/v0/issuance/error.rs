@@ -7,12 +7,12 @@ use agent_issuance::{
     offer::error::OfferError, public_offer::error::PublicOfferError, server_config::error::ServerConfigError,
     status_list::error::StatusListError,
 };
-use axum::{response::IntoResponse, response::Response, Json};
+use axum::Json;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::errors::{
-    AuthorizationErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse, ErrorStatusCode,
-    NotificationErrorResponse, OID4VCError, TokenErrorResponse,
+    AuthorizationErrorResponse, CredentialErrorResponse, ErrorStatusCode, NotificationErrorResponse, OID4VCError,
+    TokenErrorResponse,
 };
 
 impl IntoApiErrorExt for CredentialError {
@@ -346,50 +346,339 @@ impl From<AccessTokenValidationError> for PublicError {
     }
 }
 
-pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
-    let error: OID4VCError<AuthorizationErrorResponse> = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn token_error(error: TokenErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn credential_error(error: CredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn deferred_credential_error(error: DeferredCredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn notification_error(error: NotificationErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
 pub fn internal_server_error() -> PublicError {
     PublicError::InternalServerError
-}
-
-pub fn access_token_error(err: AccessTokenValidationError) -> PublicError {
-    PublicError::AccessTokenError(err)
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::error::tests::into_json_value;
+    use crate::error::tests::{assert_problems, into_json_value};
     use crate::DOCUMENTATION_URL;
-    use serde_json::json;
+    use agent_library::json_schema_validation::JsonSchemaError;
+    use axum::response::IntoResponse as _;
+    use oauth_tsl::error::OAuthTSLError;
+    use serde_json::{json, Value};
+
+    const UNEXPECTED: Option<&str> = Some("unexpected#unexpected-error");
+
+    async fn public_response(error: PublicError) -> (StatusCode, Value) {
+        let response = error.into_response();
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+    }
+
+    /// Asserts the status code and OpenID4VCI `error` code of each public error; `None` means an empty body.
+    pub async fn assert_public_errors<E: IntoPublicError>(cases: Vec<(E, StatusCode, Option<&str>)>) {
+        for (error, status, error_code) in cases {
+            let description = error.to_string();
+            let (actual_status, body) = public_response(error.into_public_error()).await;
+
+            assert_eq!(actual_status, status, "{description}");
+            assert_eq!(body.get("error").and_then(Value::as_str), error_code, "{description}");
+        }
+    }
+
+    #[test]
+    fn credential_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                CredentialError::UnsupportedCredentialFormat(json!("ldp_vc")),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Some("issuance#unsupported-credential-format"),
+            ),
+            (
+                CredentialError::InvalidCredentialPayloadError(JsonSchemaError::InvalidJsonData("{".to_string())),
+                StatusCode::BAD_REQUEST,
+                Some("issuance#invalid-credential-payload"),
+            ),
+            (
+                CredentialError::InvalidIdentifierError,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#invalid-identifier"),
+            ),
+            (
+                CredentialError::InvalidExpirationDateError,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#invalid-expiration-date"),
+            ),
+            (
+                CredentialError::InvalidCredentialStatus,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                UNEXPECTED,
+            ),
+            (
+                CredentialError::BuildCredentialError("error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                UNEXPECTED,
+            ),
+            (
+                CredentialError::InvalidCredentialDataError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                CredentialError::InvalidIssuerDidError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (CredentialError::KeyIdError, StatusCode::INTERNAL_SERVER_ERROR, None),
+        ]);
+    }
+
+    #[test]
+    fn offer_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                OfferError::MissingCredentialOfferError,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#missing-credential-offer"),
+            ),
+            (
+                OfferError::InvalidCredentialOfferUriError(url::ParseError::EmptyHost),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                UNEXPECTED,
+            ),
+        ]);
+
+        // These only occur on the OpenID4VCI endpoints, which map them to `PublicError`s instead.
+        assert_problems(
+            [
+                OfferError::UnsupportedTokenRequestGrantTypeError,
+                OfferError::MissingTxCodeError,
+                OfferError::InvalidTxCodeError,
+                OfferError::InvalidPreAuthorizedCodeError,
+                OfferError::UnrequestedTxCodeError,
+                OfferError::MissingCredentialError,
+                OfferError::MissingProofError,
+                OfferError::InvalidProofError("error".to_string()),
+                OfferError::MissingProofIssuerError,
+                OfferError::MissingCredentialConfigurationIdsError,
+                OfferError::UnknownCredentialConfiguration("id".to_string()),
+                OfferError::UnsupportedCredentialIdentifierError,
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None)),
+        );
+    }
+
+    #[test]
+    fn server_config_status_list_and_public_offer_errors_successfully_convert_to_problem_details() {
+        assert_problems([(
+            ServerConfigError::UnsupportedCredentialFormatIdentifierError("ldp_vc".to_string()),
+            StatusCode::BAD_REQUEST,
+            Some("issuance#unsupported-credential-format-identifier-error"),
+        )]);
+
+        assert_problems(
+            [
+                StatusListError::AggregateNotFound,
+                StatusListError::FailedToSetIndex(0, "error".to_string()),
+                StatusListError::GzipCompressionError,
+                StatusListError::JwtEncodeError,
+                StatusListError::StatusListEncodingError(OAuthTSLError::InvalidContentType),
+                StatusListError::StatusListNotFound("0".to_string()),
+                StatusListError::StatusListQueryError,
+                StatusListError::StatusListUrlParsingError,
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None)),
+        );
+
+        assert_problems([
+            (PublicOfferError::AlreadyExists, StatusCode::CONFLICT, None),
+            (PublicOfferError::NotFound, StatusCode::NOT_FOUND, None),
+            (PublicOfferError::TemplateNotFound, StatusCode::NOT_FOUND, None),
+            (
+                PublicOfferError::TemplateNotEligible,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#template-not-eligible-for-public-offer"),
+            ),
+        ]);
+    }
+
+    #[tokio::test]
+    async fn offer_errors_successfully_convert_to_public_errors() {
+        assert_public_errors(vec![
+            (
+                OfferError::MissingTxCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_request"),
+            ),
+            (
+                OfferError::InvalidTxCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_grant"),
+            ),
+            (
+                OfferError::InvalidPreAuthorizedCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_grant"),
+            ),
+            (
+                OfferError::UnrequestedTxCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_request"),
+            ),
+            (
+                OfferError::MissingCredentialOfferError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_credential_request"),
+            ),
+            (
+                OfferError::MissingCredentialError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_credential_request"),
+            ),
+            (
+                OfferError::MissingProofError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_proof"),
+            ),
+            (
+                OfferError::InvalidProofError("error".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("invalid_proof"),
+            ),
+            (
+                OfferError::MissingProofIssuerError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_proof"),
+            ),
+            (
+                OfferError::MissingCredentialConfigurationIdsError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_credential_request"),
+            ),
+            (
+                OfferError::UnknownCredentialConfiguration("id".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("unknown_credential_configuration"),
+            ),
+            (
+                OfferError::UnsupportedCredentialIdentifierError,
+                StatusCode::BAD_REQUEST,
+                Some("unknown_credential_identifier"),
+            ),
+            (
+                OfferError::UnsupportedTokenRequestGrantTypeError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                OfferError::InvalidCredentialOfferUriError(url::ParseError::EmptyHost),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ])
+        .await;
+    }
+
+    #[tokio::test]
+    async fn internal_issuance_errors_are_not_exposed_through_public_errors() {
+        assert_public_errors(
+            [
+                CredentialError::UnsupportedCredentialFormat(json!("ldp_vc")),
+                CredentialError::InvalidCredentialPayloadError(JsonSchemaError::InvalidJsonData("{".to_string())),
+                CredentialError::InvalidIdentifierError,
+                CredentialError::InvalidCredentialDataError,
+                CredentialError::InvalidExpirationDateError,
+                CredentialError::InvalidCredentialStatus,
+                CredentialError::BuildCredentialError("error".to_string()),
+                CredentialError::InvalidIssuerDidError,
+                CredentialError::KeyIdError,
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None))
+            .into(),
+        )
+        .await;
+
+        assert_public_errors(
+            [
+                ServerConfigError::UpdateProvisionedCredentialConfigurationError,
+                ServerConfigError::RemoveProvisionedCredentialConfigurationError,
+                ServerConfigError::UnsupportedCredentialFormatIdentifierError("ldp_vc".to_string()),
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None))
+            .into(),
+        )
+        .await;
+
+        assert_public_errors(vec![
+            (PublicOfferError::NotFound, StatusCode::NOT_FOUND, None),
+            (PublicOfferError::AlreadyExists, StatusCode::INTERNAL_SERVER_ERROR, None),
+        ])
+        .await;
+
+        assert_public_errors(vec![
+            (
+                StatusListError::StatusListNotFound("0".to_string()),
+                StatusCode::NOT_FOUND,
+                None,
+            ),
+            (
+                StatusListError::AggregateNotFound,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::FailedToSetIndex(0, "error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::GzipCompressionError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (StatusListError::JwtEncodeError, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                StatusListError::StatusListEncodingError(OAuthTSLError::InvalidContentType),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::StatusListQueryError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::StatusListUrlParsingError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ])
+        .await;
+    }
+
+    #[tokio::test]
+    async fn public_errors_successfully_convert_to_responses() {
+        let (status, body) = public_response(AuthorizationErrorResponse::InvalidRequest.into()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("invalid_request"))
+        );
+
+        let (status, body) = public_response(TokenErrorResponse::InvalidClient.into()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (StatusCode::UNAUTHORIZED, Some("invalid_client"))
+        );
+
+        let (status, body) = public_response(NotificationErrorResponse::InvalidNotificationId.into()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("invalid_notification_id"))
+        );
+
+        let response = PublicError::from(AccessTokenValidationError::InvalidToken).into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()["WWW-Authenticate"], "Bearer error=\"invalid_token\"");
+        assert_eq!(into_json_value(response).await, json!({ "error": "invalid_token" }));
+
+        let (status, _) = public_response(internal_server_error()).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
 
     #[tokio::test]
     async fn issuance_errors_successfully_convert_to_problem_details() {

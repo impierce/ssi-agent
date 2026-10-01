@@ -388,4 +388,229 @@ pub mod tests {
         );
         // TODO: more field checks needed on the response
     }
+
+    mod interactive {
+        use super::*;
+        use agent_authorization::services::OpenId4VpPresentationService;
+        use serde_json::Value;
+        use tower::ServiceExt as _;
+
+        async fn app() -> Router {
+            app_with(|verification_state| Box::new(VerificationAuthorizationAdapter::new(verification_state))).await
+        }
+
+        async fn app_with(
+            presentation_service: impl FnOnce(
+                Arc<agent_verification::state::VerificationState>,
+            ) -> Box<dyn OpenId4VpPresentationService>,
+        ) -> Router {
+            let issuance_state = Arc::new(
+                issuance_state(
+                    &InMemory,
+                    IssuanceServices::default().await,
+                    &Default::default(),
+                    Default::default(),
+                )
+                .await,
+            );
+            let verification_state = Arc::new(
+                agent_store::verification_state(
+                    &InMemory,
+                    VerificationServices::default().await,
+                    &Default::default(),
+                    Default::default(),
+                )
+                .await,
+            );
+            let authorization_state = Arc::new(
+                authorization_state(
+                    &InMemory,
+                    AuthorizationServices::default().await,
+                    &Default::default(),
+                    Default::default(),
+                    OAuth2AuthorizationRequestDomainServices::new(presentation_service(verification_state)),
+                )
+                .await,
+            );
+            agent_authorization::state::initialize(&authorization_state)
+                .await
+                .unwrap();
+
+            authorization::router((authorization_state, issuance_state))
+        }
+
+        fn authorization_request() -> AuthorizationRequest {
+            AuthorizationRequest {
+                response_type: "code".to_string(),
+                state: Some("test_state".to_string()),
+                client_id: UNIME_CLIENT_ID.to_string(),
+                redirect_uri: Some(UNIME_REDIRECT_URI.parse().unwrap()),
+                code_challenge: Some(code_challenge()),
+                code_challenge_method: Some(CodeChallengeMethod::S256),
+                scope: None,
+                issuer_state: None,
+                authorization_details: None,
+            }
+        }
+
+        fn interactive_request(authorization_request: AuthorizationRequest) -> Value {
+            json!(InteractiveAuthorizationRequest {
+                authorization_request,
+                interaction_types_supported: INTERACTION_TYPE_OPENID4VP.to_string(),
+            })
+        }
+
+        async fn post_par(app: &Router, body: &Value) -> (StatusCode, Value) {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/auth/par")
+                        .header(
+                            http::header::CONTENT_TYPE,
+                            mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                        )
+                        .body(Body::from(to_form_urlencoded_string(body).unwrap()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+
+        #[tokio::test]
+        async fn an_interactive_authorization_request_requires_an_openid4vp_presentation() {
+            let app = app().await;
+
+            let (status, body) = post_par(&app, &interactive_request(authorization_request())).await;
+
+            assert_eq!(status, StatusCode::OK, "{body}");
+            let response: InteractiveAuthorizationResponse = serde_json::from_value(body).unwrap();
+            assert_eq!(response.status, InteractiveAuthorizationStatus::RequireInteraction);
+            assert!(response.auth_session.is_some());
+            assert!(response.openid4vp_request.is_some());
+            assert!(response.code.is_none());
+        }
+
+        #[tokio::test]
+        async fn invalid_interactive_authorization_requests_are_rejected() {
+            let app = app().await;
+
+            let unsupported_interaction_type = json!(InteractiveAuthorizationRequest {
+                authorization_request: authorization_request(),
+                interaction_types_supported: "urn:example:unsupported".to_string(),
+            });
+            let unknown_redirect_uri = interactive_request(AuthorizationRequest {
+                redirect_uri: Some("unime://other".parse().unwrap()),
+                ..authorization_request()
+            });
+            let missing_redirect_uri = interactive_request(AuthorizationRequest {
+                redirect_uri: None,
+                ..authorization_request()
+            });
+            let unsupported_response_type = interactive_request(AuthorizationRequest {
+                response_type: "token".to_string(),
+                ..authorization_request()
+            });
+            let missing_code_challenge_method = interactive_request(AuthorizationRequest {
+                code_challenge_method: None,
+                ..authorization_request()
+            });
+            let unsupported_code_challenge_method = interactive_request(AuthorizationRequest {
+                code_challenge_method: Some(CodeChallengeMethod::Plain),
+                ..authorization_request()
+            });
+
+            for (case, body) in [
+                ("unsupported interaction type", unsupported_interaction_type),
+                ("unknown redirect URI", unknown_redirect_uri),
+                ("missing redirect URI", missing_redirect_uri),
+                ("unsupported response type", unsupported_response_type),
+                ("missing code challenge method", missing_code_challenge_method),
+                ("unsupported code challenge method", unsupported_code_challenge_method),
+            ] {
+                let (status, body) = post_par(&app, &body).await;
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{case}: {body}");
+                assert_eq!(body["error"], "invalid_request", "{case}");
+            }
+        }
+
+        #[tokio::test]
+        async fn follow_up_requests_need_a_known_session_and_a_valid_presentation() {
+            let app = app().await;
+            let (_, body) = post_par(&app, &interactive_request(authorization_request())).await;
+            let auth_session = body["auth_session"].as_str().unwrap().to_string();
+
+            let unknown_session = json!(InteractiveAuthorizationFollowUpRequest {
+                auth_session: "urn:uuid:00000000-0000-0000-0000-000000000000".to_string(),
+                openid4vp_response: Some(json!({})),
+                code_verifier: None,
+            });
+            let missing_presentation = json!({ "auth_session": auth_session });
+            let invalid_presentation = json!(InteractiveAuthorizationFollowUpRequest {
+                auth_session,
+                openid4vp_response: Some(json!({})),
+                code_verifier: None,
+            });
+
+            for (case, body) in [
+                ("unknown session", unknown_session),
+                ("missing presentation", missing_presentation),
+                ("invalid presentation", invalid_presentation),
+            ] {
+                let (status, body) = post_par(&app, &body).await;
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{case}: {body}");
+                assert_eq!(body["error"], "invalid_request", "{case}");
+            }
+        }
+
+        #[tokio::test]
+        async fn a_verified_presentation_completes_the_interactive_authorization_with_a_code() {
+            /// Creates real OpenID4VP requests, but accepts only the presentation `{"vp_token": "verified"}`.
+            struct AcceptingPresentationService(VerificationAuthorizationAdapter);
+
+            #[async_trait::async_trait]
+            impl OpenId4VpPresentationService for AcceptingPresentationService {
+                async fn create_openid4vp_presentation_request(&self, state: String) -> anyhow::Result<Value> {
+                    self.0.create_openid4vp_presentation_request(state).await
+                }
+
+                async fn verify_openid4vp_response(&self, openid4vp_response: Value) -> anyhow::Result<()> {
+                    anyhow::ensure!(openid4vp_response == json!({ "vp_token": "verified" }));
+                    Ok(())
+                }
+            }
+
+            let app = app_with(|verification_state| {
+                Box::new(AcceptingPresentationService(VerificationAuthorizationAdapter::new(
+                    verification_state,
+                )))
+            })
+            .await;
+            let (_, body) = post_par(&app, &interactive_request(authorization_request())).await;
+            let auth_session = body["auth_session"].as_str().unwrap().to_string();
+
+            let (status, body) = post_par(
+                &app,
+                &json!(AuthorizationRequestDto::FollowUpInteractiveAuthorizationRequest(
+                    InteractiveAuthorizationFollowUpRequest {
+                        auth_session,
+                        openid4vp_response: Some(json!({ "vp_token": "verified" })),
+                        code_verifier: None,
+                    }
+                )),
+            )
+            .await;
+
+            assert_eq!(status, StatusCode::OK, "{body}");
+            let response: InteractiveAuthorizationResponse = serde_json::from_value(body).unwrap();
+            assert_eq!(response.status, InteractiveAuthorizationStatus::Ok);
+            assert!(response.code.is_some());
+            assert_eq!(response.expires_in, Some(600));
+            assert!(response.auth_session.is_none());
+            assert!(response.openid4vp_request.is_none());
+        }
+    }
 }
