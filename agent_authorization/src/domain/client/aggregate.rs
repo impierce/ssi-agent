@@ -1,8 +1,7 @@
 use super::command::ClientCommand;
 use super::error::ClientError;
 use super::event::ClientEvent;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -44,28 +43,26 @@ pub struct Client {
     pub require_pushed_authorization_request: bool,
 }
 
-#[async_trait]
 impl Aggregate for Client {
     type Command = ClientCommand;
     type Event = ClientEvent;
     type Error = ClientError;
     type Services = ();
 
-    fn aggregate_type() -> String {
-        "client".to_string()
-    }
+    const TYPE: &'static str = "client";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use ClientCommand::*;
         use ClientEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             RegisterClient {
                 client_id,
                 client_secret,
@@ -99,7 +96,13 @@ impl Aggregate for Client {
                     require_pushed_authorization_request,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

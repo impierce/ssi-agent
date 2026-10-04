@@ -1,13 +1,16 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    handlers::{command_handler, query_handler},
-    v0::issuance::error::internal_server_error,
-    v0::issuance::error::PublicError,
+    handlers::{public_command_handler, public_query_handler},
+    v0::{
+        issuance::error::{internal_server_error, PublicError},
+        openapi::PROTOCOL_TAG,
+    },
 };
 use agent_issuance::{
     application::{
-        access_token_validation_service::AccessTokenValidationService, nonce_validation_service::NonceValidationService,
+        access_token_validation_service::{AccessTokenValidationError, AccessTokenValidationService},
+        nonce_validation_service::NonceValidationService,
     },
     credential::{command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
@@ -25,6 +28,7 @@ use axum_auth::AuthBearer;
 use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
+use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
@@ -34,18 +38,47 @@ use agent_shared::config::TEST_STATUS_LIST_ID;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
+/// Issue credentials
+///
+/// Issues the credentials of an offer in exchange for a valid access token and key proofs, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-endpoint).
+#[utoipa::path(
+    post,
+    path = "/openid4vci/credential",
+    operation_id = "openid4vci_credential",
+    tags = ["OpenID4VCI", PROTOCOL_TAG],
+    security(("access_token" = [])),
+    request_body(content = CredentialRequest, content_type = "application/json"),
+    responses(
+        (status = 200, description = "Credentials issued", body = CredentialResponse),
+        (
+            status = 400,
+            description = "The credential request is invalid, or the `Authorization` header is missing",
+            body = OID4VCError<CredentialErrorResponse>,
+        ),
+        (
+            status = 401,
+            description = "The access token is invalid or expired",
+            content_type = "application/json",
+            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            example = json!({"error": "invalid_token"}),
+        ),
+        (status = 415, description = "The request body is not `application/json`"),
+        (status = 422, description = "The request body is not a valid credential request"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
     AuthBearer(access_token): AuthBearer,
     Json(credential_request): Json<CredentialRequest>,
 ) -> Result<Response, PublicError> {
-    let offer_id = AccessTokenValidationService::validate(&state, &access_token)
-        .await
-        .ok()
-        // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
-        .and_then(|claims| claims.issuer_state)
-        .ok_or_else(|| PublicError::from(CredentialErrorResponse::InvalidProof))?;
+    let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
+    // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
+    let offer_id = claims
+        .issuer_state
+        .ok_or_else(|| PublicError::from(AccessTokenValidationError::InvalidToken))?;
 
     NonceValidationService::validate(&state, &credential_request)
         .await
@@ -53,7 +86,7 @@ pub(crate) async fn credential(
 
     // Get the `credential_issuer_metadata` and `authorization_server_metadata` from the `ServerConfigView`.
     let (credential_issuer_metadata, authorization_server_metadata) =
-        match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+        match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
             Some(ServerConfigView {
                 credential_issuer_metadata,
                 authorization_server_metadata,
@@ -77,7 +110,7 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    public_command_handler(&offer_id, &state.command.offer, command).await?;
 
     let timeout = config().external_server_response_timeout_ms;
     let start_time = Instant::now();
@@ -85,7 +118,7 @@ pub(crate) async fn credential(
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
     // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
     let (credential_ids, subject_id) = loop {
-        match query_handler(&offer_id, &state.query.offer).await? {
+        match public_query_handler(&offer_id, &state.query.offer).await? {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Some(OfferView { credential_ids, .. }) if credential_ids.is_empty() => {
                 if start_time.elapsed().as_millis() <= timeout as u128 {
@@ -108,7 +141,7 @@ pub(crate) async fn credential(
         }
     };
 
-    let all_status_lists = query_handler("all_status_lists", &state.query.all_status_lists)
+    let all_status_lists = public_query_handler("all_status_lists", &state.query.all_status_lists)
         .await?
         .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
         .unwrap_or_default();
@@ -130,7 +163,7 @@ pub(crate) async fn credential(
             let id = TEST_STATUS_LIST_ID.to_string();
 
             let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            command_handler(&id, &state.command.status_list, command).await?;
+            public_command_handler(&id, &state.command.status_list, command).await?;
 
             id
         }
@@ -143,9 +176,9 @@ pub(crate) async fn credential(
             status: StatusType::VALID,
         };
 
-        command_handler(&status_list_id, &state.command.status_list, command).await?;
+        public_command_handler(&status_list_id, &state.command.status_list, command).await?;
 
-        let status_list = query_handler(&status_list_id, &state.query.status_list)
+        let status_list = public_query_handler(&status_list_id, &state.query.status_list)
             .await?
             .ok_or(PublicError::InternalServerError)?;
 
@@ -162,9 +195,9 @@ pub(crate) async fn credential(
                 .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
         };
 
-        command_handler(&credential_id, &state.command.credential, command).await?;
+        public_command_handler(&credential_id, &state.command.credential, command).await?;
 
-        let signed_credential = match query_handler(&credential_id, &state.query.credential).await? {
+        let signed_credential = match public_query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
                 signed: Some(signed_credential),
                 notification_id,
@@ -182,10 +215,10 @@ pub(crate) async fn credential(
     };
 
     // Use the `offer_id` to create a `CredentialResponse` from the `CredentialRequest` and `credentials`.
-    command_handler(&offer_id, &state.command.offer, command).await?;
+    public_command_handler(&offer_id, &state.command.offer, command).await?;
 
     // Use the `offer_id` to get the `credential_response` from the `OfferView`.
-    query_handler(&offer_id, &state.query.offer)
+    public_query_handler(&offer_id, &state.query.offer)
         .await?
         .and_then(|offer_view| offer_view.credential_response)
         .map(|credential_response| (StatusCode::OK, Json(credential_response)).into_response())
@@ -197,8 +230,10 @@ pub mod tests {
     use super::*;
     use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::token::tests::token;
-    use crate::v0::issuance::credentials::tests::credentials;
-    use crate::v0::issuance::router;
+    use crate::v0::issuance::{
+        credentials::tests::{create_test_template_with_auth, credentials_with_template, setup_library_state},
+        router,
+    };
     use crate::API_VERSION;
     use crate::{
         tests::OFFER_ID,
@@ -222,6 +257,7 @@ pub mod tests {
     };
     use rstest::rstest;
     use serde_json::{json, Value};
+    use shared_kernel::authorization::Caller;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tower::ServiceExt;
@@ -230,8 +266,8 @@ pub mod tests {
         Mock, MockServer, ResponseTemplate,
     };
 
-    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsInZjIjp7ImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiQGNvbnRleHQiOlsiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiXSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.Osw5UpYXtsHoomEeeJ9qz6St5b4SmpBGZL8zFmvIsBfWW114BDuQQyVwUpfvZBRuG_oxlyd-uhSRJvmJbmM6DQ";
-    const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwiQGNvbnRleHQiOlsiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiXSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.WpEgTuLz4ql25ohV4bcUU_qkopcS9PK4x3AieDJR0e_9zVNmjYrts_NFH_6GvoyfgFjvO4_IrOzIxmqRfdn0DA";
+    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7ImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.LOTI6t7MmHb-cJVRZA_xh6S4lOfqkKjQScAVpMLuh5HlytNrg1Kp0-oiJQXjxfvxUfnaiDL-J6Q1V95XtjscBA";
+    const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJqdGkiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.aQQJE7l3OtZP6tYju17t8DZqtQ505PGDTVVm3LBcwIpdYq31ywrWzqKz3F6aWnuRoIUVMbSm-ECI_aufeDVECw";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
     pub const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
 
@@ -239,6 +275,7 @@ pub mod tests {
         async fn prepare_credential_event_trigger(
             &self,
             app: Arc<Mutex<Option<Router>>>,
+            template_id: String,
             is_self_signed: bool,
             delay: u64,
         );
@@ -251,6 +288,7 @@ pub mod tests {
         async fn prepare_credential_event_trigger(
             &self,
             app: Arc<Mutex<Option<Router>>>,
+            template_id: String,
             is_self_signed: bool,
             delay: u64,
         ) {
@@ -272,15 +310,16 @@ pub mod tests {
                                 // The 'backend' server can either opt for an already signed credential...
                                 let credentials_endpoint_request = if is_self_signed {
                                     CredentialsEndpointRequest {
+                                        template_id: template_id.clone(),
                                         offer_id: offer_id.clone(),
                                         credential: json!(CREDENTIAL_JWT),
                                         is_signed: true,
-                                        credential_configuration_id: "001".to_string(),
-                                        expires_at: CredentialExpiry::Never,
+                                        expires_at: Some(CredentialExpiry::Never),
                                     }
                                 } else {
                                     // ...or else, submitting the data that will be signed inside `UniCore`.
                                     CredentialsEndpointRequest {
+                                        template_id: template_id.clone(),
                                         offer_id: offer_id.clone(),
                                         credential: json!({
                                             "credentialSubject": {
@@ -290,8 +329,7 @@ pub mod tests {
                                             }
                                         }),
                                         is_signed: false,
-                                        credential_configuration_id: "001".to_string(),
-                                        expires_at: CredentialExpiry::Never,
+                                        expires_at: Some(CredentialExpiry::Never),
                                     }
                                 };
 
@@ -327,15 +365,22 @@ pub mod tests {
     pub async fn credential(
         issuance_app: &mut Router,
         issuance_state: &Arc<IssuanceState>,
+        template_id: &str,
         access_token: String,
         external_server: Option<MockServer>,
     ) -> (String, String) {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            Caller::Internal,
+            TEST_NONCE,
+            &issuance_state.command.nonce,
+            command,
+        )
+        .await
+        .unwrap();
 
         let response = issuance_app
             .oneshot(
@@ -346,7 +391,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": "001",
+                            "credential_configuration_id": template_id,
                             "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
                                         IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
                                         a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
@@ -405,61 +450,88 @@ pub mod tests {
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            set_config().enable_event_publisher_http();
-            set_config().set_event_publisher_http_target_url(target_url.clone());
-            set_config().set_event_publisher_http_target_events(Events {
-                offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                ..Default::default()
-            });
+            set_config().enable_event_publisher_http(0);
+            set_config().set_event_publisher_http_target_url(0, target_url.clone());
+            set_config().set_event_publisher_http_target_events(
+                0,
+                Events {
+                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
+                    ..Default::default()
+                },
+            );
 
             (
                 Some(external_server),
-                vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>],
+                EventPublisherHttp::load()
+                    .unwrap()
+                    .into_iter()
+                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+                    .collect(),
             )
         } else {
             (None, Default::default())
         };
 
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, issuance_event_publishers).await);
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &event_bus,
+                issuance_event_publishers,
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_auth(&library_state, is_pre_authorized).await;
 
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            Caller::Internal,
+            TEST_NONCE,
+            &issuance_state.command.nonce,
+            command,
+        )
+        .await
+        .unwrap();
 
-        let mut issuance_app = router(issuance_state.clone());
+        let mut issuance_app = router((issuance_state.clone(), library_state));
 
         if let Some(external_server) = &external_server {
             external_server
                 .prepare_credential_event_trigger(
                     Arc::new(Mutex::new(Some(issuance_app.clone()))),
+                    template_id.clone(),
                     is_self_signed,
                     delay,
                 )
                 .await;
         }
 
-        let credential_configuration_id = if is_pre_authorized {
-            "001".to_string()
-        } else {
-            "002".to_string()
-        };
-
         // When `with_external_server` is false, then the credentials endpoint does not need to be called before the
         // start of the flow, since the `external_server` will do this once it is triggered by the
         // `CredentialRequestVerified` event.
         if !with_external_server {
-            credentials(&mut issuance_app, &credential_configuration_id).await;
+            credentials_with_template(&mut issuance_app, &template_id).await;
         }
 
-        let grants = offers(&mut issuance_app, &credential_configuration_id).await.unwrap();
+        let grants = offers(&mut issuance_app, &template_id).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &event_bus,
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -484,7 +556,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
+                            "credential_configuration_id": template_id,
                             "proofs": {
                                 "jwt":[jwt]
                             }

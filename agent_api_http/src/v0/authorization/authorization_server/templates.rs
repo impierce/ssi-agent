@@ -10,7 +10,7 @@ use oid4vci::authorization_details::AuthorizationDetailsObject;
 pub struct ConsentPageTemplate {
     pub client_name: String,
     pub client_id: String,
-    pub authorization_details: Vec<AuthorizationDetailsObject>,
+    pub authorization_details: Option<Vec<AuthorizationDetailsObject>>,
     pub request_uri: String,
 }
 

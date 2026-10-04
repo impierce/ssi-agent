@@ -1,5 +1,6 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::handlers::{public_command_handler, public_query_handler};
 use crate::v0::issuance::error::{internal_server_error, PublicError};
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
@@ -9,14 +10,43 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
+use oid4vci::errors::OID4VCError;
 use oid4vci::notification_request::NotificationRequest;
 use serde_json::json;
 use std::sync::Arc;
 
 use tracing::info;
-/// The HTTP response MUST use the HTTP status code 400 (Bad Request) and set the content type to application/json.
-/// Reference: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-13.html#name-notification-error-response
-
+/// Notify the credential issuer
+///
+/// Receives a notification about the outcome of a credential issuance, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint).
+///
+/// Errors use the HTTP status code 400 (Bad Request) and the content type `application/json`, as described in the
+/// [Notification Error Response](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response).
+#[utoipa::path(
+    post,
+    path = "/openid4vci/notification",
+    operation_id = "openid4vci_notification",
+    tags = ["OpenID4VCI", PROTOCOL_TAG],
+    security(("access_token" = [])),
+    request_body(content = NotificationRequest, content_type = "application/json"),
+    responses(
+        (status = 204, description = "Notification received"),
+        (
+            status = 400,
+            description = "The notification request or its `notification_id` is invalid, or the `Authorization` header is missing",
+            body = OID4VCError<NotificationErrorResponse>,
+        ),
+        (
+            status = 401,
+            description = "The access token is invalid or expired",
+            content_type = "application/json",
+            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            example = json!({"error": "invalid_token"}),
+        ),
+        (status = 415, description = "The request body is not `application/json`"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub async fn notification(
     State(state): State<Arc<IssuanceState>>,
@@ -25,14 +55,12 @@ pub async fn notification(
 ) -> Result<Response, PublicError> {
     info!("Notification Request: {}", json!(raw_value));
 
+    let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
 
-    let _claims = AccessTokenValidationService::validate(&state, &access_token)
-        .await
-        .map_err(|_err| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
-
-    let credentials = match query_handler("all_credentials", &state.query.all_credentials).await? {
+    let credentials = match public_query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,
         _ => return Err(internal_server_error()),
     };
@@ -55,7 +83,7 @@ pub async fn notification(
         notification: notification_request,
     };
 
-    command_handler(&credential_id, &state.command.credential, command).await?;
+    public_command_handler(&credential_id, &state.command.credential, command).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }
@@ -63,9 +91,10 @@ pub async fn notification(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::authorization::authorization_server::token::tests::token;
     use crate::v0::issuance::credential_issuer::credential::tests::credential;
-    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::credentials::tests::{create_test_template, credentials, setup_library_state};
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
     use agent_authorization::services::AuthorizationServices;
@@ -82,16 +111,35 @@ mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_valid_notification_request() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut issuance_app = issuance::router(issuance_state.clone());
 
-        credentials(&mut issuance_app, "001").await;
-        let grants = offers(&mut issuance_app, "001").await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
+
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -99,7 +147,8 @@ mod tests {
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
+        let (access_token, notification_id) =
+            credential(&mut issuance_app, &issuance_state, TEMPLATE_ID, access_token, None).await;
 
         let request = Request::builder()
             .uri("/openid4vci/notification")
@@ -122,16 +171,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_notification_request() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut issuance_app = issuance::router(issuance_state.clone());
 
-        credentials(&mut issuance_app, "001").await;
-        let grants = offers(&mut issuance_app, "001").await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
+
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -139,13 +207,14 @@ mod tests {
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
 
-        let (access_token, notification_id) = credential(&mut issuance_app, &issuance_state, access_token, None).await;
+        let (access_token, notification_id) =
+            credential(&mut issuance_app, &issuance_state, TEMPLATE_ID, access_token, None).await;
 
         struct TestCase {
             name: &'static str,
             access_token: String,
             payload: String,
-            expected_error: NotificationErrorResponse,
+            expected_status: StatusCode,
         }
 
         let test_cases = vec![
@@ -158,7 +227,7 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidNotificationId,
+                expected_status: NotificationErrorResponse::InvalidNotificationId.status_code(),
             },
             TestCase {
                 name: "Invalid Access Token",
@@ -169,13 +238,13 @@ mod tests {
                     event_description: None,
                 })
                 .unwrap(),
-                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
+                expected_status: StatusCode::UNAUTHORIZED,
             },
             TestCase {
                 name: "Invalid Notification Event",
                 access_token: access_token.clone(),
                 payload: format!(r#"{{"notification_id": "{notification_id}", "event": "InvalidEventValue"}}"#),
-                expected_error: NotificationErrorResponse::InvalidNotificationRequest,
+                expected_status: NotificationErrorResponse::InvalidNotificationRequest.status_code(),
             },
         ];
 
@@ -191,10 +260,10 @@ mod tests {
             let response = issuance_app.clone().oneshot(request).await.unwrap();
             assert_eq!(
                 response.status(),
-                test_case.expected_error.status_code(),
+                test_case.expected_status,
                 "Test case {} failed: expected status {}, got {}",
                 test_case.name,
-                test_case.expected_error.status_code(),
+                test_case.expected_status,
                 response.status(),
             );
         }

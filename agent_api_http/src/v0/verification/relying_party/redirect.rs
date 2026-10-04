@@ -1,4 +1,5 @@
-use crate::handlers::command_handler;
+use crate::handlers::{public_command_handler, public_query_handler};
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_verification::{
     authorization_request::command::AuthorizationRequestCommand, generic_oid4vc::GenericAuthorizationResponse,
     state::VerificationState,
@@ -13,6 +14,53 @@ use http_api_problem::ApiError;
 use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
 use std::sync::Arc;
 
+/// An authorization response sent to the relying party, either as a SIOPv2 ID Token or as an OID4VP VP Token.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+#[serde(untagged)]
+pub(crate) enum AuthorizationResponseForm {
+    IdToken(IdTokenAuthorizationResponse),
+    VpToken(VpTokenAuthorizationResponse),
+}
+
+/// A [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#name-self-issued-openid-provider-a)
+/// authorization response.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+pub(crate) struct IdTokenAuthorizationResponse {
+    /// The `state` of the authorization request, which identifies it.
+    state: String,
+    /// The Self-Issued ID Token as a compact JWT.
+    id_token: String,
+}
+
+/// An [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-response) authorization
+/// response.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+pub(crate) struct VpTokenAuthorizationResponse {
+    /// The `state` of the authorization request, which identifies it.
+    state: String,
+    /// JSON-encoded object that maps each DCQL credential query ID to a non-empty array of presentations.
+    vp_token: String,
+}
+
+/// Submit an authorization response
+///
+/// Receives and verifies the authorization response of a SIOPv2 or OID4VP authorization request, sent with the
+/// `direct_post` response mode.
+#[utoipa::path(
+    post,
+    path = "/redirect",
+    operation_id = "redirect",
+    tags = ["OID4VP / SIOPv2", PROTOCOL_TAG],
+    request_body(content = AuthorizationResponseForm, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 200, description = "Authorization response verified"),
+        (status = 400, description = "The authorization response is malformed, has no `state`, or is invalid"),
+        (status = 404, description = "No authorization request exists for the `state`"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn redirect(
     State(verification_state): State<Arc<VerificationState>>,
@@ -30,10 +78,18 @@ pub(crate) async fn redirect(
         return Err(ApiError::new(StatusCode::BAD_REQUEST));
     };
 
+    // Without this check, the command would run against a fresh aggregate for an unknown `state`.
+    public_query_handler(
+        &authorization_request_id,
+        &verification_state.query.authorization_request,
+    )
+    .await?
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+
     let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
     // Verify the authorization response.
-    command_handler(
+    public_command_handler(
         &authorization_request_id,
         &verification_state.command.authorization_request,
         command,
@@ -127,6 +183,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
     async fn test_redirect_endpoint() {
@@ -140,19 +197,28 @@ pub mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        set_config().enable_event_publisher_http();
-        set_config().set_event_publisher_http_target_url(target_url.clone());
-        set_config().set_event_publisher_http_target_events(Events {
-            authorization_request: vec![
-                agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
-            ],
-            ..Default::default()
-        });
+        set_config().enable_event_publisher_http(0);
+        set_config().set_event_publisher_http_target_url(0, target_url.clone());
+        set_config().set_event_publisher_http_target_events(
+            0,
+            Events {
+                authorization_request: vec![
+                    agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
+                ],
+                ..Default::default()
+            },
+        );
 
-        let event_publishers = vec![Box::new(EventPublisherHttp::load().unwrap()) as Box<dyn EventPublisher>];
+        let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+        let event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
+            .unwrap()
+            .into_iter()
+            .map(|p| Box::new(p) as Box<dyn EventPublisher>)
+            .collect();
 
-        let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, event_publishers).await);
+        let verification_state = Arc::new(
+            verification_state(&InMemory, VerificationServices::default().await, &bus, event_publishers).await,
+        );
 
         let mut app = router(verification_state);
 
@@ -173,5 +239,48 @@ pub mod tests {
 
         // Assert that the event was dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);
+    }
+
+    #[rstest::rstest]
+    #[case::unknown_state("id_token=&state=unknown", false, StatusCode::NOT_FOUND)]
+    #[case::invalid_id_token("id_token=&state={state}", true, StatusCode::BAD_REQUEST)]
+    #[case::invalid_vp_token("vp_token=%7B%7D&state={state}", true, StatusCode::BAD_REQUEST)]
+    #[serial_test::serial]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn invalid_authorization_responses_are_client_errors(
+        #[case] form: &str,
+        #[case] existing_authorization_request: bool,
+        #[case] expected_status: StatusCode,
+    ) {
+        let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus, vec![]).await);
+
+        let mut app = router(verification_state);
+
+        let form = if existing_authorization_request {
+            let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+            let state = form_url_encoded_authorization_request.split("%2F").last().unwrap();
+            form.replace("{state}", state)
+        } else {
+            form.to_string()
+        };
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/redirect")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(form))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), expected_status);
     }
 }

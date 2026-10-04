@@ -1,4 +1,5 @@
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_authorization::application::oauth2_authorization_service::{
     OAuth2AuthorizationService, OAuth2AuthorizationServiceResponse,
 };
@@ -14,16 +15,37 @@ use http::header;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use std::sync::Arc;
 
+/// Authorize a pushed authorization request
+///
+/// Starts the authorization of a pushed authorization request by reference, as defined by
+/// [RFC 9126](https://www.rfc-editor.org/rfc/rfc9126.html#name-authorization-request). The user agent is
+/// redirected to the consent page, or back to the client once consent has been given.
+#[utoipa::path(
+    get,
+    path = "/auth/authorize",
+    operation_id = "auth_authorize",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    params(AuthorizationRequestByReference),
+    responses(
+        (
+            status = 302,
+            description = "Redirect to the client's redirect URI",
+            headers(("Location" = String, description = "The client's redirect URI")),
+        ),
+        (
+            status = 303,
+            description = "Redirect to the consent page",
+            headers(("Location" = String, description = "The consent page URI")),
+        ),
+        (status = 400, description = "The query string is invalid, or the authorization request is unknown, expired, or for another client"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorize(
     State(state): State<Arc<AuthorizationState>>,
     Query(authorization_request): Query<AuthorizationRequestByReference>,
 ) -> Result<Response, PublicError> {
-    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?
-    {
+    match OAuth2AuthorizationService::handle_authorization_request(&state, authorization_request).await? {
         OAuth2AuthorizationServiceResponse::RedirectToConsent(location) => Ok(Redirect::to(&location).into_response()),
         OAuth2AuthorizationServiceResponse::RedirectToClient(location) => {
             Ok((StatusCode::FOUND, [(header::LOCATION, location.to_string())]).into_response())
@@ -34,11 +56,13 @@ pub(crate) async fn authorize(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
+    use crate::v0::authorization;
     use crate::v0::authorization::authorization_server::consent::tests::{get_consent, post_consent};
     use crate::v0::authorization::authorization_server::par::tests::par;
-    use crate::v0::issuance::credentials::tests::credentials;
+    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::offers::tests::offers;
-    use crate::v0::{authorization, issuance};
+    use crate::v0::issuance::router;
     use agent_authorization::services::AuthorizationServices;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_issuance::services::IssuanceServices;
@@ -112,20 +136,38 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_authorization_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let mut app = issuance::router(issuance_state.clone());
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, false).await;
 
-        credentials(&mut app, "002").await;
-        let (authorization_code, _pre_authorized_code) = offers(&mut app, "002").await.unwrap();
+        let mut app = router((issuance_state.clone(), library_state));
+
+        credentials(&mut app).await;
+        let (authorization_code, _pre_authorized_code) = offers(&mut app, TEMPLATE_ID).await.unwrap();
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();

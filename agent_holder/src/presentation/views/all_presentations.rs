@@ -1,13 +1,13 @@
 use super::PresentationView;
 use crate::presentation::aggregate::Presentation;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllPresentationsView {
     #[serde(flatten)]
-    pub presentations: HashMap<String, PresentationView>,
+    pub presentations: IndexMap<String, PresentationView>,
 }
 
 impl View<Presentation> for AllPresentationsView {

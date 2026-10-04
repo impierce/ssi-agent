@@ -1,6 +1,6 @@
 use crate::nonce::command::NonceCommand;
 use crate::state::IssuanceState;
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use oid4vci::credential_request::CredentialRequest;
 use thiserror::Error;
@@ -38,7 +38,7 @@ impl NonceValidationService {
 
         let nonce = &nonces[0];
 
-        let nonce_status = query_handler(nonce, &state.query.nonce)
+        let nonce_status = public_query_handler(nonce, &state.query.nonce)
             .await
             .map_err(|_| NonceValidationError::InvalidNonce)?;
 
@@ -46,7 +46,7 @@ impl NonceValidationService {
             Some(n) if n.is_redeemed => Err(NonceValidationError::RedeemedNonce),
             Some(_) => {
                 let command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-                command_handler(nonce, &state.command.nonce, command)
+                public_command_handler(nonce, &state.command.nonce, command)
                     .await
                     .map_err(|_| NonceValidationError::InvalidNonce)?;
                 Ok(())
@@ -97,7 +97,7 @@ mod tests {
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_secret_manager::service::Service;
-    use agent_shared::handlers::command_handler;
+    use agent_shared::handlers::public_command_handler;
     use agent_store::in_memory::InMemory;
     use oid4vci::proofs::Proofs;
 
@@ -147,13 +147,21 @@ mod tests {
 
     #[rstest]
     async fn test_valid_nonce_successful_validation(credential_request: CredentialRequest) {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
 
         let nonce = NONCE_VALUE.to_string();
 
         let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
-        command_handler(NONCE_VALUE, &state.command.nonce, create_command)
+        public_command_handler(NONCE_VALUE, &state.command.nonce, create_command)
             .await
             .unwrap();
 
@@ -165,16 +173,24 @@ mod tests {
     #[serial_test::serial]
     async fn test_validate_redeemed_nonce_fails(credential_request: CredentialRequest) {
         let nonce = NONCE_VALUE.to_string();
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
 
         let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
-        command_handler(NONCE_VALUE, &state.command.nonce, create_command)
+        public_command_handler(NONCE_VALUE, &state.command.nonce, create_command)
             .await
             .unwrap();
 
         let redeem_command = NonceCommand::RedeemNonce { c_nonce: nonce.clone() };
-        command_handler(NONCE_VALUE, &state.command.nonce, redeem_command)
+        public_command_handler(NONCE_VALUE, &state.command.nonce, redeem_command)
             .await
             .unwrap();
 
@@ -185,13 +201,21 @@ mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_validate_wrong_nonce(credential_request: CredentialRequest) {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
 
         let create_command = NonceCommand::GenerateNonce {
             c_nonce: NONCE_VALUE_2.to_string(),
         };
-        command_handler(NONCE_VALUE_2, &state.command.nonce, create_command)
+        public_command_handler(NONCE_VALUE_2, &state.command.nonce, create_command)
             .await
             .unwrap();
 

@@ -14,3 +14,11 @@ pub enum ReissuanceCommand {
         status_action: Option<String>,
     },
 }
+
+impl shared_kernel::authorization::CommandOperation for ReissuanceCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateReissuance { .. } => "issuance.reissuances.create",
+        }
+    }
+}

@@ -3,9 +3,34 @@ use axum::{
     response::{IntoResponse, Response},
     RequestExt as _,
 };
+use chrono::DateTime;
 use http::{request::Parts, StatusCode};
+use indexmap::IndexMap;
 use oid4vc_core::utils::form_urlencoded::from_form_urlencoded_string;
 use serde::de::DeserializeOwned;
+
+/// Iterates over an insertion-ordered map from newest to oldest.
+pub fn newest_first<K, V>(values: IndexMap<K, V>) -> impl Iterator<Item = V> {
+    values.into_values().rev()
+}
+
+/// Borrows an insertion-ordered map from newest to oldest.
+pub fn newest_first_ref<K, V>(values: &IndexMap<K, V>) -> impl Iterator<Item = &V> {
+    values.values().rev()
+}
+
+/// Compares optional RFC 3339 timestamps newest-first, with a stable ID tie-breaker.
+pub fn compare_rfc3339_newest_first(
+    left_timestamp: Option<&str>,
+    left_id: &str,
+    right_timestamp: Option<&str>,
+    right_id: &str,
+) -> std::cmp::Ordering {
+    let left = left_timestamp.and_then(|value| DateTime::parse_from_rfc3339(value).ok());
+    let right = right_timestamp.and_then(|value| DateTime::parse_from_rfc3339(value).ok());
+
+    right.cmp(&left).then_with(|| left_id.cmp(right_id))
+}
 
 /// An Axum extractor for `application/x-www-form-urlencoded` data with a special deserialization strategy.
 ///
@@ -258,5 +283,26 @@ mod tests {
         assert_eq!(result_with_value.key, Some(Some("value".to_string())));
         assert_eq!(result_with_null.key, Some(None));
         assert_eq!(result_without_key.key, None);
+    }
+
+    #[test]
+    fn newest_first_reverses_insertion_order() {
+        let values = IndexMap::from([("oldest", 1), ("middle", 2), ("newest", 3)]);
+
+        assert_eq!(newest_first(values).collect::<Vec<_>>(), vec![3, 2, 1]);
+    }
+
+    #[test]
+    fn rfc3339_comparison_normalizes_offsets_and_breaks_ties_by_id() {
+        let mut values = [
+            ("b", Some("2026-01-01T01:00:00+01:00")),
+            ("a", Some("2026-01-01T00:00:00Z")),
+            ("newest", Some("2026-01-01T00:00:00.000001Z")),
+            ("missing", None),
+        ];
+
+        values.sort_by(|left, right| compare_rfc3339_newest_first(left.1, left.0, right.1, right.0));
+
+        assert_eq!(values.map(|(id, _)| id), ["newest", "a", "b", "missing"]);
     }
 }

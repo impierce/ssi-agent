@@ -78,6 +78,7 @@ impl View<Offer> for Offer {
                 self.offer_id.clone_from(offer_id);
                 self.credential_response.replace(credential_response.clone());
                 self.status.clone_from(status);
+                self.successful_issuances = self.successful_issuances.saturating_add(1);
             }
             TxCodeGenerated {
                 offer_id,

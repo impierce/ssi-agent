@@ -1,0 +1,152 @@
+meta {
+  name: Stream domain events as CloudEvents via SSE with Catch-Up
+  type: http
+  seq: 1
+  tags: [
+    Events
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/events
+  body: none
+  auth: inherit
+}
+
+params:query {
+  @description('Comma-separated list of CloudEvent types to filter')
+  ~types:
+  @description('Comma-separated list of sources/aggregate types to filter')
+  ~sources:
+  @description('Optional aggregate/subject ID filter')
+  ~subject:
+  @description('Optional limit on historical events; defaults to 100, clamped to 1000, set to 0 for live-only stream')
+  ~limit: 0
+  @description('Filter events after RFC 3339 timestamp')
+  ~since:
+  @description('Filter events before RFC 3339 timestamp')
+  ~until:
+}
+
+docs {
+  # Note on delivery guarantee
+
+  This is a **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber could
+  miss events. Gaps are signalled where detectable (`lagged`, `truncated`), not prevented.
+
+  This endpoint is suitable for a UI activity feed. Projections, syncs and audit consumers must reconcile against
+  the REST endpoints. Full detail in `problem-details/events`.
+}
+
+example {
+  name: 200 Response
+  description: Server-Sent Events stream of CloudEvents
+
+  request: {
+    url: {{BASE_URL}}/v0/events
+    method: GET
+    mode: none
+    params:query: {
+      ~types:
+      ~sources:
+      ~subject:
+      ~limit: 0
+      ~since:
+      ~until:
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: text/event-stream
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: text
+      content: '''
+        {
+          "data": "",
+          "datacontenttype": "",
+          "dataschema": "",
+          "id": "",
+          "source": "",
+          "specversion": "",
+          "subject": "",
+          "time": "",
+          "type": "com.impierce.unicore.offer-created"
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Unauthorized
+
+  request: {
+    url: {{BASE_URL}}/v0/events
+    method: GET
+    mode: none
+    params:query: {
+      ~types:
+      ~sources:
+      ~subject:
+      ~limit: 0
+      ~since:
+      ~until:
+    }
+  }
+
+  response: {
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 403 Response
+  description: Forbidden
+
+  request: {
+    url: {{BASE_URL}}/v0/events
+    method: GET
+    mode: none
+    params:query: {
+      ~types:
+      ~sources:
+      ~subject:
+      ~limit: 0
+      ~since:
+      ~until:
+    }
+  }
+
+  response: {
+    status: {
+      code: 403
+      text: Forbidden
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

@@ -23,6 +23,8 @@ impl View<OAuth2AuthorizationRequest> for OAuth2AuthorizationRequest {
                 code_challenge_method,
 
                 expires_at,
+
+                openid4vp_request,
             } => {
                 self.oauth2_authorization_request_id
                     .clone_from(oauth2_authorization_request_id);
@@ -36,6 +38,7 @@ impl View<OAuth2AuthorizationRequest> for OAuth2AuthorizationRequest {
                 self.code_challenge.clone_from(code_challenge);
                 self.code_challenge_method.clone_from(code_challenge_method);
                 self.expires_at = *expires_at;
+                self.openid4vp_request.clone_from(openid4vp_request);
             }
             OAuth2AuthorizationRequestExpired {
                 oauth2_authorization_request_id,

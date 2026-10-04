@@ -1,6 +1,7 @@
 use agent_shared::generate_random_string;
 use agent_shared::handlers::command_handler;
-use agent_shared::{config::RefreshServiceConfiguration, handlers::query_handler};
+use agent_shared::{config::RefreshServiceConfiguration, handlers::public_query_handler as query_handler};
+use shared_kernel::authorization::Caller;
 
 use crate::refresh_capability::aggregate::RefreshCapabilityStatus;
 use crate::{refresh_capability::command::RefreshCapabilityCommand, state::IssuanceState};
@@ -33,6 +34,7 @@ impl RefreshCapabilityService {
     pub async fn create_for_credential(
         &self,
         state: &IssuanceState,
+        caller: Caller,
         credential_id: &str,
         refresh_service: Option<&RefreshServiceConfiguration>,
     ) -> Result<Option<CreateRefreshCapabilityResponse>, RefreshCapabilityServiceError> {
@@ -47,9 +49,15 @@ impl RefreshCapabilityService {
             credential_id: credential_id.to_string(),
         };
 
-        command_handler(&refresh_reference, &state.command.refresh_capability, command)
-            .await
-            .map_err(|err| RefreshCapabilityServiceError::Command(err.to_string()))?;
+        command_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
+            &refresh_reference,
+            &state.command.refresh_capability,
+            command,
+        )
+        .await
+        .map_err(|err| RefreshCapabilityServiceError::Command(err.to_string()))?;
 
         Ok(Some(CreateRefreshCapabilityResponse { refresh_reference }))
     }
@@ -84,12 +92,20 @@ mod tests {
     use agent_issuance::state::{initialize, IssuanceState};
     use agent_secret_manager::service::Service;
     use agent_shared::config::RefreshServiceConfiguration;
-    use agent_shared::handlers::{command_handler, query_handler};
+    use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
     use agent_store::{in_memory::InMemory, issuance_state};
     use std::sync::Arc;
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
         state
     }
@@ -98,8 +114,13 @@ mod tests {
     async fn create_for_credential_skips_when_refresh_service_is_absent() {
         let state = test_state().await;
 
-        let response = RefreshCapabilityService::default()
-            .create_for_credential(&state, "credential-id", None)
+        let response = RefreshCapabilityService
+            .create_for_credential(
+                &state,
+                shared_kernel::authorization::Caller::Internal,
+                "credential-id",
+                None,
+            )
             .await
             .unwrap();
 
@@ -110,9 +131,10 @@ mod tests {
     async fn create_for_credential_creates_capability_when_refresh_service_is_present() {
         let state = test_state().await;
 
-        let response = RefreshCapabilityService::default()
+        let response = RefreshCapabilityService
             .create_for_credential(
                 &state,
+                shared_kernel::authorization::Caller::Internal,
                 "credential-id",
                 Some(&RefreshServiceConfiguration {
                     type_: "VerifiableCredentialRefreshService2021".to_string(),
@@ -135,9 +157,10 @@ mod tests {
     async fn resolve_active_returns_active_refresh_capability() {
         let state = test_state().await;
 
-        let created = RefreshCapabilityService::default()
+        let created = RefreshCapabilityService
             .create_for_credential(
                 &state,
+                shared_kernel::authorization::Caller::Internal,
                 "credential-id",
                 Some(&RefreshServiceConfiguration {
                     type_: "VerifiableCredentialRefreshService2021".to_string(),
@@ -147,7 +170,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        let resolved = RefreshCapabilityService::default()
+        let resolved = RefreshCapabilityService
             .resolve_active(&state, &created.refresh_reference)
             .await
             .unwrap();
@@ -160,7 +183,7 @@ mod tests {
     async fn resolve_active_returns_not_found_for_unknown_reference() {
         let state = test_state().await;
 
-        let error = RefreshCapabilityService::default()
+        let error = RefreshCapabilityService
             .resolve_active(&state, "unknown-refresh-reference")
             .await
             .expect_err("unknown reference should not resolve");
@@ -172,9 +195,10 @@ mod tests {
     async fn resolve_active_returns_not_found_for_disabled_reference() {
         let state = test_state().await;
 
-        let created = RefreshCapabilityService::default()
+        let created = RefreshCapabilityService
             .create_for_credential(
                 &state,
+                shared_kernel::authorization::Caller::Internal,
                 "credential-id",
                 Some(&RefreshServiceConfiguration {
                     type_: "VerifiableCredentialRefreshService2021".to_string(),
@@ -192,7 +216,7 @@ mod tests {
         .await
         .unwrap();
 
-        let error = RefreshCapabilityService::default()
+        let error = RefreshCapabilityService
             .resolve_active(&state, &created.refresh_reference)
             .await
             .expect_err("disabled reference should not resolve");

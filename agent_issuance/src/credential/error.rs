@@ -6,9 +6,6 @@ pub enum CredentialError {
     // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
     #[error("Credential format not supported: `{0}`")]
     UnsupportedCredentialFormat(serde_json::Value),
-    // TODO: Remove this error when fixing: https://github.com/impierce/ssi-agent/issues/136
-    #[error("This Credential type is not supported")]
-    UnsupportedCredentialType,
     #[error("The credential data payload is invalid: {0}")]
     InvalidCredentialPayloadError(JsonSchemaError),
     #[error("The `id` value could not be parsed to a valid URI")]

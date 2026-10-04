@@ -1,0 +1,39 @@
+meta {
+  name: An alias for the liveness probe
+  type: http
+  seq: 1
+  tags: [
+    Probes
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/healthz
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Application is alive
+
+  request: {
+    url: {{BASE_URL}}/healthz
+    method: GET
+    mode: none
+  }
+
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

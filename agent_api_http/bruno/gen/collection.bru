@@ -1,0 +1,13 @@
+meta {
+  name: UniCore HTTP API
+}
+
+auth {
+  mode: apikey
+}
+
+auth:apikey {
+  key: X-API-KEY
+  value: {{API_KEY}}
+  placement: header
+}

@@ -1,4 +1,3 @@
-use crate::handlers::query_handler;
 use agent_issuance::{
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -9,12 +8,30 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
+use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
+
 // TODO: move this to `authorization/authorization_server/well_known.rs`!
+/// Get the OAuth 2.0 Authorization Server Metadata
+///
+/// Returns the metadata of the authorization server as defined by
+/// [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html).
+#[utoipa::path(
+    get,
+    path = "/.well-known/oauth-authorization-server",
+    operation_id = "well_known_oauth_authorization_server",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    responses(
+        (status = 200, description = "Authorization server metadata", body = AuthorizationServerMetadata),
+        (status = 404, description = "The authorization server metadata is not configured"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    match query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
+    match public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         Some(ServerConfigView {
             authorization_server_metadata,
             ..
@@ -26,7 +43,10 @@ pub(crate) async fn oauth_authorization_server(State(state): State<Arc<IssuanceS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::v0::issuance::router;
+    use crate::v0::issuance::{
+        credentials::tests::{create_test_template, setup_library_state},
+        router,
+    };
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
     use agent_store::{in_memory::InMemory, issuance_state};
@@ -74,11 +94,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_oauth_authorization_server_endpoint() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state);
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
+
+        let mut app = router((issuance_state.clone(), library_state));
 
         let _authorization_server_metadata = oauth_authorization_server(&mut app).await;
     }

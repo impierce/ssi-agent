@@ -7,8 +7,7 @@ use crate::{
     services::VerificationServices,
 };
 use agent_shared::config::{config, get_preferred_signing_algorithm};
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject as _};
 use oid4vp::token::vp_token_validator::VpTokenValidator;
@@ -29,29 +28,32 @@ pub struct AuthorizationRequest {
     pub validated: bool,
 }
 
-#[async_trait]
 impl Aggregate for AuthorizationRequest {
     type Command = AuthorizationRequestCommand;
     type Event = AuthorizationRequestEvent;
     type Error = AuthorizationRequestError;
     type Services = Arc<VerificationServices>;
 
-    fn aggregate_type() -> String {
-        "authorization_request".to_string()
-    }
+    const TYPE: &'static str = "authorization_request";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use AuthorizationRequestCommand::*;
         use AuthorizationRequestError::*;
         use AuthorizationRequestEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateAuthorizationRequest {
                 state,
                 nonce,
                 dcql_query,
+                alternative_response_mode,
             } => {
                 let default_subject_syntax_type = services.relying_party.default_subject_syntax_type().to_string();
                 let verifier = &services.verifier;
@@ -99,7 +101,7 @@ impl Aggregate for AuthorizationRequest {
                             .client_id(ClientId::from_str(&client_id).unwrap())
                             .scope(Scope::openid())
                             .response_uri(redirect_uri)
-                            .response_mode("direct_post".to_string())
+                            .response_mode(alternative_response_mode.unwrap_or_else(|| "direct_post".to_string()))
                             .client_metadata(oid4vp_client_metadata)
                             .state(state)
                             .nonce(nonce)
@@ -235,12 +237,20 @@ impl Aggregate for AuthorizationRequest {
                                 validated: true,
                             }])
                         } else {
-                            Err(MissingAuthorizationRequest)
+                            Err(InvalidOID4VPAuthorizationResponse(anyhow::anyhow!(
+                                "The authorization request is not an OID4VP authorization request."
+                            )))
                         }
                     }
                 }
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -341,6 +351,7 @@ pub mod tests {
                 state: "state".to_string(),
                 nonce: "nonce".to_string(),
                 dcql_query: None,
+                alternative_response_mode: None,
             })
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {

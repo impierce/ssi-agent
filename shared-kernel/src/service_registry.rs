@@ -4,7 +4,8 @@ use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::{mpsc, oneshot};
 use tracing::debug;
 
-use crate::application_service::{ApplicationContext, CommandEnvelope, QueryEnvelope};
+use crate::application_service::{ApplicationContext, ApplicationServiceError, CommandEnvelope, QueryEnvelope};
+use crate::authorization::{AuthorizationError, Caller};
 
 /// A type-keyed registry for storing and retrieving services at runtime.
 ///
@@ -50,6 +51,8 @@ pub enum ServiceError<AC: ApplicationContext> {
     CommandError(AC::CommandError),
     #[error("Query error: {0}")]
     QueryError(AC::QueryError),
+    #[error("Authorization error: {0}")]
+    Authorization(#[from] AuthorizationError),
 }
 
 /// A cloneable handle for sending commands and queries to an [`ApplicationService`](crate::application_service::ApplicationService).
@@ -80,10 +83,12 @@ where
     ///
     /// Returns `ServiceError::SendCommandError` if sending the command fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
+    /// Returns `ServiceError::Authorization` if authorization denies the command.
     /// Returns `ServiceError::CommandError` if the application service returns an error for the
     /// command.
     pub async fn dispatch_command(
         &self,
+        caller: Caller,
         aggregate_id: String,
         command: AC::Command,
     ) -> Result<String, ServiceError<AC>> {
@@ -91,6 +96,7 @@ where
 
         let (reply_tx, reply_rx) = oneshot::channel();
         let command = CommandEnvelope {
+            caller,
             aggregate_id,
             command,
             reply: reply_tx,
@@ -98,7 +104,11 @@ where
 
         self.command_tx.send(command).await?;
 
-        reply_rx.await?.map_err(ServiceError::CommandError)
+        match reply_rx.await? {
+            Ok(id) => Ok(id),
+            Err(ApplicationServiceError::Authorization(error)) => Err(ServiceError::Authorization(error)),
+            Err(ApplicationServiceError::Context(error)) => Err(ServiceError::CommandError(error)),
+        }
     }
 
     /// Send a query to the application service and await the resulting view.
@@ -106,17 +116,26 @@ where
     ///
     /// Returns `ServiceError::SendQueryError` if sending the query fails.
     /// Returns `ServiceError::RecvError` if awaiting the response fails.
+    /// Returns `ServiceError::Authorization` if authorization denies the query.
     /// Returns `ServiceError::QueryError` if the application service returns an error for the
     /// query.
-    pub async fn dispatch_query(&self, query: AC::Query) -> Result<AC::View, ServiceError<AC>> {
+    pub async fn dispatch_query(&self, caller: Caller, query: AC::Query) -> Result<AC::View, ServiceError<AC>> {
         debug!("Dispatching query through service handle");
 
         let (reply_tx, reply_rx) = oneshot::channel();
-        let query = QueryEnvelope { query, reply: reply_tx };
+        let query = QueryEnvelope {
+            caller,
+            query,
+            reply: reply_tx,
+        };
 
         self.query_tx.send(query).await?;
 
-        reply_rx.await?.map_err(ServiceError::QueryError)
+        match reply_rx.await? {
+            Ok(id) => Ok(id),
+            Err(ApplicationServiceError::Authorization(error)) => Err(ServiceError::Authorization(error)),
+            Err(ApplicationServiceError::Context(error)) => Err(ServiceError::QueryError(error)),
+        }
     }
 }
 
@@ -136,8 +155,10 @@ where
 mod tests {
     use super::*;
     use crate::application_service::{ApplicationContext, ApplicationService};
+    use crate::authorization::{Actor, AllowAllAuthorizationChecker};
     use async_trait::async_trait;
     use std::fmt;
+    use std::sync::Arc;
     use tokio::sync::mpsc;
 
     // ── Fixture types ──────────────────────────────────────────────
@@ -185,6 +206,14 @@ mod tests {
         async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError> {
             Ok(TestView(query))
         }
+
+        fn command_operation_name(&self, _command: &Self::Command) -> &'static str {
+            "test.echo.command"
+        }
+
+        fn query_operation_name(&self, _query: &Self::Query) -> &'static str {
+            "test.echo.query"
+        }
     }
 
     // ── Tests ──────────────────────────────────────────────────────
@@ -217,11 +246,19 @@ mod tests {
     async fn dispatch_command_returns_result() {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(EchoContext, command_rx, query_rx);
+        let service = ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
 
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
-        let result = handle.dispatch_command("aggregte-id".into(), "create".into()).await;
+        let result = handle
+            .dispatch_command(Caller::Anonymous, "aggregte-id".into(), "create".into())
+            .await;
 
         assert_eq!(result.unwrap(), "aggregte-id");
     }
@@ -230,20 +267,154 @@ mod tests {
     async fn dispatch_query_returns_view() {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(EchoContext, command_rx, query_rx);
+        let service = ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
 
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
-        let result = handle.dispatch_query("my-query".into()).await;
+        let result = handle.dispatch_query(Caller::Anonymous, "my-query".into()).await;
 
         assert_eq!(result.unwrap(), TestView("my-query".into()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_command_sends_actor_caller() {
+        let (command_tx, mut command_rx) = mpsc::channel(16);
+        let (query_tx, _query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+
+        let dispatch = tokio::spawn(async move {
+            handle
+                .dispatch_command(Caller::Actor(actor), "aggregate-id".into(), "create".into())
+                .await
+        });
+
+        let command = command_rx.recv().await.unwrap();
+        assert_eq!(
+            command.caller,
+            Caller::Actor(Actor {
+                subject: "user@example.test".to_string()
+            })
+        );
+        assert_eq!(command.aggregate_id, "aggregate-id");
+        assert_eq!(command.command, "create");
+
+        command.reply.send(Ok("aggregate-id".into())).unwrap();
+
+        assert_eq!(dispatch.await.unwrap().unwrap(), "aggregate-id");
+    }
+
+    #[tokio::test]
+    async fn dispatch_query_sends_actor_caller() {
+        let (command_tx, _command_rx) = mpsc::channel(16);
+        let (query_tx, mut query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+        let actor = Actor {
+            subject: "user@example.test".to_string(),
+        };
+
+        let dispatch =
+            tokio::spawn(async move { handle.dispatch_query(Caller::Actor(actor), "my-query".into()).await });
+
+        let query = query_rx.recv().await.unwrap();
+        assert_eq!(
+            query.caller,
+            Caller::Actor(Actor {
+                subject: "user@example.test".to_string()
+            })
+        );
+        assert_eq!(query.query, "my-query");
+
+        query.reply.send(Ok(TestView("my-query".into()))).unwrap();
+
+        assert_eq!(dispatch.await.unwrap().unwrap(), TestView("my-query".into()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_query_sends_internal_caller() {
+        let (command_tx, _command_rx) = mpsc::channel(16);
+        let (query_tx, mut query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+
+        let dispatch = tokio::spawn(async move { handle.dispatch_query(Caller::Internal, "my-query".into()).await });
+
+        let query = query_rx.recv().await.unwrap();
+        assert_eq!(query.caller, Caller::Internal);
+
+        query.reply.send(Ok(TestView("my-query".into()))).unwrap();
+
+        assert_eq!(dispatch.await.unwrap().unwrap(), TestView("my-query".into()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_command_maps_context_error_to_command_error() {
+        let (command_tx, mut command_rx) = mpsc::channel(16);
+        let (query_tx, _query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+
+        let dispatch = tokio::spawn(async move {
+            handle
+                .dispatch_command(Caller::Anonymous, "aggregate-id".into(), "bad-command".into())
+                .await
+        });
+
+        let command = command_rx.recv().await.unwrap();
+        command
+            .reply
+            .send(Err(ApplicationServiceError::Context(TestCommandError(
+                "command failed".into(),
+            ))))
+            .unwrap();
+
+        let result = dispatch.await.unwrap();
+        assert!(matches!(
+            result,
+            Err(ServiceError::CommandError(error)) if error.to_string() == "command failed"
+        ));
+    }
+
+    #[tokio::test]
+    async fn dispatch_query_maps_context_error_to_query_error() {
+        let (command_tx, _command_rx) = mpsc::channel(16);
+        let (query_tx, mut query_rx) = mpsc::channel(16);
+        let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
+
+        let dispatch = tokio::spawn(async move { handle.dispatch_query(Caller::Anonymous, "bad-query".into()).await });
+
+        let query = query_rx.recv().await.unwrap();
+        query
+            .reply
+            .send(Err(ApplicationServiceError::Context(TestQueryError(
+                "query failed".into(),
+            ))))
+            .unwrap();
+
+        let result = dispatch.await.unwrap();
+        assert!(matches!(
+            result,
+            Err(ServiceError::QueryError(error)) if error.to_string() == "query failed"
+        ));
     }
 
     #[tokio::test]
     async fn service_handle_can_be_registered_and_retrieved() {
         let (command_tx, command_rx) = mpsc::channel(16);
         let (query_tx, query_rx) = mpsc::channel(16);
-        let service = ApplicationService::new(EchoContext, command_rx, query_rx);
+        let service = ApplicationService::new(
+            EchoContext,
+            command_rx,
+            query_rx,
+            Arc::new(AllowAllAuthorizationChecker),
+        )
+        .expect("authorization configuration should be valid");
         tokio::spawn(service.start());
 
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
@@ -256,7 +427,7 @@ mod tests {
 
         let result = retrieved
             .unwrap()
-            .dispatch_command("aggregte-id".into(), "command".into())
+            .dispatch_command(Caller::Anonymous, "aggregte-id".into(), "command".into())
             .await;
         assert_eq!(result.unwrap(), "aggregte-id");
     }

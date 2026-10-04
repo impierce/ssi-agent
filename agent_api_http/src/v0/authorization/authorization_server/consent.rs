@@ -1,6 +1,7 @@
 use crate::utils::StringifiedQuery;
 use crate::v0::authorization::authorization_server::templates::{ConsentPageTemplate, HtmlTemplate};
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_authorization::application::consent_query_service::{ConsentPageViewModel, ConsentQueryService};
 use agent_authorization::application::consent_service::{ConsentService, ConsentServiceResponse};
 use agent_authorization::application::oauth2_authorization_service::GetConsentQuery;
@@ -15,6 +16,22 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 
+/// Get the consent page
+///
+/// Renders the HTML page on which the end-user grants or denies consent to a pushed authorization request.
+#[utoipa::path(
+    get,
+    path = "/auth/consent",
+    operation_id = "get_consent",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    params(
+        ("request_uri" = String, Query, description = "The `request_uri` returned by the pushed authorization request endpoint"),
+    ),
+    responses(
+        (status = 200, description = "Consent page", body = String, content_type = "text/html"),
+        (status = 400, description = "The query string is invalid, or the `request_uri` does not refer to a pending authorization request"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_consent(
     State(state): State<Arc<AuthorizationState>>,
@@ -25,10 +42,7 @@ pub(crate) async fn get_consent(
         client_name,
         authorization_details,
         request_uri,
-    } = ConsentQueryService::prepare_consent_page_data(&state, request_uri)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?;
+    } = ConsentQueryService::prepare_consent_page_data(&state, request_uri).await?;
 
     Ok(HtmlTemplate(ConsentPageTemplate {
         client_name,
@@ -39,7 +53,7 @@ pub(crate) async fn get_consent(
     .into_response())
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ConsentForm {
     pub client_id: String,
     pub request_uri: String,
@@ -47,6 +61,26 @@ pub struct ConsentForm {
 }
 
 // TODO: investigate replay attacks as described here: https://github.com/impierce/ssi-agent/issues/241
+/// Submit consent
+///
+/// Records whether the end-user granted consent and redirects the user agent back to the client.
+#[utoipa::path(
+    post,
+    path = "/auth/consent",
+    operation_id = "post_consent",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    request_body(content = ConsentForm, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (
+            status = 302,
+            description = "Redirect to the client's redirect URI",
+            headers(("Location" = String, description = "The client's redirect URI")),
+        ),
+        (status = 400, description = "The `request_uri` does not refer to a pending authorization request"),
+        (status = 415, description = "The request body is not `application/x-www-form-urlencoded`"),
+        (status = 422, description = "The request body is not a valid consent form"),
+    )
+)]
 pub async fn post_consent(
     State(state): State<Arc<AuthorizationState>>,
     Form(ConsentForm {
@@ -55,11 +89,7 @@ pub async fn post_consent(
         consent_given,
     }): Form<ConsentForm>,
 ) -> Result<Response, PublicError> {
-    match ConsentService::handle_consent(&state, client_id, request_uri, consent_given)
-        .await
-        // TODO: implement proper error handling
-        .map_err(|_err| PublicError::InternalServerError)?
-    {
+    match ConsentService::handle_consent(&state, client_id, request_uri, consent_given).await? {
         ConsentServiceResponse::Found(location) => {
             info!("Redirecting to location: {}", location);
 

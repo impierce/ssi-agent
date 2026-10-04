@@ -3,6 +3,7 @@ name = "agent_event_publisher_http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_authorization = { path = "../agent_authorization" }

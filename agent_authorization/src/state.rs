@@ -1,8 +1,9 @@
 use agent_shared::application_state::CommandHandler;
-use agent_shared::handlers::{command_handler, query_handler};
-use cqrs_es::persist::ViewRepository;
+use agent_shared::handlers::{command_handler, public_query_handler};
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
+use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
 
@@ -16,6 +17,22 @@ use crate::domain::client::views::ClientView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
 
+impl QueryOperation for ClientView {
+    const OPERATION_NAME: &'static str = "authorization.clients.get";
+}
+
+impl QueryOperation for OAuth2AuthorizationRequestView {
+    const OPERATION_NAME: &'static str = "authorization.oauth2_authorization_requests.get";
+}
+
+impl QueryOperation for AuthorizationCodeView {
+    const OPERATION_NAME: &'static str = "authorization.authorization_codes.get";
+}
+
+impl QueryOperation for AccessTokenView {
+    const OPERATION_NAME: &'static str = "authorization.access_tokens.get";
+}
+
 // TODO: usually in traditional OAuth2/OIDC apps the client_id is provided by the authorization server
 // when registering the app. For now we are hardcoding it here, but in the future we should provide a way to configure it.
 // See: https://github.com/openid/OpenID4VCI/issues/94
@@ -26,6 +43,7 @@ pub const UNIME_REDIRECT_URI: &str = "unime://callback";
 
 #[derive(Clone)]
 pub struct AuthorizationState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub signer: Arc<dyn Sign>,
@@ -44,18 +62,18 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<ClientView, Client>,
-    dyn ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest>,
-    dyn ViewRepository<AuthorizationCodeView, AuthorizationCode>,
-    dyn ViewRepository<AccessTokenView, AccessToken>,
+    dyn DynViewRepository<ClientView, Client>,
+    dyn DynViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest>,
+    dyn DynViewRepository<AuthorizationCodeView, AuthorizationCode>,
+    dyn DynViewRepository<AccessTokenView, AccessToken>,
 >;
 
 pub struct ViewRepositories<C, OAR, AC, AT>
 where
-    C: ViewRepository<ClientView, Client> + ?Sized,
-    OAR: ViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest> + ?Sized,
-    AC: ViewRepository<AuthorizationCodeView, AuthorizationCode> + ?Sized,
-    AT: ViewRepository<AccessTokenView, AccessToken> + ?Sized,
+    C: DynViewRepository<ClientView, Client> + ?Sized,
+    OAR: DynViewRepository<OAuth2AuthorizationRequestView, OAuth2AuthorizationRequest> + ?Sized,
+    AC: DynViewRepository<AuthorizationCodeView, AuthorizationCode> + ?Sized,
+    AT: DynViewRepository<AccessTokenView, AccessToken> + ?Sized,
 {
     pub client: Arc<C>,
     pub oauth2_authorization_request: Arc<OAR>,
@@ -85,7 +103,7 @@ pub async fn initialize(state: &AuthorizationState) -> anyhow::Result<()> {
 
 /// Initialize the default client (UniMe) in the authorization state.
 async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
-    if let Some(client) = query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
+    if let Some(client) = public_query_handler(UNIME_CLIENT_ID, &state.query.client).await? {
         debug!("UniMe client already exists: {:?}", client);
         Ok(())
     } else {
@@ -109,7 +127,14 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
             require_pushed_authorization_request: true,
         };
 
-        command_handler(UNIME_CLIENT_ID, &state.command.client, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            UNIME_CLIENT_ID,
+            &state.command.client,
+            command,
+        )
+        .await?;
 
         Ok(())
     }

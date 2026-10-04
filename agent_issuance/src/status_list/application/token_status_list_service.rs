@@ -1,6 +1,6 @@
 use agent_shared::{
     config::{get_preferred_did_method, get_preferred_signing_algorithm},
-    handlers::query_handler,
+    handlers::public_query_handler,
 };
 use oauth_tsl::{
     status_list::EncodedStatusList,
@@ -23,7 +23,7 @@ impl TokenStatusListService {
         status_list_id: String,
         state: &IssuanceState,
     ) -> Result<Vec<u8>, StatusListError> {
-        let status_list = query_handler(&status_list_id, &state.query.status_list)
+        let status_list = public_query_handler(&status_list_id, &state.query.status_list)
             .await
             .map_err(|_| StatusListError::StatusListQueryError)?
             .ok_or(StatusListError::StatusListNotFound(status_list_id.clone()))?;

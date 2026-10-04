@@ -21,7 +21,7 @@ impl View<AuthorizationCode> for AuthorizationCode {
             } => {
                 self.authorization_code_id.clone_from(authorization_code_id);
                 self.client_id.clone_from(client_id);
-                self.redirect_uri.replace(redirect_uri.clone());
+                self.redirect_uri.clone_from(redirect_uri);
                 self.code_challenge.clone_from(code_challenge);
                 self.code_challenge_method.clone_from(code_challenge_method);
                 self.issuer_state.clone_from(issuer_state);

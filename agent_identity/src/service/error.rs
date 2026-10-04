@@ -2,6 +2,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ServiceError {
+    #[error("Service already exists")]
+    AlreadyExists,
+    #[error("Service not found")]
+    NotFound,
     #[error("Verification Method with ID `{0}` is missing a fragment compnent")]
     MissingVerificationMethodFragment(String),
     #[error("Verification Method with ID `{0}` is missing an algorithm parameter")]
@@ -10,6 +14,14 @@ pub enum ServiceError {
     UnsupportedVerificationMethodAlgorithm(String),
     #[error("At least one linked DID is required, but none were generated.")]
     EmptyLinkedDidsError,
+    #[error("At least one origin is required.")]
+    EmptyOriginsError,
+    #[error("At least one presentation ID is required.")]
+    EmptyPresentationIds,
+    #[error("Presentation `{0}` was not found or has not been signed.")]
+    PresentationNotFound(String),
+    #[error("Presentation `{0}` is invalid: {1}")]
+    PresentationInvalid(String, String),
     #[error("Invalid URL: {0}")]
     InvalidUrlError(String),
     #[error("Invalid DID: {0}")]

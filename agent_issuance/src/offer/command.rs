@@ -8,12 +8,13 @@ use oid4vci::{
     credential_request::CredentialRequest,
 };
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 #[derive(Debug, Deserialize)]
 pub enum OfferCommand {
     CreateCredentialOffer {
         offer_id: String,
-        credential_configuration_ids: Vec<String>,
+        template_ids: Vec<String>,
         grant_types: Vec<GrantType>,
         tx_code_constraints: Option<TxCodeConstraints>,
         delivery_options: Option<DeliveryOptions>,
@@ -21,7 +22,7 @@ pub enum OfferCommand {
     AddCredentials {
         offer_id: String,
         credential_ids: Vec<String>,
-        credential_configuration_ids: Vec<String>,
+        template_ids: Vec<String>,
     },
     SendCredentialOffer {
         offer_id: String,
@@ -39,4 +40,16 @@ pub enum OfferCommand {
         offer_id: String,
         signed_credentials: Vec<(serde_json::Value, Option<String>)>,
     },
+}
+
+impl CommandOperation for OfferCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateCredentialOffer { .. } => "issuance.offers.create",
+            Self::AddCredentials { .. } => "issuance.offers.credentials.add",
+            Self::SendCredentialOffer { .. } => "issuance.offers.send",
+            Self::VerifyCredentialRequest { .. } => "issuance.offers.credential_request.verify",
+            Self::CreateCredentialResponse { .. } => "issuance.offers.credential_response.create",
+        }
+    }
 }

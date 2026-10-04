@@ -1,8 +1,7 @@
 use super::command::AuthorizationCodeCommand;
 use super::error::AuthorizationCodeError;
 use super::event::AuthorizationCodeEvent;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{authorization_request::CodeChallengeMethod, pkce};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -21,29 +20,27 @@ pub struct AuthorizationCode {
     pub is_redeemed: bool,
 }
 
-#[async_trait]
 impl Aggregate for AuthorizationCode {
     type Command = AuthorizationCodeCommand;
     type Event = AuthorizationCodeEvent;
     type Error = AuthorizationCodeError;
     type Services = ();
 
-    fn aggregate_type() -> String {
-        "authorization_code".to_string()
-    }
+    const TYPE: &'static str = "authorization_code";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use AuthorizationCodeCommand::*;
         use AuthorizationCodeError::*;
         use AuthorizationCodeEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateAuthorizationCode {
                 authorization_code_id,
                 client_id,
@@ -114,7 +111,13 @@ impl Aggregate for AuthorizationCode {
                     redeemed: true,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -134,7 +137,7 @@ impl Aggregate for AuthorizationCode {
             } => {
                 self.authorization_code_id = authorization_code_id;
                 self.client_id = client_id;
-                self.redirect_uri.replace(redirect_uri);
+                self.redirect_uri = redirect_uri;
                 self.code_challenge = code_challenge;
                 self.code_challenge_method = code_challenge_method;
                 self.issuer_state = issuer_state;
@@ -182,7 +185,7 @@ pub mod authorization_code_tests {
             .when(AuthorizationCodeCommand::CreateAuthorizationCode {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                redirect_uri: redirect_uri.clone().unwrap(),
+                redirect_uri: redirect_uri.clone(),
                 code_challenge: Some(code_challenge.clone()),
                 code_challenge_method: code_challenge_method.clone(),
                 issuer_state: issuer_state.clone(),
@@ -191,7 +194,7 @@ pub mod authorization_code_tests {
             .then_expect_events(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id,
                 client_id,
-                redirect_uri: redirect_uri.unwrap(),
+                redirect_uri,
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -215,7 +218,7 @@ pub mod authorization_code_tests {
             .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                redirect_uri: redirect_uri.clone().unwrap(),
+                redirect_uri: redirect_uri.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -249,7 +252,7 @@ pub mod authorization_code_tests {
                 AuthorizationCodeEvent::AuthorizationCodeCreated {
                     authorization_code_id: authorization_code_id.clone(),
                     client_id: client_id.clone(),
-                    redirect_uri: redirect_uri.clone().unwrap(),
+                    redirect_uri: redirect_uri.clone(),
                     code_challenge: Some(code_challenge),
                     code_challenge_method,
                     issuer_state,
@@ -284,7 +287,7 @@ pub mod authorization_code_tests {
             .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                redirect_uri: redirect_uri.clone().unwrap(),
+                redirect_uri: redirect_uri.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -315,7 +318,7 @@ pub mod authorization_code_tests {
             .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id,
-                redirect_uri: redirect_uri.clone().unwrap(),
+                redirect_uri: redirect_uri.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -346,7 +349,7 @@ pub mod authorization_code_tests {
             .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                redirect_uri: redirect_uri.unwrap(),
+                redirect_uri,
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -376,7 +379,7 @@ pub mod authorization_code_tests {
             .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                redirect_uri: redirect_uri.clone().unwrap(),
+                redirect_uri: redirect_uri.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,
@@ -406,7 +409,7 @@ pub mod authorization_code_tests {
             .given(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
-                redirect_uri: redirect_uri.clone().unwrap(),
+                redirect_uri: redirect_uri.clone(),
                 code_challenge: Some(code_challenge),
                 code_challenge_method,
                 issuer_state,

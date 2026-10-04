@@ -10,16 +10,16 @@ use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
-    service::{aggregate::Service, command::ServiceCommand, views::ServiceView},
+    service::{aggregate::Service, views::ServiceView},
 };
-use agent_shared::config::{
-    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
-};
+use agent_shared::config::{config, config_mut, Display, SupportedDidMethod, ToggleOptions};
 use agent_shared::handlers::command_handler;
-use agent_shared::{application_state::CommandHandler, handlers::query_handler};
-use cqrs_es::persist::{PersistenceError, ViewRepository};
+use agent_shared::{application_state::CommandHandler, handlers::public_query_handler};
+use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
+use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -30,8 +30,39 @@ use tracing::{info, warn};
 /// all operations consistently target the one and only profile.
 pub const PROFILE_ID: &str = "PROFILE-001";
 
+impl QueryOperation for ConnectionView {
+    const OPERATION_NAME: &'static str = "identity.connections.get";
+}
+
+impl QueryOperation for AllConnectionsView {
+    const OPERATION_NAME: &'static str = "identity.connections.list";
+}
+
+impl QueryOperation for DocumentView {
+    const OPERATION_NAME: &'static str = "identity.documents.get";
+}
+
+impl QueryOperation for AllDocumentsView {
+    const OPERATION_NAME: &'static str = "identity.documents.list";
+}
+
+impl QueryOperation for ProfileView {
+    const OPERATION_NAME: &'static str = "identity.profile.get";
+}
+
+impl QueryOperation for ServiceView {
+    const OPERATION_NAME: &'static str = "identity.services.get";
+}
+
+impl QueryOperation for AllServicesView {
+    const OPERATION_NAME: &'static str = "identity.services.list";
+}
+
 #[derive(Clone)]
 pub struct IdentityState {
+    pub services: Arc<crate::services::IdentityServices>,
+    pub service_lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }
@@ -49,24 +80,24 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<ConnectionView, Connection>,
-    dyn ViewRepository<AllConnectionsView, Connection>,
-    dyn ViewRepository<DocumentView, Document>,
-    dyn ViewRepository<AllDocumentsView, Document>,
-    dyn ViewRepository<ProfileView, Profile>,
-    dyn ViewRepository<ServiceView, Service>,
-    dyn ViewRepository<AllServicesView, Service>,
+    dyn DynViewRepository<ConnectionView, Connection>,
+    dyn DynViewRepository<AllConnectionsView, Connection>,
+    dyn DynViewRepository<DocumentView, Document>,
+    dyn DynViewRepository<AllDocumentsView, Document>,
+    dyn DynViewRepository<ProfileView, Profile>,
+    dyn DynViewRepository<ServiceView, Service>,
+    dyn DynViewRepository<AllServicesView, Service>,
 >;
 
 pub struct ViewRepositories<C1, C2, D1, D2, P, S1, S2>
 where
-    C1: ViewRepository<ConnectionView, Connection> + ?Sized,
-    C2: ViewRepository<AllConnectionsView, Connection> + ?Sized,
-    D1: ViewRepository<DocumentView, Document> + ?Sized,
-    D2: ViewRepository<AllDocumentsView, Document> + ?Sized,
-    P: ViewRepository<ProfileView, Profile> + ?Sized,
-    S1: ViewRepository<ServiceView, Service> + ?Sized,
-    S2: ViewRepository<AllServicesView, Service> + ?Sized,
+    C1: DynViewRepository<ConnectionView, Connection> + ?Sized,
+    C2: DynViewRepository<AllConnectionsView, Connection> + ?Sized,
+    D1: DynViewRepository<DocumentView, Document> + ?Sized,
+    D2: DynViewRepository<AllDocumentsView, Document> + ?Sized,
+    P: DynViewRepository<ProfileView, Profile> + ?Sized,
+    S1: DynViewRepository<ServiceView, Service> + ?Sized,
+    S2: DynViewRepository<AllServicesView, Service> + ?Sized,
 {
     pub connection: Arc<C1>,
     pub all_connections: Arc<C2>,
@@ -91,8 +122,9 @@ impl Clone for Queries {
     }
 }
 
-/// The unique identifier for the linked domain service.
-pub const DOMAIN_LINKAGE_SERVICE_ID: &str = "linked-domain-service";
+/// The unique identifier for the `LinkedDomains` service. Also becomes the service's fragment in
+/// every published DID document.
+pub const LINKED_DOMAINS_SERVICE_ID: &str = "linked-domains-service";
 
 /// The unique identifier for the linked verifiable presentation service.
 pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
@@ -102,10 +134,9 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
     initialize_display(state).await?;
-    initialize_documents(state).await?;
-    initialize_domain_linkage(state).await?;
-    initialize_linked_verifiable_presentations(state).await?;
-    publish_decentrally_hosted_documents(state).await?;
+    let configuration = config().clone();
+    initialize_documents(state, &configuration).await?;
+    crate::service::lifecycle::maintain_services(state).await?;
 
     Ok(())
 }
@@ -119,7 +150,7 @@ pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
 // updates, rather than reading from a shared, mutable global state.
 /// Queries the profile and updates the application state with the profile information.
 pub async fn query_profile(state: &IdentityState) -> Result<(), PersistenceError> {
-    match query_handler(PROFILE_ID, &state.query.profile).await? {
+    match public_query_handler(PROFILE_ID, &state.query.profile).await? {
         Some(Profile {
             display_name,
             logo,
@@ -172,7 +203,7 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     };
 
     if let Some(config_display) = first {
-        match query_handler(PROFILE_ID, &state.query.profile).await? {
+        match public_query_handler(PROFILE_ID, &state.query.profile).await? {
             // If the profile exists, we check if it needs to be updated based on the config.
             // We only update the Profile if the config source is:
             // - Provisioned: If the Profile is Provisioned, we update the persisted Profile.
@@ -193,7 +224,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if config_display.logo != persisted_logo {
@@ -202,7 +240,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if config_display.description != persisted_description {
@@ -211,7 +256,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if config_display.country != persisted_country {
@@ -220,14 +272,28 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 let command = ProfileCommand::UpdateSource {
                     source: config_display_source,
                 };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    Caller::Internal,
+                    PROFILE_ID,
+                    &state.command.profile,
+                    command,
+                )
+                .await?;
             }
             Some(_profile) => {
                 info!("Display is already configured, no action needed.");
@@ -245,11 +311,18 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                     country: config_display.country.clone(),
                 };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    Caller::Internal,
+                    PROFILE_ID,
+                    &state.command.profile,
+                    command,
+                )
+                .await?;
             }
         };
     } else {
-        match query_handler(PROFILE_ID, &state.query.profile).await? {
+        match public_query_handler(PROFILE_ID, &state.query.profile).await? {
             Some(Profile {
                 display_name: persisted_display_name,
                 logo: persisted_logo,
@@ -263,7 +336,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if persisted_logo.is_some() {
@@ -272,7 +352,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
 
                 if persisted_country.is_some() {
@@ -281,7 +368,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                         source: config_display_source.clone(),
                     };
 
-                    command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                    command_handler(
+                        state.authorization_checker.clone(),
+                        Caller::Internal,
+                        PROFILE_ID,
+                        &state.command.profile,
+                        command,
+                    )
+                    .await?;
                 }
             }
             _ => {
@@ -294,7 +388,14 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
                     source: config_display_source,
                 };
 
-                command_handler(PROFILE_ID, &state.command.profile, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    Caller::Internal,
+                    PROFILE_ID,
+                    &state.command.profile,
+                    command,
+                )
+                .await?;
             }
         };
     }
@@ -304,27 +405,94 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Initializes or updates documents based on the current DID methods configuration.
-///
-/// This asynchronous function synchronizes document state with the configured DID methods by:
-///
-/// 1. Retrieving all DID methods along with their fixed algorithm information via
-///    `get_did_methods_with_or_without_fixed_algorithm()`.
-/// 2. Querying all existing documents using `query_all_documents`, thereby obtaining a map
-///    of document entries.
-/// 3. Iterating over each DID method:
-///    - If a document exists with the matching DID method and fixed algorithm flag and the DID method
-///      is disabled (i.e. `ToggleOptions.enabled` is `false`), the document's status is updated to
-///      `Disabled`.
-///    - If the DID method is enabled, a document is created (or updated) regardless of whether it
-///      already exists. If a document already exists, its `document_id` is reused; otherwise, a new
-///      one is generated.
-/// 4. For each generated document command, executing the command via `command_handler` and subsequently
-///    updating the document's public keys.
-async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
-    let did_methods_with_or_without_fixed_algorithm = get_did_methods_with_or_without_fixed_algorithm();
+/// Reuses the persisted deployment DID and refuses to start on public-origin drift unless the
+/// configured one-shot overwrite authorization exactly names the persisted DID. Other DID
+/// methods retain their existing configuration-driven initialization.
+pub async fn initialize_documents(
+    state: &IdentityState,
+    configuration: &agent_shared::config::ApplicationConfiguration,
+) -> anyhow::Result<()> {
+    let did_methods_with_or_without_fixed_algorithm = get_did_methods_with_or_without_fixed_algorithm(configuration);
 
     let all_documents = query_all_documents(state, |_| true).await?;
+
+    // Check identity drift before dispatching any document mutations.
+    let persisted_documents: Vec<_> = all_documents
+        .values()
+        .filter(|document| document.did_method == Some(SupportedDidMethod::Web))
+        .filter_map(|document| {
+            document
+                .document
+                .as_ref()
+                .map(|persisted| (document.document_id.clone(), persisted.id().clone()))
+        })
+        .collect();
+    let mut did_web_overwritten = false;
+    if !persisted_documents.is_empty() {
+        let expected = crate::document::web::did_web(&configuration.public_url)?;
+        let drifted_documents: Vec<_> = persisted_documents
+            .iter()
+            .filter(|(_, persisted)| persisted != &expected)
+            .cloned()
+            .collect();
+
+        if !drifted_documents.is_empty() {
+            let persisted_dids = drifted_documents
+                .iter()
+                .map(|(_, persisted)| persisted.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let configured_origin = configuration.public_url.origin().ascii_serialization();
+            let previous_did = configuration.overwrite_previous_did_web.as_deref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Configured public origin '{configured_origin}' would change persisted deployment DID(s) \
+                     [{persisted_dids}] to '{expected}'. Refusing to start without explicit overwrite authorization; \
+                     set `overwrite_previous_did_web` to the persisted DID"
+                )
+            })?;
+            let authorized_did = previous_did.parse::<identity_did::CoreDID>().map_err(|error| {
+                anyhow::anyhow!("Invalid `overwrite_previous_did_web` value '{previous_did}': {error}")
+            })?;
+            if drifted_documents
+                .iter()
+                .any(|(_, persisted)| persisted != &authorized_did)
+            {
+                anyhow::bail!(
+                    "Overwrite authorization '{authorized_did}' does not match persisted deployment DID(s) \
+                     [{persisted_dids}]; refusing to change identity for configured origin '{configured_origin}'"
+                );
+            }
+
+            warn!(
+                persisted_did = %authorized_did,
+                configured_did = %expected,
+                configured_origin,
+                "Explicitly overwriting the deployment did:web; existing credentials are not migrated"
+            );
+            for (document_id, persisted_did) in drifted_documents {
+                command_handler(
+                    state.authorization_checker.clone(),
+                    Caller::Internal,
+                    &document_id,
+                    &state.command.document,
+                    DocumentCommand::OverwritePreviousDidWeb {
+                        previous_did: persisted_did,
+                        public_url: configuration.public_url.clone(),
+                    },
+                )
+                .await?;
+            }
+            did_web_overwritten = true;
+        } else {
+            if let Some(previous_did) = &configuration.overwrite_previous_did_web {
+                warn!(
+                    overwrite_previous_did_web = previous_did,
+                    current_did = %expected,
+                    "DID overwrite authorization is no longer needed and should be removed from configuration"
+                );
+            }
+        }
+    }
 
     for ((did_method, ToggleOptions { enabled, .. }), with_fixed_algorithm) in
         did_methods_with_or_without_fixed_algorithm
@@ -343,7 +511,19 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
                     status: Status::Disabled,
                 },
             )),
-            // If the DID method is enabled, then create the Document regardless of whether it already exists or not.
+            Some(document) if enabled && did_method == SupportedDidMethod::Web && document.document.is_some() => {
+                if document.status == Status::Disabled {
+                    Some((
+                        document.document_id.clone(),
+                        DocumentCommand::UpdateDocumentStatus {
+                            status: Status::SignAndValidate,
+                        },
+                    ))
+                } else {
+                    None
+                }
+            }
+            // Other DID methods retain their existing initialization behavior.
             document if enabled => {
                 let document_id = document
                     // Extract the `document_id` from the Document if it exists.
@@ -366,18 +546,57 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 
         // If a Document command was generated, then execute the command and update the Document's Public Keys.
         if let Some((document_id, command)) = document_id_and_command {
-            command_handler(&document_id, &state.command.document, command).await?;
+            let update_keys = !matches!(command, DocumentCommand::UpdateDocumentStatus { .. });
+            command_handler(
+                state.authorization_checker.clone(),
+                Caller::Internal,
+                &document_id,
+                &state.command.document,
+                command,
+            )
+            .await?;
 
-            if enabled {
+            if enabled && update_keys {
                 let command = DocumentCommand::UpdatePublicKeys {
                     public_key_jwks: vec![],
                 };
 
-                command_handler(&document_id, &state.command.document, command).await?;
+                command_handler(
+                    state.authorization_checker.clone(),
+                    Caller::Internal,
+                    &document_id,
+                    &state.command.document,
+                    command,
+                )
+                .await?;
             }
         }
     }
 
+    // Signing caches are process-local, even when the DID document is reused.
+    for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
+        .await?
+        .values()
+    {
+        if let (Some(did_method), Some(core_document)) = (document.did_method, &document.document) {
+            for method in core_document.methods(None) {
+                if let Some(algorithm) = method.data().public_key_jwk().and_then(|jwk| jwk.alg()) {
+                    state
+                        .services
+                        .subject
+                        .insert_verification_method_id(
+                            agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
+                            method.id().clone(),
+                        )
+                        .await?;
+                }
+            }
+        }
+    }
+
+    if did_web_overwritten {
+        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
+    }
     Ok(())
 }
 
@@ -395,12 +614,18 @@ async fn initialize_documents(state: &IdentityState) -> anyhow::Result<()> {
 /// - The second element is an `Option<Algorithm>`, where:
 ///   - `Some(algorithm)` indicates a fixed signing algorithm for non-update supporting DID methods.
 ///   - `None` indicates that the DID method supports updates and does not require a fixed algorithm.
-fn get_did_methods_with_or_without_fixed_algorithm() -> Vec<((SupportedDidMethod, ToggleOptions), Option<Algorithm>)> {
+fn get_did_methods_with_or_without_fixed_algorithm(
+    configuration: &agent_shared::config::ApplicationConfiguration,
+) -> Vec<((SupportedDidMethod, ToggleOptions), Option<Algorithm>)> {
     // Retrieve all the configured DID methods.
-    let did_methods = config().did_methods.clone();
+    let did_methods = configuration.did_methods.clone();
 
     // Retrieve all enabled signing algorithms, wrapping each in `Some`.
-    let enabled_algorithms = get_all_enabled_signing_algorithms_supported().into_iter().map(Some);
+    let enabled_algorithms = configuration
+        .signing_algorithms_supported
+        .iter()
+        .filter(|(_, options)| options.enabled)
+        .map(|(algorithm, _)| Some(*algorithm));
 
     // Partition DID methods into those that support updates and those that do not.
     let (update_supporting_did_methods, non_update_supporting_did_methods): (Vec<_>, Vec<_>) = did_methods
@@ -416,124 +641,6 @@ fn get_did_methods_with_or_without_fixed_algorithm() -> Vec<((SupportedDidMethod
                 .map(|did_method| (did_method, None)),
         )
         .collect()
-}
-
-/// Initializes or disables the Domain Linkage Service based on the current configuration and document state.
-///
-/// This asynchronous function performs the following steps:
-///
-/// 1. Query Documents: It retrieves all documents that are not disabled and whose DID methods support updates.
-/// 2. Conditional Service Creation:
-///    - If domain linkage is enabled in the configuration and there exists at least one update-supporting document,
-///      it creates the Domain Linkage Service.
-///    - It then queries for the created service. If found, it adds the service to all update-supporting documents.
-/// 3. Service Deletion:
-///    - If domain linkage is disabled or no update-supporting documents exist, the function sends a command
-///      to disable the Domain Linkage Service.
-pub async fn initialize_domain_linkage(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all the Documents that are not disabled and support updates.
-    let update_supporting_documents = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled
-            && document
-                .did_method
-                .as_ref()
-                .map(SupportedDidMethod::supports_update)
-                .unwrap_or_default()
-            && document
-                .iota_metadata
-                .as_ref()
-                .map(|iota_metadata| iota_metadata.is_funded || config().iota_sponsoring_service_url.is_some())
-                .unwrap_or(true)
-    })
-    .await?;
-
-    // Check whether Domain Linkage is enabled and whether there are any enabled update-supporting Documents.
-    if config().domain_linkage_enabled && !update_supporting_documents.is_empty() {
-        info!(
-            "Creating domain linkage service with documents: {:?}",
-            update_supporting_documents
-        );
-
-        // Collect all Verification Methods from update-supporting documents.
-        let verification_methods = update_supporting_documents
-            .values()
-            .filter_map(|document| document.document.as_ref())
-            .flat_map(|core_document| core_document.methods(None).into_iter().cloned())
-            .collect();
-
-        // Create the Domain Linkage Service.
-        let command = ServiceCommand::CreateDomainLinkageService {
-            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-            verification_methods,
-        };
-
-        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
-
-        info!("Created Linked Domain service");
-
-        match query_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.query.service).await {
-            Ok(Some(Service {
-                service: Some(service), ..
-            })) => {
-                info!("Found Linked Domains service: {service}");
-
-                // Add the Domain Linkage service to all the enabled update supporting Documents.
-                for document_id in update_supporting_documents.keys() {
-                    let command = DocumentCommand::AddService {
-                        service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-                        service: Box::new(service.clone()),
-                    };
-
-                    command_handler(document_id, &state.command.document, command).await?;
-                }
-            }
-            _ => anyhow::bail!("Failed to retrieve Linked Domains service"),
-        };
-    } else {
-        // If Domain Linkage is disabled and/or there are no enabled update supporting Documents, then disable the Domain Linkage Service.
-        let command = ServiceCommand::DeleteDomainLinkageService {
-            service_id: DOMAIN_LINKAGE_SERVICE_ID.to_string(),
-        };
-
-        command_handler(DOMAIN_LINKAGE_SERVICE_ID, &state.command.service, command).await?;
-
-        info!("Disabled Domain Linkage service");
-    }
-
-    Ok(())
-}
-
-/// Initializes the Linked Verifiable Presentations service for DID Web Document.
-pub async fn initialize_linked_verifiable_presentations(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all documents that can be updated.
-    let documents = query_all_documents(state, |(_, document)| {
-        document.status != Status::Disabled
-            && document
-                .did_method
-                .as_ref()
-                .map(SupportedDidMethod::supports_update)
-                .unwrap_or(false)
-    })
-    .await?;
-
-    if let Some(Service {
-        service: Some(service), ..
-    }) = query_handler(LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID, &state.query.service).await?
-    {
-        info!("Found Linked Verifiable Presentations service: {service}");
-
-        // Add the Linked Verifiable Presentations service to the DID Web Document.
-        for document_id in documents.keys() {
-            let command = DocumentCommand::AddService {
-                service_id: LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID.to_string(),
-                service: Box::new(service.clone()),
-            };
-
-            command_handler(document_id, &state.command.document, command).await?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Publishes all decentrally hosted documents.
@@ -558,7 +665,14 @@ pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyh
     // Publish each decentrally hosted Documents.
     for document_id in decentrally_hosted_documents.keys() {
         // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
-        let _ = command_handler(document_id, &state.command.document, DocumentCommand::PublishDocument).await;
+        let _ = command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            document_id,
+            &state.command.document,
+            DocumentCommand::PublishDocument,
+        )
+        .await;
     }
 
     Ok(())
@@ -574,7 +688,7 @@ pub async fn query_all_documents(
     state: &IdentityState,
     query: impl Fn(&(String, Document)) -> bool,
 ) -> anyhow::Result<HashMap<String, Document>> {
-    match query_handler("all_documents", &state.query.all_documents).await? {
+    match public_query_handler("all_documents", &state.query.all_documents).await? {
         Some(AllDocumentsView { documents }) => Ok(documents.into_iter().filter(query).collect()),
         None => Ok(Default::default()),
     }

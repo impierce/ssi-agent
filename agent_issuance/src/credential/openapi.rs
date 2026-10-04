@@ -1,6 +1,6 @@
 use utoipa::openapi::{schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, SchemaFormat, Type};
 
-pub(crate) fn status_type() -> Object {
+pub fn status_type() -> Object {
     ObjectBuilder::new()
         .schema_type(SchemaType::Type(Type::String))
         .enum_values(Some(["VALID", "INVALID", "SUSPENDED", "UNDEFINED"]))
@@ -42,7 +42,7 @@ pub(crate) fn credential_configurations_supported() -> Object {
     ObjectBuilder::new()
         .schema_type(SchemaType::Type(Type::Object))
         .property(
-            "credential_format",
+            "format",
             ObjectBuilder::new()
                 .enum_values(Some(["jwt_vc_json", "dc+sd-jwt", "vc+sd-jwt"]))
                 .build(),
@@ -68,7 +68,7 @@ pub(crate) fn credential_configurations_supported() -> Object {
                 .property("display", display())
                 .build(),
         )
-        .required("credential_format")
+        .required("format")
         .build()
 }
 
@@ -122,4 +122,18 @@ fn display() -> Array {
                 .build(),
         )
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn configuration_schema_matches_serialized_format_field() {
+        let configuration = oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject::default();
+        let serialized = serde_json::to_value(configuration).unwrap();
+        let schema = serde_json::to_value(super::credential_configurations_supported()).unwrap();
+        assert!(serialized.get("format").is_some());
+        assert!(serialized.get("credential_format").is_none());
+        assert!(schema["properties"].get("format").is_some());
+        assert_eq!(schema["required"], serde_json::json!(["format"]));
+    }
 }

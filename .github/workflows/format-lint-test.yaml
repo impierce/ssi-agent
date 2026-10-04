@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt, clippy
 
@@ -29,17 +29,17 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Lint
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Lint (Default features)
+        run: cargo clippy --workspace -- -D warnings
 
-      - name: Test
-        # TODO: do not exclude `agent_issuance` (see TODO comment below)
-        run: cargo test --workspace --exclude agent_issuance
+      - name: Lint (All features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: Test (Agent Issuance)
-        # TODO: We set `RUST_MIN_STACK` to 32 MiB to prevent stack overflow in `test_verify_credential_response`.
-        # Investigate removing this workaround after testing refactor.
-        run: RUST_MIN_STACK=33554432 cargo test -p agent_issuance
+      - name: Test (Default features)
+        run: cargo test --workspace
+
+      - name: Test (allow-localhost)
+        run: cargo test -p agent_api_http -p agent_identity --features allow-localhost allow_localhost_tests
 
       - name: Generated files are unchanged
         run: git diff --exit-code

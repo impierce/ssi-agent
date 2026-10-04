@@ -1,100 +1,130 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::{error::IntoApiErrorExt, extractors::RequestActor, v0::openapi::PROTOCOL_TAG};
 use agent_identity::{
-    document::{aggregate::Status, command::DocumentCommand},
-    service::{aggregate::Service, command::ServiceCommand},
-    state::{publish_decentrally_hosted_documents, IdentityState},
+    service::{command::ServiceCommand, lifecycle},
+    state::IdentityState,
 };
-use agent_shared::config::SupportedDidMethod;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
 use http_api_problem::ApiError;
-use hyper::StatusCode;
+use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct LinkedVPEndpointRequest {
+pub struct LinkedVerifiablePresentationsRequest {
+    /// Presentation IDs to publish or withdraw.
+    #[schema(min_items = 1)]
     pub presentation_ids: Vec<String>,
 }
 
-#[axum_macros::debug_handler]
-pub(crate) async fn linked_vp(
+/// Add linked verifiable presentations
+///
+/// Publishes the given presentations after the presentations, signatures, holders and credential
+/// subjects have been validated. Existing IDs and duplicates are no-ops; new IDs retain request
+/// order after presentations that were already published.
+#[utoipa::path(
+    post,
+    path = "/add-linked-verifiable-presentations",
+    operation_id = "add_linked_verifiable_presentations",
+    tags = ["Identity"],
+    request_body = LinkedVerifiablePresentationsRequest,
+    responses(
+        (status = 204, description = "Presentations published"),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
+        (status = 422, description = "Empty list, missing presentation, or invalid presentation"),
+    )
+)]
+pub(crate) async fn add_linked_verifiable_presentations(
     State(state): State<Arc<IdentityState>>,
-    Json(LinkedVPEndpointRequest { presentation_ids }): Json<LinkedVPEndpointRequest>,
+    RequestActor(actor): RequestActor,
+    Json(LinkedVerifiablePresentationsRequest { presentation_ids }): Json<LinkedVerifiablePresentationsRequest>,
+) -> Result<StatusCode, ApiError> {
+    lifecycle::execute(
+        &state,
+        actor,
+        ServiceCommand::AddLinkedVerifiablePresentations {
+            presentation_ids,
+            signed_presentations: Default::default(),
+            linkable_documents: vec![],
+        },
+    )
+    .await
+    .map_err(|error| error.into_api_error())?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Remove linked verifiable presentations
+///
+/// Withdraws the given presentations while preserving all others in their existing order. Unknown
+/// IDs and duplicates are no-ops; removing a holder's last presentation removes its DID service.
+#[utoipa::path(
+    post,
+    path = "/remove-linked-verifiable-presentations",
+    operation_id = "remove_linked_verifiable_presentations",
+    tags = ["Identity"],
+    request_body = LinkedVerifiablePresentationsRequest,
+    responses(
+        (status = 204, description = "Presentations withdrawn"),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
+        (status = 422, description = "Empty presentation ID list"),
+    )
+)]
+pub(crate) async fn remove_linked_verifiable_presentations(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+    Json(LinkedVerifiablePresentationsRequest { presentation_ids }): Json<LinkedVerifiablePresentationsRequest>,
+) -> Result<StatusCode, ApiError> {
+    lifecycle::execute(
+        &state,
+        actor,
+        ServiceCommand::RemoveLinkedVerifiablePresentations { presentation_ids },
+    )
+    .await
+    .map_err(|error| error.into_api_error())?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Get a linked verifiable presentation
+///
+/// Serves a published presentation to anyone resolving its holder's DID document, without
+/// authentication, as defined by [Linked Verifiable Presentation](https://identity.foundation/linked-vp/).
+/// Presentations that are not published answer `404`.
+#[utoipa::path(
+    get,
+    path = "/linked-verifiable-presentations/{presentation_id}",
+    operation_id = "get_linked_verifiable_presentation_by_id",
+    tags = ["DID", PROTOCOL_TAG],
+    params(
+        ("presentation_id" = String, Path, description = "Credential presentation ID"),
+    ),
+    responses(
+        (status = 200, description = "Signed credential presentation", body = String, content_type = "application/jwt"),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "The presentation is not published"),
+    )
+)]
+pub(crate) async fn get_linked_verifiable_presentation_by_id(
+    State(state): State<Arc<IdentityState>>,
+    Path(presentation_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service_id = "linked-verifiable-presentation-service".to_string();
-
-    let command = ServiceCommand::CreateLinkedVerifiablePresentationService {
-        service_id: service_id.clone(),
-        presentation_ids,
-    };
-
-    // Create a linked verifiable presentation service.
-    command_handler(&service_id, &state.command.service, command).await?;
-
-    let linked_verifiable_presentation_service = match query_handler(&service_id, &state.query.service).await? {
-        Some(Service {
-            service: Some(linked_verifiable_presentation_service),
-            ..
-        }) => linked_verifiable_presentation_service,
-        // TODO: this *should* be an impossible error, what should we return here?
-        _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
-    };
-
-    // Query all DID Documents that require an update.
-    let document_ids: Vec<String> = query_handler("all_documents", &state.query.all_documents)
-        .await?
-        .map(|all_documents_view| {
-            all_documents_view
-                .documents
-                .into_values()
-                .filter(|document| {
-                    document.status != Status::Disabled
-                        && document
-                            .did_method
-                            .as_ref()
-                            .map(SupportedDidMethod::supports_update)
-                            .unwrap_or(false)
-                })
-                .map(|document| document.document_id)
-                .collect()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
-
-    for document_id in &document_ids {
-        let command = DocumentCommand::AddService {
-            service_id: service_id.clone(),
-            service: Box::new(linked_verifiable_presentation_service.clone()),
-        };
-
-        command_handler(document_id, &state.command.document, command).await?;
-    }
-
-    publish_decentrally_hosted_documents(&state)
+    match lifecycle::published_linked_verifiable_presentation(&state, &presentation_id)
         .await
-        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
-
-    query_handler("all_documents", &state.query.all_documents)
-        .await?
-        .map(|all_documents_view| {
-            let documents: Vec<_> = all_documents_view
-                .documents
-                .into_values()
-                .filter(|document| {
-                    document.status != Status::Disabled
-                        && document
-                            .did_method
-                            .as_ref()
-                            .map(SupportedDidMethod::supports_update)
-                            .unwrap_or(false)
-                })
-                .collect();
-            (StatusCode::OK, Json(documents)).into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .map_err(|error| error.into_api_error())?
+    {
+        Some(presentation) => Ok((
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/jwt")],
+            presentation.as_str().to_owned(),
+        )
+            .into_response()),
+        None => Err(ApiError::new(StatusCode::NOT_FOUND)),
+    }
 }

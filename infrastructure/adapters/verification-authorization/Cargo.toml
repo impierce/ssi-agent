@@ -1,0 +1,20 @@
+[package]
+name = "verification-authorization"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+agent_authorization = { path = "../../../agent_authorization" }
+agent_shared = { path = "../../../agent_shared" }
+agent_verification = { path = "../../../agent_verification" }
+shared-kernel.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+oid4vp.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

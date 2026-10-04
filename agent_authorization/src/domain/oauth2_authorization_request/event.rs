@@ -19,7 +19,7 @@ pub enum OAuth2AuthorizationRequestEvent {
         issuer_state: Option<String>,
 
         // OID4VCI
-        authorization_details: Vec<AuthorizationDetailsObject>,
+        authorization_details: Option<Vec<AuthorizationDetailsObject>>,
 
         // PKCE
         #[serde(default)]
@@ -28,6 +28,8 @@ pub enum OAuth2AuthorizationRequestEvent {
         code_challenge_method: Option<CodeChallengeMethod>,
 
         expires_at: i64,
+
+        openid4vp_request: Option<serde_json::Value>,
     },
     OAuth2AuthorizationRequestExpired {
         oauth2_authorization_request_id: String,

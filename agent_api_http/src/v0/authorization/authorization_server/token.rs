@@ -1,5 +1,6 @@
 use crate::v0::authorization::AuthorizationState;
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 use agent_authorization::application::token_issuance_service::TokenIssuanceService;
 use agent_issuance::state::IssuanceState;
 use axum::{
@@ -8,9 +9,31 @@ use axum::{
     response::{IntoResponse, Response},
     Form,
 };
-use oid4vci::token_request::TokenRequest;
+use oid4vci::{
+    errors::{OID4VCError, TokenErrorResponse},
+    token_request::TokenRequest,
+    token_response::TokenResponse,
+};
 use std::sync::Arc;
 
+/// Request an access token
+///
+/// Exchanges an authorization code or a pre-authorized code for an access token, as defined by
+/// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-endpoint).
+#[utoipa::path(
+    post,
+    path = "/auth/token",
+    operation_id = "auth_token",
+    tags = ["OAuth 2.0", PROTOCOL_TAG],
+    request_body(content = TokenRequest, content_type = "application/x-www-form-urlencoded"),
+    responses(
+        (status = 200, description = "Access token issued", body = TokenResponse),
+        (status = 400, description = "The token request is invalid", body = OID4VCError<TokenErrorResponse>),
+        (status = 401, description = "The client is invalid", body = OID4VCError<TokenErrorResponse>),
+        (status = 415, description = "The request body is not `application/x-www-form-urlencoded`"),
+        (status = 422, description = "The request body is not a valid token request"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn token(
     State((authorization_state, issuance_state)): State<(Arc<AuthorizationState>, Arc<IssuanceState>)>,
@@ -25,6 +48,8 @@ pub(crate) async fn token(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::tests::TEMPLATE_ID;
+    use crate::v0::issuance::router;
     use crate::v0::{
         authorization::{
             self,
@@ -34,15 +59,21 @@ pub mod tests {
                 par::tests::par,
             },
         },
-        issuance::{self, credentials::tests::credentials, offers::tests::offers},
+        issuance::{
+            self,
+            credentials::tests::{create_test_template_with_auth, credentials, setup_library_state},
+            offers::tests::offers,
+        },
     };
     use agent_authorization::services::AuthorizationServices;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_verifier, state::UNIME_REDIRECT_URI,
     };
+    use agent_issuance::public_offer::command::PublicOfferCommand;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
+    use agent_shared::handlers::public_command_handler as command_handler;
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
@@ -143,24 +174,36 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let mut app = issuance::router(issuance_state.clone());
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, is_pre_authorized).await;
 
-        let credential_configuration_id = if is_pre_authorized {
-            "001".to_string()
-        } else {
-            "002".to_string()
-        };
+        let mut app = router((issuance_state.clone(), library_state));
 
-        credentials(&mut app, &credential_configuration_id).await;
-        let grants = offers(&mut app, &credential_configuration_id).await.unwrap();
+        credentials(&mut app).await;
+        let grants = offers(&mut app, TEMPLATE_ID).await.unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         agent_authorization::state::initialize(&authorization_state)
             .await
@@ -169,5 +212,195 @@ pub mod tests {
         let mut app = authorization::router((authorization_state.clone(), issuance_state.clone()));
 
         let _access_token = token(&mut app, is_pre_authorized, grants).await;
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_pre_authorized_token_redemption_fails_when_public_offer_is_offline() {
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, true).await;
+
+        let mut issuance_app = router((issuance_state.clone(), library_state));
+        credentials(&mut issuance_app).await;
+        let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
+
+        let offer_id = crate::tests::OFFER_ID;
+        let aggregate_id = format!("public_offer:{offer_id}");
+
+        command_handler(
+            &aggregate_id,
+            &issuance_state.command.public_offer,
+            PublicOfferCommand::Create {
+                offer_id: offer_id.to_string(),
+                template_id: TEMPLATE_ID.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        command_handler(
+            &aggregate_id,
+            &issuance_state.command.public_offer,
+            PublicOfferCommand::TakeOffline {
+                offer_id: offer_id.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut app = authorization::router((authorization_state, issuance_state));
+
+        let pre_authorized_code = pre_authorized_code
+            .expect("expected pre-authorized code for pre-authorized flow")
+            .pre_authorized_code;
+
+        let token_request = TokenRequest::PreAuthorizedCode {
+            pre_authorized_code,
+            tx_code: None,
+            authorization_details: None,
+        };
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/token")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(to_form_urlencoded_string(&token_request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("invalid_grant"));
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_pre_authorized_token_redemption_fails_when_public_offer_is_deleted() {
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, true).await;
+
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state.clone()));
+        credentials(&mut issuance_app).await;
+        let (_authorization_code, pre_authorized_code) = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
+
+        let offer_id = crate::tests::OFFER_ID;
+        let aggregate_id = format!("public_offer:{offer_id}");
+
+        command_handler(
+            &aggregate_id,
+            &issuance_state.command.public_offer,
+            PublicOfferCommand::Create {
+                offer_id: offer_id.to_string(),
+                template_id: TEMPLATE_ID.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        command_handler(
+            &aggregate_id,
+            &issuance_state.command.public_offer,
+            PublicOfferCommand::Delete {
+                offer_id: offer_id.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut app = authorization::router((authorization_state, issuance_state));
+
+        let pre_authorized_code = pre_authorized_code
+            .expect("expected pre-authorized code for pre-authorized flow")
+            .pre_authorized_code;
+
+        let token_request = TokenRequest::PreAuthorizedCode {
+            pre_authorized_code,
+            tx_code: None,
+            authorization_details: None,
+        };
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/token")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(to_form_urlencoded_string(&token_request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body.contains("invalid_grant"));
     }
 }

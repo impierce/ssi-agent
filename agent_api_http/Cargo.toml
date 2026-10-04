@@ -3,6 +3,7 @@ name = "agent_api_http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_authorization = { path = "../agent_authorization" }
@@ -13,6 +14,7 @@ agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 askama = "0.14"
@@ -22,6 +24,7 @@ axum-macros = "0.5"
 base64.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
+futures.workspace = true
 http = "1.3"
 http-api-problem = { version = "0.60", features = ["axum", "api-error"] }
 http-body-util = "0.1"
@@ -29,12 +32,16 @@ hyper = { version = "1.2" }
 identity_core.workspace = true
 identity_credential.workspace = true
 identity_did.workspace = true
-metrics = "0.24"
-metrics-exporter-prometheus = { version = "0.17", default-features = false }
+identity_document.workspace = true
+indexmap.workspace = true
+iso8601.workspace = true
+jsonschema.workspace = true
 oauth_tsl.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true
+opentelemetry.workspace = true
+percent-encoding.workspace = true
 rand.workspace = true
 sd-jwt.workspace = true
 serde.workspace = true
@@ -69,8 +76,11 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [
     "test_utils",
 ] }
+verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
+async-trait.workspace = true
 futures.workspace = true
+identity_document.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
@@ -79,6 +89,7 @@ oid4vc-manager.workspace = true
 rstest.workspace = true
 serde_urlencoded.workspace = true
 serial_test = "3.0"
+tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true
 tower-http.workspace = true
 tracing-test.workspace = true
@@ -87,3 +98,4 @@ wiremock.workspace = true
 
 [features]
 test_utils = []
+allow-localhost = ["agent_identity/allow-localhost"]

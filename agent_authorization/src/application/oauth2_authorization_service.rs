@@ -4,7 +4,7 @@ use crate::{
     },
     state::AuthorizationState,
 };
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler};
 use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ impl OAuth2AuthorizationService {
         AuthorizationRequestByReference { client_id, request_uri }: AuthorizationRequestByReference,
     ) -> Result<OAuth2AuthorizationServiceResponse, OAuth2AuthorizationError> {
         // Get the OAuth2 authorization request that has been pushed via the `/auth/par` endpoint.
-        let oauth2_authorization_request = query_handler(
+        let oauth2_authorization_request = public_query_handler(
             request_uri.to_string().as_ref(),
             &state.query.oauth2_authorization_request,
         )
@@ -81,7 +81,7 @@ impl OAuth2AuthorizationService {
                 let command = AuthorizationCodeCommand::CreateAuthorizationCode {
                     authorization_code_id: authorization_code_id.clone(),
                     client_id,
-                    redirect_uri: redirect_uri.clone(),
+                    redirect_uri: Some(redirect_uri.clone()),
                     code_challenge: oauth2_authorization_request.code_challenge,
                     code_challenge_method: oauth2_authorization_request.code_challenge_method,
                     issuer_state: oauth2_authorization_request.issuer_state,
@@ -89,7 +89,7 @@ impl OAuth2AuthorizationService {
                     expires_in: 600, // 10 minutes
                 };
 
-                command_handler(&authorization_code_id, &state.command.authorization_code, command)
+                public_command_handler(&authorization_code_id, &state.command.authorization_code, command)
                     .await
                     .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
 

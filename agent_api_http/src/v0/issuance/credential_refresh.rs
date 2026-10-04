@@ -106,7 +106,7 @@ mod tests {
         state::{initialize, IssuanceState},
     };
     use agent_secret_manager::service::Service;
-    use agent_shared::{config::RefreshServiceConfiguration, handlers::command_handler};
+    use agent_shared::{config::RefreshServiceConfiguration, handlers::public_command_handler as command_handler};
     use agent_store::{in_memory::InMemory, issuance_state};
     use axum::{
         body::Body,
@@ -116,13 +116,24 @@ mod tests {
     use tower::ServiceExt;
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
         state
     }
 
     async fn post_credential_refresh(state: Arc<IssuanceState>, refresh_token: &str) -> StatusCode {
-        let app = router(state);
+        let app = router((
+            state,
+            Arc::new(agent_store::library_state(&InMemory, &Default::default(), Default::default(), vec![]).await),
+        ));
 
         app.oneshot(
             Request::builder()
@@ -154,9 +165,10 @@ mod tests {
     #[tokio::test]
     async fn credential_refresh_returns_forbidden_when_noop_hook_cannot_prepare() {
         let state = test_state().await;
-        let refresh_capability = RefreshCapabilityService::default()
+        let refresh_capability = RefreshCapabilityService
             .create_for_credential(
                 &state,
+                shared_kernel::authorization::Caller::Internal,
                 "credential-id",
                 Some(&RefreshServiceConfiguration {
                     type_: "VerifiableCredentialRefreshService2021".to_string(),
@@ -174,9 +186,10 @@ mod tests {
     #[tokio::test]
     async fn credential_refresh_returns_not_found_for_disabled_reference() {
         let state = test_state().await;
-        let refresh_capability = RefreshCapabilityService::default()
+        let refresh_capability = RefreshCapabilityService
             .create_for_credential(
                 &state,
+                shared_kernel::authorization::Caller::Internal,
                 "credential-id",
                 Some(&RefreshServiceConfiguration {
                     type_: "VerifiableCredentialRefreshService2021".to_string(),

@@ -1,13 +1,18 @@
 use crate::v0::issuance::error::{IntoPublicError, PublicError};
 use crate::DOCUMENTATION_URL;
+use agent_shared::handlers::{CommandHandlerError, QueryHandlerError};
 use cqrs_es::{persist::PersistenceError, AggregateError};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use shared_kernel::authorization::AuthorizationError;
+use shared_kernel::event_bus::EventBusError;
 
 /// Wraps errors from the `cqrs_es` crate to be returned as API errors.
 #[derive(Debug)]
 pub enum ErrorWrapper<T: std::error::Error> {
     AggregateError(AggregateError<T>),
+    CommandHandlerError(CommandHandlerError<T>),
+    QueryHandlerError(QueryHandlerError),
     PersistenceError(PersistenceError),
 }
 
@@ -23,6 +28,8 @@ where
     fn into_api_error(self) -> ApiError {
         match self {
             ErrorWrapper::AggregateError(error) => error.into_api_error(),
+            ErrorWrapper::CommandHandlerError(error) => error.into_api_error(),
+            ErrorWrapper::QueryHandlerError(error) => error.into_api_error(),
             ErrorWrapper::PersistenceError(error) => error.into_api_error(),
         }
     }
@@ -38,10 +45,36 @@ impl IntoApiErrorExt for ApiError {
     }
 }
 
+impl IntoApiErrorExt for AuthorizationError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            AuthorizationError::Unauthorized => ApiError::builder(StatusCode::UNAUTHORIZED)
+                .title("Unauthorized")
+                .type_url(type_url("authorization#unauthorized"))
+                .message("Authentication is required")
+                .finish(),
+            AuthorizationError::Forbidden => ApiError::builder(StatusCode::FORBIDDEN)
+                .title("Forbidden")
+                .type_url(type_url("authorization#forbidden"))
+                .message("The request is not authorized")
+                .finish(),
+        }
+    }
+}
+
 impl<T: std::error::Error + IntoPublicError> From<ErrorWrapper<T>> for PublicError {
     fn from(err: ErrorWrapper<T>) -> Self {
         match err {
             ErrorWrapper::AggregateError(error) => PublicError::from(error),
+            ErrorWrapper::CommandHandlerError(error) => match error {
+                CommandHandlerError::Authorization(_) => PublicError::InternalServerError,
+                CommandHandlerError::Aggregate(error) => PublicError::from(error),
+            },
+            ErrorWrapper::QueryHandlerError(error) => match error {
+                QueryHandlerError::Authorization(_) | QueryHandlerError::Persistence(_) => {
+                    PublicError::InternalServerError
+                }
+            },
             ErrorWrapper::PersistenceError(error) => PublicError::from(error),
         }
     }
@@ -88,6 +121,27 @@ where
     }
 }
 
+impl<T: IntoApiErrorExt> IntoApiErrorExt for CommandHandlerError<T>
+where
+    T: Send + Sync + 'static,
+{
+    fn into_api_error(self) -> ApiError {
+        match self {
+            CommandHandlerError::Authorization(error) => error.into_api_error(),
+            CommandHandlerError::Aggregate(error) => error.into_api_error(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for QueryHandlerError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            QueryHandlerError::Authorization(error) => error.into_api_error(),
+            QueryHandlerError::Persistence(error) => error.into_api_error(),
+        }
+    }
+}
+
 impl IntoApiErrorExt for PersistenceError {
     fn into_api_error(self) -> ApiError {
         AggregateError::<ApiError>::from(self).into_api_error()
@@ -100,11 +154,45 @@ impl From<PersistenceError> for PublicError {
     }
 }
 
+impl IntoApiErrorExt for EventBusError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            EventBusError::Lagged(dropped) => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
+                .title("Event Bus Lagged")
+                .type_url(type_url("events#event-bus-lagged"))
+                .message(format!("Subscriber lagged behind by {dropped} events"))
+                .finish(),
+            // Driver errors carry hostnames, ports, replica-set topology and auth failure detail.
+            // Log them in full; return a fixed `detail`. The problem-details shape is unchanged.
+            EventBusError::Source(error) => {
+                tracing::error!(error = %error, "Event source error");
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Event Source Error")
+                    .type_url(type_url("events#event-source-error"))
+                    .message("The event source is unavailable")
+                    .finish()
+            }
+            EventBusError::UnsupportedPosition => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Position")
+                .type_url(type_url("events#unsupported-position"))
+                .message("Position-based subscription is unsupported")
+                .finish(),
+            EventBusError::Closed => ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
+                .title("Event Bus Closed")
+                .type_url(type_url("events#event-bus-closed"))
+                .message("Event bus stream closed")
+                .finish(),
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use axum::response::Response;
+    use http_api_problem::IntoApiError;
     use serde_json::json;
+    use std::{error::Error, fmt};
 
     pub async fn into_json_value(response: Response) -> serde_json::Value {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -172,5 +260,128 @@ pub mod tests {
                 "detail": "An unexpected error occurred"
             }),
         );
+    }
+
+    #[tokio::test]
+    async fn command_handler_errors_successfully_convert_to_problem_details() {
+        assert_eq!(
+            into_json_value(
+                ErrorWrapper::<ApiError>::CommandHandlerError(CommandHandlerError::Authorization(
+                    AuthorizationError::Forbidden
+                ))
+                .into_api_error()
+                .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/authorization#forbidden"),
+                "title": "Forbidden",
+                "status": 403,
+                "detail": "The request is not authorized"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                ErrorWrapper::CommandHandlerError(CommandHandlerError::Aggregate(AggregateError::UserError(
+                    ApiError::builder(StatusCode::BAD_REQUEST)
+                        .title("Invalid Command")
+                        .type_url(type_url("test#invalid-command"))
+                        .message("The command is invalid")
+                        .finish(),
+                )))
+                .into_api_error()
+                .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/test#invalid-command"),
+                "title": "Invalid Command",
+                "status": 400,
+                "detail": "The command is invalid"
+            }),
+        );
+    }
+
+    #[tokio::test]
+    async fn event_bus_errors_successfully_convert_to_problem_details() {
+        assert_eq!(
+            into_json_value(EventBusError::Lagged(5).into_api_error().into_axum_response()).await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#event-bus-lagged"),
+                "title": "Event Bus Lagged",
+                "status": 503,
+                "detail": "Subscriber lagged behind by 5 events"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(
+                EventBusError::Source("MongoDB error".into())
+                    .into_api_error()
+                    .into_axum_response()
+            )
+            .await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#event-source-error"),
+                "title": "Event Source Error",
+                "status": 500,
+                "detail": "The event source is unavailable"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(EventBusError::UnsupportedPosition.into_api_error().into_axum_response()).await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#unsupported-position"),
+                "title": "Unsupported Position",
+                "status": 400,
+                "detail": "Position-based subscription is unsupported"
+            }),
+        );
+
+        assert_eq!(
+            into_json_value(EventBusError::Closed.into_api_error().into_axum_response()).await,
+            json!({
+                "type": format!("{DOCUMENTATION_URL}problem-details/events#event-bus-closed"),
+                "title": "Event Bus Closed",
+                "status": 503,
+                "detail": "Event bus stream closed"
+            }),
+        );
+    }
+
+    #[test]
+    fn command_handler_errors_successfully_convert_to_public_errors() {
+        assert!(matches!(
+            PublicError::from(ErrorWrapper::<TestPublicError>::CommandHandlerError(
+                CommandHandlerError::Authorization(AuthorizationError::Forbidden)
+            )),
+            PublicError::InternalServerError
+        ));
+
+        assert!(matches!(
+            PublicError::from(ErrorWrapper::CommandHandlerError(CommandHandlerError::Aggregate(
+                AggregateError::UserError(TestPublicError)
+            ))),
+            PublicError::NotFoundError
+        ));
+    }
+
+    #[derive(Debug)]
+    struct TestPublicError;
+
+    impl fmt::Display for TestPublicError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("test public error")
+        }
+    }
+
+    impl Error for TestPublicError {}
+
+    impl IntoPublicError for TestPublicError {
+        fn into_public_error(self) -> PublicError {
+            PublicError::NotFoundError
+        }
     }
 }

@@ -1,6 +1,5 @@
 use agent_shared::config::Logo;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -29,28 +28,26 @@ pub struct Profile {
     pub source: Source,
 }
 
-#[async_trait]
 impl Aggregate for Profile {
     type Command = ProfileCommand;
     type Event = ProfileEvent;
     type Error = ProfileError;
     type Services = Arc<IdentityServices>;
 
-    fn aggregate_type() -> String {
-        "profile".to_string()
-    }
+    const TYPE: &'static str = "profile";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use ProfileCommand::*;
         use ProfileEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateProfile {
                 profile_id,
                 display_name,
@@ -115,7 +112,13 @@ impl Aggregate for Profile {
 
                 Ok(vec![ProfileEvent::SourceUpdated { source }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

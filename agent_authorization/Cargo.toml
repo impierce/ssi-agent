@@ -3,17 +3,21 @@ name = "agent_authorization"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
 jsonwebtoken.workspace = true
+indexmap.workspace = true
+mockall = { workspace = true, optional = true }
 oid4vci.workspace = true
 oid4vc-core.workspace = true
 strum.workspace = true
@@ -43,4 +47,4 @@ serial_test = "3.0"
 tracing-test.workspace = true
 
 [features]
-test_utils = ["dep:lazy_static", "dep:once_cell", "dep:rstest"]
+test_utils = ["dep:lazy_static", "dep:once_cell", "dep:rstest", "dep:mockall"]

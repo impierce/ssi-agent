@@ -1,4 +1,8 @@
+use super::credentials::{
+    expiration_to_credential_expiry, validate_credential_against_schema, validate_expiry_within_template_deadline,
+};
 use crate::error::{type_url, IntoApiErrorExt};
+use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
 use agent_issuance::{
     credential::aggregate::CredentialExpiry,
@@ -8,6 +12,11 @@ use agent_issuance::{
     },
     state::IssuanceState,
 };
+use agent_library::{
+    state::LibraryState,
+    template::aggregate::{Status as TemplateStatus, Template},
+};
+use axum::Extension;
 use axum::{
     extract::{Json, Path, State},
     response::{IntoResponse, Response},
@@ -15,6 +24,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
 use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -23,7 +33,8 @@ pub struct CreateCredentialReissuanceRequest {
     pub original_credential_id: String,
     pub credential_configuration_id: String,
     pub credential: serde_json::Value,
-    pub expires_at: CredentialExpiry,
+    #[serde(default)]
+    pub expires_at: Option<CredentialExpiry>,
     pub reason: Option<String>,
     // TODO stronger types
     pub trigger_type: Option<String>,
@@ -47,6 +58,7 @@ pub struct CreateCredentialReissuanceResponse {
     path = "/reissue-credential",
     operation_id = "reissue_credential",
     tags = ["Issuance"],
+    request_body = CreateCredentialReissuanceRequest,
     responses(
         (status = 201, description = "Credential reissuance prepared successfully", body = CreateCredentialReissuanceResponse)
     )
@@ -54,6 +66,8 @@ pub struct CreateCredentialReissuanceResponse {
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_reissuances(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CreateCredentialReissuanceRequest {
         original_credential_id,
         credential_configuration_id,
@@ -65,6 +79,34 @@ pub(crate) async fn credential_reissuances(
         status_action,
     }): Json<CreateCredentialReissuanceRequest>,
 ) -> Result<Response, ApiError> {
+    let template: Template = query_handler(
+        library_state.authorization_checker.clone(),
+        actor.clone(),
+        &credential_configuration_id,
+        Some(&credential_configuration_id),
+        &library_state.query.template,
+    )
+    .await?
+    .filter(|template| template.status == TemplateStatus::Published)
+    .ok_or_else(|| {
+        ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Template Not Published")
+            .type_url(type_url("issuance#template-not-published"))
+            .message("Reissuance requires an existing published template.")
+            .finish()
+    })?;
+    if let Some(schema) = template.schema.as_ref() {
+        validate_credential_against_schema(credential.get("credentialSubject").unwrap_or(&credential), schema)
+            .map_err(|error| *error)?;
+    }
+    let deadline = expiration_to_credential_expiry(&template.credential_expiration)?;
+    let expires_at = match expires_at {
+        Some(explicit) => {
+            validate_expiry_within_template_deadline(&explicit, &deadline)?;
+            explicit
+        }
+        None => deadline,
+    };
     let service = ReissuanceService::default();
 
     let request = CreateReissuanceRequest {
@@ -77,25 +119,24 @@ pub(crate) async fn credential_reissuances(
         expires_at,
         reason,
         trigger_type,
-        triggered_by,
+        triggered_by: actor.as_ref().map(|actor| actor.subject.clone()).or(triggered_by),
         status_action,
     };
 
     let response = service
-        .create(&state, request)
+        .create(&state, actor.clone().map_or(Caller::Anonymous, Caller::Actor), request)
         .await
         .map_err(IntoApiErrorExt::into_api_error)?;
 
-    let credential_offer = query_handler(&response.offer_id, &state.query.offer)
-        .await
-        .map_err(|_| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Failed to query credential offer")
-                .type_url(type_url("issuance#query-credential-offer-failed"))
-                .message("Failed to query the prepared credential offer.")
-                .finish()
-        })?
-        .and_then(|offer| offer.form_url_encoded_credential_offer);
+    let credential_offer = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &response.offer_id,
+        Some(&response.offer_id),
+        &state.query.offer,
+    )
+    .await?
+    .and_then(|offer| offer.form_url_encoded_credential_offer);
 
     Ok((
         StatusCode::CREATED,
@@ -121,18 +162,20 @@ pub(crate) async fn credential_reissuances(
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn all_credential_reissuances(State(state): State<Arc<IssuanceState>>) -> Result<Response, ApiError> {
-    let reissuances = query_handler("all_reissuances", &state.query.all_reissuances)
-        .await
-        .map_err(|_| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Failed to query credential reissuances")
-                .type_url(type_url("issuance#query-credential-reissuances-failed"))
-                .message("Failed to query the credential reissuance relations.")
-                .finish()
-        })?
-        .map(|all_reissuances_view| all_reissuances_view.reissuances.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn all_credential_reissuances(
+    State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let reissuances = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_reissuances",
+        None,
+        &state.query.all_reissuances,
+    )
+    .await?
+    .map(|all_reissuances_view| all_reissuances_view.reissuances.into_values().collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(reissuances)).into_response())
 }
@@ -140,6 +183,7 @@ pub(crate) async fn all_credential_reissuances(State(state): State<Arc<IssuanceS
 #[utoipa::path(
     get,
     path = "/get-credential-reissuance/{id}",
+    params(("id" = String, Path, description = "Reissuance relation ID")),
     operation_id = "get_credential_reissuance",
     tags = ["Issuance"],
     responses(
@@ -150,19 +194,19 @@ pub(crate) async fn all_credential_reissuances(State(state): State<Arc<IssuanceS
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_reissuance(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Path(reissuance_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&reissuance_id, &state.query.reissuance)
-        .await
-        .map_err(|_| {
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Failed to query credential reissuance")
-                .type_url(type_url("issuance#query-credential-reissuance-failed"))
-                .message("Failed to query the credential reissuance relation.")
-                .finish()
-        })?
-        .map(|reissuance_view| (StatusCode::OK, Json(reissuance_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &reissuance_id,
+        Some(&reissuance_id),
+        &state.query.reissuance,
+    )
+    .await?
+    .map(|reissuance_view| (StatusCode::OK, Json(reissuance_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]
@@ -187,7 +231,7 @@ mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::{
         config::CredentialConfiguration,
-        handlers::{command_handler, query_handler},
+        handlers::{public_command_handler as command_handler, public_query_handler as query_handler},
     };
     use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
     use axum::{
@@ -202,7 +246,15 @@ mod tests {
     const CREDENTIAL_PROOF_JWT: &str = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
         add_sd_jwt_credential_configuration(&state).await;
         state
@@ -259,10 +311,10 @@ mod tests {
             .clone();
 
         command_handler(
-            "original-credential-id",
+            "11111111-1111-4111-8111-111111111111",
             &state.command.credential,
             CredentialCommand::CreateUnsignedCredential {
-                credential_id: "original-credential-id".to_string(),
+                credential_id: "11111111-1111-4111-8111-111111111111".to_string(),
                 data: Data {
                     raw: json!({
                         "first_name": "Ferris",
@@ -279,8 +331,28 @@ mod tests {
         .unwrap();
     }
 
+    async fn test_library() -> Arc<LibraryState> {
+        use agent_library::template::{
+            aggregate::{DataModel, Expiration, HolderType, Visibility},
+            command::TemplateCommand,
+        };
+        let library =
+            Arc::new(agent_store::library_state(&InMemory, &Default::default(), Default::default(), vec![]).await);
+        command_handler("SD-JWT VC", &library.command.template, TemplateCommand::CreateNewTemplate {
+            template_id: "SD-JWT VC".to_string(), source_template_id: None,
+            title: "Reissuance template".to_string(), display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0, holder_type: HolderType::Individual,
+            tags: None, status: TemplateStatus::Published, visibility: Visibility::Private,
+            credential_expiration: Some(Expiration::Never), description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(json!({"type":"object", "properties":{"first_name":{"type":"string"},"last_name":{"type":"string"},"dob":{"type":"string"}},"required":["first_name","last_name"]}))),
+            schema_properties_attributes: None, holder_authorization: Default::default(),
+        }).await.unwrap();
+        library
+    }
+
     async fn post_reissuance(state: Arc<IssuanceState>) -> (StatusCode, Value) {
-        let app = router(state);
+        let app = router((state, test_library().await));
         let response = app
             .oneshot(
                 Request::builder()
@@ -289,7 +361,7 @@ mod tests {
                     .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "originalCredentialId": "original-credential-id",
+                            "originalCredentialId": "11111111-1111-4111-8111-111111111111",
                             "credentialConfigurationId": "SD-JWT VC",
                             "credential": {
                                 "first_name": "Ferris",
@@ -321,7 +393,7 @@ mod tests {
         let (status, body) = post_reissuance(state.clone()).await;
 
         assert_eq!(status, StatusCode::CREATED);
-        assert_eq!(body["originalCredentialId"], "original-credential-id");
+        assert_eq!(body["originalCredentialId"], "11111111-1111-4111-8111-111111111111");
         assert_eq!(body["credentialConfigurationId"], "SD-JWT VC");
         assert!(body["id"].is_string());
         assert!(body["newCredentialId"].is_string());
@@ -342,7 +414,10 @@ mod tests {
             .unwrap();
         let offer = query_handler(offer_id, &state.query.offer).await.unwrap().unwrap();
 
-        assert_eq!(reissuance.original_credential_id, "original-credential-id");
+        assert_eq!(
+            reissuance.original_credential_id,
+            "11111111-1111-4111-8111-111111111111"
+        );
         assert_eq!(reissuance.new_credential_id, new_credential_id);
         assert_eq!(reissuance.offer_id, offer_id);
         assert_eq!(reissuance.status_action, None);
@@ -362,8 +437,16 @@ mod tests {
         let offer_id = body["offerId"].as_str().unwrap();
         let new_credential_id = body["newCredentialId"].as_str().unwrap();
 
-        let authorization_state =
-            Arc::new(authorization_state(&InMemory, AuthorizationServices::default().await, Default::default()).await);
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_authorization::state::initialize(&authorization_state)
             .await
             .unwrap();
@@ -392,7 +475,7 @@ mod tests {
         .await
         .unwrap();
 
-        let app = router(state.clone());
+        let app = router((state.clone(), test_library().await));
         let response = app
             .oneshot(
                 Request::builder()
@@ -414,13 +497,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(
-            response.headers().get(header::CONTENT_TYPE).unwrap(),
-            "application/json"
-        );
-
+        let status = response.status();
         let body = body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         assert!(body["credentials"][0]["credential"].is_string());
@@ -441,7 +520,7 @@ mod tests {
         let (status, created_body) = post_reissuance(state.clone()).await;
         assert_eq!(status, StatusCode::CREATED);
 
-        let app = router(state);
+        let app = router((state, test_library().await));
         let response = app
             .oneshot(
                 Request::builder()
@@ -459,7 +538,10 @@ mod tests {
 
         assert_eq!(body.as_array().unwrap().len(), 1);
         assert_eq!(body[0]["id"], created_body["id"]);
-        assert_eq!(body[0]["original_credential_id"], "original-credential-id");
+        assert_eq!(
+            body[0]["original_credential_id"],
+            "11111111-1111-4111-8111-111111111111"
+        );
     }
 
     #[tokio::test]
@@ -470,7 +552,7 @@ mod tests {
         assert_eq!(status, StatusCode::CREATED);
 
         let reissuance_id = created_body["id"].as_str().unwrap();
-        let app = router(state);
+        let app = router((state, test_library().await));
         let response = app
             .oneshot(
                 Request::builder()
@@ -487,14 +569,14 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body["id"], created_body["id"]);
-        assert_eq!(body["original_credential_id"], "original-credential-id");
+        assert_eq!(body["original_credential_id"], "11111111-1111-4111-8111-111111111111");
         assert_eq!(body["new_credential_id"], created_body["newCredentialId"]);
     }
 
     #[tokio::test]
     async fn test_credential_reissuance_endpoint_returns_not_found_for_unknown_id() {
         let state = test_state().await;
-        let app = router(state);
+        let app = router((state, test_library().await));
 
         let response = app
             .oneshot(
@@ -508,5 +590,41 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+    #[tokio::test]
+    async fn reissuance_validates_template_before_creating_records() {
+        let state = test_state().await;
+        create_original_credential(&state).await;
+        let response = router((state.clone(), test_library().await))
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("{API_VERSION}/reissue-credential"))
+                    .header(header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "originalCredentialId": "11111111-1111-4111-8111-111111111111",
+                            "credentialConfigurationId": "SD-JWT VC", "credential": {"first_name": 42}
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(query_handler("all_reissuances", &state.query.all_reissuances)
+            .await
+            .unwrap()
+            .is_none());
+        let credentials = query_handler("all_credentials", &state.query.all_credentials)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(credentials.credentials.len(), 1);
+        assert!(query_handler("all_offers", &state.query.all_offers)
+            .await
+            .unwrap()
+            .is_none());
     }
 }

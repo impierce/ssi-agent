@@ -9,19 +9,19 @@ use agent_identity::{
 };
 use agent_issuance::{
     credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
-    refresh_capability::aggregate::RefreshCapability, reissuance::aggregate::Reissuance,
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
+use agent_issuance::{refresh_capability::aggregate::RefreshCapability, reissuance::aggregate::Reissuance};
 use agent_library::template::aggregate::Template;
 use agent_shared::config::config;
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
     HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, RefreshCapabilityEventPublisher,
-    ReissuanceEventPublisher, ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher,
-    TemplateEventPublisher,
+    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ServerConfigEventPublisher,
+    ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
 };
+use agent_store::{RefreshCapabilityEventPublisher, ReissuanceEventPublisher};
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use async_trait::async_trait;
 use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
@@ -67,301 +67,303 @@ pub struct EventPublisherHttp {
 }
 
 impl EventPublisherHttp {
-    pub fn load() -> anyhow::Result<Self> {
-        let event_publisher_http = config().event_publishers.http.clone().unwrap_or_default();
+    pub fn load() -> anyhow::Result<Vec<Self>> {
+        config()
+            .event_publishers
+            .http
+            .iter()
+            .filter(|c| c.enabled)
+            .map(|event_publisher_http| {
+                let access_token = (!event_publisher_http.events.access_token.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<AccessToken>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .access_token
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        // If it's not enabled, return an empty event publisher.
-        if !event_publisher_http.enabled {
-            return Ok(EventPublisherHttp::default());
-        }
+                let authorization_code = (!event_publisher_http.events.authorization_code.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<AuthorizationCode>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .authorization_code
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let access_token = (!event_publisher_http.events.access_token.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<AccessToken>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .access_token
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let client = (!event_publisher_http.events.client.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Client>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .client
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let authorization_code = (!event_publisher_http.events.authorization_code.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<AuthorizationCode>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .authorization_code
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let oauth2_authorization_request =
+                    (!event_publisher_http.events.oauth2_authorization_request.is_empty()).then(|| {
+                        AggregateEventPublisherHttp::<OAuth2AuthorizationRequest>::new(
+                            event_publisher_http.target_url.clone(),
+                            event_publisher_http.headers.clone(),
+                            event_publisher_http
+                                .events
+                                .oauth2_authorization_request
+                                .iter()
+                                .map(ToString::to_string)
+                                .collect(),
+                        )
+                    });
 
-        let client = (!event_publisher_http.events.client.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Client>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .client
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Connection>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .connection
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let oauth2_authorization_request =
-            (!event_publisher_http.events.oauth2_authorization_request.is_empty()).then(|| {
-                AggregateEventPublisherHttp::<OAuth2AuthorizationRequest>::new(
-                    event_publisher_http.target_url.clone(),
-                    event_publisher_http.headers.clone(),
-                    event_publisher_http
-                        .events
-                        .oauth2_authorization_request
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect(),
-                )
-            });
+                let document = (!event_publisher_http.events.document.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Document>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .document
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Connection>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .connection
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let profile = (!event_publisher_http.events.profile.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Profile>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .profile
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let document = (!event_publisher_http.events.document.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Document>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .document
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let service = (!event_publisher_http.events.service.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Service>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .service
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let profile = (!event_publisher_http.events.profile.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Profile>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .profile
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let template = (!event_publisher_http.events.template.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Template>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .template
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let service = (!event_publisher_http.events.service.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Service>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .service
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<ServerConfig>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .server_config
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let template = (!event_publisher_http.events.template.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Template>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .template
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let credential = (!event_publisher_http.events.credential.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Credential>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .credential
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<ServerConfig>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .server_config
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let reissuance = (!event_publisher_http.events.reissuance.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Reissuance>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .reissuance
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let credential = (!event_publisher_http.events.credential.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Credential>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .credential
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let refresh_capability = (!event_publisher_http.events.refresh_capability.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<RefreshCapability>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .refresh_capability
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let reissuance = (!event_publisher_http.events.reissuance.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Reissuance>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .reissuance
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Offer>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .offer
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let refresh_capability = (!event_publisher_http.events.refresh_capability.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<RefreshCapability>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .refresh_capability
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let nonce = (!event_publisher_http.events.nonce.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Nonce>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .nonce
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Offer>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .offer
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let status_list = (!event_publisher_http.events.status_list.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<StatusListAggregate>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .status_list
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let nonce = (!event_publisher_http.events.nonce.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Nonce>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .nonce
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .holder_credential
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let status_list = (!event_publisher_http.events.status_list.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<StatusListAggregate>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .status_list
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let presentation = (!event_publisher_http.events.presentation.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<Presentation>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .presentation
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .holder_credential
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
+                    AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
+                        event_publisher_http.target_url.clone(),
+                        event_publisher_http.headers.clone(),
+                        event_publisher_http
+                            .events
+                            .received_offer
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    )
+                });
 
-        let presentation = (!event_publisher_http.events.presentation.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<Presentation>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .presentation
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let authorization_request =
+                    (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
+                        AggregateEventPublisherHttp::<AuthorizationRequest>::new(
+                            event_publisher_http.target_url.clone(),
+                            event_publisher_http.headers.clone(),
+                            event_publisher_http
+                                .events
+                                .authorization_request
+                                .iter()
+                                .map(ToString::to_string)
+                                .collect(),
+                        )
+                    });
 
-        let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .received_offer
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                let event_publisher = EventPublisherHttp {
+                    access_token,
+                    authorization_code,
+                    client,
+                    oauth2_authorization_request,
+                    connection,
+                    document,
+                    profile,
+                    service,
+                    template,
+                    server_config,
+                    reissuance,
+                    refresh_capability,
+                    credential,
+                    offer,
+                    nonce,
+                    status_list,
+                    holder_credential,
+                    presentation,
+                    received_offer,
+                    authorization_request,
+                };
 
-        let authorization_request = (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
-            AggregateEventPublisherHttp::<AuthorizationRequest>::new(
-                event_publisher_http.target_url.clone(),
-                event_publisher_http.headers.clone(),
-                event_publisher_http
-                    .events
-                    .authorization_request
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect(),
-            )
-        });
+                info!("Loaded HTTP event publisher: {:?}", event_publisher);
 
-        let event_publisher: EventPublisherHttp = EventPublisherHttp {
-            access_token,
-            authorization_code,
-            client,
-            oauth2_authorization_request,
-            connection,
-            document,
-            profile,
-            service,
-            template,
-            server_config,
-            credential,
-            reissuance,
-            refresh_capability,
-            offer,
-            nonce,
-            status_list,
-            holder_credential,
-            presentation,
-            received_offer,
-            authorization_request,
-        };
-
-        info!("Loaded HTTP event publisher: {:?}", event_publisher);
-
-        Ok(event_publisher)
+                Ok(event_publisher)
+            })
+            .collect()
     }
 }
 
@@ -429,10 +431,26 @@ impl EventPublisher for EventPublisherHttp {
             .map(|publisher| Box::new(publisher) as CredentialEventPublisher)
     }
 
+    fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
+        self.reissuance
+            .take()
+            .map(|publisher| Box::new(publisher) as ReissuanceEventPublisher)
+    }
+
+    fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
+        self.refresh_capability
+            .take()
+            .map(|publisher| Box::new(publisher) as RefreshCapabilityEventPublisher)
+    }
+
     fn offer(&mut self) -> Option<OfferEventPublisher> {
         self.offer
             .take()
             .map(|publisher| Box::new(publisher) as OfferEventPublisher)
+    }
+
+    fn public_offer(&mut self) -> Option<agent_store::PublicOfferEventPublisher> {
+        None
     }
 
     fn nonce(&mut self) -> Option<NonceEventPublisher> {
@@ -470,23 +488,11 @@ impl EventPublisher for EventPublisherHttp {
             .take()
             .map(|publisher| Box::new(publisher) as AuthorizationRequestEventPublisher)
     }
-
-    fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
-        self.reissuance
-            .take()
-            .map(|publisher| Box::new(publisher) as ReissuanceEventPublisher)
-    }
-
-    fn refresh_capability(&mut self) -> Option<RefreshCapabilityEventPublisher> {
-        self.refresh_capability
-            .take()
-            .map(|publisher| Box::new(publisher) as RefreshCapabilityEventPublisher)
-    }
 }
 
 /// An event publisher for a specific aggregate that dispatches events to an HTTP endpoint.
 #[skip_serializing_none]
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct AggregateEventPublisherHttp<A>
 where
     A: Aggregate,
@@ -499,6 +505,16 @@ where
     pub client: reqwest::Client,
     #[serde(skip)]
     _marker: std::marker::PhantomData<A>,
+}
+
+impl<A: Aggregate> std::fmt::Debug for AggregateEventPublisherHttp<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AggregateEventPublisherHttp")
+            .field("target_url", &self.target_url)
+            .field("headers", &self.headers.as_ref().map(|_| "<REDACTED>"))
+            .field("target_events", &self.target_events)
+            .finish()
+    }
 }
 
 impl<A> AggregateEventPublisherHttp<A>
@@ -561,7 +577,21 @@ mod tests {
     use agent_issuance::offer::event::OfferEvent;
     use agent_shared::config::{set_config, Events};
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
+    /// `dispatch` sends requests from a detached task, so wait until they arrive (or give up after a timeout).
+    async fn wait_for_requests(mock_server: &MockServer, count: usize) -> Vec<Request> {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+
+        loop {
+            let received_requests = mock_server.received_requests().await.unwrap();
+            if received_requests.len() >= count || tokio::time::Instant::now() >= deadline {
+                return received_requests;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn it_works() {
@@ -576,18 +606,17 @@ mod tests {
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
         // Set the test configuration.
-        set_config().enable_event_publisher_http();
-        set_config().set_event_publisher_http_target_url(target_url.clone());
-        set_config().set_event_publisher_http_target_events(Events {
-            reissuance: vec![agent_shared::config::ReissuanceEvent::ReissuanceCreated],
-            refresh_capability: vec![agent_shared::config::RefreshCapabilityEvent::RefreshCapabilityCreated],
-            offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
-            ..Default::default()
-        });
+        set_config().enable_event_publisher_http(0);
+        set_config().set_event_publisher_http_target_url(0, target_url.clone());
+        set_config().set_event_publisher_http_target_events(
+            0,
+            Events {
+                offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
+                ..Default::default()
+            },
+        );
 
-        let publisher = EventPublisherHttp::load().unwrap();
-        assert!(publisher.reissuance.is_some());
-        assert!(publisher.refresh_capability.is_some());
+        let publisher = EventPublisherHttp::load().unwrap().into_iter().next().unwrap();
 
         // A new event for the `Offer` aggregate.
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
@@ -606,11 +635,8 @@ mod tests {
         // Dispatch the event.
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
-        // Wait for the request to arrive at the mock server endpoint.
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        let received_requests = mock_server.received_requests().await;
-        let received_request = received_requests.as_ref().unwrap().first().unwrap();
+        let received_requests = wait_for_requests(&mock_server, 1).await;
+        let received_request = received_requests.first().expect("the event should be dispatched");
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());

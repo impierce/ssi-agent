@@ -1,11 +1,11 @@
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::application_state::Command;
-use async_trait::async_trait;
 use cqrs_es::{
     mem_store::MemStore,
     persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
+use shared_kernel::view_repository::DynViewRepository;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -15,7 +15,6 @@ struct MemRepository<V: View<A>, A: Aggregate> {
     _phantom: std::marker::PhantomData<(V, A)>,
 }
 
-#[async_trait]
 impl<V, A> ViewRepository<V, A> for MemRepository<V, A>
 where
     V: View<A>,
@@ -66,13 +65,13 @@ impl CqrsComponentBuilder for InMemory {
         event_publishers: Vec<Box<dyn Query<A>>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
-        Arc<dyn ViewRepository<V, A>>,
-        Arc<dyn ViewRepository<AV, A>>,
+        Arc<dyn DynViewRepository<V, A>>,
+        Arc<dyn DynViewRepository<AV, A>>,
     )
     where
         <A as Aggregate>::Command: Send + Sync,
     {
-        let all_aggregates_name = format!("all_{}s", A::aggregate_type());
+        let all_aggregates_name = format!("all_{}s", A::TYPE);
 
         // Initialize the in-memory repositories.
         let aggregate: Arc<MemRepository<V, A>> = Arc::new(MemRepository::default());

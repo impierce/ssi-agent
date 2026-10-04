@@ -1,8 +1,7 @@
 #[cfg(feature = "test_utils")]
 use agent_shared::config::TESTINDEX;
 use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oauth_tsl::status_list::{Bits, StatusList};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -18,26 +17,24 @@ pub struct StatusListAggregate {
     pub used_indices: Vec<usize>,
 }
 
-#[async_trait]
 impl Aggregate for StatusListAggregate {
     type Command = StatusListCommand;
     type Event = StatusListEvent;
     type Error = StatusListError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "status_list".to_string()
-    }
+    const TYPE: &'static str = "status_list";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use StatusListCommand::*;
         use StatusListEvent::*;
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateStatusList { id } => Ok(vec![StatusListCreated {
                 id,
                 status_list: StatusList {
@@ -99,7 +96,13 @@ impl Aggregate for StatusListAggregate {
                     status,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

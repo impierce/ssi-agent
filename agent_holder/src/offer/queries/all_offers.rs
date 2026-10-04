@@ -1,13 +1,13 @@
 use super::ReceivedOfferView;
 use crate::offer::queries::Offer;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllReceivedOffersView {
     #[serde(flatten)]
-    pub received_offers: HashMap<String, ReceivedOfferView>,
+    pub received_offers: IndexMap<String, ReceivedOfferView>,
 }
 
 impl View<Offer> for AllReceivedOffersView {

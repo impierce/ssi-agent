@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::handlers::{command_handler, query_handler};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
@@ -39,11 +40,13 @@ pub struct AddConnectionEndpointRequest {
                 ("Location" = String, description = "URI of the newly created connection")
             )
         ),
+        (status = 400, description = "Malformed JSON request body"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(AddConnectionEndpointRequest { url }): Json<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
@@ -54,21 +57,33 @@ pub(crate) async fn post_connection(
         url,
     };
 
-    command_handler(&connection_id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &connection_id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
 
     // Return the connection.
-    query_handler(&connection_id, &state.query.connection)
-        .await?
-        .map(|connection_view| {
-            (
-                StatusCode::CREATED,
-                [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-                Json(connection_view),
-            )
-                .into_response()
-        })
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &connection_id,
+        Some(&connection_id),
+        &state.query.connection,
+    )
+    .await?
+    .map(|connection_view| {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
+            Json(connection_view),
+        )
+            .into_response()
+    })
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -93,32 +108,38 @@ pub struct GetConnectionsEndpointRequest {
     operation_id = "get_all_connections",
     tags = ["Connections"],
     responses(
-        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView])
+        (status = 200, description = "All connections retrieved successfully", body = [ConnectionView]),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
-    let filtered_connections = query_handler("all_connections", &state.query.all_connections)
-        .await?
-        .map(|all_connections_view| {
-            let filtered_connections: Vec<_> = all_connections_view
-                .connections
-                .into_values()
-                .filter(|connection| {
-                    display
-                        .as_ref()
-                        .map_or(true, |display| connection.display.as_ref() == Some(display))
-                        && url.as_ref().map_or(true, |url| *url == connection.url)
-                        && did.as_ref().map_or(true, |did| connection.dids.contains(did))
-                })
-                .collect();
+    let filtered_connections = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_connections",
+        None,
+        &state.query.all_connections,
+    )
+    .await?
+    .map(|all_connections_view| {
+        let filtered_connections: Vec<_> = crate::utils::newest_first(all_connections_view.connections)
+            .filter(|connection| {
+                display
+                    .as_ref()
+                    .is_none_or(|display| connection.display.as_ref() == Some(display))
+                    && url.as_ref().is_none_or(|url| *url == connection.url)
+                    && did.as_ref().is_none_or(|did| connection.dids.contains(did))
+            })
+            .collect();
 
-            filtered_connections
-        })
-        .unwrap_or_default();
+        filtered_connections
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(filtered_connections)).into_response())
 }
@@ -128,23 +149,32 @@ pub(crate) async fn get_connections(
 /// Retrieve a specific connection by its unique identifier.
 #[utoipa::path(
     get,
-    path = "/connections/{id}",
+    path = "/connections/{connection_id}",
     operation_id = "get_connection_by_id",
     tags = ["Connections"],
     responses(
         (status = 200, description = "Connection retrieved successfully", body = ConnectionView),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Connection not found"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&id, &state.query.connection)
-        .await?
-        .filter(|view| !view.deleted)
-        .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        Some(&id),
+        &state.query.connection,
+    )
+    .await?
+    .filter(|view| !view.deleted)
+    .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -162,18 +192,27 @@ pub struct SyncConnectionRequest {
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(SyncConnectionRequest { id }): Json<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -192,17 +231,28 @@ pub struct AcceptConnectionChangesRequest {
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Connection not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(AcceptConnectionChangesRequest { id }): Json<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -221,17 +271,28 @@ pub struct RemoveConnectionRequest {
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
-        (status = 200)
+        (status = 200),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Connection not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(RemoveConnectionRequest { id }): Json<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
         connection_id: id.clone(),
     };
-    command_handler(&id, &state.command.connection, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &id,
+        &state.command.connection,
+        command,
+    )
+    .await?;
     Ok(StatusCode::OK.into_response())
 }
 
@@ -240,8 +301,13 @@ pub(crate) async fn remove_connection(
 pub fn parse_url(input: &str) -> Result<Url, ApiError> {
     let input = input.trim();
     let with_scheme = match input.strip_prefix("http://") {
+        #[cfg(not(feature = "allow-localhost"))]
         Some(rest) => format!("https://{rest}"),
+        #[cfg(feature = "allow-localhost")]
+        Some(_rest) => input.to_string(),
         None if input.starts_with("https://") => input.to_string(),
+        #[cfg(feature = "allow-localhost")]
+        None if input.starts_with("localhost") => format!("http://{input}"),
         None => format!("https://{input}"),
     };
 
@@ -251,16 +317,19 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
             .finish()
     })?;
 
-    let host = url.host_str().ok_or_else(|| {
-        ApiError::builder(StatusCode::BAD_REQUEST)
-            .message("Url missing host".to_string())
-            .finish()
-    })?;
+    #[cfg(not(feature = "allow-localhost"))]
+    {
+        let host = url.host_str().ok_or_else(|| {
+            ApiError::builder(StatusCode::BAD_REQUEST)
+                .message("Url missing host".to_string())
+                .finish()
+        })?;
 
-    if !host.contains('.') {
-        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
-            .finish());
+        if !host.contains('.') {
+            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                .message("Url must contain a top-level domain (e.g. .com, .nl, .eu).".to_string())
+                .finish());
+        }
     }
 
     Ok(url)
@@ -270,8 +339,13 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
 pub mod tests {
     use super::*;
 
+    use agent_identity::services::IdentityServices;
+    use agent_store::{identity_state, in_memory::InMemory};
+    use cqrs_es::persist::ViewContext;
+
     #[test]
-    fn test_parsing_with_http_prefix() {
+    #[cfg(not(feature = "allow-localhost"))]
+    fn test_parsing_with_http_prefix_upgrades_to_https() {
         let input_string = "http://a-via-lactea.example.com/";
         let parsed = parse_url(input_string).unwrap();
 
@@ -302,9 +376,58 @@ pub mod tests {
         assert_eq!(parsed, Url::parse("https://a-via-lactea.example.com/").unwrap());
     }
 
+    #[tokio::test]
+    async fn removed_connection_stays_hidden_after_repository_round_trip() {
+        let event_bus = shared_kernel::EventBusHandle::default();
+        let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &event_bus, vec![]).await);
+        let connection_id = "removed-connection";
+
+        state
+            .query
+            .connection
+            .update_view(
+                ConnectionView {
+                    connection_id: connection_id.to_string(),
+                    deleted: true,
+                    ..Default::default()
+                },
+                ViewContext::new(connection_id.to_string(), 0),
+            )
+            .await
+            .unwrap();
+
+        let response = get_connection(State(state), RequestActor(None), Path(connection_id.to_string()))
+            .await
+            .unwrap_err()
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
     #[test]
-    fn invalid_input_no_tld() {
+    #[cfg(not(feature = "allow-localhost"))]
+    fn invalid_input_no_tld_fails() {
         let input_string = "a-via-lactea";
         assert!(parse_url(input_string).is_err());
+    }
+
+    #[cfg(feature = "allow-localhost")]
+    pub mod allow_localhost_tests {
+        use super::*;
+
+        #[test]
+        fn test_parsing_with_http_prefix_preserves_http() {
+            let input_string = "http://a-via-lactea.example.com/";
+            let parsed = parse_url(input_string).unwrap();
+
+            assert_eq!(parsed, Url::parse("http://a-via-lactea.example.com/").unwrap());
+        }
+
+        #[test]
+        fn test_parsing_localhost_defaults_to_http() {
+            let input_string = "localhost:8080";
+            let parsed = parse_url(input_string).unwrap();
+            assert_eq!(parsed, Url::parse("http://localhost:8080/").unwrap());
+        }
     }
 }

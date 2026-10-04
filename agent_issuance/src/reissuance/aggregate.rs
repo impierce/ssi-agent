@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -32,25 +31,23 @@ pub struct Reissuance {
     pub created_at: Option<DateTime<Utc>>,
 }
 
-#[async_trait]
 impl Aggregate for Reissuance {
     type Command = ReissuanceCommand;
     type Event = ReissuanceEvent;
     type Error = ReissuanceError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "reissuance".to_string()
-    }
+    const TYPE: &'static str = "reissuance";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events = match command {
             ReissuanceCommand::CreateReissuance {
                 reissuance_id,
                 original_credential_id,
@@ -73,7 +70,7 @@ impl Aggregate for Reissuance {
                 #[cfg(not(feature = "test_utils"))]
                 let created_at: DateTime<Utc> = chrono::Utc::now();
 
-                Ok(vec![ReissuanceCreated {
+                vec![ReissuanceCreated {
                     created_at,
                     credential_configuration_id,
                     new_credential_id,
@@ -84,9 +81,13 @@ impl Aggregate for Reissuance {
                     status_action,
                     trigger_type,
                     triggered_by,
-                }])
+                }]
             }
+        };
+        for event in events {
+            sink.write(event, self).await;
         }
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -142,13 +143,16 @@ mod tests {
 
     #[async_std::test]
     async fn create_reissuance_records_relation() {
+        let sink = EventSink::default();
         let services = IssuanceServices::default().await;
         let mut reissuance = Reissuance::default();
 
-        let events = reissuance
-            .handle(create_reissuance_command(), &services)
+        reissuance
+            .handle(create_reissuance_command(), &services, &sink)
             .await
             .expect("reissuance creation should succeed");
+        let events = sink.collect().await;
+        let sink = EventSink::default();
 
         assert_eq!(events.len(), 1);
 
@@ -203,7 +207,7 @@ mod tests {
         assert!(reissuance.created_at.is_some());
 
         let error = reissuance
-            .handle(create_reissuance_command(), &services)
+            .handle(create_reissuance_command(), &services, &sink)
             .await
             .expect_err("existing reissuance relation should not be recreated");
 
@@ -212,15 +216,17 @@ mod tests {
 
     #[async_std::test]
     async fn create_reissuance_preserves_optional_status_action_metadata() {
+        let sink = EventSink::default();
         let services = IssuanceServices::default().await;
         let mut command = create_reissuance_command();
         let ReissuanceCommand::CreateReissuance { status_action, .. } = &mut command;
         *status_action = Some("replaced".to_string());
 
-        let events = Reissuance::default()
-            .handle(command, &services)
+        Reissuance::default()
+            .handle(command, &services, &sink)
             .await
             .expect("reissuance creation should succeed");
+        let events = sink.collect().await;
 
         let ReissuanceCreated { status_action, .. } = events
             .first()

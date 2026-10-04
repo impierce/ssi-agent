@@ -1,4 +1,5 @@
-use agent_shared::handlers::query_handler;
+use agent_shared::handlers::public_query_handler as query_handler;
+use shared_kernel::authorization::Caller;
 
 use crate::{
     refresh_capability::{
@@ -50,7 +51,7 @@ where
         state: &IssuanceState,
         request: PrepareRefreshContinuationRequest,
     ) -> Result<RefreshContinuation, RefreshContinuationServiceError> {
-        let resolved = RefreshCapabilityService::default()
+        let resolved = RefreshCapabilityService
             .resolve_active(state, &request.refresh_reference)
             .await?;
 
@@ -65,6 +66,7 @@ where
         let response = ReissuanceService::default()
             .create(
                 state,
+                Caller::Internal,
                 CreateReissuanceRequest {
                     reissuance_id: uuid::Uuid::new_v4().to_string(),
                     original_credential_id: resolved.credential_id,
@@ -117,7 +119,7 @@ mod tests {
     use agent_secret_manager::service::Service;
     use agent_shared::{
         config::CredentialConfiguration,
-        handlers::{command_handler, query_handler},
+        handlers::{public_command_handler as command_handler, public_query_handler as query_handler},
         UrlAppendHelpers,
     };
     use agent_store::{in_memory::InMemory, issuance_state};
@@ -150,7 +152,15 @@ mod tests {
     }
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(state.as_ref()).await.unwrap();
         state
     }
@@ -202,8 +212,13 @@ mod tests {
                 .and_then(|server_config| server_config.credential_configurations.get("SD-JWT VC").cloned())
                 .unwrap();
 
-        let refresh_capability = RefreshCapabilityService::default()
-            .create_for_credential(state, "original-credential-id", refresh_service.as_ref())
+        let refresh_capability = RefreshCapabilityService
+            .create_for_credential(
+                state,
+                shared_kernel::authorization::Caller::Internal,
+                "original-credential-id",
+                refresh_service.as_ref(),
+            )
             .await
             .unwrap();
 
@@ -216,7 +231,8 @@ mod tests {
                         type_: refresh_service.type_.clone(),
                         url: agent_shared::config::config()
                             .public_url
-                            .append_path_segment("credential-refresh")
+                            .append_path_segment("v0")
+                            .append_path_segment("refresh-credential")
                             .to_string(),
                         refresh_token: refresh_capability.refresh_reference.clone(),
                     }

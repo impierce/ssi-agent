@@ -2,6 +2,7 @@ pub mod public;
 pub mod v0;
 
 pub mod error;
+pub mod extractors;
 pub mod handlers;
 pub mod metrics;
 pub mod utils;
@@ -15,14 +16,16 @@ use agent_shared::config::config;
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, Bytes},
-    extract::{MatchedPath, Request},
-    middleware,
-    middleware::Next,
+    extract::{MatchedPath, Request, State},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     Router,
 };
+use http::HeaderMap;
+use http_api_problem::ApiError;
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
+use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
 use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -33,28 +36,53 @@ pub const API_VERSION: &str = "/v0";
 pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
 #[derive(Default)]
-pub struct ApplicationState {
+pub struct ApiState {
     pub identity_state: Option<Arc<IdentityState>>,
     pub library_state: Option<Arc<LibraryState>>,
     pub authorization_state: Option<Arc<AuthorizationState>>,
     pub issuance_state: Option<Arc<IssuanceState>>,
     pub holder_state: Option<Arc<HolderState>>,
     pub verification_state: Option<Arc<VerificationState>>,
+    pub events_state: Option<Arc<v0::events::EventsState>>,
 }
 
-pub fn app(
-    ApplicationState {
+/// Build the top-level API router.
+///
+/// This merges the routers for each bounded context that has state available,
+/// installs actor extraction middleware, and attaches request tracing/logging.
+/// When the configured application URL includes a non-root base path, the
+/// router is nested under that path.
+pub fn app<E>(state: ApiState, actor_extractor: Arc<E>) -> Router
+where
+    E: ActorExtractor,
+{
+    let application_base_path = config().application_url.path().to_owned();
+    app_with_base_path(state, actor_extractor, &application_base_path)
+}
+
+pub(crate) fn app_with_base_path<E>(
+    ApiState {
         identity_state,
         library_state,
         authorization_state,
         issuance_state,
         holder_state,
         verification_state,
-    }: ApplicationState,
-) -> Router {
+        events_state,
+    }: ApiState,
+    actor_extractor: Arc<E>,
+    application_base_path: &str,
+) -> Router
+where
+    E: ActorExtractor,
+{
+    let well_known = identity_state
+        .clone()
+        .map(v0::identity::well_known_router)
+        .unwrap_or_default();
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
-        .merge(library_state.map(v0::library::router).unwrap_or_default())
+        .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
         .merge(
             authorization_state
                 // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
@@ -64,19 +92,28 @@ pub fn app(
                 .map(v0::authorization::router)
                 .unwrap_or_default(),
         )
-        .merge(issuance_state.map(v0::issuance::router).unwrap_or_default())
+        .merge(
+            issuance_state
+                .zip(library_state.clone())
+                .map(v0::issuance::router)
+                .unwrap_or_default(),
+        )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(public::router())
+        .merge(public::router(library_state))
         // Trace layers
         .layer(
             ServiceBuilder::new()
                 .layer(
                     TraceLayer::new_for_http()
                         .make_span_with(|request: &Request<_>| {
-                            let path = request.extensions().get::<MatchedPath>().map(MatchedPath::as_str);
+                            let path = request
+                                .extensions()
+                                .get::<MatchedPath>()
+                                .map(MatchedPath::as_str)
+                                .unwrap_or_else(|| request.uri().path());
                             info_span!(
-                                "HTTP Request ",
+                                "HTTP Request",
                                 method = ?request.method(),
                                 path,
                             )
@@ -96,18 +133,27 @@ pub fn app(
                         }),
                 )
                 .layer(middleware::from_fn(log_request_body)),
-        );
+        )
+        // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
+        .merge(events_state.map(v0::events::router).unwrap_or_default());
 
-    let application_base_path = config().application_url.path().to_string();
-
-    // Note: since version 0.8 axum does not allow nesting routers with an empty base path. We must explicitly check
-    // for an empty base path before nesting.
-    if application_base_path == "/" {
+    let app = if application_base_path == "/" {
         app
     } else {
-        // TODO: This breaks Domain Linkage. We need to fix this.
-        Router::new().nest(&application_base_path, app)
+        Router::new().nest(application_base_path.trim_end_matches('/'), app)
+    };
+    app.merge(well_known)
+        .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
+}
+
+/// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
+/// events route — which stays outside the trace layer so SSE payloads are not logged.
+pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
+    if uri_contains_null_byte(request.uri()) {
+        return Err(null_byte_rejection().into_axum_response());
     }
+
+    Ok(next.run(request).await)
 }
 
 // This middleware logs the request body before passing it on.
@@ -123,12 +169,20 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
 
     debug!("Path segments and query string: `{}`", parts.uri);
 
+    if uri_contains_null_byte(&parts.uri) {
+        return Err(null_byte_rejection().into_axum_response());
+    }
+
     // Convert the request body into bytes.
     let bytes = body
         .collect()
         .await
         .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
         .to_bytes();
+
+    if body_contains_null_byte(&bytes) {
+        return Err(null_byte_rejection().into_axum_response());
+    }
 
     let _ = serde_json::from_slice(&bytes)
         .and_then(|json_value: serde_json::Value| serde_json::to_string_pretty(&json_value))
@@ -137,22 +191,158 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
     Ok(Request::from_parts(parts, Body::from(bytes)))
 }
 
+/// A `NUL` anywhere in a request eventually reaches the event store, which cannot hold one: Postgres
+/// rejects it in `text` (`invalid byte sequence for encoding "UTF8": 0x00`) and in `jsonb`
+/// (`unsupported Unicode escape sequence`). Both surface far downstream as a `500`, so requests
+/// carrying one are turned away here instead.
+///
+/// A URI spells a `NUL` as `%00`, and both path and query are still percent-encoded here, so they
+/// are matched in that form rather than decoded first. The query is included because
+/// `Uri::path()` excludes it.
+fn uri_contains_null_byte(uri: &http::Uri) -> bool {
+    uri.path_and_query()
+        .is_some_and(|path_and_query| encoded_null_byte(path_and_query.as_str()))
+}
+
+fn encoded_null_byte(percent_encoded: &str) -> bool {
+    percent_encoded
+        .as_bytes()
+        .windows(3)
+        .any(|window| window[0] == b'%' && &window[1..] == b"00")
+}
+
+/// JSON spells a `NUL` as the escape `\u0000`, which survives parsing as a real `NUL` byte, so the
+/// raw body is matched against both spellings.
+fn body_contains_null_byte(bytes: &[u8]) -> bool {
+    if bytes.contains(&0) {
+        return true;
+    }
+
+    bytes
+        .windows(6)
+        .enumerate()
+        .filter(|(_, window)| *window == br"\u0000")
+        // A backslash that is itself escaped (`\\u0000`) is literal text and stores fine. The escape
+        // is only real when an even number of backslashes precedes it.
+        .any(|(index, _)| bytes[..index].iter().rev().take_while(|byte| **byte == b'\\').count() % 2 == 0)
+}
+
+fn null_byte_rejection() -> ApiError {
+    ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Unsupported Character")
+        .type_url(error::type_url("request#unsupported-character"))
+        .message("The request contains a NUL character, which cannot be stored.")
+        .finish()
+}
+
+/// Adapter that lets the actor extractor read values from HTTP headers.
+struct HttpActorInput<'a> {
+    headers: &'a HeaderMap,
+}
+
+impl<'a> HttpActorInput<'a> {
+    /// Create a header-backed actor input used by the actor extractor.
+    fn from_headers(headers: &'a HeaderMap) -> Self {
+        Self { headers }
+    }
+}
+
+impl ToActor for HttpActorInput<'_> {
+    /// Raw HTTP credentials are not stable actor identifiers.
+    ///
+    /// Actor extractors should read credentials with [`ToActor::auth_value`] and map them to a
+    /// non-sensitive subject before returning an [`Actor`].
+    fn to_actor(&self) -> Option<Actor> {
+        None
+    }
+
+    /// Read the header identified by `key` as a UTF-8 string slice.
+    fn auth_value(&self, key: &str) -> Option<&str> {
+        self.headers.get(key).and_then(|value| value.to_str().ok())
+    }
+}
+
+/// Extract an optional actor from the request headers and store it in the request extensions when present.
+pub async fn extract_actor<E>(State(actor_extractor): State<Arc<E>>, mut request: Request, next: Next) -> Response
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+
+    if let Some(actor) = actor_extractor.extract_actor(&input).await {
+        request.extensions_mut().insert(actor);
+    }
+
+    next.run(request).await
+}
+
+/// Require a valid actor in the request headers, returning `401 Unauthorized` when none is present.
+///
+/// When an actor is found, it is inserted into the request extensions before the request is forwarded to the next handler.
+pub async fn require_actor<E>(
+    State(actor_extractor): State<Arc<E>>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode>
+where
+    E: ActorExtractor,
+{
+    let input = HttpActorInput::from_headers(request.headers());
+
+    if let Some(actor) = actor_extractor.extract_actor(&input).await {
+        request.extensions_mut().insert(actor);
+    } else {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    Ok(next.run(request).await)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::extractors::RequestActor;
     use agent_shared::config::config;
+    use axum::{body::Body, routing::get};
+    use http::header::AUTHORIZATION;
+    use http::Request;
     use oid4vci::credential_issuer::{
         credential_configurations_supported::CredentialConfigurationsSupportedObject,
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
+    use shared_kernel::authorization::NoActorExtractor;
     use std::collections::HashMap;
+    use tower::ServiceExt;
 
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
+    pub const TEMPLATE_ID: &str = "001";
+
+    #[test]
+    fn null_bytes_are_detected_in_every_spelling() {
+        let uri = |raw: &str| raw.parse::<http::Uri>().unwrap();
+        assert!(uri_contains_null_byte(&uri("/v0/credentials/%00")));
+        assert!(!uri_contains_null_byte(&uri("/v0/credentials/00")));
+        assert!(!uri_contains_null_byte(&uri("/v0/credentials/abc")));
+
+        // `Uri::path()` excludes the query string, so these were previously missed entirely.
+        assert!(uri_contains_null_byte(&uri("/v0/events?subject=%00")));
+        assert!(uri_contains_null_byte(&uri("/v0/events?types=a&sources=b%00c")));
+        assert!(!uri_contains_null_byte(&uri("/v0/events?subject=abc")));
+
+        assert!(body_contains_null_byte(b"{\"id\": \"a\0b\"}"));
+        assert!(body_contains_null_byte(br#"{"id": "a\u0000b"}"#));
+        assert!(!body_contains_null_byte(br#"{"id": "ab"}"#));
+
+        // A backslash that is itself escaped leaves the text `\u0000`, which stores fine.
+        assert!(!body_contains_null_byte(br#"{"id": "a\\u0000b"}"#));
+        assert!(body_contains_null_byte(br#"{"id": "a\\\u0000b"}"#));
+    }
 
     lazy_static::lazy_static! {
         static ref CREDENTIAL_CONFIGURATIONS_SUPPORTED: HashMap<String, CredentialConfigurationsSupportedObject> =
             vec![(
-                "001".to_string(),
+                TEMPLATE_ID.to_string(),
                 serde_json::from_value(json!({
                     "format": "jwt_vc_json",
                     "cryptographic_binding_methods_supported": [
@@ -190,50 +380,6 @@ mod tests {
                     }}
                 ))
                 .unwrap()
-            ),
-            (
-                "002".to_string(),
-                serde_json::from_value(json!({
-                    "format": "jwt_vc_json",
-                    "cryptographic_binding_methods_supported": [
-                        "did:jwk",
-                        "did:key",
-                    ],
-                    "credential_signing_alg_values_supported": [
-                        "ES256",
-                        "EdDSA"
-                    ],
-                    "credential_definition":{
-                        "type": [
-                            "VerifiableCredential"
-                        ]
-                    },
-                    "proof_types_supported": {
-                        "jwt": {
-                            "proof_signing_alg_values_supported": [
-                                "ES256",
-                                "EdDSA"
-                            ],
-                        }
-                    },
-                    "credential_metadata": {
-                        "display": [
-                            {
-                                "name": "Verifiable Credential",
-                                "locale": "en",
-                                "logo": {
-                                    "uri": "https://www.impierce.com/external/impierce-logo.png",
-                                    "alt_text": "Impierce Logo",
-                                }
-                            }
-                        ]
-                    },
-                    "authorization": {
-                        "pre_authorized": false
-                    }
-                }
-                ))
-                .unwrap()
             )]
             .into_iter()
             .collect();
@@ -252,5 +398,183 @@ mod tests {
             })]),
             ..Default::default()
         };
+    }
+
+    #[derive(Clone)]
+    struct MappingActorExtractor;
+
+    #[async_trait::async_trait]
+    impl ActorExtractor for MappingActorExtractor {
+        async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input
+                .bearer_token()
+                .filter(|token| *token == "valid-token")
+                .map(|_| Actor {
+                    subject: "user@example.test".to_string(),
+                })
+        }
+    }
+
+    #[derive(Clone)]
+    struct CustomHeaderActorExtractor;
+
+    #[async_trait::async_trait]
+    impl ActorExtractor for CustomHeaderActorExtractor {
+        async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
+            input
+                .auth_value("x-custom-actor-token")
+                .filter(|token| *token == "valid-token")
+                .map(|_| Actor {
+                    subject: "custom@example.test".to_string(),
+                })
+        }
+    }
+
+    async fn actor_subject(RequestActor(actor): RequestActor) -> String {
+        actor
+            .map(|actor| actor.subject)
+            .unwrap_or_else(|| "anonymous".to_string())
+    }
+
+    #[tokio::test]
+    async fn actor_extraction_middleware_stores_mapped_actor_in_request_extensions() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(MappingActorExtractor),
+                extract_actor::<MappingActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(AUTHORIZATION, "Bearer valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"user@example.test");
+    }
+
+    #[tokio::test]
+    async fn actor_extractor_can_read_custom_auth_values() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(CustomHeaderActorExtractor),
+                extract_actor::<CustomHeaderActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("x-custom-actor-token", "valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"custom@example.test");
+    }
+
+    #[tokio::test]
+    async fn no_actor_extractor_stores_anonymous_actor_extension() {
+        let app = Router::new()
+            .route("/", get(actor_subject))
+            .layer(middleware::from_fn_with_state(
+                Arc::new(NoActorExtractor),
+                extract_actor::<NoActorExtractor>,
+            ));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header(AUTHORIZATION, "Bearer valid-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(body.as_ref(), b"anonymous");
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn sse_response_body_chunks_are_not_logged_by_tracing_layer() {
+        let bus_handle = shared_kernel::event_bus::EventBusHandle::new(16);
+        let events_state = Arc::new(v0::events::EventsState::from(bus_handle.clone()));
+        bus_handle.publish(shared_kernel::event_bus::build_cloud_event(
+            "test",
+            "test-1",
+            1,
+            "TestEvent",
+            serde_json::json!({"secret": "sensitive-data"}),
+            None,
+        ));
+
+        let app = app_with_base_path(
+            ApiState {
+                events_state: Some(events_state),
+                ..Default::default()
+            },
+            Arc::new(NoActorExtractor),
+            "/",
+        );
+
+        let response = tower::ServiceExt::oneshot(
+            app,
+            Request::builder()
+                .uri("/v0/events?limit=1")
+                .header("accept", "text/event-stream")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("content-type").unwrap(), "text/event-stream");
+
+        let mut body = response.into_body();
+        let frame = http_body_util::BodyExt::frame(&mut body).await;
+        assert!(frame.is_some());
+
+        // Verify that absolutely nothing was logged for /events
+        assert!(!logs_contain("Received request"));
+        assert!(!logs_contain("Returning"));
+        assert!(!logs_contain("Response Body:"));
+        assert!(!logs_contain("sensitive-data"));
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn non_events_requests_are_logged_by_tracing_layer() {
+        let app = app_with_base_path(ApiState::default(), Arc::new(NoActorExtractor), "/");
+
+        let _response = tower::ServiceExt::oneshot(
+            app,
+            Request::builder()
+                .uri("/public/sponsoring-configuration")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert!(logs_contain("Received request"));
+        assert!(logs_contain("Returning"));
     }
 }

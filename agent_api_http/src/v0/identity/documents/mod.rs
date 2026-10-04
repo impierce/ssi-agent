@@ -1,3 +1,4 @@
+use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
 use agent_identity::{document::aggregate::Document, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
@@ -29,31 +30,37 @@ pub struct GetDocumentsEndpoint {
     params(GetDocumentsEndpoint),
     responses(
         (status = 200, description = "Documents retrieved successfully", body = [Document]),
+        (status = 400, description = "Invalid query parameter"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_documents(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Query(GetDocumentsEndpoint { did_method }): Query<GetDocumentsEndpoint>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
 
-    let filtered_documents = query_handler("all_documents", &state.query.all_documents)
-        .await?
-        .map(|all_documents_view| {
-            let filtered_documents: Vec<_> = all_documents_view
-                .documents
-                .into_values()
-                .filter(|document| {
-                    did_method
-                        .as_ref()
-                        .map_or(true, |method| document.did_method.as_ref() == Some(method))
-                })
-                .collect();
+    let filtered_documents = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_documents",
+        None,
+        &state.query.all_documents,
+    )
+    .await?
+    .map(|all_documents_view| {
+        let filtered_documents: Vec<_> = crate::utils::newest_first(all_documents_view.documents)
+            .filter(|document| {
+                did_method
+                    .as_ref()
+                    .is_none_or(|method| document.did_method.as_ref() == Some(method))
+            })
+            .collect();
 
-            filtered_documents
-        })
-        .unwrap_or_default();
+        filtered_documents
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(filtered_documents)).into_response())
 }
@@ -68,16 +75,24 @@ pub(crate) async fn get_documents(
     tags = ["Identity"],
     responses(
         (status = 200, description = "Document retrieved successfully", body = Document),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Document not found"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn get_document(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Path(document_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&document_id, &state.query.document)
-        .await?
-        .map(|document_view| (StatusCode::OK, Json(document_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &document_id,
+        Some(&document_id),
+        &state.query.document,
+    )
+    .await?
+    .map(|document_view| (StatusCode::OK, Json(document_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

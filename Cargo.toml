@@ -19,25 +19,30 @@ members = [
     "shared-kernel",
 
     "infrastructure/stores/mongodb",
+    "infrastructure/adapters/verification-authorization",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.76.0"
+rust-version = "1.94.0"
+license-file = "LICENSE"
+publish = false
 
 [workspace.lints.clippy]
-# Enables a large group of strict lints for idiomatic Rust. 
-# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they 
+# Enables a large group of strict lints for idiomatic Rust.
+# Note: This includes opinionated rules that can be overly strict. We may selectively disable specific lints if they
 # prove too noisy.
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "e860178" }
+siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
+oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "634dc44", features = [
+    "utoipa",
+] }
+oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
+oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
+oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "634dc44" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -47,9 +52,11 @@ async-trait = "0.1"
 axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
-cqrs-es = "0.4.12"
+cqrs-es = "0.5.0"
 derivative = "2.2"
 futures = "0.3"
+hickory-resolver = "0.26"
+mockall = "0.14"
 identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
@@ -69,15 +76,21 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
     "client",
     "stronghold",
 ] }
+iso8601 = "0.6"
+indexmap = { version = "2.14", features = ["serde"] }
+jsonschema = "0.46"
 jsonwebtoken = "9.3"
 lazy_static = "1.4"
 mime = { version = "0.3" }
+mongo-es = "0.4.1"
 oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
+opentelemetry = "0.31"
 product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.16", package = "product_common", features = [
     "gas-station",
     "default-http-client",
 ] }
+percent-encoding = "2.3"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
@@ -90,6 +103,7 @@ sd-jwt = { package = "sd-jwt-payload", version = "0.5", default-features = false
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
+serde_norway = "0.9"
 serde_urlencoded = "0.7"
 serde_with = "3.13"
 strum = "0.26"
@@ -97,6 +111,7 @@ strum_macros = "0.26"
 temp-env = "0.3"
 thiserror = "1.0"
 tokio = { version = "1.46", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 tower = { version = "0.4" }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = { version = "0.1" }

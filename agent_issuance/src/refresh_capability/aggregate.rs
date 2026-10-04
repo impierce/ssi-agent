@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -32,25 +31,23 @@ pub enum RefreshCapabilityStatus {
     Disabled,
 }
 
-#[async_trait]
 impl Aggregate for RefreshCapability {
     type Command = RefreshCapabilityCommand;
     type Event = RefreshCapabilityEvent;
     type Error = RefreshCapabilityError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "refresh_capability".to_string()
-    }
+    const TYPE: &'static str = "refresh_capability";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events = match command {
             RefreshCapabilityCommand::CreateRefreshCapability {
                 refresh_reference,
                 credential_id,
@@ -66,11 +63,11 @@ impl Aggregate for RefreshCapability {
                 #[cfg(not(feature = "test_utils"))]
                 let created_at: DateTime<Utc> = chrono::Utc::now();
 
-                Ok(vec![RefreshCapabilityCreated {
+                vec![RefreshCapabilityCreated {
                     refresh_reference,
                     credential_id,
                     created_at,
-                }])
+                }]
             }
             RefreshCapabilityCommand::DisableRefreshCapability => {
                 if self.created_at.is_none() {
@@ -81,9 +78,13 @@ impl Aggregate for RefreshCapability {
                     return Err(RefreshCapabilityError::AlreadyDisabled);
                 }
 
-                Ok(vec![RefreshCapabilityDisabled])
+                vec![RefreshCapabilityDisabled]
             }
+        };
+        for event in events {
+            sink.write(event, self).await;
         }
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -122,13 +123,16 @@ mod tests {
 
     #[async_std::test]
     async fn create_refresh_capability_records_reference() {
+        let sink = EventSink::default();
         let services = IssuanceServices::default().await;
         let mut refresh_capability = RefreshCapability::default();
 
-        let events = refresh_capability
-            .handle(create_refresh_capability_command(), &services)
+        refresh_capability
+            .handle(create_refresh_capability_command(), &services, &sink)
             .await
             .expect("refresh capability creation should succeed");
+        let events = sink.collect().await;
+        let sink = EventSink::default();
 
         assert_eq!(events.len(), 1);
 
@@ -159,7 +163,7 @@ mod tests {
         assert!(refresh_capability.created_at.is_some());
 
         let error = refresh_capability
-            .handle(create_refresh_capability_command(), &services)
+            .handle(create_refresh_capability_command(), &services, &sink)
             .await
             .expect_err("existing refresh capability should not be recreated");
 
@@ -168,22 +172,26 @@ mod tests {
 
     #[async_std::test]
     async fn disable_refresh_capability_marks_reference_disabled() {
+        let sink = EventSink::default();
         let services = IssuanceServices::default().await;
         let mut refresh_capability = RefreshCapability::default();
 
-        let events = refresh_capability
-            .handle(create_refresh_capability_command(), &services)
+        refresh_capability
+            .handle(create_refresh_capability_command(), &services, &sink)
             .await
             .expect("refresh capability creation should succeed");
+        let events = sink.collect().await;
+        let sink = EventSink::default();
 
         for event in events {
             refresh_capability.apply(event);
         }
 
-        let events = refresh_capability
-            .handle(RefreshCapabilityCommand::DisableRefreshCapability, &services)
+        refresh_capability
+            .handle(RefreshCapabilityCommand::DisableRefreshCapability, &services, &sink)
             .await
             .expect("refresh capability disable should succeed");
+        let events = sink.collect().await;
 
         assert_eq!(events, vec![RefreshCapabilityDisabled]);
 

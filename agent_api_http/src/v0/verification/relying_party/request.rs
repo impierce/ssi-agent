@@ -1,4 +1,3 @@
-use crate::handlers::query_handler;
 use agent_verification::state::VerificationState;
 use axum::{
     extract::{Path, State},
@@ -9,15 +8,38 @@ use http_api_problem::ApiError;
 use hyper::header;
 use std::sync::Arc;
 
+use crate::handlers::public_query_handler;
+use crate::v0::openapi::PROTOCOL_TAG;
+
+/// Get a request object
+///
 /// Instead of directly embedding the Authorization Request into a QR-code or deeplink, the `Relying Party` can embed a
-/// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved.
-/// As described here: https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-
+/// `request_uri` that points to this endpoint from where the Authorization Request Object can be retrieved, as
+/// described in [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101.html#name-passing-a-request-object-by-).
+#[utoipa::path(
+    get,
+    path = "/request/{request_id}",
+    operation_id = "request_object",
+    tags = ["OID4VP / SIOPv2", PROTOCOL_TAG],
+    params(
+        ("request_id" = String, Path, description = "Authorization request ID"),
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Signed authorization request object",
+            body = String,
+            content_type = "application/oauth-authz-req+jwt",
+        ),
+        (status = 404, description = "The authorization request does not exist"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn request(
     State(verification_state): State<Arc<VerificationState>>,
     Path(request_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&request_id, &verification_state.query.authorization_request)
+    public_query_handler(&request_id, &verification_state.query.authorization_request)
         .await?
         .and_then(|authorization_request_view| authorization_request_view.signed_authorization_request_object)
         .map(|signed_authorization_request_object| {
@@ -75,8 +97,15 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_request_endpoint() {
-        let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, Default::default()).await);
+        let verification_state = Arc::new(
+            verification_state(
+                &InMemory,
+                VerificationServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
 
         let mut app = router(verification_state);
 

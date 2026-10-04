@@ -1,8 +1,7 @@
 use agent_shared::config::{config, Authorization, RefreshServiceConfiguration};
 use agent_shared::UrlAppendHelpers as _;
-use async_trait::async_trait;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt;
@@ -87,29 +86,27 @@ pub struct ServerConfig {
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
 
-#[async_trait]
 impl Aggregate for ServerConfig {
     type Command = ServerConfigCommand;
     type Event = ServerConfigEvent;
     type Error = ServerConfigError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "server_config".to_string()
-    }
+    const TYPE: &'static str = "server_config";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use ServerConfigCommand::*;
         use ServerConfigError::*;
         use ServerConfigEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             InitializeServerMetadata {
                 authorization_server_metadata,
                 credential_issuer_metadata,
@@ -124,15 +121,34 @@ impl Aggregate for ServerConfig {
             UpdateIssuerUrl { url } => {
                 let mut authorization_server_metadata = self.authorization_server_metadata.clone();
                 authorization_server_metadata.issuer = url.clone();
-                authorization_server_metadata.authorization_endpoint = Some(url.append_path_segment("auth/authorize"));
-                authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
-                authorization_server_metadata.pushed_authorization_request_endpoint =
-                    Some(url.append_path_segment("auth/par"));
+                if authorization_server_metadata.authorization_endpoint.is_some() {
+                    authorization_server_metadata.authorization_endpoint =
+                        Some(url.append_path_segment("auth/authorize"));
+                }
+                if authorization_server_metadata.token_endpoint.is_some() {
+                    authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
+                }
+                if authorization_server_metadata
+                    .pushed_authorization_request_endpoint
+                    .is_some()
+                {
+                    authorization_server_metadata.pushed_authorization_request_endpoint =
+                        Some(url.append_path_segment("auth/par"));
+                }
+                if authorization_server_metadata
+                    .interactive_authorization_endpoint
+                    .is_some()
+                {
+                    authorization_server_metadata.interactive_authorization_endpoint =
+                        Some(url.append_path_segment("auth/par"));
+                }
 
                 let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
                 credential_issuer_metadata.credential_issuer = url.clone();
                 credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
-                credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
+                if credential_issuer_metadata.nonce_endpoint.is_some() {
+                    credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
+                }
 
                 Ok(vec![IssuerUrlUpdated {
                     authorization_server_metadata: Box::new(authorization_server_metadata),
@@ -315,7 +331,13 @@ impl Aggregate for ServerConfig {
                     credential_configurations,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
