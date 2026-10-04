@@ -185,14 +185,21 @@ pub fn document_to_cloud_event(document: &bson::Document) -> Option<CloudEvent> 
         .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
         .map(|parsed_datetime| parsed_datetime.with_timezone(&chrono::Utc));
 
-    Some(build_cloud_event(
-        aggregate_type,
-        aggregate_id,
-        sequence,
-        event_type,
-        payload,
-        occurred_at,
-    ))
+    let caller_type = metadata_doc
+        .as_ref()
+        .and_then(|metadata| metadata.get_str("callertype").ok())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+    let caller_id = metadata_doc
+        .as_ref()
+        .and_then(|metadata| metadata.get_str("callerid").ok())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+
+    let event = build_cloud_event(aggregate_type, aggregate_id, sequence, event_type, payload, occurred_at)
+        .with_caller(caller_id, caller_type);
+
+    Some(event)
 }
 
 /// An [`EventSource`] implementation for MongoDB using change streams.
@@ -575,6 +582,28 @@ mod tests {
             cloud_event.time.unwrap().to_rfc3339(),
             "2026-09-21T07:50:45.686998501+00:00"
         );
+    }
+
+    #[test]
+    fn test_document_to_cloud_event_with_caller() {
+        let doc = doc! {
+            "aggregate_type": "template",
+            "aggregate_id": "tpl-123",
+            "sequence": 1i64,
+            "event_type": "TemplateCreated",
+            "payload": {
+                "TemplateCreated": {}
+            },
+            "metadata": {
+                "timestamp": "2026-09-21T07:50:45.686998501Z",
+                "callerid": "alice@example.test",
+                "callertype": "user"
+            }
+        };
+
+        let cloud_event = document_to_cloud_event(&doc).expect("Should convert to CloudEvent");
+        assert_eq!(cloud_event.extension.callerid.as_deref(), Some("alice@example.test"));
+        assert_eq!(cloud_event.extension.callertype.as_deref(), Some("user"));
     }
 
     #[test]

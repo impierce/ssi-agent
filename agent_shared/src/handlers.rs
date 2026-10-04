@@ -94,7 +94,7 @@ where
 {
     let operation_name = command.operation_name();
     let authorization_request = AuthorizationRequest {
-        caller,
+        caller: caller.clone(),
         operation: AuthorizationOperation::Command {
             aggregate_id: aggregate_id.to_string(),
             resource_id: None,
@@ -107,13 +107,14 @@ where
         .await
         .map_err(CommandHandlerError::Authorization)?;
 
-    public_command_handler(aggregate_id, state, command).await
+    command_handler_with_caller(aggregate_id, state, command, &caller).await
 }
 
-pub async fn public_command_handler<A>(
+pub async fn command_handler_with_caller<A>(
     aggregate_id: &str,
     state: &CommandHandler<A>,
     command: A::Command,
+    caller: &Caller,
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
@@ -125,12 +126,37 @@ where
         .map_err(|err| CommandHandlerError::Aggregate(AggregateError::UnexpectedError(Box::new(err))))?;
     metadata.insert("timestamp".to_string(), timestamp);
 
+    match caller {
+        Caller::Actor(actor) => {
+            metadata.insert("callerid".to_string(), actor.id().to_string());
+            metadata.insert("callertype".to_string(), actor.type_name().to_string());
+        }
+        Caller::Internal => {
+            metadata.insert("callertype".to_string(), "internal".to_string());
+        }
+        Caller::Anonymous => {
+            metadata.insert("callertype".to_string(), "anonymous".to_string());
+        }
+    }
+
     info!("Executing command: {:?}", command);
     state
         .execute_with_metadata(aggregate_id, command, metadata)
         .await
         .map_err(CommandHandlerError::Aggregate)
         .inspect_err(|err| error!("Error: {}", err.to_string()))
+}
+
+pub async fn public_command_handler<A>(
+    aggregate_id: &str,
+    state: &CommandHandler<A>,
+    command: A::Command,
+) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
+where
+    A: Aggregate,
+    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+{
+    command_handler_with_caller(aggregate_id, state, command, &Caller::Anonymous).await
 }
 
 #[cfg(test)]
@@ -347,9 +373,7 @@ mod tests {
         let handler = Arc::new(CapturingCommandHandler::default());
         let state: CommandHandler<TestAggregate> = handler.clone();
         let requests = Arc::new(Mutex::new(Vec::new()));
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
 
         command_handler(
             Arc::new(CapturingAuthorizationChecker {
@@ -380,9 +404,7 @@ mod tests {
     async fn query_handler_sends_stable_operation_name() {
         let state: Arc<dyn DynViewRepository<TestView, TestAggregate>> = Arc::new(TestViewRepository);
         let requests = Arc::new(Mutex::new(Vec::new()));
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
 
         let view = query_handler(
             Arc::new(CapturingAuthorizationChecker {
@@ -407,5 +429,70 @@ mod tests {
                 },
             }]
         );
+    }
+
+    #[tokio::test]
+    async fn command_handler_with_caller_attaches_user_caller_metadata_with_explicit_type() {
+        let handler = Arc::new(CapturingCommandHandler::default());
+        let state: CommandHandler<TestAggregate> = handler.clone();
+        let caller = Caller::Actor(Actor::user("user-uuid-456"));
+
+        command_handler_with_caller("agg-1", &state, TestCommand("emit".to_string()), &caller)
+            .await
+            .unwrap();
+
+        let calls = handler.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].metadata.get("callerid"), Some(&"user-uuid-456".to_string()));
+        assert_eq!(calls[0].metadata.get("callertype"), Some(&"user".to_string()));
+    }
+
+    #[tokio::test]
+    async fn command_handler_with_caller_attaches_service_account_caller_metadata() {
+        let handler = Arc::new(CapturingCommandHandler::default());
+        let state: CommandHandler<TestAggregate> = handler.clone();
+        let caller = Caller::Actor(Actor::service_account("sa-456"));
+
+        command_handler_with_caller("agg-1", &state, TestCommand("emit".to_string()), &caller)
+            .await
+            .unwrap();
+
+        let calls = handler.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].metadata.get("callerid"), Some(&"sa-456".to_string()));
+        assert_eq!(
+            calls[0].metadata.get("callertype"),
+            Some(&"service-account".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn command_handler_with_caller_attaches_internal_caller_metadata() {
+        let handler = Arc::new(CapturingCommandHandler::default());
+        let state: CommandHandler<TestAggregate> = handler.clone();
+
+        command_handler_with_caller("agg-1", &state, TestCommand("emit".to_string()), &Caller::Internal)
+            .await
+            .unwrap();
+
+        let calls = handler.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].metadata.get("callerid"), None);
+        assert_eq!(calls[0].metadata.get("callertype"), Some(&"internal".to_string()));
+    }
+
+    #[tokio::test]
+    async fn command_handler_with_caller_attaches_anonymous_caller_metadata() {
+        let handler = Arc::new(CapturingCommandHandler::default());
+        let state: CommandHandler<TestAggregate> = handler.clone();
+
+        command_handler_with_caller("agg-1", &state, TestCommand("emit".to_string()), &Caller::Anonymous)
+            .await
+            .unwrap();
+
+        let calls = handler.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].metadata.get("callerid"), None);
+        assert_eq!(calls[0].metadata.get("callertype"), Some(&"anonymous".to_string()));
     }
 }
