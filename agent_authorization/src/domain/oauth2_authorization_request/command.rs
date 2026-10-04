@@ -1,5 +1,6 @@
 use oid4vci::{authorization_request::AuthorizationRequest, InteractionType};
 use serde::Deserialize;
+use shared_kernel::authorization::CommandOperation;
 
 // TODO: remove this clippy allow
 #[allow(clippy::large_enum_variant)]
@@ -18,4 +19,17 @@ pub enum OAuth2AuthorizationRequestCommand {
     SubmitOpenId4VpResponse {
         openid4vp_response: serde_json::Value,
     },
+}
+
+impl CommandOperation for OAuth2AuthorizationRequestCommand {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateOAuth2AuthorizationRequest { .. } => "authorization.oauth2_authorization_requests.create",
+            Self::GrantConsent => "authorization.oauth2_authorization_requests.consent.grant",
+            Self::RejectConsent => "authorization.oauth2_authorization_requests.consent.reject",
+            Self::SubmitOpenId4VpResponse { .. } => {
+                "authorization.oauth2_authorization_requests.openid4vp_response.submit"
+            }
+        }
+    }
 }

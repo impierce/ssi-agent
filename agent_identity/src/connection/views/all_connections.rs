@@ -2,19 +2,19 @@ use super::ConnectionView;
 use crate::connection::event::ConnectionEvent;
 use crate::connection::views::Connection;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllConnectionsView {
     #[serde(flatten)]
-    pub connections: HashMap<String, ConnectionView>,
+    pub connections: IndexMap<String, ConnectionView>,
 }
 
 impl View<Connection> for AllConnectionsView {
     fn update(&mut self, event: &EventEnvelope<Connection>) {
         if let ConnectionEvent::ConnectionRemoved { connection_id } = &event.payload {
-            self.connections.remove(connection_id);
+            self.connections.shift_remove(connection_id);
             return;
         }
         self.connections

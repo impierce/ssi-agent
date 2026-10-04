@@ -1,0 +1,69 @@
+meta {
+  name: List identity services
+  type: http
+  seq: 20
+  tags: [
+    Identity
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/v0/services
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Identity services
+
+  request: {
+    url: {{BASE_URL}}/v0/services
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        [
+          {
+            "id": "",
+            "origins": [
+              "https://example.org/"
+            ],
+            "presentations": [
+              {
+                "holder": "",
+                "presentation_id": "",
+                "url": ""
+              }
+            ],
+            "resource": "",
+            "service": ""
+          }
+        ]
+      '''
+    }
+  }
+}
+
+script:post-response {
+  const items = res.getBody();
+  if (Array.isArray(items) && items.length > 0) {
+    const newestId = items[0]?.id;
+    if (newestId) {
+      bru.setVar('SERVICE_ID', newestId);
+    }
+  }
+}

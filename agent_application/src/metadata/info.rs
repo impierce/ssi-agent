@@ -12,7 +12,7 @@ include!(concat!(env!("OUT_DIR"), "/metadata.rs"));
 const APP_NAME: &str = "UniCore";
 
 #[skip_serializing_none]
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Info {
     app: String,
     profile: ApplicationProfile,
@@ -27,6 +27,15 @@ pub struct Info {
 }
 
 /// Returns the `version`, application `uptime` among other build metadata.
+#[utoipa::path(
+    get,
+    path = "/info",
+    operation_id = "info",
+    tags = ["Metadata"],
+    responses(
+        (status = 200, description = "Application information", body = Info),
+    )
+)]
 pub async fn info(State(state): State<MetadataState>) -> Json<Info> {
     let time_delta = TimeDelta::seconds(state.startup_instant.elapsed().as_secs() as i64);
     let uptime_human_readable = format!(

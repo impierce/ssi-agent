@@ -14,7 +14,6 @@ did_methods:
   did_web:
     enabled: false
 
-domain_linkage_enabled: false
 enable_interactive_authorization_flow: true
 
 signing_algorithms_supported:
@@ -39,8 +38,6 @@ event_publishers:
         credential: [UnsignedCredentialCreated, CredentialSigned]
         # To enable the interactive authorization flow for OID4VCIm, the event below needs to be listened to.
         # authorization_request: [OID4VPAuthorizationResponseVerified]
-
-
   nats:
     enabled: true
     nats_url: "nats://localhost:4222"
@@ -59,23 +56,7 @@ display:
       uri: "https://www.impierce.com/external/impierce-icon.png"
       alt_text: UniCore Logo
 
-credential_configurations:
-  - credential_configuration_id: w3c_vc_credential
-    format: jwt_vc_json
-    type:
-      - VerifiableCredential
-    display:
-      - name: Impierce Credential
-        locale: en
-        logo:
-          uri: https://www.impierce.com/external/impierce-logo.png
-          alt_text: UniCore Logo
-    authorization:
-      pre_authorized: true
-      transaction_code_constraints:
-        input_mode: "numeric"
-        length: 6
-        description: "Transaction code to authorize credential issuance"
+serve_openapi_enabled: false
 
 # File-based key management
 secret_manager:

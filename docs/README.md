@@ -18,12 +18,16 @@ These markdown files are used as input for generating the official documentation
 - **[Ubiquitous Language](./glossary/ubiquitous-language.md)** - Shared domain terminology (implementation-free, publishable)
 - **[Introduction](./introduction/)** - Quick start and feature overview
 - **[Configuration](./configuration/)** - Setup and environment variables
+- **[Migration Guides](./migration-guides)** - Step-by-step version migration instructions
 - **[API Documentation](https://beta.docs.impierce.com/unicore/)** - OpenAPI specification
 
 ### For Developers & AI Agents
 
-- **[AI Context & Code Navigation](./glossary/CONTEXT.md)** - Architecture patterns and bounded context mapping
+- **[AI Context & Code Navigation](../CONTEXT.md)** - Architecture patterns and bounded context mapping
 - **[Glossary Overview](./glossary/)** - How to use ubiquitous language and AI context
+- **[Template Model](./template-model.md)** - Current template structure, reasoning, and data-model-specific behavior
 - **[Architecture Decision Records](./adr/)** - Why certain design choices were made
 - **[Deployment](./deployment/)** - Production deployment guides
+- **[Metrics](./metrics/README.md)** - OpenTelemetry metrics export and how to add new metrics
+- **[Fuzzing](./testing/fuzzing.md)** - Property-based fuzzing of the HTTP API against its OpenAPI specification
 - **[Problem Details](./problem-details/)** - Troubleshooting and error handling

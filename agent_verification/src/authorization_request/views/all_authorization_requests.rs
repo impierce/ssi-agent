@@ -1,13 +1,13 @@
 use super::AuthorizationRequestView;
 use crate::authorization_request::views::AuthorizationRequest;
 use cqrs_es::{EventEnvelope, View};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllAuthorizationRequestsView {
     #[serde(flatten)]
-    pub authorization_requests: HashMap<String, AuthorizationRequestView>,
+    pub authorization_requests: IndexMap<String, AuthorizationRequestView>,
 }
 
 impl View<AuthorizationRequest> for AllAuthorizationRequestsView {

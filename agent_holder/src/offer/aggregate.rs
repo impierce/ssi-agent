@@ -2,8 +2,7 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_credential::credential::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
@@ -16,7 +15,6 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = HolderOfferStatus)]
 pub enum Status {
     #[default]
     Pending,
@@ -40,6 +38,7 @@ pub struct Offer {
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_offer: Option<CredentialOfferParameters>,
+    #[schema(inline)]
     pub status: Status,
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
@@ -53,25 +52,27 @@ pub struct Offer {
     pub credentials: Vec<OfferCredential>,
 }
 
-#[async_trait]
 impl Aggregate for Offer {
     type Command = OfferCommand;
     type Event = OfferEvent;
     type Error = OfferError;
     type Services = Arc<HolderServices>;
 
-    fn aggregate_type() -> String {
-        "received_offer".to_string()
-    }
+    const TYPE: &'static str = "received_offer";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferError::*;
         use OfferEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             ReceiveCredentialOffer {
                 received_offer_id,
                 credential_offer,
@@ -274,6 +275,12 @@ impl Aggregate for Offer {
                 }])
             }
             RejectCredentialOffer { received_offer_id } => {
+                // A never-received offer has no `credential_offer` but does default to `Pending`, so the
+                // status check alone would let a rejection materialise an offer that never existed.
+                if self.credential_offer.is_none() {
+                    return Err(MissingCredentialOfferError);
+                }
+
                 // TODO: should we 'do nothing' or log a `warn!` message instead of returning an error?
                 if self.status != Status::Pending {
                     return Err(CredentialOfferStatusNotPendingError);
@@ -284,7 +291,13 @@ impl Aggregate for Offer {
                     status: Status::Rejected,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -327,14 +340,19 @@ pub mod tests {
     use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
     use agent_authorization::services::AuthorizationServices;
-    use agent_issuance::server_config::aggregate::test_utils::credential_configurations_supported;
+    use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
+    use agent_issuance::state::SERVER_CONFIG_ID;
+    use agent_library::template::aggregate::{
+        DataModel, Display, HolderType, Logo, Status as TemplateStatus, Visibility,
+    };
+    use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::config;
-    use agent_shared::config::config_mut;
+    use agent_shared::config::{config, config_mut, Authorization, CredentialConfiguration};
     use agent_shared::generate_random_string;
+    use agent_shared::handlers::public_command_handler as command_handler;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
+    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -345,6 +363,8 @@ pub mod tests {
     use serde_json::json;
     use tokio::net::TcpListener;
     use tower::Service as _;
+
+    const TEMPLATE_ID: &str = "001";
 
     type OfferTestFramework = TestFramework<Offer>;
 
@@ -361,15 +381,87 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
-        let mut credential_isser = issuance::router(issuance_state.clone());
+
+        let library_state =
+            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+
+        // Create a template and register a credential configuration for it.
+        // (The CredentialConfigurationProjection is not wired in tests, so we do this manually.)
+        command_handler(
+            TEMPLATE_ID,
+            &library_state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: TEMPLATE_ID.to_string(),
+                source_template_id: None,
+                title: "Test Template".to_string(),
+                display: Box::new(Some(Display {
+                    name: "Verifiable Credential".to_string(),
+                    logo: Some(Logo {
+                        uri: "https://www.impierce.com/external/impierce-logo.png".to_string(),
+                        alt_text: Some("Impierce Logo".to_string()),
+                    }),
+                })),
+                data_model: DataModel::W3CVcDataModelV1_1,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: TemplateStatus::Published,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
+            "credential_configuration_id": TEMPLATE_ID,
+            "format": "jwt_vc_json",
+            "type": ["VerifiableCredential"],
+            "display": [
+                {
+                    "name": "Verifiable Credential",
+                    "locale": "en",
+                    "logo": {
+                        "uri": "https://www.impierce.com/external/impierce-logo.png",
+                        "alt_text": "Impierce Logo"
+                    }
+                }
+            ],
+            "authorization": { "pre_authorized": true }
+        }))
+        .unwrap();
+        command_handler(
+            SERVER_CONFIG_ID,
+            &issuance_state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration,
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let mut issuance_router = issuance::router((issuance_state.clone(), library_state));
 
         let authorization_state = Arc::new(
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &Default::default(),
                 Default::default(),
                 Default::default(),
             )
@@ -382,7 +474,7 @@ pub mod tests {
 
         let received_offer_id = generate_random_string();
 
-        let _ = credential_isser
+        let _ = issuance_router
             .call(
                 Request::builder()
                     .method(http::Method::POST)
@@ -400,7 +492,7 @@ pub mod tests {
                                         "name": "Master of Oceanography"
                                     }
                             }},
-                            "credentialConfigurationId": "001",
+                            "templateId": TEMPLATE_ID,
                             "expiresAt": "never",
                         }))
                         .unwrap(),
@@ -409,7 +501,7 @@ pub mod tests {
             )
             .await;
 
-        let response = credential_isser
+        let response = issuance_router
             .call(
                 Request::builder()
                     .method(http::Method::POST)
@@ -418,7 +510,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "offerId": received_offer_id,
-                            "credentialConfigurationIds": ["001"],
+                            "templateIds": [TEMPLATE_ID],
                         }))
                         .unwrap(),
                     ))
@@ -432,7 +524,7 @@ pub mod tests {
         let credential_offer: CredentialOffer = String::from_utf8(body.to_vec()).unwrap().parse().unwrap();
 
         tokio::spawn(async move {
-            axum::serve(listener, credential_isser.merge(authorization_server))
+            axum::serve(listener, issuance_router.merge(authorization_server))
                 .await
                 .unwrap();
         });
@@ -448,6 +540,15 @@ pub mod tests {
             CredentialOffer::CredentialOffer(credential_offer) => credential_offer,
             _ => unreachable!(),
         }
+    }
+
+    #[fixture]
+    fn credential_configurations_supported() -> HashMap<String, CredentialConfigurationsSupportedObject> {
+        use agent_issuance::credential::aggregate::test_utils::JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION;
+        HashMap::from_iter(vec![(
+            TEMPLATE_ID.to_string(),
+            JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+        )])
     }
 
     #[rstest]
@@ -590,6 +691,17 @@ pub mod tests {
                 received_offer_id: received_offer_id.clone(),
                 status: Status::Rejected,
             }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_reject_unknown_credential_offer(received_offer_id: String) {
+        OfferTestFramework::with(HolderServices::default().await)
+            .given_no_previous_events()
+            .when_async(OfferCommand::RejectCredentialOffer { received_offer_id })
+            .await
+            .then_expect_error_message(&OfferError::MissingCredentialOfferError.to_string());
     }
 }
 

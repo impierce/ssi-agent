@@ -9,6 +9,7 @@ publish.workspace = true
 agent_library = { path = "../agent_library" }
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -18,6 +19,7 @@ chrono.workspace = true
 derivative.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
+indexmap.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
 oauth_tsl.workspace = true
@@ -44,6 +46,7 @@ rstest = { workspace = true, optional = true }
 [dev-dependencies]
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_issuance = { path = ".", features = ["test_utils"] }
+agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }
@@ -51,6 +54,7 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 async-std.workspace = true
 serial_test = "3.0"
+tokio.workspace = true
 tracing-test.workspace = true
 
 [features]

@@ -12,7 +12,7 @@ use agent_issuance::{
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
 use agent_library::template::aggregate::Template;
-use agent_shared::config::config;
+use agent_shared::config::{config, EventPublisherHttp as EventPublisherHttpConfig};
 use agent_store::{
     AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
     ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
@@ -64,9 +64,11 @@ pub struct EventPublisherHttp {
 
 impl EventPublisherHttp {
     pub fn load() -> anyhow::Result<Vec<Self>> {
-        config()
-            .event_publishers
-            .http
+        Self::load_from(&config().event_publishers.http)
+    }
+
+    pub fn load_from(configurations: &[EventPublisherHttpConfig]) -> anyhow::Result<Vec<Self>> {
+        configurations
             .iter()
             .filter(|c| c.enabled)
             .map(|event_publisher_http| {
@@ -535,9 +537,24 @@ mod tests {
 
     use agent_issuance::offer::aggregate::Status;
     use agent_issuance::offer::event::OfferEvent;
-    use agent_shared::config::{set_config, Events};
+    use agent_shared::config::{EventPublisherHttp as EventPublisherHttpConfig, Events};
+    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
+    /// `dispatch` sends requests from a detached task, so wait until they arrive (or give up after a timeout).
+    async fn wait_for_requests(mock_server: &MockServer, count: usize) -> Vec<Request> {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+
+        loop {
+            let received_requests = mock_server.received_requests().await.unwrap();
+            if received_requests.len() >= count || tokio::time::Instant::now() >= deadline {
+                return received_requests;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn it_works() {
@@ -551,18 +568,26 @@ mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        // Set the test configuration.
-        set_config().enable_event_publisher_http(0);
-        set_config().set_event_publisher_http_target_url(0, target_url.clone());
-        set_config().set_event_publisher_http_target_events(
-            0,
-            Events {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_static("Basic YWxhZGRpbjpvcGVuc2VzYW1l"),
+        );
+        let configuration = EventPublisherHttpConfig {
+            enabled: true,
+            target_url: target_url.clone(),
+            headers: Some(headers),
+            events: Events {
                 offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
                 ..Default::default()
             },
-        );
+        };
 
-        let publisher = EventPublisherHttp::load().unwrap().into_iter().next().unwrap();
+        let publisher = EventPublisherHttp::load_from(&[configuration])
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
 
         // A new event for the `Offer` aggregate.
         let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
@@ -581,11 +606,8 @@ mod tests {
         // Dispatch the event.
         publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
 
-        // Wait for the request to arrive at the mock server endpoint.
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        let received_requests = mock_server.received_requests().await;
-        let received_request = received_requests.as_ref().unwrap().first().unwrap();
+        let received_requests = wait_for_requests(&mock_server, 1).await;
+        let received_request = received_requests.first().expect("the event should be dispatched");
 
         // Assert that the event was dispatched to the target URL.
         assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());
@@ -614,5 +636,90 @@ mod tests {
 
         // Assert that the event was not dispatched to the target URL.
         assert!(mock_server.received_requests().await.unwrap().len() == 1);
+    }
+
+    #[test]
+    fn load_creates_a_publisher_for_every_aggregate_with_target_events() {
+        use agent_shared::config as c;
+
+        let target_url = "https://every-aggregate.example.com/events".to_string();
+        let disabled_target_url = "https://disabled.example.com/events".to_string();
+        let events = Events {
+            access_token: vec![c::AccessTokenEvent::AccessTokenIssued],
+            authorization_code: vec![c::AuthorizationCodeEvent::AuthorizationCodeCreated],
+            client: vec![c::ClientEvent::ClientRegistered],
+            oauth2_authorization_request: vec![c::OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated],
+            connection: vec![c::ConnectionEvent::ConnectionAdded],
+            document: vec![c::DocumentEvent::DocumentCreated],
+            profile: vec![c::ProfileEvent::ProfileCreated],
+            service: vec![c::ServiceEvent::LinkedDomainsAdded],
+            template: vec![c::TemplateEvent::TemplateCreated],
+            server_config: vec![c::ServerConfigEvent::ServerMetadataInitialized],
+            credential: vec![c::CredentialEvent::UnsignedCredentialCreated],
+            offer: vec![c::OfferEvent::CredentialOfferCreated],
+            nonce: vec![c::NonceEvent::NonceGenerated],
+            status_list: vec![c::StatusListEvent::StatusListCreated],
+            holder_credential: vec![c::HolderCredentialEvent::CredentialAdded],
+            presentation: vec![c::PresentationEvent::PresentationCreated],
+            received_offer: vec![c::ReceivedOfferEvent::CredentialOfferReceived],
+            authorization_request: vec![c::AuthorizationRequestEvent::AuthorizationRequestCreated],
+        };
+        let configurations = [
+            EventPublisherHttpConfig {
+                enabled: true,
+                target_url: target_url.clone(),
+                headers: None,
+                events: events.clone(),
+            },
+            EventPublisherHttpConfig {
+                enabled: false,
+                target_url: disabled_target_url.clone(),
+                headers: None,
+                events,
+            },
+        ];
+
+        let publishers = EventPublisherHttp::load_from(&configurations).unwrap();
+        let target_url_of = |publisher: &EventPublisherHttp| {
+            publisher
+                .offer
+                .as_ref()
+                .map(|offer| offer.target_url.clone())
+                .unwrap_or_default()
+        };
+        assert!(!publishers
+            .iter()
+            .any(|publisher| target_url_of(publisher) == disabled_target_url));
+        let mut publisher = publishers
+            .into_iter()
+            .find(|publisher| target_url_of(publisher) == target_url)
+            .unwrap();
+
+        assert_eq!(
+            publisher.offer.as_ref().unwrap().target_events,
+            vec!["CredentialOfferCreated".to_string()]
+        );
+        assert!(publisher.access_token().is_some());
+        assert!(publisher.authorization_code().is_some());
+        assert!(publisher.client().is_some());
+        assert!(publisher.oauth2_authorization_request().is_some());
+        assert!(publisher.connection().is_some());
+        assert!(publisher.document().is_some());
+        assert!(publisher.profile().is_some());
+        assert!(publisher.service().is_some());
+        assert!(publisher.template().is_some());
+        assert!(publisher.server_config().is_some());
+        assert!(publisher.credential().is_some());
+        assert!(publisher.offer().is_some());
+        assert!(publisher.nonce().is_some());
+        assert!(publisher.status_list().is_some());
+        assert!(publisher.holder_credential().is_some());
+        assert!(publisher.presentation().is_some());
+        assert!(publisher.received_offer().is_some());
+        assert!(publisher.authorization_request().is_some());
+        assert!(publisher.public_offer().is_none());
+
+        // Each publisher is handed out only once.
+        assert!(publisher.offer().is_none());
     }
 }

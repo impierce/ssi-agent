@@ -21,19 +21,14 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
 use url::Url;
 
-use crate::{
-    config::openapi::{authorization, credential_metadata},
-    error::SharedError,
-    profile::ApplicationProfile,
-};
+use crate::{config::openapi::credential_metadata, error::SharedError, profile::ApplicationProfile};
 // Re-export
-pub use provisioned::load_provisioned_config;
+pub use provisioned::{load_provisioned_config, warn_deprecated_settings};
 
 pub const BITS_PER_STATUS: u8 = 2; // Amount of bits per status
 pub const STATUS_LIST_BYTES_AMOUNT: usize = 2048; // Amount of bytes in the status list. Equates to 8192 statuses for BITS_PER_STATUS = 2.
@@ -55,24 +50,6 @@ pub static CONFIG: Lazy<RwLock<ApplicationConfiguration>> = Lazy::new(|| {
         ApplicationConfiguration::load(load_provisioned_config().unwrap(), ApplicationProfile::load())
             // Fail fast when the configuration is not suitable for the current application profile.
             .unwrap_or_else(|e| panic!("{e}"));
-
-    #[cfg(not(feature = "test_utils"))]
-    {
-        use tracing::{debug, info};
-        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
-        let tracing_subscriber = tracing_subscriber::registry()
-            // Set the default logging level to `info`, equivalent to `RUST_LOG=info`
-            .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()));
-
-        match application_configuration.log_format {
-            LogFormat::Json => tracing_subscriber.with(tracing_subscriber::fmt::layer().json()).init(),
-            LogFormat::Text => tracing_subscriber.with(tracing_subscriber::fmt::layer()).init(),
-        }
-
-        info!("Configuration loaded successfully");
-        debug!("{:#?}", application_configuration);
-    }
 
     RwLock::new(application_configuration)
 });
@@ -110,6 +87,9 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
 #[derive(Debug, Deserialize, Clone, Serialize, Config)]
 pub struct ApplicationConfiguration {
     #[config(default)]
+    #[serde(default, skip_serializing_if = "DevConfig::is_empty")]
+    pub dev: DevConfig,
+    #[config(default)]
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
             type_: EventStoreType::InMemory,
@@ -128,6 +108,8 @@ pub struct ApplicationConfiguration {
         transform_with = "into_directory"
     )]
     pub public_url: Url,
+    #[config(default)]
+    pub overwrite_previous_did_web: Option<String>,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
@@ -196,14 +178,8 @@ pub struct ApplicationConfiguration {
     pub redirect_uri: Url,
     #[config(default)]
     pub cors_enabled: bool,
-    #[config(
-        default,
-        development_default = "Metrics {
-            enabled: false,
-            port: 9090
-        }"
-    )]
-    pub metrics: Metrics,
+    #[config(default)]
+    pub serve_openapi_enabled: bool,
     #[config(
         default,
         development_default = "HashMap::from(
@@ -253,14 +229,10 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     #[config(default = "1000")]
     pub external_server_response_timeout_ms: u64,
-    #[config(default, production_default = "true")]
-    pub domain_linkage_enabled: bool,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
     pub secret_manager: SecretManagerConfig,
-    #[config(default)]
-    pub credential_configuration_file: Option<Box<PathBuf>>,
     #[config(default = "
         HashMap::from(
             [
@@ -340,6 +312,12 @@ pub struct ApplicationConfiguration {
 }
 
 impl ApplicationConfiguration {
+    fn apply_profile(&mut self, application_profile: &ApplicationProfile) {
+        if let ApplicationProfile::Production = application_profile {
+            self.dev = DevConfig::default();
+        }
+    }
+
     /// Validates whether the configuration is suitable for development (enforce restrictions).
     pub fn validate_development(&self) -> Result<(), SharedError> {
         if self.event_store.type_ == EventStoreType::InMemory {
@@ -459,6 +437,18 @@ impl ApplicationConfiguration {
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct DevConfig {
+    #[serde(serialize_with = "redact")]
+    pub api_key: Option<String>,
+}
+
+impl DevConfig {
+    fn is_empty(&self) -> bool {
+        self.api_key.is_none()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
     #[default]
@@ -551,12 +541,12 @@ pub struct CredentialConfiguration {
     #[schema(schema_with = credential_metadata)]
     #[serde(flatten)]
     pub credential_metadata: CredentialMetadata,
-    #[schema(schema_with = authorization)]
     #[serde(default)]
     pub authorization: Authorization,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+#[schema(as = HolderAuthorization)]
 pub struct Authorization {
     pub pre_authorized: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -574,6 +564,7 @@ impl Default for Authorization {
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+#[schema(as = ProfileLogo)]
 pub struct Logo {
     pub uri: Option<Url>,
     pub alt_text: Option<String>,
@@ -696,6 +687,8 @@ pub enum DocumentEvent {
     PublicKeyUpdated,
     DocumentStatusUpdated,
     ServiceAdded,
+    ServiceRemoved,
+    DocumentDidWebOverwritten,
     DocumentPublished,
 }
 
@@ -711,9 +704,11 @@ pub enum ProfileEvent {
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
 pub enum ServiceEvent {
-    DomainLinkageServiceCreated,
-    DomainLinkageServiceDeleted,
-    LinkedVerifiablePresentationServiceCreated,
+    LinkedDomainsAdded,
+    LinkedDomainsRemoved,
+    LinkedDomainsCredentialsRenewed,
+    LinkedVerifiablePresentationsAdded,
+    LinkedVerifiablePresentationsRemoved,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -721,15 +716,13 @@ pub enum TemplateEvent {
     TemplateCreated,
     TitleUpdated,
     DisplayUpdated,
-    DataModelUpdated,
-    CreatorUpdated,
-    HolderTypeUpdated,
     TagsUpdated,
     StatusUpdated,
     VisibilityUpdated,
     DescriptionUpdated,
     TypeUpdated,
     SchemaUpdated,
+    CredentialExpirationUpdated,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
@@ -797,22 +790,6 @@ pub enum AuthorizationRequestEvent {
     AuthorizationRequestObjectSigned,
     SIOPv2AuthorizationResponseVerified,
     OID4VPAuthorizationResponseVerified,
-}
-
-#[derive(Debug, Deserialize, Clone, Serialize)]
-#[serde(default)]
-pub struct Metrics {
-    pub enabled: bool,
-    pub port: u16,
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            port: 9090,
-        }
-    }
 }
 
 /// All DID methods supported by UniCore
@@ -1091,7 +1068,6 @@ mod tests {
                     event_store:
                         type: "in_memory"
                     cors_enabled: true
-                    domain_linkage_enabled: true
                     secret_manager:
                         stronghold_password: "sup3rSecr3t"
                 "#,
@@ -1118,10 +1094,7 @@ mod tests {
               "ietf_oauth_token_status_list_uri": "http://localhost:3033/ietf-oauth-token-status-list",
               "redirect_uri": "http://localhost:3033/redirect",
               "cors_enabled": true,
-              "metrics": {
-                "enabled": false,
-                "port": 9090
-              },
+              "serve_openapi_enabled": false,
               "did_methods": {
                 "did:jwk": {
                   "enabled": true,
@@ -1132,7 +1105,6 @@ mod tests {
                 }
               },
               "external_server_response_timeout_ms": 1000,
-              "domain_linkage_enabled": true,
               "credential_offer_by_value_enabled": false,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
@@ -1188,11 +1160,77 @@ mod tests {
                     "type": "in_memory"
                 },
                 "cors_enabled": true,
-                "domain_linkage_enabled": true,
                 "secret_manager": {
                     "stronghold_password": "<REDACTED>"
                 }
             })
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_development_config_loads_static_api_key() {
+        let provisioned_config = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                    dev:
+                        api_key: "local-development-key"
+                "#,
+                config::FileFormat::Yaml,
+            ))
+            .build()
+            .unwrap();
+
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+        assert_eq!(config.dev.api_key.as_deref(), Some("local-development-key"));
+        assert_eq!(
+            serde_json::to_value(&config.dev).unwrap(),
+            json!({"api_key": "<REDACTED>"})
+        );
+        assert_eq!(
+            config.get_provisioned_config(),
+            json!({
+                "dev": {
+                    "api_key": "<REDACTED>"
+                }
+            })
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_production_config_ignores_static_development_api_key() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__DEV__API_KEY", Some("local-development-key")),
+            ],
+            || {
+                let provisioned_config = config::Config::builder()
+                    .add_source(config::File::from_str(
+                        r#"
+                            dev:
+                                api_key: "yaml-development-key"
+                            application_url: "http://localhost"
+                            event_store:
+                                type: "postgres"
+                                connection_string: "postgresql://:test:"
+                            display:
+                                - name: "UniCore"
+                        "#,
+                        config::FileFormat::Yaml,
+                    ))
+                    .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                    .build()
+                    .unwrap();
+
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
+
+                assert!(config.dev.api_key.is_none());
+                assert!(config.get_provisioned_config().get("dev").is_none());
+            },
         );
     }
 
@@ -1424,6 +1462,26 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_loads_fuzz_config_file() {
+        temp_env::with_vars(
+            [(
+                "UNICORE__CONFIG_FILE",
+                Some("../agent_application/docker/fuzz.config.yaml"),
+            )],
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+                assert!(config.signing_algorithms_supported[&Algorithm::EdDSA].enabled);
+                assert!(config.event_publishers.http.is_empty());
+                assert!(config.event_publishers.nats.is_none());
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
     fn test_env_var_overwrites_config_file() {
         temp_env::with_vars(
             [
@@ -1441,6 +1499,21 @@ mod tests {
                 assert_eq!(serialized.get("log_format").unwrap(), &json!("text"));
             },
         );
+    }
+
+    #[test]
+    #[serial]
+    fn test_serve_openapi_enabled_environment_variable() {
+        temp_env::with_var("UNICORE__SERVE_OPENAPI_ENABLED", Some("true"), || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+            assert!(config.serve_openapi_enabled);
+        });
     }
 
     #[test]
@@ -1491,14 +1564,8 @@ mod tests {
         assert!(config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
         assert!(config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled);
 
-        // Domain linkage is disabled
-        assert!(!config.domain_linkage_enabled);
-
         // Some display information is set
         assert_eq!(config.display.len(), 1);
-
-        // The Credential Configuration file is set to `None`
-        assert!(config.credential_configuration_file.is_none());
     }
 
     #[test]
@@ -1526,8 +1593,6 @@ mod tests {
                 let config =
                     ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Production).unwrap();
 
-                assert!(config.domain_linkage_enabled);
-
                 // Disable DID methods that do not support updates
                 assert!(!config.did_methods.get(&SupportedDidMethod::Jwk).unwrap().enabled);
                 assert!(!config.did_methods.get(&SupportedDidMethod::Key).unwrap().enabled);
@@ -1547,6 +1612,25 @@ mod tests {
 
         // Assert that the public URL is set to the application URL
         assert_eq!(config.public_url, config.application_url);
+    }
+
+    #[test]
+    #[serial]
+    fn test_did_web_overwrite_authorization_is_loaded_from_environment() {
+        temp_env::with_var(
+            "UNICORE__OVERWRITE_PREVIOUS_DID_WEB",
+            Some("did:web:old.example.org"),
+            || {
+                let provisioned_config = load_provisioned_config().unwrap();
+                let config =
+                    ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+
+                assert_eq!(
+                    config.overwrite_previous_did_web.as_deref(),
+                    Some("did:web:old.example.org")
+                );
+            },
+        );
     }
 
     #[test]

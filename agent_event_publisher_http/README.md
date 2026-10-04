@@ -87,6 +87,8 @@ DocumentCreated
 PublicKeyUpdated
 DocumentStatusUpdated
 ServiceAdded
+ServiceRemoved
+DocumentDidWebOverwritten
 DocumentPublished
 ```
 
@@ -104,9 +106,11 @@ SourceUpdated,
 #### `service`
 
 ```
-DomainLinkageServiceCreated
-DomainLinkageServiceDeleted
-LinkedVerifiablePresentationServiceCreated
+LinkedDomainsAdded
+LinkedDomainsRemoved
+LinkedDomainsCredentialsRenewed
+LinkedVerifiablePresentationsAdded
+LinkedVerifiablePresentationsRemoved
 ```
 
 #### `template`
@@ -115,15 +119,13 @@ LinkedVerifiablePresentationServiceCreated
 TemplateCreated
 TitleUpdated
 DisplayUpdated
-DataModelUpdated
-CreatorUpdated
-HolderTypeUpdated
 TagsUpdated
 StatusUpdated
 VisibilityUpdated
 DescriptionUpdated
 TypeUpdated
 SchemaUpdated
+CredentialExpirationUpdated
 ```
 
 #### `server_config`

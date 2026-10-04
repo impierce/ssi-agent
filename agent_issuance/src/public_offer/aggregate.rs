@@ -1,7 +1,6 @@
 use crate::public_offer::{command::PublicOfferCommand, error::PublicOfferError, event::PublicOfferEvent};
 use crate::services::IssuanceServices;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -16,23 +15,21 @@ pub struct PublicOffer {
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[async_trait]
 impl Aggregate for PublicOffer {
     type Command = PublicOfferCommand;
     type Event = PublicOfferEvent;
     type Error = PublicOfferError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "public_offer".to_string()
-    }
+    const TYPE: &'static str = "public_offer";
 
     async fn handle(
-        &self,
+        &mut self,
         command: Self::Command,
         _services: &Self::Services,
-    ) -> Result<Vec<Self::Event>, Self::Error> {
-        match command {
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
+        let events: Vec<Self::Event> = match command {
             PublicOfferCommand::Create { offer_id, template_id } => {
                 if !self.id.is_empty() && !self.deleted {
                     return Err(PublicOfferError::AlreadyExists);
@@ -49,7 +46,7 @@ impl Aggregate for PublicOffer {
                     return Err(PublicOfferError::NotFound);
                 }
                 if !self.active {
-                    return Ok(vec![]);
+                    return Ok(());
                 }
 
                 Ok(vec![PublicOfferEvent::TakenOffline { offer_id }])
@@ -59,7 +56,7 @@ impl Aggregate for PublicOffer {
                     return Err(PublicOfferError::NotFound);
                 }
                 if self.active {
-                    return Ok(vec![]);
+                    return Ok(());
                 }
 
                 Ok(vec![PublicOfferEvent::TakenOnline { offer_id }])
@@ -71,7 +68,13 @@ impl Aggregate for PublicOffer {
 
                 Ok(vec![PublicOfferEvent::Deleted { offer_id }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -108,7 +111,7 @@ pub mod tests {
     use super::*;
     use crate::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use cqrs_es::test::TestFramework;
+    use cqrs_es::{event_sink::EventSink, test::TestFramework};
     use rstest::rstest;
 
     type PublicOfferTestFramework = TestFramework<PublicOffer>;
@@ -121,17 +124,20 @@ pub mod tests {
 
         let issuance_services = IssuanceServices::default().await;
 
-        let aggregate = PublicOffer::default();
-        let events = aggregate
+        let mut aggregate = PublicOffer::default();
+        let sink = EventSink::default();
+        aggregate
             .handle(
                 PublicOfferCommand::Create {
                     offer_id: offer_id.clone(),
                     template_id: template_id.clone(),
                 },
                 &issuance_services,
+                &sink,
             )
             .await
             .expect("create command should succeed");
+        let events = sink.collect().await;
 
         assert_eq!(events.len(), 1);
         match &events[0] {
@@ -185,16 +191,19 @@ pub mod tests {
             offer_id: offer_id.clone(),
         });
 
-        let events = aggregate
+        let sink = EventSink::default();
+        aggregate
             .handle(
                 PublicOfferCommand::Create {
                     offer_id: offer_id.clone(),
                     template_id: new_template_id.clone(),
                 },
                 &issuance_services,
+                &sink,
             )
             .await
             .expect("recreate command should succeed after delete");
+        let events = sink.collect().await;
 
         assert_eq!(events.len(), 1);
         match &events[0] {

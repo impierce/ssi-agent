@@ -1,9 +1,12 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::error::IntoApiErrorExt;
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::command::CredentialCommand,
     offer::{
         aggregate::{Offer, OfferCredential},
         command::OfferCommand,
+        error::OfferError,
         queries::ReceivedOfferView,
     },
     state::HolderState,
@@ -27,12 +30,18 @@ use std::sync::Arc;
     tags = ["Identity", "Holder"],
     responses(
         (status = 201, description = "Credential offer accepted successfully", body = Offer),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential offer not found"),
+        (status = 409, description = "The credential offer is not in a state that allows accepting it"),
+        (status = 422, description = "The credential offer cannot be processed, e.g. it carries no pre-authorized code"),
+        (status = 501, description = "The credential issuer requires a flow UniCore does not support yet"),
+        (status = 502, description = "The credential issuer or its authorization server could not be reached"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(
     State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
     Path(received_offer_id): Path<String>,
 ) -> Result<Response, ApiError> {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the
@@ -41,25 +50,51 @@ pub(crate) async fn accept(
     // Furthermore, the Application Layer (not implemented yet) should be kept very thin as well. See: https://github.com/impierce/ssi-agent/issues/114
 
     // Check if the Credential Offer exists.
-    query_handler(&received_offer_id, &state.query.received_offer)
-        .await?
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))?;
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &received_offer_id,
+        Some(&received_offer_id),
+        &state.query.received_offer,
+    )
+    .await?
+    .ok_or_else(|| OfferError::MissingCredentialOfferError.into_api_error())?;
 
     let command = OfferCommand::AcceptCredentialOffer {
         received_offer_id: received_offer_id.clone(),
     };
 
     // Accept the Credential Offer
-    command_handler(&received_offer_id, &state.command.offer, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &received_offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
     let command = OfferCommand::SendCredentialRequest {
         received_offer_id: received_offer_id.clone(),
     };
 
     // Send the Credential Request
-    command_handler(&received_offer_id, &state.command.offer, command).await?;
+    internal_command_handler(
+        state.authorization_checker.clone(),
+        &received_offer_id,
+        &state.command.offer,
+        command,
+    )
+    .await?;
 
-    let credentials = match query_handler(&received_offer_id, &state.query.received_offer).await? {
+    let credentials = match internal_query_handler(
+        state.authorization_checker.clone(),
+        &received_offer_id,
+        Some(&received_offer_id),
+        &state.query.received_offer,
+    )
+    .await?
+    {
         Some(ReceivedOfferView { credentials, .. }) => credentials,
         // TODO: this *should* be an impossible error, what should we return here?
         _ => return Err(ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)),
@@ -77,12 +112,23 @@ pub(crate) async fn accept(
         };
 
         // Add the Credential to the state.
-        command_handler(&holder_credential_id, &state.command.credential, command).await?;
+        internal_command_handler(
+            state.authorization_checker.clone(),
+            &holder_credential_id,
+            &state.command.credential,
+            command,
+        )
+        .await?;
     }
 
-    query_handler(&received_offer_id, &state.query.received_offer)
-        .await?
-        .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &received_offer_id,
+        Some(&received_offer_id),
+        &state.query.received_offer,
+    )
+    .await?
+    .map(|received_offer_view| (StatusCode::CREATED, Json(received_offer_view)).into_response())
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }

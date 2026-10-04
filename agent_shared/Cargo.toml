@@ -7,6 +7,9 @@ publish.workspace = true
 
 [dependencies]
 agent_macros = { path = "../agent_macros" }
+shared-kernel.workspace = true
+
+anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 chrono.workspace = true
@@ -34,15 +37,13 @@ temp-env = "0.3"
 thiserror.workspace = true
 time = { version = "0.3" }
 tracing.workspace = true
-tracing-subscriber.workspace = true
 url.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
-agent_secret_manager = { path = "../agent_secret_manager", features = [
-    "test_utils",
-] }
 agent_shared = { path = ".", features = ["test_utils"] }
+
+oid4vc-core = { workspace = true, features = ["test-utils"] }
 serial_test = "3.0"
 tokio.workspace = true
 wiremock.workspace = true

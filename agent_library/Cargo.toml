@@ -7,11 +7,14 @@ publish.workspace = true
 
 [dependencies]
 agent_shared = { path = "../agent_shared" }
+shared-kernel.workspace = true
 
 async-trait.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
-jsonschema = "0.43"
+iso8601.workspace = true
+indexmap.workspace = true
+jsonschema.workspace = true
 lazy_static.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -21,6 +24,7 @@ strum_macros.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 utoipa.workspace = true
+uuid.workspace = true
 
 # `test_utils` dependencies
 rstest = { workspace = true, optional = true }

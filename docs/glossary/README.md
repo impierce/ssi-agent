@@ -24,7 +24,7 @@ When reading or writing about UniCore:
 
 ---
 
-## 🔧 [AI Context & Code Navigation](./CONTEXT.md)
+## 🔧 [AI Context & Code Navigation](../../CONTEXT.md)
 
 **Audience**: AI agents, developers, architects
 
@@ -42,8 +42,8 @@ Contains:
 When navigating the codebase:
 
 1. Start with a domain concept from [Ubiquitous Language](./ubiquitous-language.md)
-2. Find where it lives using the [Bounded Context Mapping](./CONTEXT.md#bounded-context-mapping)
-3. Understand the architectural pattern (Aggregate, Event, Command) from [Key Architectural Patterns](./CONTEXT.md#key-architectural-patterns)
+2. Find where it lives using the [Bounded Context Mapping](../../CONTEXT.md#bounded-context-mapping)
+3. Understand the architectural pattern (Aggregate, Event, Command) from [Key Architectural Patterns](../../CONTEXT.md#key-architectural-patterns)
 4. Locate the specific code files
 
 ---
@@ -62,7 +62,7 @@ Add to [ubiquitous-language.md](./ubiquitous-language.md):
 
 ### 2. New Implementation Pattern
 
-Update [CONTEXT.md](./CONTEXT.md):
+Update [CONTEXT.md](../../CONTEXT.md):
 
 - Describe the architectural pattern or aggregate
 - Map to relevant codebase locations
@@ -70,7 +70,7 @@ Update [CONTEXT.md](./CONTEXT.md):
 
 ### 3. New Bounded Context
 
-Update [AI Context Mapping table](./CONTEXT.md#bounded-context-mapping):
+Update [AI Context Mapping table](../../CONTEXT.md#bounded-context-mapping):
 
 - Add context name, domain focus, primary aggregates
 - List key file locations

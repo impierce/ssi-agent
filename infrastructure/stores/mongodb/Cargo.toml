@@ -8,7 +8,7 @@ publish.workspace = true
 [dependencies]
 shared-kernel.workspace = true
 
-mongo-es = "0.4.0"
+mongo-es.workspace = true
 thiserror.workspace = true
 
 [lints]

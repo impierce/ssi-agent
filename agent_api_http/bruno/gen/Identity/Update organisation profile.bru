@@ -1,0 +1,160 @@
+meta {
+  name: Update organisation profile
+  type: http
+  seq: 17
+  tags: [
+    Identity
+    Profile
+  ]
+}
+
+patch {
+  url: {{BASE_URL}}/v0/profile
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "country": "",
+    "description": "",
+    "displayName": "",
+    "logo": ""
+  }
+}
+
+docs {
+  Updates your organisation's profile with the given information.
+}
+
+example {
+  name: 200 Response
+  description: Profile updated successfully
+
+  request: {
+    url: {{BASE_URL}}/v0/profile
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "country": "",
+        "description": "",
+        "displayName": "",
+        "logo": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Malformed JSON request body
+
+  request: {
+    url: {{BASE_URL}}/v0/profile
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "country": "",
+        "description": "",
+        "displayName": "",
+        "logo": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 409 Response
+  description: The profile was provisioned through configuration and cannot be modified at runtime
+
+  request: {
+    url: {{BASE_URL}}/v0/profile
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "country": "",
+        "description": "",
+        "displayName": "",
+        "logo": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 409
+      text: Conflict
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response
+  description: Request body does not match the expected schema
+
+  request: {
+    url: {{BASE_URL}}/v0/profile
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "country": "",
+        "description": "",
+        "displayName": "",
+        "logo": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

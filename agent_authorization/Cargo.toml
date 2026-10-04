@@ -9,12 +9,14 @@ publish.workspace = true
 agent_issuance = { path = "../agent_issuance" }
 agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
 jsonwebtoken.workspace = true
+indexmap.workspace = true
 mockall = { workspace = true, optional = true }
 oid4vci.workspace = true
 oid4vc-core.workspace = true

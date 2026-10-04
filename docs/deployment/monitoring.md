@@ -6,8 +6,9 @@ UniCore offers a variety of monitoring options to ensure a healthy deployment an
 
 UniCore implements conventional probe endpoints to monitor the availability and health of the service. [Standard Kubernetes probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/) are served at the following endpoints:
 
-- `/healthz`: Liveness probe
-<!-- - `/readyz`: Readiness probe -->
+- `/livez`: Liveness probe
+- `/healthz`: Backwards-compatible alias for `/livez`
+- `/readyz`: Readiness probe
 
 ## Metadata
 
@@ -22,6 +23,8 @@ Although the `/version` and `/info` endpoints do not contain sensitive data, the
 
 :::
 
-<!-- ## Metrics
+## Metrics
 
-- `/metrics`: Exposes Prometheus metrics for monitoring and alerting -->
+Metrics are exported via **OpenTelemetry** (OTLP push), activated by setting the standard `OTEL_EXPORTER_OTLP_*` environment variables. There is no `/metrics` endpoint to scrape.
+
+See [Metrics](../metrics/README.md) for the available metrics, how to activate the export, and how to add new metrics.

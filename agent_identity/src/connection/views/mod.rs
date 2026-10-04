@@ -22,7 +22,8 @@ pub struct ConnectionView {
     pub pending_changes: Option<PendingChanges>,
     pub first_interacted_at: Option<DateTime<Utc>>,
     pub last_interacted_at: Option<DateTime<Utc>>,
-    #[serde(skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[schema(ignore)]
     pub deleted: bool,
 }
 

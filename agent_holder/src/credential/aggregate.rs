@@ -3,8 +3,7 @@ use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
 use crate::services::HolderServices;
 use agent_shared::credential_status_checker::CredentialStatusChecker;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_credential::credential::Jwt;
 use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
@@ -28,25 +27,27 @@ pub struct Credential {
     pub data: Option<Data>,
 }
 
-#[async_trait]
 impl Aggregate for Credential {
     type Command = CredentialCommand;
     type Event = CredentialEvent;
     type Error = CredentialError;
     type Services = Arc<HolderServices>;
 
-    fn aggregate_type() -> String {
-        "holder_credential".to_string()
-    }
+    const TYPE: &'static str = "holder_credential";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             AddCredential {
                 holder_credential_id,
                 received_offer_id,
@@ -75,7 +76,13 @@ impl Aggregate for Credential {
                     data: Data { raw: raw_credential },
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {

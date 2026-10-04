@@ -1,5 +1,6 @@
 use agent_shared::application_state::CommandHandler;
-use cqrs_es::persist::ViewRepository;
+use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
+use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 use crate::credential::aggregate::Credential;
@@ -12,8 +13,33 @@ use crate::presentation::aggregate::Presentation;
 use crate::presentation::views::all_presentations::AllPresentationsView;
 use crate::presentation::views::PresentationView;
 
+impl QueryOperation for HolderCredentialView {
+    const OPERATION_NAME: &'static str = "holder.credentials.get";
+}
+
+impl QueryOperation for AllHolderCredentialsView {
+    const OPERATION_NAME: &'static str = "holder.credentials.list";
+}
+
+impl QueryOperation for PresentationView {
+    const OPERATION_NAME: &'static str = "holder.presentations.get";
+}
+
+impl QueryOperation for AllPresentationsView {
+    const OPERATION_NAME: &'static str = "holder.presentations.list";
+}
+
+impl QueryOperation for ReceivedOfferView {
+    const OPERATION_NAME: &'static str = "holder.offers.get";
+}
+
+impl QueryOperation for AllReceivedOffersView {
+    const OPERATION_NAME: &'static str = "holder.offers.list";
+}
+
 #[derive(Clone)]
 pub struct HolderState {
+    pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
 }
@@ -30,22 +56,22 @@ pub struct CommandHandlers {
 /// that any type of repository that implements the `ViewRepository` trait can be used, but the corresponding `View` and
 /// `Aggregate` types must be the same.
 type Queries = ViewRepositories<
-    dyn ViewRepository<HolderCredentialView, Credential>,
-    dyn ViewRepository<AllHolderCredentialsView, Credential>,
-    dyn ViewRepository<PresentationView, Presentation>,
-    dyn ViewRepository<AllPresentationsView, Presentation>,
-    dyn ViewRepository<ReceivedOfferView, Offer>,
-    dyn ViewRepository<AllReceivedOffersView, Offer>,
+    dyn DynViewRepository<HolderCredentialView, Credential>,
+    dyn DynViewRepository<AllHolderCredentialsView, Credential>,
+    dyn DynViewRepository<PresentationView, Presentation>,
+    dyn DynViewRepository<AllPresentationsView, Presentation>,
+    dyn DynViewRepository<ReceivedOfferView, Offer>,
+    dyn DynViewRepository<AllReceivedOffersView, Offer>,
 >;
 
 pub struct ViewRepositories<C1, C2, P1, P2, O1, O2>
 where
-    C1: ViewRepository<HolderCredentialView, Credential> + ?Sized,
-    C2: ViewRepository<AllHolderCredentialsView, Credential> + ?Sized,
-    P1: ViewRepository<PresentationView, Presentation> + ?Sized,
-    P2: ViewRepository<AllPresentationsView, Presentation> + ?Sized,
-    O1: ViewRepository<ReceivedOfferView, Offer> + ?Sized,
-    O2: ViewRepository<AllReceivedOffersView, Offer> + ?Sized,
+    C1: DynViewRepository<HolderCredentialView, Credential> + ?Sized,
+    C2: DynViewRepository<AllHolderCredentialsView, Credential> + ?Sized,
+    P1: DynViewRepository<PresentationView, Presentation> + ?Sized,
+    P2: DynViewRepository<AllPresentationsView, Presentation> + ?Sized,
+    O1: DynViewRepository<ReceivedOfferView, Offer> + ?Sized,
+    O2: DynViewRepository<AllReceivedOffersView, Offer> + ?Sized,
 {
     pub holder_credential: Arc<C1>,
     pub all_holder_credentials: Arc<C2>,

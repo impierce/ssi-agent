@@ -1,0 +1,12 @@
+name: opentelemetry
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm
+    container_name: otel-lgtm
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "3000:3000"
+    tmpfs:
+      - /data

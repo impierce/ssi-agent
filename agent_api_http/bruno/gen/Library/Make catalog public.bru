@@ -1,0 +1,159 @@
+meta {
+  name: Make catalog public
+  type: http
+  seq: 13
+  tags: [
+    Library
+    Catalog
+  ]
+}
+
+post {
+  url: {{BASE_URL}}/v0/make-catalog-public
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "catalogId": ""
+  }
+}
+
+docs {
+  Updates a catalog's visibility to public.
+}
+
+example {
+  name: 200 Response
+  description: Catalog made public successfully
+
+  request: {
+    url: {{BASE_URL}}/v0/make-catalog-public
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "display": {
+            "description": "",
+            "icon": "",
+            "name": ""
+          },
+          "id": "",
+          "modified_at": "",
+          "template_ids": [],
+          "visibility": "Public"
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Malformed JSON request body
+
+  request: {
+    url: {{BASE_URL}}/v0/make-catalog-public
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Catalog not found
+
+  request: {
+    url: {{BASE_URL}}/v0/make-catalog-public
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 404
+      text: Not Found
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}
+
+example {
+  name: 422 Response
+  description: Request body does not match the expected schema
+
+  request: {
+    url: {{BASE_URL}}/v0/make-catalog-public
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "catalogId": ""
+      }
+    }
+  }
+
+  response: {
+    status: {
+      code: 422
+      text: Unprocessable Entity
+    }
+
+    body: {
+      type: text
+      content: '''
+
+      '''
+    }
+  }
+}

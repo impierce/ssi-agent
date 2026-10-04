@@ -1,5 +1,6 @@
 use agent_shared::handlers::{command_handler, query_handler};
 use oid4vci::{credential_format_profiles::CredentialFormats, credential_offer::GrantType};
+use shared_kernel::authorization::{AuthorizationError, Caller};
 
 use crate::{
     credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data},
@@ -37,6 +38,9 @@ pub struct CreateReissuanceResponse {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ReissuanceServiceError {
+    #[error(transparent)]
+    Authorization(#[from] AuthorizationError),
+
     #[error("Original credential `{0}` was not found")]
     OriginalCredentialNotFound(String),
 
@@ -82,27 +86,48 @@ where
     pub async fn create(
         &self,
         state: &IssuanceState,
+        caller: Caller,
         request: CreateReissuanceRequest,
     ) -> Result<CreateReissuanceResponse, ReissuanceServiceError> {
-        let original_credential = query_handler(&request.original_credential_id, &state.query.credential)
-            .await
-            .map_err(|err| ReissuanceServiceError::Query(err.to_string()))?
-            .ok_or_else(|| {
-                ReissuanceServiceError::OriginalCredentialNotFound(request.original_credential_id.clone())
-            })?;
+        let original_credential = query_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
+            &request.original_credential_id,
+            Some(&request.original_credential_id),
+            &state.query.credential,
+        )
+        .await
+        .map_err(|err| match err {
+            agent_shared::handlers::QueryHandlerError::Authorization(error) => {
+                ReissuanceServiceError::Authorization(error)
+            }
+            other => ReissuanceServiceError::Query(other.to_string()),
+        })?
+        .ok_or_else(|| ReissuanceServiceError::OriginalCredentialNotFound(request.original_credential_id.clone()))?;
 
-        let (_, credential_configuration, authorization) = query_handler(SERVER_CONFIG_ID, &state.query.server_config)
-            .await
-            .map_err(|err| ReissuanceServiceError::Query(err.to_string()))?
-            .and_then(|server_config_view| {
-                server_config_view
-                    .credential_configurations
-                    .get(&request.credential_configuration_id)
-                    .cloned()
-            })
-            .ok_or_else(|| {
-                ReissuanceServiceError::CredentialConfigurationNotFound(request.credential_configuration_id.clone())
-            })?;
+        let (_, credential_configuration, authorization) = query_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
+            SERVER_CONFIG_ID,
+            Some(SERVER_CONFIG_ID),
+            &state.query.server_config,
+        )
+        .await
+        .map_err(|err| match err {
+            agent_shared::handlers::QueryHandlerError::Authorization(error) => {
+                ReissuanceServiceError::Authorization(error)
+            }
+            other => ReissuanceServiceError::Query(other.to_string()),
+        })?
+        .and_then(|server_config_view| {
+            server_config_view
+                .credential_configurations
+                .get(&request.credential_configuration_id)
+                .cloned()
+        })
+        .ok_or_else(|| {
+            ReissuanceServiceError::CredentialConfigurationNotFound(request.credential_configuration_id.clone())
+        })?;
 
         match &credential_configuration.credential_format {
             CredentialFormats::DcSdJwt(_) | CredentialFormats::VcSdJwt(_) => {}
@@ -136,17 +161,35 @@ where
         };
 
         command_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
             &request.new_credential_id,
             &state.command.credential,
             create_credential_command,
         )
         .await
-        .map_err(|err| ReissuanceServiceError::Command(err.to_string()))?;
+        .map_err(|err| match err {
+            agent_shared::handlers::CommandHandlerError::Authorization(error) => {
+                ReissuanceServiceError::Authorization(error)
+            }
+            other => ReissuanceServiceError::Command(other.to_string()),
+        })?;
 
-        if query_handler(&request.offer_id, &state.query.offer)
-            .await
-            .map_err(|err| ReissuanceServiceError::Query(err.to_string()))?
-            .is_none()
+        if query_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
+            &request.offer_id,
+            Some(&request.offer_id),
+            &state.query.offer,
+        )
+        .await
+        .map_err(|err| match err {
+            agent_shared::handlers::QueryHandlerError::Authorization(error) => {
+                ReissuanceServiceError::Authorization(error)
+            }
+            other => ReissuanceServiceError::Query(other.to_string()),
+        })?
+        .is_none()
         {
             let tx_code_constraints = authorization
                 .pre_authorized
@@ -161,26 +204,48 @@ where
 
             let create_offer_command = OfferCommand::CreateCredentialOffer {
                 offer_id: request.offer_id.clone(),
-                credential_configuration_ids: vec![request.credential_configuration_id.clone()],
+                template_ids: vec![request.credential_configuration_id.clone()],
                 grant_types,
                 tx_code_constraints,
                 delivery_options: None,
             };
 
-            command_handler(&request.offer_id, &state.command.offer, create_offer_command)
-                .await
-                .map_err(|err| ReissuanceServiceError::Command(err.to_string()))?;
+            command_handler(
+                state.authorization_checker.clone(),
+                caller.clone(),
+                &request.offer_id,
+                &state.command.offer,
+                create_offer_command,
+            )
+            .await
+            .map_err(|err| match err {
+                agent_shared::handlers::CommandHandlerError::Authorization(error) => {
+                    ReissuanceServiceError::Authorization(error)
+                }
+                other => ReissuanceServiceError::Command(other.to_string()),
+            })?;
         }
 
         let add_credentials_command = OfferCommand::AddCredentials {
             offer_id: request.offer_id.clone(),
             credential_ids: vec![request.new_credential_id.clone()],
-            credential_configuration_ids: vec![request.credential_configuration_id.clone()],
+            template_ids: vec![request.credential_configuration_id.clone()],
         };
 
-        command_handler(&request.offer_id, &state.command.offer, add_credentials_command)
-            .await
-            .map_err(|err| ReissuanceServiceError::Command(err.to_string()))?;
+        command_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
+            &request.offer_id,
+            &state.command.offer,
+            add_credentials_command,
+        )
+        .await
+        .map_err(|err| match err {
+            agent_shared::handlers::CommandHandlerError::Authorization(error) => {
+                ReissuanceServiceError::Authorization(error)
+            }
+            other => ReissuanceServiceError::Command(other.to_string()),
+        })?;
 
         let create_reissuance_command = ReissuanceCommand::CreateReissuance {
             reissuance_id: request.reissuance_id.clone(),
@@ -195,12 +260,19 @@ where
         };
 
         command_handler(
+            state.authorization_checker.clone(),
+            caller.clone(),
             &request.reissuance_id,
             &state.command.reissuance,
             create_reissuance_command,
         )
         .await
-        .map_err(|err| ReissuanceServiceError::Command(err.to_string()))?;
+        .map_err(|err| match err {
+            agent_shared::handlers::CommandHandlerError::Authorization(error) => {
+                ReissuanceServiceError::Authorization(error)
+            }
+            other => ReissuanceServiceError::Command(other.to_string()),
+        })?;
 
         Ok(CreateReissuanceResponse {
             reissuance_id: request.reissuance_id,
@@ -221,14 +293,39 @@ mod tests {
     use agent_issuance::state::{initialize, IssuanceState, SERVER_CONFIG_ID};
     use agent_secret_manager::service::Service;
     use agent_shared::config::CredentialConfiguration;
-    use agent_shared::handlers::{command_handler, query_handler};
+    use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
     use agent_store::{in_memory::InMemory, issuance_state};
     use serde_json::json;
+    use shared_kernel::authorization::Caller;
     use std::sync::Arc;
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&state).await.unwrap();
+        command_handler(
+            SERVER_CONFIG_ID,
+            &state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration: serde_json::from_value(json!({
+                    "credential_configuration_id": "001",
+                    "format": "jwt_vc_json",
+                    "credential_metadata": {"display": [{"name": "Unsupported format"}]},
+                    "type": ["VerifiableCredential"]
+                }))
+                .unwrap(),
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
         add_sd_jwt_credential_configuration(&state).await;
         state
     }
@@ -367,8 +464,8 @@ mod tests {
     fn reissuance_request(credential_configuration_id: &str, credential: serde_json::Value) -> CreateReissuanceRequest {
         CreateReissuanceRequest {
             reissuance_id: "reissuance-id".to_string(),
-            original_credential_id: "original-credential-id".to_string(),
-            new_credential_id: "new-credential-id".to_string(),
+            original_credential_id: "11111111-1111-4111-8111-111111111111".to_string(),
+            new_credential_id: "22222222-2222-4222-8222-222222222222".to_string(),
             offer_id: "offer-id".to_string(),
             credential_configuration_id: credential_configuration_id.to_string(),
             credential,
@@ -388,6 +485,7 @@ mod tests {
         let error = service
             .create(
                 &state,
+                Caller::Anonymous,
                 reissuance_request(
                     "SD-JWT VC",
                     json!({
@@ -403,18 +501,22 @@ mod tests {
         assert!(matches!(
             error,
             ReissuanceServiceError::OriginalCredentialNotFound(credential_id)
-                if credential_id == "original-credential-id"
+                if credential_id == "11111111-1111-4111-8111-111111111111"
         ));
     }
 
     #[async_std::test]
     async fn create_reissuance_rejects_non_object_payload() {
         let state = test_state().await;
-        create_original_credential(&state, "original-credential-id", "SD-JWT VC").await;
+        create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
         let service = ReissuanceService::default();
 
         let error = service
-            .create(&state, reissuance_request("SD-JWT VC", json!("not-an-object")))
+            .create(
+                &state,
+                Caller::Anonymous,
+                reissuance_request("SD-JWT VC", json!("not-an-object")),
+            )
             .await
             .unwrap_err();
 
@@ -424,12 +526,13 @@ mod tests {
     #[async_std::test]
     async fn create_reissuance_rejects_non_sd_jwt_configuration() {
         let state = test_state().await;
-        create_original_credential(&state, "original-credential-id", "001").await;
+        create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "001").await;
         let service = ReissuanceService::default();
 
         let error = service
             .create(
                 &state,
+                Caller::Anonymous,
                 reissuance_request(
                     "001",
                     json!({
@@ -450,12 +553,13 @@ mod tests {
     #[async_std::test]
     async fn create_reissuance_prepares_new_credential_offer_and_relation() {
         let state = test_state().await;
-        create_original_credential(&state, "original-credential-id", "SD-JWT VC").await;
+        create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
         let service = ReissuanceService::default();
 
         let response = service
             .create(
                 &state,
+                Caller::Anonymous,
                 reissuance_request(
                     "SD-JWT VC",
                     json!({
@@ -469,16 +573,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.reissuance_id, "reissuance-id");
-        assert_eq!(response.original_credential_id, "original-credential-id");
-        assert_eq!(response.new_credential_id, "new-credential-id");
+        assert_eq!(response.original_credential_id, "11111111-1111-4111-8111-111111111111");
+        assert_eq!(response.new_credential_id, "22222222-2222-4222-8222-222222222222");
         assert_eq!(response.offer_id, "offer-id");
         assert_eq!(response.credential_configuration_id, "SD-JWT VC");
 
-        let original_credential = query_handler("original-credential-id", &state.query.credential)
+        let original_credential = query_handler("11111111-1111-4111-8111-111111111111", &state.query.credential)
             .await
             .unwrap()
             .unwrap();
-        let new_credential = query_handler("new-credential-id", &state.query.credential)
+        let new_credential = query_handler("22222222-2222-4222-8222-222222222222", &state.query.credential)
             .await
             .unwrap()
             .unwrap();
@@ -490,9 +594,12 @@ mod tests {
 
         assert_eq!(original_credential.data.unwrap().raw["last_name"], json!("Rustacean"));
         assert_eq!(new_credential.data.unwrap().raw["last_name"], json!("Reissued"));
-        assert_eq!(offer.credential_ids, vec!["new-credential-id"]);
-        assert_eq!(reissuance.original_credential_id, "original-credential-id");
-        assert_eq!(reissuance.new_credential_id, "new-credential-id");
+        assert_eq!(offer.credential_ids, vec!["22222222-2222-4222-8222-222222222222"]);
+        assert_eq!(
+            reissuance.original_credential_id,
+            "11111111-1111-4111-8111-111111111111"
+        );
+        assert_eq!(reissuance.new_credential_id, "22222222-2222-4222-8222-222222222222");
         assert_eq!(reissuance.offer_id, "offer-id");
         assert_eq!(reissuance.credential_configuration_id, "SD-JWT VC");
         assert_eq!(reissuance.reason.as_deref(), Some("data_changed"));
@@ -504,12 +611,13 @@ mod tests {
     #[async_std::test]
     async fn create_reissuance_prepares_vc_sd_jwt_credential_offer_and_relation() {
         let state = test_state().await;
-        create_original_credential(&state, "original-credential-id", "VCDM SD-JWT VC").await;
+        create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "VCDM SD-JWT VC").await;
         let service = ReissuanceService::default();
 
         let response = service
             .create(
                 &state,
+                Caller::Anonymous,
                 reissuance_request(
                     "VCDM SD-JWT VC",
                     json!({
@@ -525,16 +633,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.reissuance_id, "reissuance-id");
-        assert_eq!(response.original_credential_id, "original-credential-id");
-        assert_eq!(response.new_credential_id, "new-credential-id");
+        assert_eq!(response.original_credential_id, "11111111-1111-4111-8111-111111111111");
+        assert_eq!(response.new_credential_id, "22222222-2222-4222-8222-222222222222");
         assert_eq!(response.offer_id, "offer-id");
         assert_eq!(response.credential_configuration_id, "VCDM SD-JWT VC");
 
-        let original_credential = query_handler("original-credential-id", &state.query.credential)
+        let original_credential = query_handler("11111111-1111-4111-8111-111111111111", &state.query.credential)
             .await
             .unwrap()
             .unwrap();
-        let new_credential = query_handler("new-credential-id", &state.query.credential)
+        let new_credential = query_handler("22222222-2222-4222-8222-222222222222", &state.query.credential)
             .await
             .unwrap()
             .unwrap();
@@ -552,9 +660,12 @@ mod tests {
             new_credential.data.unwrap().raw["credentialSubject"]["last_name"],
             json!("Reissued")
         );
-        assert_eq!(offer.credential_ids, vec!["new-credential-id"]);
-        assert_eq!(reissuance.original_credential_id, "original-credential-id");
-        assert_eq!(reissuance.new_credential_id, "new-credential-id");
+        assert_eq!(offer.credential_ids, vec!["22222222-2222-4222-8222-222222222222"]);
+        assert_eq!(
+            reissuance.original_credential_id,
+            "11111111-1111-4111-8111-111111111111"
+        );
+        assert_eq!(reissuance.new_credential_id, "22222222-2222-4222-8222-222222222222");
         assert_eq!(reissuance.offer_id, "offer-id");
         assert_eq!(reissuance.credential_configuration_id, "VCDM SD-JWT VC");
     }

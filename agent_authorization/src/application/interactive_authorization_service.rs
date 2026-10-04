@@ -1,4 +1,5 @@
-use agent_shared::handlers::{command_handler, query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
+use cqrs_es::AggregateError;
 use oid4vci::{
     InteractionType, InteractiveAuthorizationRequest, InteractiveAuthorizationResponse, InteractiveAuthorizationStatus,
 };
@@ -36,6 +37,8 @@ pub enum InteractiveAuthorizationError {
     MissingRedirectUriError,
     #[error("Missing `openid4vp_response` in the request")]
     MissingOpenId4VPResponseError,
+    #[error("Invalid `openid4vp_response`: {0}")]
+    InvalidOpenId4VPResponseError(String),
     #[error("Unsupported interaction types: {0}")]
     UnsupportedInteractionTypesError(String),
     #[error("Internal error: {0}")]
@@ -64,7 +67,7 @@ impl InteractiveAuthorizationService {
         // registered in the Authorization Server). Therefore, as of now we can only validate the request for known
         // Clients. See: https://github.com/openid/OpenID4VCI/issues/94
         if authorization_request.client_id == UNIME_CLIENT_ID {
-            let client = query_handler(&authorization_request.client_id, &state.query.client)
+            let client = public_query_handler(&authorization_request.client_id, &state.query.client)
                 .await
                 .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?
                 .ok_or(InteractiveAuthorizationError::InvalidClientIdError)?;
@@ -107,7 +110,7 @@ impl InteractiveAuthorizationService {
             interaction_type: Some(InteractionType::OpenId4VpPresentation),
         };
 
-        command_handler(
+        public_command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,
@@ -115,7 +118,7 @@ impl InteractiveAuthorizationService {
         .await
         .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 
-        let oauth2_authorization_request_view = query_handler(
+        let oauth2_authorization_request_view = public_query_handler(
             &oauth2_authorization_request_id,
             &state.query.oauth2_authorization_request,
         )
@@ -158,16 +161,30 @@ impl InteractiveAuthorizationService {
                 .ok_or(InteractiveAuthorizationError::MissingOpenId4VPResponseError)?,
         };
 
-        command_handler(
+        // Without this check, the command would run against a fresh aggregate for an unknown `auth_session`.
+        public_query_handler(
+            &oauth2_authorization_request_id,
+            &state.query.oauth2_authorization_request,
+        )
+        .await
+        .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?
+        .ok_or(InteractiveAuthorizationError::RequestNotFound)?;
+
+        public_command_handler(
             &oauth2_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,
         )
         .await
-        .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
+        .map_err(|err| match err {
+            CommandHandlerError::Aggregate(AggregateError::UserError(err)) => {
+                InteractiveAuthorizationError::InvalidOpenId4VPResponseError(err.to_string())
+            }
+            err => InteractiveAuthorizationError::Internal(err.to_string()),
+        })?;
 
         // Get the OAuth2 authorization request that has been pushed via the `/auth/par` endpoint.
-        let oauth2_authorization_request = query_handler(
+        let oauth2_authorization_request = public_query_handler(
             &oauth2_authorization_request_id,
             &state.query.oauth2_authorization_request,
         )
@@ -193,7 +210,7 @@ impl InteractiveAuthorizationService {
             expires_in,
         };
 
-        command_handler(&authorization_code_id, &state.command.authorization_code, command)
+        public_command_handler(&authorization_code_id, &state.command.authorization_code, command)
             .await
             .map_err(|err| InteractiveAuthorizationError::Internal(err.to_string()))?;
 

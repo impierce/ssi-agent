@@ -1,11 +1,13 @@
 use crate::error::IntoApiErrorExt;
-use crate::handlers::{command_handler, query_handler};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, public_query_handler, query_handler};
 use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::public_offer::error::PublicOfferError;
 use agent_issuance::state::IssuanceState;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Status;
+use axum::Extension;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -77,6 +79,7 @@ pub struct PublicOfferStatusDto {
     pub id: String,
     pub template_id: String,
     pub amount_issued: u32,
+    #[schema(inline)]
     pub status: PublicOfferStatus,
 }
 
@@ -137,17 +140,32 @@ impl From<&PublicOffer> for PublicOfferStatusDto {
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_public_offers(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let all_offers = query_handler("all_public_offers", &issuance_state.query.all_public_offers)
-        .await?
-        .unwrap_or_default();
+    let all_offers = query_handler(
+        issuance_state.authorization_checker.clone(),
+        actor.clone(),
+        "all_public_offers",
+        None,
+        &issuance_state.query.all_public_offers,
+    )
+    .await?
+    .unwrap_or_default();
 
     let mut offers = Vec::with_capacity(all_offers.offers.len());
 
-    for public_offer in all_offers.offers.values() {
+    for public_offer in crate::utils::newest_first_ref(&all_offers.offers) {
         let mut dto = PublicOfferStatusDto::from(public_offer);
-        if let Some(offer_view) = query_handler(&public_offer.id, &issuance_state.query.offer).await? {
+        if let Some(offer_view) = query_handler(
+            issuance_state.authorization_checker.clone(),
+            actor.clone(),
+            &public_offer.id,
+            Some(&public_offer.id),
+            &issuance_state.query.offer,
+        )
+        .await?
+        {
             dto.amount_issued = offer_view.successful_issuances;
         }
         offers.push(dto);
@@ -165,25 +183,40 @@ pub(crate) async fn all_public_offers(
     responses(
         (status = 201, description = "Public offer created successfully"),
         (status = 404, description = "Template or offer not found"),
-        (status = 400, description = "Template schema invalid for public offers")
+        (status = 400, description = "Template schema invalid for public offers"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn create_public_offer(
-    State((issuance_state, library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+    Extension(library_state): Extension<Arc<LibraryState>>,
     Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
-    if query_handler(&offer_id, &issuance_state.query.offer).await?.is_none() {
+    if query_handler(
+        issuance_state.authorization_checker.clone(),
+        actor.clone(),
+        &offer_id,
+        Some(&offer_id),
+        &issuance_state.query.offer,
+    )
+    .await?
+    .is_none()
+    {
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
 
-    // Query the template from library state to validate it exists and has valid schema
-    let library_state = library_state.ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
-
-    let template = query_handler(&template_id, &library_state.query.template)
-        .await
-        .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
-        .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
+    let template = query_handler(
+        library_state.authorization_checker.clone(),
+        actor.clone(),
+        &template_id,
+        Some(&template_id),
+        &library_state.query.template,
+    )
+    .await
+    .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
+    .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     // Only non-deleted templates can be offered publicly
     if template.status == Status::Deleted {
@@ -199,7 +232,14 @@ pub(crate) async fn create_public_offer(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::CREATED).into_response())
 }
@@ -212,12 +252,15 @@ pub(crate) async fn create_public_offer(
     request_body = TakePublicOfferOfflineRequest,
     responses(
         (status = 204, description = "Public offer taken offline successfully"),
-        (status = 404, description = "Public offer not found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Public offer not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_offline(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
@@ -225,7 +268,14 @@ pub(crate) async fn take_public_offer_offline(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -238,12 +288,15 @@ pub(crate) async fn take_public_offer_offline(
     request_body = TakePublicOfferOnlineRequest,
     responses(
         (status = 204, description = "Public offer taken online successfully"),
-        (status = 404, description = "Public offer not found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Public offer not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn take_public_offer_online(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
@@ -251,7 +304,14 @@ pub(crate) async fn take_public_offer_online(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -264,12 +324,15 @@ pub(crate) async fn take_public_offer_online(
     request_body = DeletePublicOfferRequest,
     responses(
         (status = 204, description = "Public offer deleted successfully"),
-        (status = 404, description = "Public offer not found")
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Public offer not found"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn delete_public_offer(
-    State((issuance_state, _library_state)): State<(Arc<IssuanceState>, Option<Arc<LibraryState>>)>,
+    State(issuance_state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
@@ -277,7 +340,14 @@ pub(crate) async fn delete_public_offer(
     };
 
     let aggregate_id = public_offer_aggregate_id(&offer_id);
-    command_handler(&aggregate_id, &issuance_state.command.public_offer, command).await?;
+    command_handler(
+        issuance_state.authorization_checker.clone(),
+        actor,
+        &aggregate_id,
+        &issuance_state.command.public_offer,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
 }
@@ -286,7 +356,7 @@ pub(crate) async fn delete_public_offer(
 pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_id: &str) -> Result<bool, ApiError> {
     let aggregate_id = public_offer_aggregate_id(offer_id);
 
-    match query_handler(&aggregate_id, &state.query.public_offer).await? {
+    match public_query_handler(&aggregate_id, &state.query.public_offer).await? {
         Some(offer) => Ok(offer.active && !offer.deleted),
         // If there is no public-offer record, treat it as a normal offer.
         None => Ok(true),
@@ -295,17 +365,18 @@ pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_i
 
 #[cfg(test)]
 mod tests {
-    use crate::handlers::command_handler;
-    use crate::v0::issuance::{credentials::tests::credentials, router_with_library};
+    use crate::handlers::public_command_handler;
+    use crate::tests::TEMPLATE_ID;
+    use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
+    use crate::v0::issuance::router;
     use crate::API_VERSION;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_library::state::LibraryState;
-    use agent_library::template::aggregate::{Status as TemplateStatus, Visibility};
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{issuance_state, library_state};
+    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
@@ -314,8 +385,6 @@ mod tests {
     use serde_json::Value;
     use std::sync::Arc;
     use tower::Service as _;
-
-    const TEMPLATE_ID: &str = "template-001";
 
     async fn create_public_offer_request(offer_id: &str, template_id: &str) -> Request<Body> {
         Request::builder()
@@ -341,37 +410,34 @@ mod tests {
     }
 
     async fn setup_app() -> (Router, Arc<LibraryState>) {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
-        let library_state = Arc::new(library_state(&InMemory, Default::default(), Default::default()).await);
-
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        (
-            router_with_library(issuance_state, Some(library_state.clone())),
-            library_state,
-        )
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template_with_auth(&library_state, true).await;
+
+        (router((issuance_state, library_state.clone())), library_state)
     }
 
-    async fn create_template(library_state: &Arc<LibraryState>, template_id: &str, schema: Option<Value>) {
-        let command = TemplateCommand::CreateTemplate {
+    /// Updates the schema of an existing template for public-offer schema validation tests.
+    /// Uses `UpdateSchema` rather than `CreateNewTemplate` to preserve the template's Published
+    /// status (required for credential creation) while setting the schema under test.
+    async fn update_template_schema(library_state: &Arc<LibraryState>, template_id: &str, schema: Option<Value>) {
+        let Some(schema) = schema else { return };
+        let command = TemplateCommand::UpdateSchema {
             template_id: template_id.to_string(),
-            source_template_id: None,
-            title: Some("Template".to_string()),
-            display: Box::new(None),
-            data_model: None,
-            creator: None,
-            holder_type: None,
-            tags: vec![],
-            status: TemplateStatus::Draft,
-            visibility: Visibility::Private,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(schema),
-            schema_properties_attributes: None,
+            schema,
         };
 
-        command_handler(template_id, &library_state.command.template, command)
+        public_command_handler(template_id, &library_state.command.template, command)
             .await
             .unwrap();
     }
@@ -424,10 +490,10 @@ mod tests {
     async fn test_create_public_offer_succeeds() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
         // A credential (and its associated offer) must exist before creating a public offer.
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
 
         let response = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
@@ -464,9 +530,9 @@ mod tests {
     async fn test_create_public_offer_fails_when_already_exists() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
 
         let first = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
@@ -488,9 +554,9 @@ mod tests {
     async fn test_take_public_offer_offline() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
         let _ = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
@@ -523,9 +589,9 @@ mod tests {
     async fn test_take_public_offer_online() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
         let _ = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
@@ -573,9 +639,9 @@ mod tests {
     async fn test_delete_public_offer_removes_from_list() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
         let _ = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
@@ -630,7 +696,7 @@ mod tests {
     async fn test_create_public_offer_fails_when_template_not_found() {
         let (mut app, _library_state) = setup_app().await;
 
-        credentials(&mut app, "001").await;
+        credentials(&mut app).await;
 
         let response = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, "missing-template").await)
@@ -645,13 +711,83 @@ mod tests {
     async fn test_create_public_offer_fails_when_template_schema_has_non_const_leaf() {
         let (mut app, library_state) = setup_app().await;
 
-        create_template(&library_state, TEMPLATE_ID, Some(non_const_schema())).await;
-        credentials(&mut app, "001").await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(non_const_schema())).await;
+        credentials(&mut app).await;
 
         let response = app
             .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_credential_offer_uri_resolves_only_active_offers() {
+        let (mut app, library_state) = setup_app().await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+
+        async fn post(app: &mut Router, command: &str) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::POST)
+                        .uri(format!("{API_VERSION}/{command}"))
+                        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                        .body(Body::from(
+                            serde_json::to_vec(&serde_json::json!({ "offerId": crate::tests::OFFER_ID })).unwrap(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        }
+        async fn resolve(app: &mut Router, offer_id: &str) -> (StatusCode, Value) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::GET)
+                        .uri(format!("/openid4vci/credential-offer/{offer_id}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+
+        assert_eq!(resolve(&mut app, "unknown").await.0, StatusCode::NOT_FOUND);
+
+        // An offer without a public-offer record resolves like any other offer.
+        credentials(&mut app).await;
+        let (status, credential_offer) = resolve(&mut app, crate::tests::OFFER_ID).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            credential_offer["credential_configuration_ids"],
+            serde_json::json!([TEMPLATE_ID])
+        );
+
+        let response = app
+            .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(
+            resolve(&mut app, crate::tests::OFFER_ID).await,
+            (status, credential_offer.clone())
+        );
+
+        post(&mut app, "take-public-offer-offline").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::NOT_FOUND);
+
+        post(&mut app, "take-public-offer-online").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::OK);
+
+        post(&mut app, "delete-public-offer").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::NOT_FOUND);
     }
 }

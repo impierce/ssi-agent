@@ -3,8 +3,7 @@ use crate::services::OAuth2AuthorizationRequestDomainServices;
 use super::command::OAuth2AuthorizationRequestCommand;
 use super::error::OAuth2AuthorizationRequestError;
 use super::event::OAuth2AuthorizationRequestEvent;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{
     authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod, InteractionType,
 };
@@ -49,25 +48,27 @@ pub struct OAuth2AuthorizationRequest {
     pub openid4vp_request: Option<serde_json::Value>,
 }
 
-#[async_trait]
 impl Aggregate for OAuth2AuthorizationRequest {
     type Command = OAuth2AuthorizationRequestCommand;
     type Event = OAuth2AuthorizationRequestEvent;
     type Error = OAuth2AuthorizationRequestError;
     type Services = OAuth2AuthorizationRequestDomainServices;
 
-    fn aggregate_type() -> String {
-        "oauth2_authorization_request".to_string()
-    }
+    const TYPE: &'static str = "oauth2_authorization_request";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OAuth2AuthorizationRequestCommand::*;
         use OAuth2AuthorizationRequestError::*;
         use OAuth2AuthorizationRequestEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateOAuth2AuthorizationRequest {
                 oauth2_authorization_request_id,
                 pushed_authorization_request,
@@ -155,7 +156,13 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     }])
                 }
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -287,6 +294,96 @@ pub mod oauth2_authorization_request_tests {
                 oauth2_authorization_request_id,
                 consent_status: ConsentStatus::Rejected,
             }]);
+    }
+
+    fn expired(mut event: OAuth2AuthorizationRequestEvent) -> OAuth2AuthorizationRequestEvent {
+        if let OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated { expires_at, .. } = &mut event {
+            *expires_at = chrono::Utc::now().timestamp() - 1;
+        }
+        event
+    }
+
+    fn verifying_services(verification: fn() -> anyhow::Result<()>) -> OAuth2AuthorizationRequestDomainServices {
+        let mut openid4vp_presentation_service = crate::services::MockOpenId4VpPresentationService::new();
+        openid4vp_presentation_service
+            .expect_verify_openid4vp_response()
+            .returning(move |_| verification());
+
+        OAuth2AuthorizationRequestDomainServices::new(Box::new(openid4vp_presentation_service))
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn consent_decisions_on_an_expired_request_expire_it(
+        oauth2_authorization_request_id: String,
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let expired_event = OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestExpired {
+            oauth2_authorization_request_id,
+            consent_status: ConsentStatus::Expired,
+        };
+
+        for command in [
+            OAuth2AuthorizationRequestCommand::GrantConsent,
+            OAuth2AuthorizationRequestCommand::RejectConsent,
+        ] {
+            OAuth2AuthorizationRequestTestFramework::with(OAuth2AuthorizationRequestDomainServices::default())
+                .given(vec![
+                    expired(authorization_request_pushed_event.clone()),
+                    expired_event.clone(),
+                ])
+                .when(command)
+                .then_expect_events(vec![expired_event.clone()]);
+        }
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn a_verified_openid4vp_response_grants_consent_until_the_request_expires(
+        oauth2_authorization_request_id: String,
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let submit = || OAuth2AuthorizationRequestCommand::SubmitOpenId4VpResponse {
+            openid4vp_response: serde_json::json!({ "vp_token": "vp_token" }),
+        };
+
+        OAuth2AuthorizationRequestTestFramework::with(verifying_services(|| Ok(())))
+            .given(vec![authorization_request_pushed_event.clone()])
+            .when(submit())
+            .then_expect_events(vec![OAuth2AuthorizationRequestEvent::ConsentGranted {
+                oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
+                consent_status: ConsentStatus::Granted,
+            }]);
+
+        OAuth2AuthorizationRequestTestFramework::with(verifying_services(|| Ok(())))
+            .given(vec![expired(authorization_request_pushed_event)])
+            .when(submit())
+            .then_expect_events(vec![
+                OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestExpired {
+                    oauth2_authorization_request_id,
+                    consent_status: ConsentStatus::Expired,
+                },
+            ]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn an_unverifiable_openid4vp_response_is_rejected(
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let result = OAuth2AuthorizationRequestTestFramework::with(verifying_services(|| {
+            Err(anyhow::anyhow!("invalid presentation"))
+        }))
+        .given(vec![authorization_request_pushed_event])
+        .when(OAuth2AuthorizationRequestCommand::SubmitOpenId4VpResponse {
+            openid4vp_response: serde_json::json!({ "vp_token": "vp_token" }),
+        })
+        .inspect_result();
+
+        assert!(matches!(
+            result,
+            Err(OAuth2AuthorizationRequestError::OpenID4VpVerificationError(_))
+        ));
     }
 }
 

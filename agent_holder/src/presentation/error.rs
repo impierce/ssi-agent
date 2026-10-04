@@ -12,4 +12,6 @@ pub enum PresentationError {
     MissingIdentifierError(String),
     #[error("Failed to sign presentation: {0}")]
     SigningError(String),
+    #[error("Failed to get a key identifier for signing the presentation")]
+    KeyIdError,
 }

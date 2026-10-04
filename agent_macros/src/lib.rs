@@ -122,9 +122,10 @@ pub fn config_derive(input: TokenStream) -> TokenStream {
 
                 *metadata = provisioned_config.clone().try_deserialize().expect("Failed to deserialize config");
 
-                let res = #struct_name {
+                let mut res = #struct_name {
                     #(#load_configuration_variables)*
                 };
+                res.apply_profile(&application_profile);
 
                 // Overwrite all fields from res into metadata
                 overwrite_existing_fields(&mut metadata, &json!(res));

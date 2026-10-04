@@ -166,7 +166,7 @@ pub struct StatusListClaim {
 mod tests {
     use super::*;
 
-    use agent_secret_manager::subject::Subject;
+    use oid4vc_core::verification_material_resolver::test_utils::TestVerificationMaterialResolver;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
@@ -175,9 +175,8 @@ mod tests {
     #[tokio::test]
     async fn test_check_jwt_status_claim() {
         // A credential with no "status" claim should be considered valid.
-        let subject = Subject::test_subject().await;
         let checker = CredentialStatusChecker {
-            verification_material_resolver: Arc::new(subject),
+            verification_material_resolver: Arc::new(TestVerificationMaterialResolver),
         };
 
         let result = checker.check_credential_status(serde_json::json!({})).await;

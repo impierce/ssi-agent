@@ -9,6 +9,7 @@ use agent_verification::{
 };
 use async_trait::async_trait;
 use oid4vp::dcql::dcql_query::{ClaimQuery, CredentialQuery, CredentialQueryId, DcqlQuery, Format, MetaTypes};
+use shared_kernel::authorization::Caller;
 use std::sync::Arc;
 
 /// This adapter bridges `agent_verification` functionality which is needed in `agent_authorization` during the interactive authorization flow, specifically for handling openID4VP presentation requests and responses.
@@ -93,6 +94,8 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         };
 
         command_handler(
+            self.verification_state.authorization_checker.clone(),
+            Caller::Internal,
             &authorization_request_id,
             &self.verification_state.command.authorization_request,
             command,
@@ -100,7 +103,10 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         .await?;
 
         let mut authorization_request = query_handler(
+            self.verification_state.authorization_checker.clone(),
+            Caller::Internal,
             &authorization_request_id,
+            Some(&authorization_request_id),
             &self.verification_state.query.authorization_request,
         )
         .await?
@@ -131,6 +137,8 @@ impl OpenId4VpPresentationService for VerificationAuthorizationAdapter {
         let command = AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response };
 
         command_handler(
+            self.verification_state.authorization_checker.clone(),
+            Caller::Internal,
             &authorization_request_id,
             &self.verification_state.command.authorization_request,
             command,

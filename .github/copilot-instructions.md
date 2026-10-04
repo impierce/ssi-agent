@@ -4,7 +4,7 @@
 
 **ssi-agent** is a Self-Sovereign Identity (SSI) agent implementing OpenID4VCI (issuance) and OpenID4VP (verification) protocols. It's a Rust Tokio-based service that manages identity credentials, digital wallets, and credential verification flows.
 
-- **Language**: Rust 1.76.0+ (enforced in Cargo.toml `rust-version`)
+- **Language**: Rust 1.94.0+ (enforced in Cargo.toml `rust-version`)
 - **Build System**: Cargo workspace with 18 crates
 - **HTTP Framework**: Axum 0.8 with Tokio async runtime
 - **Persistence**: PostgreSQL with CQRS-ES event sourcing pattern
@@ -18,12 +18,12 @@ All commands run from repository root. **Always use `cargo` commands; do not use
 ### Bootstrap (one-time setup)
 
 ```bash
-# Install Rust 1.76.0+ (use dtolnay/rust-toolchain@stable for CI version)
+# Install Rust 1.94.0+ (use dtolnay/rust-toolchain@stable for CI version)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup component add rustfmt clippy
 
 # Verify installation
-cargo --version  # Should show 1.76.0+
+cargo --version  # Should show 1.94.0+
 ```
 
 ### Build
@@ -120,7 +120,7 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 - **.github/workflows/format-lint-test.yaml**: Runs `cargo fmt --check`, `cargo clippy`, `cargo test --workspace` on all PRs
 - **.github/workflows/audit.yaml**: Daily dependency audit via cargo-audit
 - **.github/workflows/check-licenses.yaml**: Weekly license check via cargo-deny
-- **.github/workflows/coverage.yaml**: Generates LCOV coverage, uploads to Codecov on main/next/beta/alpha
+- **.github/workflows/coverage.yaml**: Generates LCOV coverage, uploads to Codecov nightly (default branch) and on manual dispatch
 - **.github/workflows/build-push-docker.yaml**: Multi-platform Docker builds (amd64/arm64)
 
 ## Architecture & Key Constraints
@@ -170,7 +170,7 @@ cargo fmt --all -- --check && \
   cargo test --workspace && \
   git diff --exit-code
 
-# If git diff fails, code generation files changed (check agent_api_http openapi-generated.yaml)
+# If git diff fails, code generation files changed (check agent_api_http openapi.yaml)
 ```
 
 **If tests timeout or panic**: Check for stack-related issues in test output (search for "stack" or "overflow"). All known stack-intensive tests are already wrapped; report new cases.

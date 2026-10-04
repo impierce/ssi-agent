@@ -1,9 +1,14 @@
+use crate::extractors::RequestActor;
 use crate::{
-    handlers::{command_handler, query_handler},
+    handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler},
     API_VERSION,
 };
 use agent_shared::generate_random_string;
-use agent_verification::{authorization_request::command::AuthorizationRequestCommand, state::VerificationState};
+use agent_verification::{
+    authorization_request::{aggregate::AuthorizationRequest, command::AuthorizationRequestCommand},
+    generic_oid4vc::GenericAuthorizationRequest,
+    state::VerificationState,
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -12,48 +17,146 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oid4vp::dcql::dcql_query::DcqlQuery;
+use oid4vp::{dcql::dcql_query::DcqlQuery, token::vp_token_validator::DecodedVpToken};
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+#[derive(Serialize, utoipa::ToSchema)]
+struct AuthorizationRequestResponse {
+    /// TODO: Replace this generic object schema with schemas for the supported OpenID authorization request types.
+    #[schema(value_type = Option<Object>)]
+    authorization_request: Option<GenericAuthorizationRequest>,
+    form_url_encoded_authorization_request: Option<String>,
+    signed_authorization_request_object: Option<String>,
+    id_token: Option<String>,
+    /// TODO: Replace this generic object schema with a schema for `DecodedVpToken`.
+    #[schema(value_type = Option<Object>)]
+    vp_token: Option<DecodedVpToken>,
+    state: Option<String>,
+    validated: bool,
+}
+
+impl From<AuthorizationRequest> for AuthorizationRequestResponse {
+    fn from(authorization_request: AuthorizationRequest) -> Self {
+        Self {
+            authorization_request: authorization_request.authorization_request,
+            form_url_encoded_authorization_request: authorization_request.form_url_encoded_authorization_request,
+            signed_authorization_request_object: authorization_request.signed_authorization_request_object,
+            id_token: authorization_request.id_token,
+            vp_token: authorization_request.vp_token,
+            state: authorization_request.state,
+            validated: authorization_request.validated,
+        }
+    }
+}
+
+/// List authorization requests
+#[utoipa::path(
+    get,
+    path = "/authorization_requests",
+    operation_id = "list_authorization_requests",
+    tags = ["Authorization Requests"],
+    responses(
+        (status = 200, description = "Authorization requests", body = [AuthorizationRequestResponse]),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn all_authorization_requests(
     State(state): State<Arc<VerificationState>>,
+    RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let all_authorization_requests =
-        query_handler("all_authorization_requests", &state.query.all_authorization_requests)
-            .await?
-            .map(|all_authorization_requests_view| {
-                all_authorization_requests_view
-                    .authorization_requests
-                    .into_values()
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+    let all_authorization_requests = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_authorization_requests",
+        None,
+        &state.query.all_authorization_requests,
+    )
+    .await?
+    .map(|all_authorization_requests_view| {
+        crate::utils::newest_first(all_authorization_requests_view.authorization_requests)
+            .map(AuthorizationRequestResponse::from)
+            .collect::<Vec<_>>()
+    })
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_authorization_requests)).into_response())
 }
 
+/// Get an authorization request
+#[utoipa::path(
+    get,
+    path = "/authorization_requests/{authorization_request_id}",
+    operation_id = "get_authorization_request",
+    tags = ["Authorization Requests"],
+    params(
+        ("authorization_request_id" = String, Path, description = "Authorization request ID"),
+    ),
+    responses(
+        (status = 200, description = "Authorization request", body = AuthorizationRequestResponse),
+        (status = 400, description = "Invalid path parameter"),
+        (status = 404, description = "Authorization request not found"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
+    RequestActor(actor): RequestActor,
     Path(authorization_request_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&authorization_request_id, &state.query.authorization_request)
-        .await?
-        .map(|authorization_request_view| (StatusCode::OK, Json(authorization_request_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &authorization_request_id,
+        Some(&authorization_request_id),
+        &state.query.authorization_request,
+    )
+    .await?
+    .map(|authorization_request_view| {
+        (
+            StatusCode::OK,
+            Json(AuthorizationRequestResponse::from(authorization_request_view)),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 pub struct AuthorizationRequestsEndpointRequest {
+    /// Optional caller-provided identifier for the authorization request. A random value is generated when omitted.
     pub state: Option<String>,
+    /// TODO: Replace this generic object schema with a schema for `DcqlQuery`.
+    #[schema(value_type = Option<Object>)]
     pub dcql_query: Option<DcqlQuery>,
 }
 
+/// Create an authorization request
+///
+/// Creates and signs an OpenID authorization request. The returned form-encoded deep link can be opened by a wallet.
+#[utoipa::path(
+    post,
+    path = "/authorization_requests",
+    operation_id = "create_authorization_request",
+    tags = ["Authorization Requests"],
+    request_body = AuthorizationRequestsEndpointRequest,
+    responses(
+        (
+            status = 201,
+            description = "Authorization request created",
+            headers(("Location", description = "Path of the created authorization request")),
+            body = String,
+            content_type = "application/x-www-form-urlencoded"
+        ),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn authorization_requests(
     State(verification_state): State<Arc<VerificationState>>,
+    RequestActor(actor): RequestActor,
     Json(AuthorizationRequestsEndpointRequest { state, dcql_query }): Json<AuthorizationRequestsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let state = state.unwrap_or(generate_random_string());
@@ -67,10 +170,18 @@ pub(crate) async fn authorization_requests(
     };
 
     // Create the authorization request.
-    command_handler(&state, &verification_state.command.authorization_request, command).await?;
+    command_handler(
+        verification_state.authorization_checker.clone(),
+        actor.clone(),
+        &state,
+        &verification_state.command.authorization_request,
+        command,
+    )
+    .await?;
 
     // Sign the authorization request object.
-    command_handler(
+    internal_command_handler(
+        verification_state.authorization_checker.clone(),
         &state,
         &verification_state.command.authorization_request,
         AuthorizationRequestCommand::SignAuthorizationRequestObject,
@@ -78,24 +189,35 @@ pub(crate) async fn authorization_requests(
     .await?;
 
     // Return the authorization_request.
-    query_handler(&state, &verification_state.query.authorization_request)
-        .await?
-        .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
-        .map(|form_url_encoded_authorization_request| {
-            (
-                StatusCode::CREATED,
-                [
-                    (
-                        header::LOCATION,
-                        format!("{API_VERSION}/authorization_requests/{state}").as_str(),
-                    ),
-                    (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
-                ],
-                form_url_encoded_authorization_request,
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        verification_state.authorization_checker.clone(),
+        &state,
+        Some(&state),
+        &verification_state.query.authorization_request,
+    )
+    .await?
+    .and_then(|authorization_request_view| authorization_request_view.form_url_encoded_authorization_request)
+    .map(|form_url_encoded_authorization_request| {
+        (
+            StatusCode::CREATED,
+            [
+                (
+                    header::LOCATION,
+                    // `state` is caller-supplied and lands in a header here. Left raw, a control
+                    // character in it makes the header value unparsable and axum answers 500.
+                    format!(
+                        "{API_VERSION}/authorization_requests/{}",
+                        utf8_percent_encode(&state, NON_ALPHANUMERIC)
+                    )
+                    .as_str(),
+                ),
+                (header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+            ],
+            form_url_encoded_authorization_request,
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[cfg(test)]
@@ -193,11 +315,61 @@ pub mod tests {
     #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, Default::default()).await);
+        let verification_state = Arc::new(
+            verification_state(
+                &InMemory,
+                VerificationServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;
         assert!(!result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_all_authorization_requests_endpoint() {
+        let verification_state = Arc::new(
+            verification_state(
+                &InMemory,
+                VerificationServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        let mut app = router(verification_state);
+
+        async fn all_authorization_requests(app: &mut Router) -> Vec<serde_json::Value> {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::GET)
+                        .uri(format!("{API_VERSION}/authorization_requests"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            serde_json::from_slice(&body).unwrap()
+        }
+
+        assert!(all_authorization_requests(&mut app).await.is_empty());
+
+        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+
+        let all = all_authorization_requests(&mut app).await;
+        assert_eq!(all.len(), 1);
+        assert_eq!(
+            all[0]["form_url_encoded_authorization_request"],
+            form_url_encoded_authorization_request
+        );
+        assert_eq!(all[0]["validated"], false);
+        assert!(all[0]["vp_token"].is_null());
     }
 }

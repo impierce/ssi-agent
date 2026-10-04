@@ -1,4 +1,5 @@
 use crate::error::IntoApiErrorExt;
+use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, query_handler};
 use crate::utils::serde_explicit_null;
 use agent_identity::profile::aggregate::Source;
@@ -40,11 +41,15 @@ pub struct PatchProfileEndpointRequest {
     tags = ["Identity", "Profile"],
     responses(
         (status = 200, description = "Profile updated successfully"),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 409, description = "The profile was provisioned through configuration and cannot be modified at runtime"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn patch_profile(
     State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
     Json(PatchProfileEndpointRequest {
         display_name,
         description,
@@ -60,7 +65,14 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     if let Some(description) = description {
@@ -69,7 +81,14 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     if let Some(logo) = logo {
@@ -78,7 +97,14 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     if let Some(country) = country {
@@ -87,7 +113,14 @@ pub(crate) async fn patch_profile(
             source: Source::Runtime,
         };
 
-        command_handler(&profile_id, &state.command.profile, command).await?;
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &profile_id,
+            &state.command.profile,
+            command,
+        )
+        .await?;
     }
 
     query_profile(&state).await.map_err(IntoApiErrorExt::into_api_error)?;
@@ -121,21 +154,30 @@ struct GetProfileEndpointResponse {
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn get_profile(State(state): State<Arc<IdentityState>>) -> Result<Response, ApiError> {
-    query_handler(PROFILE_ID, &state.query.profile)
-        .await?
-        .map(|profile_view| {
-            (
-                StatusCode::OK,
-                Json(GetProfileEndpointResponse {
-                    display_name: profile_view.display_name,
-                    description: profile_view.description,
-                    logo: profile_view.logo,
-                    country: profile_view.country,
-                    source: profile_view.source,
-                }),
-            )
-                .into_response()
-        })
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+pub(crate) async fn get_profile(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        PROFILE_ID,
+        Some(PROFILE_ID),
+        &state.query.profile,
+    )
+    .await?
+    .map(|profile_view| {
+        (
+            StatusCode::OK,
+            Json(GetProfileEndpointResponse {
+                display_name: profile_view.display_name,
+                description: profile_view.description,
+                logo: profile_view.logo,
+                country: profile_view.country,
+                source: profile_view.source,
+            }),
+        )
+            .into_response()
+    })
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

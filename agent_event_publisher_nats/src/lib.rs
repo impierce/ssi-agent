@@ -246,8 +246,6 @@ where
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use agent_issuance::offer::aggregate::DeliveryOptions;
-    use agent_issuance::offer::event::OfferEvent;
     use serde_json::json;
 
     #[test]
@@ -289,42 +287,5 @@ pub mod tests {
 
         println!("NATS Payload:");
         println!("{}", payload_str);
-    }
-
-    #[tokio::test]
-    async fn test_integration() {
-        // Test creating publisher and publishing
-        // For this to run successfully, you should have a NATS server running locally.
-        // You can run one with Docker: `docker run -p 4222:4222 -ti nats:latest` in your terminal
-        // before running this test.
-        let publisher = AggregateEventPublisherNats::<Offer>::new(
-            "nats://localhost:4222".to_string(),
-            "test.commands".to_string(),
-            vec!["TxCodeGenerated".to_string()],
-        )
-        .await;
-
-        match publisher {
-            Ok(p) => {
-                info!("Connection to NATS successful");
-
-                // Test publishing
-                let test_event = OfferEvent::TxCodeGenerated {
-                    offer_id: "offer-123".to_string(),
-                    tx_code: "12345".to_string(),
-                    delivery_options: Some(DeliveryOptions {
-                        recipient_email: Some("sergey.kuryokhin@example.test".to_string()),
-                    }),
-                };
-
-                let result = p.dispatch_event("offer-123", &test_event).await;
-
-                match result {
-                    Ok(_) => info!("Message published successfully and is now on its way to the client! "),
-                    Err(e) => info!("Publishing failed: {}", e),
-                }
-            }
-            Err(e) => info!("NATS connection failed: {}", e),
-        }
     }
 }

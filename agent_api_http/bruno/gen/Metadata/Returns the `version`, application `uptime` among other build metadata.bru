@@ -1,0 +1,43 @@
+meta {
+  name: Returns the `version`, application `uptime` among other build metadata
+  type: http
+  seq: 1
+  tags: [
+    Metadata
+  ]
+}
+
+get {
+  url: {{BASE_URL}}/info
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Application information
+
+  request: {
+    url: {{BASE_URL}}/info
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+
+      '''
+    }
+  }
+}

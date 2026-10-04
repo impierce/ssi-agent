@@ -1,4 +1,13 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{info, warn};
+
+static LEGACY_DOMAIN_LINKAGE_SETTING: AtomicBool = AtomicBool::new(false);
+
+pub fn warn_deprecated_settings() {
+    if LEGACY_DOMAIN_LINKAGE_SETTING.load(Ordering::Relaxed) {
+        warn!("domain_linkage_enabled is deprecated and ignored; manage domain linkage through the API");
+    }
+}
 
 /// Loads provisioned configuration from a yaml file and environment variables.
 pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> {
@@ -6,7 +15,10 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
 
     let config_file_path_str = std::env::var("UNICORE__CONFIG_FILE").unwrap_or_else(|_| {
         if cfg!(feature = "test_utils") {
-            "../agent_shared/tests/test.config.yaml".to_string()
+            // Uses compile-time CARGO_MANIFEST_DIR to ensure tests locate test.config.yaml
+            // regardless of the working directory across workspaces.
+            // See `docs/adr/0003-hermetic-test-architecture-and-config-decoupling.md` for context.
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/test.config.yaml").to_string()
         } else {
             "./config.yaml".to_string()
         }
@@ -40,6 +52,9 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
             },
         )?;
 
+        if config.get::<config::Value>("domain_linkage_enabled").is_ok() {
+            LEGACY_DOMAIN_LINKAGE_SETTING.store(true, Ordering::Relaxed);
+        }
         Ok(config)
     }
     #[cfg(not(feature = "test_utils"))]
@@ -51,6 +66,9 @@ pub fn load_provisioned_config() -> Result<config::Config, config::ConfigError> 
             .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
             .build()?;
 
+        if config.get::<config::Value>("domain_linkage_enabled").is_ok() {
+            LEGACY_DOMAIN_LINKAGE_SETTING.store(true, Ordering::Relaxed);
+        }
         Ok(config)
     }
 }

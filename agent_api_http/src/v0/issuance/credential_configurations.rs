@@ -1,3 +1,4 @@
+use crate::extractors::RequestActor;
 use crate::handlers::command_handler;
 use agent_issuance::server_config::command::ServerConfigCommand;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
@@ -25,6 +26,7 @@ use std::sync::Arc;
 #[axum_macros::debug_handler]
 pub(crate) async fn credential_configurations(
     State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
     Json(credential_configuration): Json<CredentialConfiguration>,
 ) -> Result<Response, ApiError> {
     let command = ServerConfigCommand::UpdateCredentialConfiguration {
@@ -32,7 +34,14 @@ pub(crate) async fn credential_configurations(
         provisioned: false,
     };
 
-    command_handler(SERVER_CONFIG_ID, &state.command.server_config, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        SERVER_CONFIG_ID,
+        &state.command.server_config,
+        command,
+    )
+    .await?;
 
     Ok((StatusCode::CREATED, Json(credential_configuration)).into_response())
 }

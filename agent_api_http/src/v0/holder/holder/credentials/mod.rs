@@ -1,4 +1,5 @@
-use crate::handlers::{command_handler, query_handler};
+use crate::extractors::RequestActor;
+use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand},
     state::HolderState,
@@ -27,24 +28,51 @@ use std::sync::Arc;
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn credentials(State(state): State<Arc<HolderState>>) -> Result<Response, ApiError> {
-    let all_credentials = query_handler("all_holder_credentials", &state.query.all_holder_credentials)
-        .await?
-        .map(|all_credentials_view| all_credentials_view.credentials.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+pub(crate) async fn credentials(
+    State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Response, ApiError> {
+    let all_credentials = query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        "all_holder_credentials",
+        None,
+        &state.query.all_holder_credentials,
+    )
+    .await?
+    .map(|all_credentials_view| crate::utils::newest_first(all_credentials_view.credentials).collect::<Vec<_>>())
+    .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HolderCredentialsEndpointRequest {
+    /// Compact JWT-encoded verifiable credential to add to the holder.
+    #[schema(value_type = String)]
     pub credential: Jwt,
 }
 
+/// Store a credential in the organisation's wallet
+///
+/// Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+#[utoipa::path(
+    post,
+    path = "/holder/credentials",
+    operation_id = "create_holder_credential",
+    tags = ["Identity", "Holder"],
+    request_body = HolderCredentialsEndpointRequest,
+    responses(
+        (status = 201, description = "Credential stored successfully", body = Credential),
+        (status = 400, description = "Malformed JSON request body"),
+        (status = 422, description = "Request body does not match the expected schema, or the credential could not be decoded"),
+    )
+)]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
     Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
@@ -55,13 +83,25 @@ pub(crate) async fn post_credentials(
         credential,
     };
 
-    command_handler(&holder_credential_id, &state.command.credential, command).await?;
+    command_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &holder_credential_id,
+        &state.command.credential,
+        command,
+    )
+    .await?;
 
-    query_handler(&holder_credential_id, &state.query.holder_credential)
-        .await?
-        .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
-        // TODO: this *should* be an impossible error, what should we return here?
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    internal_query_handler(
+        state.authorization_checker.clone(),
+        &holder_credential_id,
+        Some(&holder_credential_id),
+        &state.query.holder_credential,
+    )
+    .await?
+    .map(|holder_credential_view| (StatusCode::CREATED, Json(holder_credential_view)).into_response())
+    // TODO: this *should* be an impossible error, what should we return here?
+    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 /// Get credential by ID
@@ -69,21 +109,29 @@ pub(crate) async fn post_credentials(
 /// Retrieves a credential held by your organisation by its ID.
 #[utoipa::path(
     get,
-    path = "/holder/credentials/{holder_credential_id}",
+    path = "/holder/credentials/{credential_id}",
     operation_id = "get_holder_credential_by_id",
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Credential retrieved successfully", body = Credential),
+        (status = 400, description = "Invalid path parameter"),
         (status = 404, description = "Credential not found"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,
+    RequestActor(actor): RequestActor,
     Path(holder_credential_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(&holder_credential_id, &state.query.holder_credential)
-        .await?
-        .map(|holder_credential_view| (StatusCode::OK, Json(holder_credential_view)).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    query_handler(
+        state.authorization_checker.clone(),
+        actor.clone(),
+        &holder_credential_id,
+        Some(&holder_credential_id),
+        &state.query.holder_credential,
+    )
+    .await?
+    .map(|holder_credential_view| (StatusCode::OK, Json(holder_credential_view)).into_response())
+    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

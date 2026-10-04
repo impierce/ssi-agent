@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
+shared-kernel.workspace = true
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -15,6 +16,7 @@ chrono.workspace = true
 cqrs-es.workspace = true
 futures.workspace = true
 jsonwebtoken.workspace = true
+indexmap.workspace = true
 oid4vc-core.workspace = true
 oid4vc-manager.workspace = true
 oid4vp.workspace = true

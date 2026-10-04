@@ -12,7 +12,31 @@ use hyper::header;
 use oauth_tsl::relying_party::StatusListTokenResponseType;
 
 use crate::v0::issuance::error::PublicError;
+use crate::v0::openapi::PROTOCOL_TAG;
 
+/// Get a status list token
+///
+/// Returns a gzip-encoded Status List Token, as defined by
+/// [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+#[utoipa::path(
+    get,
+    path = "/ietf-oauth-token-status-list/{path}",
+    operation_id = "token_status_list",
+    tags = ["Status List", PROTOCOL_TAG],
+    params(
+        ("path" = String, Path, description = "Status list ID"),
+    ),
+    responses(
+        (
+            status = 200,
+            description = "Status List Token as a compact JWT",
+            body = String,
+            content_type = "application/statuslist+jwt",
+            headers(("Content-Encoding" = String, description = "Always `gzip`")),
+        ),
+        (status = 404, description = "The status list does not exist"),
+    )
+)]
 pub async fn token_status_list(
     State(state): State<Arc<IssuanceState>>,
     Path(status_list_id): Path<String>,
@@ -60,12 +84,16 @@ pub mod tests {
         tokens::status_list_token::StatusListTyp,
     };
     use oid4vc_core::authentication::verify::Verify;
+    use shared_kernel::authorization::Caller;
 
+    use crate::tests::TEMPLATE_ID;
     use crate::v0::{
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
-            credential_issuer::credential::tests::TEST_NONCE, credentials::tests::credentials, offers::tests::offers,
-            router,
+            self,
+            credential_issuer::credential::tests::TEST_NONCE,
+            credentials::tests::{create_test_template, credentials, setup_library_state},
+            offers::tests::offers,
         },
     };
     use serde_json::json;
@@ -75,14 +103,24 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, Default::default()).await);
+        let issuance_state = Arc::new(
+            issuance_state(
+                &InMemory,
+                IssuanceServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
         initialize(&issuance_state).await.unwrap();
 
-        let mut app = router(issuance_state.clone());
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
+
+        let mut app = issuance::router((issuance_state.clone(), library_state));
 
         // We must create a signed credential first to initiate the status list creation. There is no other way we expose Status List creation through the endpoints.
-        create_test_signed_credential(&mut app, &issuance_state).await;
+        create_test_signed_credential(&mut app, &issuance_state, TEMPLATE_ID).await;
 
         // Fetch the Status List Token
         let token_status_list_response = app
@@ -143,24 +181,33 @@ pub mod tests {
     /// - with_anonymous_access: false
     /// - with_external_server: false
     /// - is_self_signed: false
-    pub async fn create_test_signed_credential(app: &mut Router, issuance_state: &Arc<IssuanceState>) -> String {
+    pub async fn create_test_signed_credential(
+        app: &mut Router,
+        issuance_state: &Arc<IssuanceState>,
+        template_id: &str,
+    ) -> String {
         let command = agent_issuance::nonce::command::NonceCommand::GenerateNonce {
             c_nonce: TEST_NONCE.to_string(),
         };
-        agent_shared::handlers::command_handler(TEST_NONCE, &issuance_state.command.nonce, command)
-            .await
-            .unwrap();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            Caller::Internal,
+            TEST_NONCE,
+            &issuance_state.command.nonce,
+            command,
+        )
+        .await
+        .unwrap();
 
-        let credential_configuration_id = "001".to_string();
+        let credential_endpoint = credentials(app).await;
 
-        let credential_endpoint = credentials(app, &credential_configuration_id).await;
-
-        let grants = offers(app, &credential_configuration_id).await.unwrap();
+        let grants = offers(app, template_id).await.unwrap();
 
         let authorization_state = Arc::new(
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
+                &Default::default(),
                 Default::default(),
                 Default::default(),
             )
@@ -185,7 +232,7 @@ pub mod tests {
                     .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
                     .body(Body::from(
                         serde_json::to_vec(&json!({
-                            "credential_configuration_id": credential_configuration_id,
+                            "credential_configuration_id": template_id,
                             "proofs": {
                                 "jwt":[jwt]
                             }

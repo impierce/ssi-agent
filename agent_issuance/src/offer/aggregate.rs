@@ -1,6 +1,5 @@
 use agent_shared::config::config;
-use async_trait::async_trait;
-use cqrs_es::Aggregate;
+use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
 use oid4vci::credential_offer::{
@@ -22,7 +21,6 @@ use oid4vci::credential_offer::CredentialConfigurationIds;
 use oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[schema(as = CredentialOfferStatus)]
 pub enum Status {
     #[default]
     Created,
@@ -50,6 +48,7 @@ pub struct Offer {
     // TODO: provide full type
     #[schema(value_type = Option<Object>)]
     pub credential_response: Option<CredentialResponse>,
+    #[schema(inline)]
     pub status: Status,
     pub tx_code: Option<String>,
     pub delivery_options: Option<DeliveryOptions>,
@@ -78,28 +77,30 @@ pub enum DeliveryMethod {
     },
 }
 
-#[async_trait]
 impl Aggregate for Offer {
     type Command = OfferCommand;
     type Event = OfferEvent;
     type Error = OfferError;
     type Services = Arc<IssuanceServices>;
 
-    fn aggregate_type() -> String {
-        "offer".to_string()
-    }
+    const TYPE: &'static str = "offer";
 
-    async fn handle(&self, command: Self::Command, services: &Self::Services) -> Result<Vec<Self::Event>, Self::Error> {
+    async fn handle(
+        &mut self,
+        command: Self::Command,
+        services: &Self::Services,
+        sink: &EventSink<Self>,
+    ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;
 
         info!("Handling command: {:?}", command);
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateCredentialOffer {
                 offer_id,
                 grant_types,
-                credential_configuration_ids,
+                template_ids,
                 tx_code_constraints,
                 delivery_options,
             } => {
@@ -131,7 +132,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
                     credential_issuer: credential_issuer.clone(),
-                    credential_configuration_ids: CredentialConfigurationIds::try_new(credential_configuration_ids)
+                    credential_configuration_ids: CredentialConfigurationIds::try_new(template_ids)
                         .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
                 }));
@@ -182,7 +183,7 @@ impl Aggregate for Offer {
             AddCredentials {
                 offer_id,
                 credential_ids,
-                credential_configuration_ids,
+                template_ids,
             } => {
                 let mut credential_offer = self
                     .credential_offer
@@ -190,12 +191,12 @@ impl Aggregate for Offer {
                     .ok_or_else(|| MissingCredentialOfferError)?;
 
                 if let CredentialOffer::CredentialOffer(credential_offer) = &mut credential_offer {
-                    // Deduplicate credential_configuration_ids to ensure uniqueness
+                    // Deduplicate template_ids to ensure uniqueness
                     let credential_configuration_id_set: HashSet<String> = credential_offer
                         .credential_configuration_ids
                         .iter()
                         .cloned()
-                        .chain(credential_configuration_ids)
+                        .chain(template_ids)
                         .collect();
 
                     credential_offer.credential_configuration_ids =
@@ -236,8 +237,18 @@ impl Aggregate for Offer {
                 match delivery_method {
                     DeliveryMethod::TargetUrl { target_url } => {
                         let client = reqwest::Client::new();
-                        let target = form_url_encoded_credential_offer
-                            .replace("openid-credential-offer://", target_url.as_str());
+
+                        // TODO: Currently, we are hardcoding the `/credential_offer` endpoint on the target URL.
+                        // According to the OpenID4VCI specification, we should instead retrieve the `credential_offer_endpoint`
+                        // from the Wallet's Client Metadata.
+                        // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-client-metadata
+                        let target = form_url_encoded_credential_offer.replace(
+                            "openid-credential-offer://",
+                            target_url
+                                .join("credential_offer")
+                                .map_err(InvalidCredentialOfferUriError)?
+                                .as_str(),
+                        );
 
                         info!("Sending credential offer to: {}", target);
 
@@ -259,8 +270,8 @@ impl Aggregate for Offer {
 
                         // TODO: Remove this client-side logic.
                         let offer_link = config()
-                            .application_url
-                            .join(&format!("offer/{}", offer_id))
+                            .public_url
+                            .join(&format!("public/offers/{}", offer_id))
                             .expect("Failed to construct offer link URL");
 
                         Ok(vec![CredentialOfferEmailSent {
@@ -348,7 +359,13 @@ impl Aggregate for Offer {
                     status: Status::Issued,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
@@ -441,7 +458,7 @@ pub mod tests {
     type OfferTestFramework = TestFramework<Offer>;
 
     // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
-    #[expect(dead_code)]
+    // TODO: refactor test
     fn run_with_large_stack<F>(test: F)
     where
         F: FnOnce() + Send + 'static,
@@ -470,7 +487,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
@@ -510,7 +527,7 @@ pub mod tests {
             .given_no_previous_events()
             .when(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
@@ -559,7 +576,7 @@ pub mod tests {
             .when(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
-                credential_configuration_ids: vec!["UniversityDegree".to_string()],
+                template_ids: vec!["UniversityDegree".to_string()],
             })
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
@@ -579,6 +596,7 @@ pub mod tests {
     // outside the test function body, before entering run_with_large_stack. This would cause a stack
     // overflow before the large stack is available. Instead, all fixture setup is done manually inside
     // the large-stack wrapper using the test helper functions directly.
+    #[rstest]
     #[serial_test::serial]
     fn test_verify_credential_response() {
         run_with_large_stack(move || {
