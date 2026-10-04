@@ -805,8 +805,7 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_template_resets_visibility_and_hides_lineage() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "source-template", Visibility::Public).await;
 
         let response = duplicate_template(
@@ -832,8 +831,7 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_template_rejects_deleted_source_template() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "deleted-source", Visibility::Private).await;
 
         command_handler(
@@ -867,8 +865,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_template_returns_created_template() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = create_template(
             State(state),
@@ -904,8 +901,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_template_defaults_empty_display_name_to_title() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = create_template(
             State(state),
@@ -940,8 +936,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_requires_id() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = update_template(
             State(state),
@@ -975,8 +970,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_rejects_deleted_template() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "deleted-template", Visibility::Private).await;
 
         command_handler(
@@ -1021,8 +1015,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_applies_type_and_credential_expiration_changes() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         let response = update_template(
@@ -1063,8 +1056,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_keeps_empty_display_name_and_resolves_it_on_read() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         let response = update_template(
@@ -1131,8 +1123,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_keeps_title_and_display_name_independent() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         update_template(
@@ -1197,8 +1188,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_templates_filters_deleted_and_sorts_latest_first() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template_with_title(&state, "older-template", "Older Template", Visibility::Private).await;
         create_source_template_with_title(&state, "newer-template", "Newer Template", Visibility::Private).await;
         create_source_template_with_title(&state, "deleted-template", "Deleted Template", Visibility::Private).await;
@@ -1354,8 +1344,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_template_hides_template_from_get_endpoint() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-delete", Visibility::Private).await;
 
         let response = delete_template(
@@ -1384,8 +1373,7 @@ mod tests {
         // is preserved end-to-end: create template → retrieve via get endpoint → field still present.
         use agent_library::template::aggregate::FormFieldType;
 
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = create_template(
             State(state.clone()),

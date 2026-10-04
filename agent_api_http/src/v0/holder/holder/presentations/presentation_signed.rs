@@ -87,7 +87,6 @@ mod tests {
             &agent_store::in_memory::InMemory,
             Arc::new(HolderServices::new(Arc::new(Subject::test_subject().await))),
             &shared_kernel::EventBusHandle::default(),
-            vec![],
         )
         .await;
         state.authorization_checker = authorization.clone();

@@ -213,24 +213,13 @@ dependencies = [
 name = "agent_event_publisher_http"
 version = "0.1.0"
 dependencies = [
- "agent_authorization",
  "agent_event_publisher_http",
- "agent_holder",
- "agent_identity",
- "agent_issuance",
- "agent_library",
  "agent_shared",
- "agent_store",
- "agent_verification",
- "anyhow",
- "async-trait",
- "cqrs-es",
- "http-serde",
  "reqwest 0.12.28",
- "serde",
  "serde_json",
- "serde_with 3.21.0",
+ "shared-kernel",
  "tokio",
+ "tokio-stream",
  "tracing",
  "wiremock",
 ]
@@ -239,21 +228,13 @@ dependencies = [
 name = "agent_event_publisher_nats"
 version = "0.1.0"
 dependencies = [
- "agent_issuance",
  "agent_shared",
- "agent_store",
- "anyhow",
  "async-nats",
- "async-trait",
- "cloudevents-sdk",
- "cqrs-es",
- "futures",
- "serde",
  "serde_json",
- "testcontainers-modules",
+ "shared-kernel",
  "tokio",
+ "tokio-stream",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -2260,25 +2241,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
-name = "cloudevents-sdk"
-version = "0.8.0"
-source = "git+https://github.com/cloudevents/sdk-rust?rev=6f02d23#6f02d238e4de9e6ab18f36ddf6f93265121c3dd4"
-dependencies = [
- "async-nats",
- "base64 0.22.1",
- "bitflags 2.13.0",
- "chrono",
- "delegate-attr",
- "hostname",
- "serde",
- "serde_json",
- "snafu",
- "url",
- "uuid",
- "web-sys",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3019,17 +2981,6 @@ name = "decoded-char"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5440d1dc8ea7cae44cda3c64568db29bfa2434aba51ae66a50c00488841a65a3"
-
-[[package]]
-name = "delegate-attr"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51aac4c99b2e6775164b412ea33ae8441b2fde2dbf05a20bc0052a63d08c475b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
 
 [[package]]
 name = "der"
@@ -4879,17 +4830,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
 dependencies = [
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "hostname"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "617aaa3557aef3810a6369d0a99fac8a080891b68bd9f9812a1eeda0c0730cbd"
-dependencies = [
- "cfg-if",
- "libc",
- "windows-link",
 ]
 
 [[package]]
@@ -11969,27 +11909,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "snafu"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e84b3f4eacbf3a1ce05eac6763b4d629d60cbc94d632e4092c54ade71f1e1a2"
-dependencies = [
- "snafu-derive",
-]
-
-[[package]]
-name = "snafu-derive"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
 ]
 
 [[package]]
