@@ -61,21 +61,13 @@ mod tests {
         #[case] uri: &str,
         #[case] form: Option<&str>,
     ) {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         let authorization_state = Arc::new(
             authorization_state(
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,

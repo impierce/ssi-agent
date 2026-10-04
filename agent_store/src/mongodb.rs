@@ -135,7 +135,7 @@ impl CqrsComponentBuilder for MongoDB {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         &self,
         services: A::Services,
-        event_publishers: Vec<Box<dyn Query<A>>>,
+        queries: Vec<Box<dyn Query<A>>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
         Arc<dyn DynViewRepository<V, A>>,
@@ -156,12 +156,7 @@ impl CqrsComponentBuilder for MongoDB {
             Arc::new(
                 AggregateHandler::new(self.client.clone(), services)
                     .await
-                    .with_parameters(
-                        aggregate.clone(),
-                        all_aggregates.clone(),
-                        event_publishers,
-                        &all_aggregates_name,
-                    ),
+                    .with_parameters(aggregate.clone(), all_aggregates.clone(), queries, &all_aggregates_name),
             ),
             aggregate,
             all_aggregates,

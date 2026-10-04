@@ -107,10 +107,9 @@ pub mod tests {
     use crate::v0::verification::{
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
-    use agent_event_publisher_http::EventPublisherHttp;
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory::InMemory, verification_state, EventPublisher};
+    use agent_store::{in_memory::InMemory, verification_state};
     use agent_verification::services::VerificationServices;
     use axum::{
         body::Body,
@@ -202,23 +201,15 @@ pub mod tests {
         set_config().set_event_publisher_http_target_events(
             0,
             Events {
-                authorization_request: vec![
-                    agent_shared::config::AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified,
-                ],
-                ..Default::default()
+                types: vec!["SIOPv2AuthorizationResponseVerified".to_string()],
             },
         );
 
         let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        let event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-            .unwrap()
-            .into_iter()
-            .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-            .collect();
+        agent_event_publisher_http::start_http_forwarder(bus.clone());
 
-        let verification_state = Arc::new(
-            verification_state(&InMemory, VerificationServices::default().await, &bus, event_publishers).await,
-        );
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus).await);
 
         let mut app = router(verification_state);
 
@@ -254,7 +245,7 @@ pub mod tests {
     ) {
         let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus, vec![]).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus).await);
 
         let mut app = router(verification_state);
 

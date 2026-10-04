@@ -379,7 +379,7 @@ pub mod tests {
     #[tokio::test]
     async fn removed_connection_stays_hidden_after_repository_round_trip() {
         let event_bus = shared_kernel::EventBusHandle::default();
-        let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &event_bus, vec![]).await);
+        let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &event_bus).await);
         let connection_id = "removed-connection";
 
         state

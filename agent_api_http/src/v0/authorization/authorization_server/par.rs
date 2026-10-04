@@ -281,15 +281,8 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pushed_authorization_request_endpoint() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -308,7 +301,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,
@@ -329,15 +321,8 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_interactive_authorization_request_flow() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
@@ -351,13 +336,8 @@ pub mod tests {
         let issuer_state = issuer_state.unwrap();
 
         let verification_state = Arc::new(
-            agent_store::verification_state(
-                &InMemory,
-                VerificationServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
+            agent_store::verification_state(&InMemory, VerificationServices::default().await, &Default::default())
+                .await,
         );
 
         let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(Box::new(
@@ -369,7 +349,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 oauth2_authorization_request_domain_services,
             )
             .await,

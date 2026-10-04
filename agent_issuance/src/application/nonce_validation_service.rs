@@ -147,15 +147,7 @@ mod tests {
 
     #[rstest]
     async fn test_valid_nonce_successful_validation(credential_request: CredentialRequest) {
-        let state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&state).await.unwrap();
 
         let nonce = NONCE_VALUE.to_string();
@@ -173,15 +165,7 @@ mod tests {
     #[serial_test::serial]
     async fn test_validate_redeemed_nonce_fails(credential_request: CredentialRequest) {
         let nonce = NONCE_VALUE.to_string();
-        let state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&state).await.unwrap();
 
         let create_command = NonceCommand::GenerateNonce { c_nonce: nonce.clone() };
@@ -201,15 +185,7 @@ mod tests {
     #[rstest]
     #[serial_test::serial]
     async fn test_validate_wrong_nonce(credential_request: CredentialRequest) {
-        let state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&state).await.unwrap();
 
         let create_command = NonceCommand::GenerateNonce {
