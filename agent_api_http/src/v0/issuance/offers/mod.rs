@@ -2,14 +2,15 @@ pub mod send;
 
 use crate::extractors::RequestActor;
 use crate::{
-    error::type_url,
-    handlers::{command_handler, query_handler},
+    error::{type_url, IntoApiErrorExt},
+    handlers::{caller, command_handler, query_handler},
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
     state::IssuanceState,
 };
 use agent_library::{
+    queries,
     state::LibraryState,
     template::aggregate::{Status as TemplateStatus, Template},
 };
@@ -97,22 +98,16 @@ pub(crate) async fn offers(
     let mut templates = Vec::with_capacity(template_ids.len());
 
     for template_id in &template_ids {
-        let template: Template = query_handler(
-            library_state.authorization_checker.clone(),
-            actor.clone(),
-            template_id,
-            Some(template_id),
-            &library_state.query.template,
-        )
-        .await?
-        .filter(|t| t.status != TemplateStatus::Deleted)
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Template Not Found")
-                .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{template_id}`"))
-                .finish()
-        })?;
+        let template: Template = queries::get_template(&library_state, caller(actor.clone()), template_id)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)?
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Template Not Found")
+                    .type_url(type_url("issuance#template-not-found"))
+                    .message(format!("No template found with id: `{template_id}`"))
+                    .finish()
+            })?;
 
         // Template must be in "Published" status
         if template.status != TemplateStatus::Published {

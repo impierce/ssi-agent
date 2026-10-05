@@ -223,9 +223,14 @@ impl Aggregate for Catalog {
 pub mod catalog_tests {
     use super::test_utils::*;
     use super::*;
+    use crate::catalog::services::CatalogServiceImpl;
+    use crate::template::aggregate::{Status, Template};
+    use crate::template::views::TemplateView;
     use async_trait::async_trait;
+    use cqrs_es::persist::{ViewContext, ViewRepository};
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
+    use shared_kernel::test_utils::in_memory::MemViewRepository;
     use std::sync::Arc;
 
     pub struct MockCatalogServices {
@@ -388,6 +393,37 @@ pub mod catalog_tests {
                 template_ids: template_ids.clone(),
             })
             .then_expect_error_message(&format!("Template not found: {}", template_ids.join(", ")))
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_deleted_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
+        let template_view_repo = MemViewRepository::<TemplateView, Template>::default();
+        for (template_id, status) in [("template-001", Status::Published), ("template-002", Status::Deleted)] {
+            let view = TemplateView {
+                template_id: template_id.to_string(),
+                status,
+                ..Default::default()
+            };
+            ViewRepository::update_view(&template_view_repo, view, ViewContext::new(template_id.to_string(), 0))
+                .await
+                .unwrap();
+        }
+        let services = Arc::new(CatalogServiceImpl {
+            template_view_repo: Arc::new(template_view_repo),
+        });
+
+        CatalogTestFramework::with(services)
+            .given(vec![CatalogEvent::CatalogCreated {
+                id: catalog_id.clone(),
+                display,
+                visibility,
+            }])
+            .when(CatalogCommand::AddTemplateIds {
+                catalog_id,
+                template_ids: vec!["template-001".to_string(), "template-002".to_string()],
+            })
+            .then_expect_error_message(&CatalogError::TemplateNotFound("template-002".to_string()).to_string())
     }
 
     #[rstest]

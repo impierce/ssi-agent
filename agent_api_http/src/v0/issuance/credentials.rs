@@ -1,6 +1,6 @@
-use crate::error::type_url;
+use crate::error::{type_url, IntoApiErrorExt};
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, internal_command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -12,6 +12,7 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_library::queries;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
 use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
@@ -122,22 +123,16 @@ pub(crate) async fn credentials(
     }
 
     // Look up the template by ID.
-    let template: Template = query_handler(
-        library_state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &library_state.query.template,
-    )
-    .await?
-    .filter(|t| t.status != TemplateStatus::Deleted)
-    .ok_or_else(|| {
-        ApiError::builder(StatusCode::NOT_FOUND)
-            .title("Template Not Found")
-            .type_url(type_url("issuance#template-not-found"))
-            .message(format!("No template found with id: `{template_id}`"))
-            .finish()
-    })?;
+    let template: Template = queries::get_template(&library_state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("issuance#template-not-found"))
+                .message(format!("No template found with id: `{template_id}`"))
+                .finish()
+        })?;
 
     if template.status != TemplateStatus::Published {
         return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
