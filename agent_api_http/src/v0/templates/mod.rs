@@ -674,7 +674,8 @@ pub(crate) async fn delete_template(
 mod tests {
     use super::*;
     use crate::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_library::library_state;
+    use agent_store::in_memory::InMemory;
     use axum::{body::to_bytes, response::IntoResponse};
     use serde_json::json;
     use std::sync::Arc;

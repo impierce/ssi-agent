@@ -65,14 +65,16 @@ pub async fn token_status_list(
 pub mod tests {
     use std::sync::Arc;
 
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::{
         services::IssuanceServices,
         state::{initialize, IssuanceState},
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
         Router,

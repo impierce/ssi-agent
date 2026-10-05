@@ -65,16 +65,18 @@ pub mod tests {
             offers::tests::offers,
         },
     };
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_verifier, state::UNIME_REDIRECT_URI,
     };
+    use agent_issuance::issuance_state;
     use agent_issuance::public_offer::command::PublicOfferCommand;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_shared::handlers::public_command_handler as command_handler;
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},

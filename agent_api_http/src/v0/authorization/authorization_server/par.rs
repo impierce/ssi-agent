@@ -122,16 +122,18 @@ pub mod tests {
             offers::tests::offers,
         },
     };
+    use agent_authorization::authorization_state;
     use agent_authorization::{
         application::interactive_authorization_service::INTERACTION_TYPE_OPENID4VP,
         domain::oauth2_authorization_request::aggregate::test_utils::code_challenge,
         services::OAuth2AuthorizationRequestDomainServices, state::UNIME_REDIRECT_URI,
     };
     use agent_authorization::{services::AuthorizationServices, state::UNIME_CLIENT_ID};
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
-    use agent_verification::services::VerificationServices;
+    use agent_store::in_memory::InMemory;
+    use agent_verification::{services::VerificationServices, verification_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -335,10 +337,8 @@ pub mod tests {
         let AuthorizationCode { issuer_state, .. } = authorization_code.unwrap();
         let issuer_state = issuer_state.unwrap();
 
-        let verification_state = Arc::new(
-            agent_store::verification_state(&InMemory, VerificationServices::default().await, &Default::default())
-                .await,
-        );
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &Default::default()).await);
 
         let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(Box::new(
             VerificationAuthorizationAdapter::new(verification_state.clone()),

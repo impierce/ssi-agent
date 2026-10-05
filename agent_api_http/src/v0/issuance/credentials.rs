@@ -635,14 +635,15 @@ pub mod tests {
     use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
     use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+    use agent_issuance::issuance_state;
     use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_library::library_state;
     use agent_library::template::aggregate::{DataModel, Display, Expiration, HolderType, Status, Visibility};
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
-    use agent_store::{issuance_state, library_state};
     use axum::{
         body::{self, Body},
         http::{self, Request, StatusCode},

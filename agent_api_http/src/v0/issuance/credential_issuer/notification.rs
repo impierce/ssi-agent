@@ -97,11 +97,12 @@ mod tests {
     use crate::v0::issuance::credentials::tests::{create_test_template, credentials, setup_library_state};
     use crate::v0::issuance::offers::tests::offers;
     use crate::v0::{authorization, issuance};
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state};
     use axum::{body::Body, http::Request};
     use oid4vci::errors::ErrorStatusCode;
     use oid4vci::notification_request::NotificationEvent;

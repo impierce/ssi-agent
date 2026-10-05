@@ -63,8 +63,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_nonce_endpoint() {
+        use agent_issuance::issuance_state;
         use agent_store::in_memory::InMemory;
-        use agent_store::issuance_state;
 
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);

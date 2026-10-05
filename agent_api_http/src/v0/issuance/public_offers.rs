@@ -370,13 +370,13 @@ mod tests {
     use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::router;
     use crate::API_VERSION;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_library::state::LibraryState;
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},

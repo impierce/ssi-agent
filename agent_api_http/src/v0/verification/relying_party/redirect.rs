@@ -109,8 +109,8 @@ pub mod tests {
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{set_config, Events};
-    use agent_store::{in_memory::InMemory, verification_state};
-    use agent_verification::services::VerificationServices;
+    use agent_store::in_memory::InMemory;
+    use agent_verification::{services::VerificationServices, verification_state};
     use axum::{
         body::Body,
         http::{self, Request},

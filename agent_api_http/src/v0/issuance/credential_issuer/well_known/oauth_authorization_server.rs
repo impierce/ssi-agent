@@ -47,9 +47,10 @@ mod tests {
         credentials::tests::{create_test_template, setup_library_state},
         router,
     };
+    use agent_issuance::issuance_state;
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_secret_manager::service::Service;
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},

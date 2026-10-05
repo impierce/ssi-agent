@@ -517,7 +517,8 @@ pub(crate) async fn delete_catalog(
 mod tests {
     use super::*;
     use crate::handlers::public_command_handler;
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_library::library_state;
+    use agent_store::in_memory::InMemory;
     use shared_kernel::{
         async_trait,
         authorization::{

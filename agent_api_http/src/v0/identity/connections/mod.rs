@@ -339,8 +339,8 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
 pub mod tests {
     use super::*;
 
-    use agent_identity::services::IdentityServices;
-    use agent_store::{identity_state, in_memory::InMemory};
+    use agent_identity::{identity_state, services::IdentityServices};
+    use agent_store::in_memory::InMemory;
     use cqrs_es::persist::ViewContext;
 
     #[test]
