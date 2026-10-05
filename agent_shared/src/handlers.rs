@@ -80,7 +80,17 @@ where
     Aggregate(#[from] AggregateError<E>),
 }
 
-/// The `command_handler` function is used to execute a command on an aggregate.
+/// Executes a command on an aggregate after verifying that the [`Caller`] is authorized.
+///
+/// This is the standard entry point for protected API endpoints. It validates the caller's
+/// permissions against [`AuthorizationChecker`] using the command's [`CommandOperation::operation_name`],
+/// and upon successful authorization, delegates to [`command_handler_with_caller`] to execute the
+/// command with attached caller metadata.
+///
+/// # Errors
+///
+/// Returns a [`CommandHandlerError::Authorization`] if the caller is not permitted to perform the
+/// operation, or a [`CommandHandlerError::Aggregate`] if command execution fails on the aggregate.
 pub async fn command_handler<A>(
     authorization_checker: Arc<dyn AuthorizationChecker>,
     caller: Caller,
@@ -110,7 +120,16 @@ where
     command_handler_with_caller(aggregate_id, state, command, &caller).await
 }
 
-pub async fn command_handler_with_caller<A>(
+/// Executes a command on an aggregate directly with caller provenance metadata, bypassing authorization.
+///
+/// This serves as the low-level execution engine for all command dispatches. It stamps the CQRS event
+/// metadata with the current UTC timestamp and the [`Caller`]'s provenance (`callerid` and `callertype`),
+/// ensuring that all emitted domain events and downstream integration events maintain an audit trail.
+///
+/// # Errors
+///
+/// Returns a [`CommandHandlerError::Aggregate`] if command execution or event persistence fails.
+async fn command_handler_with_caller<A>(
     aggregate_id: &str,
     state: &CommandHandler<A>,
     command: A::Command,
@@ -147,6 +166,18 @@ where
         .inspect_err(|err| error!("Error: {}", err.to_string()))
 }
 
+/// Executes a command on an aggregate for public, unauthenticated protocol endpoints.
+///
+/// Certain decentralized protocols (e.g., OpenID4VCI credential issuance or public invitation acceptance)
+/// require endpoints to be openly accessible to external wallets without authentication credentials.
+///
+/// This function bypasses [`AuthorizationChecker`] and delegates to [`command_handler_with_caller`]
+/// using [`Caller::Anonymous`], guaranteeing that resulting events are explicitly stamped with
+/// `callertype = "anonymous"`.
+///
+/// # Errors
+///
+/// Returns a [`CommandHandlerError::Aggregate`] if command execution fails on the aggregate.
 pub async fn public_command_handler<A>(
     aggregate_id: &str,
     state: &CommandHandler<A>,
