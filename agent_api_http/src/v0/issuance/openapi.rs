@@ -1,5 +1,5 @@
 use crate::v0::issuance::credentials::{
-    __path_all_credentials, __path_credential, __path_credentials, __path_patch_credential,
+    __path_all_credentials, __path_batch_credentials, __path_credential, __path_credentials, __path_patch_credential,
 };
 use crate::v0::issuance::offers::{
     __path_all_offers, __path_offer, __path_offers,
@@ -18,6 +18,7 @@ use utoipa::{
 #[openapi(
     paths(
         all_credentials,
+        batch_credentials,
         credential,
         credentials,
         patch_credential,

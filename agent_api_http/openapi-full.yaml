@@ -1110,6 +1110,37 @@ paths:
           description: Template not found
         '422':
           description: Request body does not match the expected schema
+  /v0/credentials/batch:
+    post:
+      tags:
+      - Credentials
+      - Issuance
+      summary: Batch create credentials
+      description: |-
+        Validates and optionally creates multiple credentials in a single request.
+        All payloads are validated first; if any fail, no credentials or offers are created
+        and a detailed error response is returned. When `verifyOnly` is `true`, only
+        validation is performed.
+      operationId: batch_create_credentials
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCredentialsRequest'
+        required: true
+      responses:
+        '200':
+          description: All credentials validated (and created if verifyOnly is false)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          description: Empty batch or batch exceeds size limit
+        '422':
+          description: One or more credentials failed validation
   /v0/credentials/{credential_id}:
     get:
       tags:
@@ -2560,6 +2591,19 @@ components:
       properties:
         batch_size:
           $ref: '#/components/schemas/BatchSize'
+    BatchCredentialsRequest:
+      type: object
+      required:
+      - credentials
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/CredentialsEndpointRequest'
+          description: The list of credential payloads to process.
+        verifyOnly:
+          type: boolean
+          description: When true, only validate — don't create credentials/offers or send emails.
     BatchSize:
       type: integer
       format: int32
