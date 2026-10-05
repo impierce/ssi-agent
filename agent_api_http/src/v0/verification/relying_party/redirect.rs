@@ -206,7 +206,9 @@ pub mod tests {
         );
 
         let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        agent_event_publisher_http::start_http_forwarder(bus.clone());
+        if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&bus) {
+            publisher.spawn();
+        }
 
         let verification_state =
             Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus).await);

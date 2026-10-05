@@ -1,23 +1,43 @@
-use agent_shared::config::config;
-use shared_kernel::event_bus::{EventBus, EventBusHandle, EventFilter};
+use agent_shared::config::{config, EventPublisherNats};
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
 
-/// Spawns a background worker that subscribes to the [`EventBusHandle`] and forwards
+/// Background event publisher that subscribes to the [`EventBusHandle`] and publishes
 /// canonical [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s to configured NATS subjects.
-pub fn start_nats_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::JoinHandle<()>> {
-    let conf = config();
-    let nats_config = conf.event_publishers.nats.as_ref()?;
-    if !nats_config.enabled {
-        return None;
+pub struct NatsEventPublisher {
+    config: EventPublisherNats,
+    stream: BusEventStream,
+}
+
+impl NatsEventPublisher {
+    /// Creates a new `NatsEventPublisher` with an explicitly provided configuration.
+    ///
+    /// Subscribes immediately to `event_bus` upon creation to prevent event loss.
+    /// Returns `None` if `config.enabled` is `false`.
+    pub fn new(config: EventPublisherNats, event_bus: &EventBusHandle) -> Option<Self> {
+        if !config.enabled {
+            return None;
+        }
+
+        let stream = event_bus.subscribe(EventFilter::default());
+
+        Some(Self { config, stream })
     }
 
-    let nats_url = nats_config.nats_url.clone();
-    let subjects = nats_config.subjects.clone();
-    let mut stream = event_bus.subscribe(EventFilter::default());
+    /// Creates a `NatsEventPublisher` from the global application configuration.
+    pub fn from_config(event_bus: &EventBusHandle) -> Option<Self> {
+        let conf = config();
+        let nats_config = conf.event_publishers.nats.as_ref()?.clone();
+        Self::new(nats_config, event_bus)
+    }
 
-    Some(tokio::spawn(async move {
-        info!("Connecting NATS event publisher forwarder to {}...", nats_url);
+    /// Runs the NATS event publisher loop.
+    pub async fn run(mut self) {
+        let nats_url = self.config.nats_url;
+        let subjects = self.config.subjects;
+
+        info!("Connecting NATS event publisher to {}...", nats_url);
         let client = match async_nats::connect(&nats_url).await {
             Ok(c) => c,
             Err(err) => {
@@ -26,9 +46,9 @@ pub fn start_nats_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::Jo
             }
         };
 
-        info!("NATS event publisher forwarder connected successfully.");
+        info!("NATS event publisher connected successfully.");
 
-        while let Some(item) = stream.next().await {
+        while let Some(item) = self.stream.next().await {
             if let Ok(cloud_event) = item {
                 for subject_config in &subjects {
                     let filter = EventFilter {
@@ -64,7 +84,12 @@ pub fn start_nats_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::Jo
                 }
             }
         }
-    }))
+    }
+
+    /// Spawns the NATS event publisher as a background task on the Tokio runtime.
+    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(self.run())
+    }
 }
 
 #[cfg(test)]
@@ -80,69 +105,44 @@ mod tests {
     static TEST_MUTEX: Mutex<()> = Mutex::const_new(());
 
     #[tokio::test]
-    async fn test_start_nats_forwarder_disabled() {
-        let _guard = TEST_MUTEX.lock().await;
-
-        {
-            let mut conf = set_config();
-            conf.event_publishers.nats = None;
-        }
-
+    async fn test_nats_event_publisher_new_disabled() {
         let event_bus = EventBusHandle::new(100);
-        let handle = start_nats_forwarder(event_bus.clone());
-        assert!(handle.is_none(), "Expected None when NATS publisher config is None");
 
-        {
-            let mut conf = set_config();
-            conf.event_publishers.nats = Some(EventPublisherNats {
-                enabled: false,
-                nats_url: "127.0.0.1:4222".to_string(),
-                subjects: vec![],
-            });
-        }
-
-        let handle = start_nats_forwarder(event_bus);
-        assert!(handle.is_none(), "Expected None when NATS publisher enabled flag is false");
-
-        // Cleanup
-        set_config().event_publishers.nats = None;
+        let config = EventPublisherNats {
+            enabled: false,
+            nats_url: "127.0.0.1:4222".to_string(),
+            subjects: vec![],
+        };
+        assert!(NatsEventPublisher::new(config, &event_bus).is_none());
     }
 
     #[tokio::test]
-    async fn test_start_nats_forwarder_connection_failure() {
-        let _guard = TEST_MUTEX.lock().await;
+    async fn test_nats_event_publisher_connection_failure() {
+        let event_bus = EventBusHandle::new(100);
 
         // Use a closed port that immediately fails connection
-        {
-            let mut conf = set_config();
-            conf.event_publishers.nats = Some(EventPublisherNats {
-                enabled: true,
-                nats_url: "127.0.0.1:1".to_string(),
-                subjects: vec![NatsSubject {
-                    name: "test.subject".to_string(),
-                    events: Events {
-                        types: vec!["*".to_string()],
-                    },
-                }],
-            });
-        }
+        let config = EventPublisherNats {
+            enabled: true,
+            nats_url: "127.0.0.1:1".to_string(),
+            subjects: vec![NatsSubject {
+                name: "test.subject".to_string(),
+                events: Events {
+                    types: vec!["*".to_string()],
+                },
+            }],
+        };
 
-        let event_bus = EventBusHandle::new(100);
-        let handle = start_nats_forwarder(event_bus)
-            .expect("Expected JoinHandle when NATS publisher is enabled");
+        let publisher =
+            NatsEventPublisher::new(config, &event_bus).expect("Expected NatsEventPublisher instance when enabled");
+        let handle = publisher.spawn();
 
         // The background task should exit gracefully when connect fails
         let res = tokio::time::timeout(Duration::from_secs(3), handle).await;
         assert!(res.is_ok(), "Task should finish promptly on connection failure");
-
-        // Cleanup
-        set_config().event_publishers.nats = None;
     }
 
     #[tokio::test]
-    async fn test_start_nats_forwarder_publishes_to_mock_nats() {
-        let _guard = TEST_MUTEX.lock().await;
-
+    async fn test_nats_event_publisher_publishes_to_mock_nats() {
         // Bind mock NATS TCP listener on an ephemeral port
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let local_addr = listener.local_addr().unwrap();
@@ -177,23 +177,20 @@ mod tests {
             }
         });
 
-        {
-            let mut conf = set_config();
-            conf.event_publishers.nats = Some(EventPublisherNats {
-                enabled: true,
-                nats_url: local_addr.to_string(),
-                subjects: vec![NatsSubject {
-                    name: "unicore.events".to_string(),
-                    events: Events {
-                        types: vec!["tech.impierce.unicore.credential.issued".to_string()],
-                    },
-                }],
-            });
-        }
+        let config = EventPublisherNats {
+            enabled: true,
+            nats_url: local_addr.to_string(),
+            subjects: vec![NatsSubject {
+                name: "unicore.events".to_string(),
+                events: Events {
+                    types: vec!["tech.impierce.unicore.credential.issued".to_string()],
+                },
+            }],
+        };
 
         let event_bus = EventBusHandle::new(100);
-        let handle = start_nats_forwarder(event_bus.clone())
-            .expect("Expected JoinHandle when NATS publisher is enabled");
+        let publisher = NatsEventPublisher::new(config, &event_bus).expect("Expected NatsEventPublisher when enabled");
+        let handle = publisher.spawn();
 
         // Wait briefly for NATS handshake to complete
         tokio::time::sleep(Duration::from_millis(150)).await;
@@ -203,13 +200,10 @@ mod tests {
         event_bus.publish(non_matching);
 
         // 2. Publish matching event
-        let matching = CloudEvent::new(
-            "tech.impierce.unicore.credential.issued",
-            "https://example.com/issuer",
-        )
-        .with_subject("sub-42")
-        .with_caller(Some("caller-nats".to_string()), Some("api_key".to_string()))
-        .with_data(serde_json::json!({ "status": "issued" }));
+        let matching = CloudEvent::new("tech.impierce.unicore.credential.issued", "https://example.com/issuer")
+            .with_subject("sub-42")
+            .with_caller(Some("caller-nats".to_string()), Some("api_key".to_string()))
+            .with_data(serde_json::json!({ "status": "issued" }));
 
         let matching_id = matching.id.clone();
         event_bus.publish(matching);
@@ -235,7 +229,36 @@ mod tests {
 
         handle.abort();
         mock_server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_nats_event_publisher_from_config() {
+        let _guard = TEST_MUTEX.lock().await;
+
+        {
+            let mut conf = set_config();
+            conf.event_publishers.nats = None;
+        }
+
+        let event_bus = EventBusHandle::new(100);
+        assert!(NatsEventPublisher::from_config(&event_bus).is_none());
+
+        {
+            let mut conf = set_config();
+            conf.event_publishers.nats = Some(EventPublisherNats {
+                enabled: true,
+                nats_url: "127.0.0.1:1".to_string(),
+                subjects: vec![],
+            });
+        }
+
+        let publisher = NatsEventPublisher::from_config(&event_bus);
+        assert!(publisher.is_some());
+        if let Some(p) = publisher {
+            let h = p.spawn();
+            h.abort();
+        }
+
         set_config().event_publishers.nats = None;
     }
 }
-

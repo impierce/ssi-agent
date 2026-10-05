@@ -5,8 +5,8 @@ pub mod telemetry;
 
 use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
-use agent_event_publisher_http::start_http_forwarder;
-use agent_event_publisher_nats::start_nats_forwarder;
+use agent_event_publisher_http::HttpEventPublisher;
+use agent_event_publisher_nats::NatsEventPublisher;
 use agent_holder::{presentation::aggregate::Presentation, services::HolderServices};
 use agent_identity::services::{IdentityServices, LinkedVerifiablePresentationSource};
 use agent_issuance::{
@@ -138,8 +138,12 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
     let event_bus = shared_kernel::event_bus::EventBusHandle::default();
 
-    start_http_forwarder(event_bus.clone());
-    start_nats_forwarder(event_bus.clone());
+    if let Some(publisher) = HttpEventPublisher::from_config(&event_bus) {
+        publisher.spawn();
+    }
+    if let Some(publisher) = NatsEventPublisher::from_config(&event_bus) {
+        publisher.spawn();
+    }
 
     let event_store_type = config().event_store.type_.clone();
     let event_verification;
