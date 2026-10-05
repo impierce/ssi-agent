@@ -1,5 +1,6 @@
-use agent_shared::application_state::CommandHandler;
-use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
+use agent_shared::application_state::{CommandHandler, CqrsComponentBuilder};
+use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, QueryOperation};
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -91,5 +92,50 @@ impl Clone for Queries {
             received_offer: self.received_offer.clone(),
             all_received_offers: self.all_received_offers.clone(),
         }
+    }
+}
+
+/// Constructs the CQRS components and initializes the state for the Holder bounded context.
+///
+/// Registers command handlers and view repositories for held credentials, presentations,
+/// and received credential offers using the provided [`CqrsComponentBuilder`].
+pub async fn holder_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<crate::services::HolderServices>,
+    event_bus: &EventBusHandle,
+) -> HolderState {
+    let (holder_credential_command_handler, holder_credential, all_holder_credential) = builder
+        .commands_and_queries::<Credential, Credential, AllHolderCredentialsView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+
+    let (presentation_command_handler, presentation, all_presentations) = builder
+        .commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+
+    let (received_offer_command_handler, received_offer, all_received_offers) = builder
+        .commands_and_queries::<Offer, Offer, AllReceivedOffersView>(services.clone(), vec![event_bus.query()])
+        .await;
+
+    HolderState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        command: CommandHandlers {
+            credential: holder_credential_command_handler,
+            presentation: presentation_command_handler,
+            offer: received_offer_command_handler,
+        },
+        query: ViewRepositories {
+            holder_credential,
+            all_holder_credentials: all_holder_credential,
+            presentation,
+            all_presentations,
+            received_offer,
+            all_received_offers,
+        },
     }
 }

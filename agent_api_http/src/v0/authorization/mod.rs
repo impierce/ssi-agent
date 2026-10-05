@@ -28,10 +28,12 @@ pub fn router((authorization_state, issuance_state): (Arc<AuthorizationState>, A
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service as _;
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},

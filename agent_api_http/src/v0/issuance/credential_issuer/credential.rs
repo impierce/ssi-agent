@@ -240,15 +240,16 @@ pub mod tests {
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
     use agent_issuance::credential::aggregate::CredentialExpiry;
+    use agent_issuance::issuance_state;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
-    use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},

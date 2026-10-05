@@ -33,11 +33,6 @@ impl Postgres {
     }
     // TODO: Run [Pool::close] during graceful shutdown to close all open connections.
 
-    pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
-        self.verify_events_with(event_verification::core_event_verifiers())
-            .await
-    }
-
     pub async fn verify_events_with(
         &self,
         verifiers: &[EventVerifier],

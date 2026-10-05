@@ -1,6 +1,8 @@
 use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+use agent_issuance::issuance_state;
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
+use agent_library::library_state;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{DataModel, Display, PropertyAttribute, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
@@ -9,7 +11,6 @@ use agent_secret_manager::service::Service;
 use agent_shared::config::Authorization;
 use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
 use agent_store::in_memory::InMemory;
-use agent_store::{issuance_state, library_state};
 use cqrs_es::{EventEnvelope, Query};
 use std::collections::HashMap;
 use std::sync::Arc;

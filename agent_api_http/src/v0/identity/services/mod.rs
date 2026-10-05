@@ -284,7 +284,7 @@ mod tests {
             };
             let event_bus = shared_kernel::EventBusHandle::default();
             let mut state =
-                agent_store::identity_state(&agent_store::in_memory::InMemory, Arc::new(services), &event_bus).await;
+                agent_identity::identity_state(&agent_store::in_memory::InMemory, Arc::new(services), &event_bus).await;
             initialize_documents(&state, &configuration).await.unwrap();
             let authorization = Arc::new(RecordingAuthorization::default());
             state.authorization_checker = authorization.clone();

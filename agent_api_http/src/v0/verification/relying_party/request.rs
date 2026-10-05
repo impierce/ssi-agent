@@ -59,8 +59,8 @@ pub mod tests {
     use crate::v0::verification::authorization_requests::tests::authorization_requests;
     use crate::v0::verification::router;
     use agent_secret_manager::service::Service;
-    use agent_store::{in_memory::InMemory, verification_state};
-    use agent_verification::services::VerificationServices;
+    use agent_store::in_memory::InMemory;
+    use agent_verification::{services::VerificationServices, verification_state};
     use axum::{
         body::Body,
         http::{self, Request},

@@ -264,13 +264,14 @@ pub mod tests {
         router,
     };
     use crate::API_VERSION;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
+    use agent_library::library_state;
     use agent_library::template::aggregate::{Expiration, Status};
     use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory::InMemory;
-    use agent_store::{issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},

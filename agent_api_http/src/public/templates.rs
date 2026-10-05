@@ -111,8 +111,9 @@ pub(crate) async fn get_public_templates(State(state): State<Arc<LibraryState>>)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_library::library_state;
     use agent_library::template::views::{all_templates::AllTemplatesView, TemplateView};
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_store::in_memory::InMemory;
     use axum::body::Body;
     use cqrs_es::persist::ViewContext;
     use http::Request;
