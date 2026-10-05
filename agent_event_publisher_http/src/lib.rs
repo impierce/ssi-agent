@@ -1,7 +1,12 @@
+use std::time::Duration;
+
 use agent_shared::config::config;
 use shared_kernel::event_bus::{EventBus, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
+
+/// Default timeout for outgoing HTTP webhook requests.
+const DEFAULT_WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Spawns a background worker that subscribes to the [`EventBusHandle`] and forwards
 /// canonical [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s to configured HTTP webhook endpoints.
@@ -45,32 +50,36 @@ pub fn start_http_forwarder(event_bus: EventBusHandle) -> Option<tokio::task::Jo
                         }
                     }
 
-                    let req = req.json(&cloud_event);
+                    let req = req.json(&cloud_event).timeout(DEFAULT_WEBHOOK_TIMEOUT);
+                    let event_id = cloud_event.id.clone();
+                    let target_url = target_config.target_url.clone();
 
-                    match req.send().await {
-                        Ok(res) => {
-                            if res.status().is_success() {
-                                info!(
-                                    "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
-                                    cloud_event.id, target_config.target_url
-                                );
-                            } else {
-                                tracing::warn!(
-                                    "HTTP webhook target {} returned status {}",
-                                    target_config.target_url,
-                                    res.status()
+                    tokio::spawn(async move {
+                        match req.send().await {
+                            Ok(res) => {
+                                if res.status().is_success() {
+                                    info!(
+                                        "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
+                                        event_id, target_url
+                                    );
+                                } else {
+                                    tracing::warn!(
+                                        "HTTP webhook target {} returned status {}",
+                                        target_url,
+                                        res.status()
+                                    );
+                                }
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
+                                    event_id,
+                                    target_url,
+                                    err
                                 );
                             }
                         }
-                        Err(err) => {
-                            tracing::error!(
-                                "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
-                                cloud_event.id,
-                                target_config.target_url,
-                                err
-                            );
-                        }
-                    }
+                    });
                 }
             }
         }
