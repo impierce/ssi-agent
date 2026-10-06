@@ -613,6 +613,7 @@ pub struct NatsSubject {
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Events {
     #[serde(default)]
     pub types: Vec<String>,
@@ -1516,5 +1517,27 @@ mod tests {
                 );
             },
         );
+    }
+
+    #[test]
+    fn test_events_rejects_unknown_fields() {
+        // Old beta config format: events: { credential: [...] }
+        let old_format = r#"{"credential": ["UnsignedCredentialCreated"]}"#;
+        let res: Result<Events, _> = serde_json::from_str(old_format);
+        assert!(res.is_err(), "Expected unknown field 'credential' to be rejected");
+
+        let unknown_format = r#"{"offer": ["TxCodeGenerated"]}"#;
+        let res: Result<Events, _> = serde_json::from_str(unknown_format);
+        assert!(res.is_err(), "Expected unknown field 'offer' to be rejected");
+
+        // Valid new format
+        let valid_format = r#"{"types": ["TxCodeGenerated", "CredentialSigned"]}"#;
+        let events: Events = serde_json::from_str(valid_format).unwrap();
+        assert_eq!(events.types, vec!["TxCodeGenerated", "CredentialSigned"]);
+
+        // Empty object defaults to empty types
+        let empty_format = r#"{}"#;
+        let events: Events = serde_json::from_str(empty_format).unwrap();
+        assert!(events.types.is_empty());
     }
 }

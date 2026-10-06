@@ -17,12 +17,11 @@ event_publishers:
       headers:
         authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        server_config: []
-        credential: [UnsignedCredentialCreated, CredentialSigned]
+        types: [UnsignedCredentialCreated, CredentialSigned]
     - enabled: false
       target_url: "https://another-endpoint.example.org/events"
       events:
-        offer: [CredentialOfferCreated]
+        types: [CredentialOfferCreated]
 ```
 
 ### Request format

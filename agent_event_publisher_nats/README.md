@@ -14,7 +14,7 @@ event_publishers:
     subjects:
       - name: "email.commands" # NATS subject to publish to
         events:
-          offer: [TxCodeGenerated, CredentialOfferEmailSent] # Event types to publish
+          types: [TxCodeGenerated, CredentialOfferEmailSent] # Event types to publish
 ```
 
 ## Usage
@@ -22,9 +22,9 @@ event_publishers:
 ### 1. Load the publisher
 
 ```rust
-use agent_event_publisher_nats::EventPublisherNats;
+use agent_event_publisher_nats::NatsEventPublisher;
 
-let nats_publisher = EventPublisherNats::load().await?;
+let nats_publisher = NatsEventPublisher::from_config(&event_bus).await?;
 ```
 
 The publisher currently implements the `Query<Offer>` trait and will automatically publish those events when they occur.
@@ -38,17 +38,15 @@ For example:
 ```json
 {
   "specversion": "1.0",
-  "type": "email.command.txcodegenerated",
-  "source": "https://example.com/event",
-  "id": "offer-123-uuid",
+  "type": "com.impierce.unicore.tx-code-generated",
+  "source": "/services/offer",
+  "id": "offer:12345:1",
   "datacontenttype": "application/json",
   "data": {
-    "TxCodeGenerated": {
-      "offer_id": "12345",
-      "tx_code": "1234",
-      "delivery_options": {
-        "recipient_email": "user@example.com"
-      }
+    "offer_id": "12345",
+    "tx_code": "1234",
+    "delivery_options": {
+      "recipient_email": "user@example.com"
     }
   }
 }
