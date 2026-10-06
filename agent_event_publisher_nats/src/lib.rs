@@ -1,6 +1,6 @@
 use agent_shared::config::{config, EventPublisherNats, NatsSubject};
 use async_nats::Client;
-use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusHandle, EventFilter};
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
 
@@ -60,42 +60,56 @@ impl NatsEventPublisher {
     /// Runs the NATS event publisher loop.
     pub async fn run(mut self) {
         while let Some(item) = self.stream.next().await {
-            if let Ok(cloud_event) = item {
-                for subject_config in &self.subjects {
-                    if subject_config.events.types.is_empty() {
+            let cloud_event = match item {
+                Ok(event) => event,
+                // See docs/adr/0008-event-publisher-delivery-guarantees-and-lag-handling.md
+                Err(EventBusError::Lagged(dropped_count)) => {
+                    tracing::warn!(
+                        "NATS event publisher lagged behind by {} events; events were dropped",
+                        dropped_count
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!("NATS event publisher encountered event bus error: {:?}", err);
+                    continue;
+                }
+            };
+
+            for subject_config in &self.subjects {
+                if subject_config.events.types.is_empty() {
+                    continue;
+                }
+
+                let filter = EventFilter {
+                    event_types: subject_config.events.types.clone(),
+                    ..Default::default()
+                };
+                if !filter.matches(&cloud_event) {
+                    continue;
+                }
+
+                let subject_name = subject_config.name.clone();
+                let payload = match serde_json::to_vec(&cloud_event) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::error!("Failed to serialize CloudEvent for NATS: {:?}", e);
                         continue;
                     }
+                };
 
-                    let filter = EventFilter {
-                        event_types: subject_config.events.types.clone(),
-                        ..Default::default()
-                    };
-                    if !filter.matches(&cloud_event) {
-                        continue;
-                    }
-
-                    let subject_name = subject_config.name.clone();
-                    let payload = match serde_json::to_vec(&cloud_event) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            tracing::error!("Failed to serialize CloudEvent for NATS: {:?}", e);
-                            continue;
-                        }
-                    };
-
-                    if let Err(err) = self.client.publish(subject_name.clone(), payload.into()).await {
-                        tracing::error!(
-                            "Failed to publish CloudEvent {:?} to NATS subject {}: {:?}",
-                            cloud_event.id,
-                            subject_name,
-                            err
-                        );
-                    } else {
-                        info!(
-                            "Published CloudEvent {:?} to NATS subject {}",
-                            cloud_event.id, subject_name
-                        );
-                    }
+                if let Err(err) = self.client.publish(subject_name.clone(), payload.into()).await {
+                    tracing::error!(
+                        "Failed to publish CloudEvent {:?} to NATS subject {}: {:?}",
+                        cloud_event.id,
+                        subject_name,
+                        err
+                    );
+                } else {
+                    info!(
+                        "Published CloudEvent {:?} to NATS subject {}",
+                        cloud_event.id, subject_name
+                    );
                 }
             }
         }

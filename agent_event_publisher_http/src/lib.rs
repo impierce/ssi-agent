@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use agent_shared::config::{config, EventPublisherHttp};
-use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusHandle, EventFilter};
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
 
@@ -55,59 +55,73 @@ impl HttpEventPublisher {
         info!("Starting HTTP event publisher for {} endpoints...", self.configs.len());
 
         while let Some(item) = self.stream.next().await {
-            if let Ok(cloud_event) = item {
-                for target_config in &self.configs {
-                    if target_config.events.types.is_empty() {
-                        continue;
+            let cloud_event = match item {
+                Ok(event) => event,
+                // See docs/adr/0008-event-publisher-delivery-guarantees-and-lag-handling.md
+                Err(EventBusError::Lagged(dropped_count)) => {
+                    tracing::warn!(
+                        "HTTP event publisher lagged behind by {} events; events were dropped",
+                        dropped_count
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!("HTTP event publisher encountered event bus error: {:?}", err);
+                    continue;
+                }
+            };
+
+            for target_config in &self.configs {
+                if target_config.events.types.is_empty() {
+                    continue;
+                }
+
+                let filter = EventFilter {
+                    event_types: target_config.events.types.clone(),
+                    ..Default::default()
+                };
+                if !filter.matches(&cloud_event) {
+                    continue;
+                }
+
+                let mut req = self.client.post(&target_config.target_url);
+
+                if let Some(headers) = &target_config.headers {
+                    for (header_name, header_value) in headers {
+                        req = req.header(header_name.as_str(), header_value.to_str().unwrap_or(""));
                     }
+                }
 
-                    let filter = EventFilter {
-                        event_types: target_config.events.types.clone(),
-                        ..Default::default()
-                    };
-                    if !filter.matches(&cloud_event) {
-                        continue;
-                    }
+                let req = req.json(&cloud_event).timeout(DEFAULT_WEBHOOK_TIMEOUT);
+                let event_id = cloud_event.id.clone();
+                let target_url = target_config.target_url.clone();
 
-                    let mut req = self.client.post(&target_config.target_url);
-
-                    if let Some(headers) = &target_config.headers {
-                        for (header_name, header_value) in headers {
-                            req = req.header(header_name.as_str(), header_value.to_str().unwrap_or(""));
-                        }
-                    }
-
-                    let req = req.json(&cloud_event).timeout(DEFAULT_WEBHOOK_TIMEOUT);
-                    let event_id = cloud_event.id.clone();
-                    let target_url = target_config.target_url.clone();
-
-                    tokio::spawn(async move {
-                        match req.send().await {
-                            Ok(res) => {
-                                if res.status().is_success() {
-                                    info!(
-                                        "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
-                                        event_id, target_url
-                                    );
-                                } else {
-                                    tracing::warn!(
-                                        "HTTP webhook target {} returned status {}",
-                                        target_url,
-                                        res.status()
-                                    );
-                                }
-                            }
-                            Err(err) => {
-                                tracing::error!(
-                                    "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
-                                    event_id,
+                tokio::spawn(async move {
+                    match req.send().await {
+                        Ok(res) => {
+                            if res.status().is_success() {
+                                info!(
+                                    "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
+                                    event_id, target_url
+                                );
+                            } else {
+                                tracing::warn!(
+                                    "HTTP webhook target {} returned status {}",
                                     target_url,
-                                    err
+                                    res.status()
                                 );
                             }
                         }
-                    });
-                }
+                        Err(err) => {
+                            tracing::error!(
+                                "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
+                                event_id,
+                                target_url,
+                                err
+                            );
+                        }
+                    }
+                });
             }
         }
     }
