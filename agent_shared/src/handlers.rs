@@ -3,7 +3,7 @@ use shared_kernel::authorization::{
     AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
     QueryOperation,
 };
-use shared_kernel::view_repository::DynViewRepository;
+use shared_kernel::view_repository::{load_by_id, DynViewRepository, SoftDeletable};
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
 use tracing::{debug, error, info};
@@ -51,6 +51,38 @@ where
     A: Aggregate,
     V: View<A> + QueryOperation,
 {
+    authorize_query::<V>(authorization_checker.as_ref(), caller, resource_id).await?;
+
+    public_query_handler(view_id, state)
+        .await
+        .map_err(QueryHandlerError::Persistence)
+}
+
+/// Like [`query_handler`], but treats a soft-deleted view as missing (see [`load_by_id`]).
+pub async fn live_query_handler<A, V>(
+    authorization_checker: &dyn AuthorizationChecker,
+    caller: Caller,
+    view_id: &str,
+    resource_id: Option<&str>,
+    state: &dyn DynViewRepository<V, A>,
+) -> Result<Option<V>, QueryHandlerError>
+where
+    A: Aggregate,
+    V: View<A> + QueryOperation + SoftDeletable,
+{
+    authorize_query::<V>(authorization_checker, caller, resource_id).await?;
+
+    load_by_id(state, view_id).await.map_err(|err| {
+        error!("Error: {:#?}\n", err);
+        QueryHandlerError::Persistence(err)
+    })
+}
+
+async fn authorize_query<V: QueryOperation>(
+    authorization_checker: &dyn AuthorizationChecker,
+    caller: Caller,
+    resource_id: Option<&str>,
+) -> Result<(), QueryHandlerError> {
     let authorization_request = AuthorizationRequest {
         caller,
         operation: AuthorizationOperation::Query {
@@ -62,11 +94,7 @@ where
     authorization_checker
         .is_authorized(&authorization_request)
         .await
-        .map_err(QueryHandlerError::Authorization)?;
-
-    public_query_handler(view_id, state)
-        .await
-        .map_err(QueryHandlerError::Persistence)
+        .map_err(QueryHandlerError::Authorization)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -195,9 +223,11 @@ mod tests {
     use super::*;
     use crate::application_state::Command;
     use async_trait::async_trait;
+    use cqrs_es::persist::{ViewContext, ViewRepository};
     use cqrs_es::{event_sink::EventSink, DomainEvent};
     use serde::{Deserialize, Serialize};
     use shared_kernel::authorization::{Actor, AllowAllAuthorizationChecker, Caller};
+    use shared_kernel::test_utils::in_memory::MemViewRepository;
     use std::sync::Mutex;
 
     #[derive(Default, Debug, Serialize, Deserialize)]
@@ -460,6 +490,80 @@ mod tests {
                 },
             }]
         );
+    }
+
+    #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+    struct SoftDeletableTestView {
+        deleted: bool,
+    }
+
+    impl View<TestAggregate> for SoftDeletableTestView {
+        fn update(&mut self, _event: &cqrs_es::EventEnvelope<TestAggregate>) {}
+    }
+
+    impl QueryOperation for SoftDeletableTestView {
+        const OPERATION_NAME: &'static str = "test.queries.get";
+    }
+
+    impl SoftDeletable for SoftDeletableTestView {
+        fn is_deleted(&self) -> bool {
+            self.deleted
+        }
+    }
+
+    async fn soft_deletable_views() -> MemViewRepository<SoftDeletableTestView, TestAggregate> {
+        let repo = MemViewRepository::default();
+        for (view_id, deleted) in [("live", false), ("deleted", true)] {
+            ViewRepository::update_view(
+                &repo,
+                SoftDeletableTestView { deleted },
+                ViewContext::new(view_id.to_string(), 0),
+            )
+            .await
+            .unwrap();
+        }
+        repo
+    }
+
+    #[tokio::test]
+    async fn live_query_handler_hides_soft_deleted_views() {
+        let repo = soft_deletable_views().await;
+        let authorization_checker = AllowAllAuthorizationChecker;
+
+        let live = live_query_handler(&authorization_checker, Caller::Anonymous, "live", Some("live"), &repo)
+            .await
+            .unwrap();
+        let deleted = live_query_handler(
+            &authorization_checker,
+            Caller::Anonymous,
+            "deleted",
+            Some("deleted"),
+            &repo,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(live, Some(SoftDeletableTestView { deleted: false }));
+        assert_eq!(deleted, None);
+    }
+
+    #[tokio::test]
+    async fn live_query_handler_returns_forbidden_when_denied() {
+        let repo = soft_deletable_views().await;
+
+        let result = live_query_handler(
+            &DenyAllAuthorizationChecker,
+            Caller::Anonymous,
+            "live",
+            Some("live"),
+            &repo,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            Err(QueryHandlerError::Authorization(AuthorizationError::Forbidden))
+        ));
     }
 
     #[tokio::test]

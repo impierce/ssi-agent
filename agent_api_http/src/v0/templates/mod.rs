@@ -1,7 +1,8 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
+use agent_library::queries;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
     DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Template, Visibility,
@@ -17,6 +18,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
@@ -170,26 +172,22 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .map(|template_view| {
-        (
-            StatusCode::CREATED,
-            [(
-                header::LOCATION,
-                &format!("{API_VERSION}/get-template-by-id/{template_id}"),
-            )],
-            Json(TemplateDto::from(template_view)),
-        )
-            .into_response()
-    })
-    // TODO: this *should* be an impossible error, what should we return here?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    queries::get_template(&state, Caller::Internal, &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|template_view| {
+            (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    &format!("{API_VERSION}/get-template-by-id/{template_id}"),
+                )],
+                Json(TemplateDto::from(template_view)),
+            )
+                .into_response()
+        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -223,16 +221,10 @@ pub(crate) async fn duplicate_template(
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
-    let original_template = query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &source_template_id,
-        Some(&source_template_id),
-        &state.query.template,
-    )
-    .await?
-    .filter(|template| template.status != Status::Deleted)
-    .ok_or_else(|| TemplateError::SourceTemplateNotFound(source_template_id.clone()).into_api_error())?;
+    let original_template = queries::get_template(&state, caller(actor.clone()), &source_template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| TemplateError::SourceTemplateNotFound(source_template_id.clone()).into_api_error())?;
 
     let command = TemplateCommand::CreateNewTemplate {
         template_id: new_template_id.clone(),
@@ -262,14 +254,10 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = internal_query_handler(
-        state.authorization_checker.clone(),
-        &new_template_id,
-        Some(&new_template_id),
-        &state.query.template,
-    )
-    .await?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let new_template = queries::get_template(&state, Caller::Internal, &new_template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok((
         StatusCode::CREATED,
@@ -339,16 +327,10 @@ pub(crate) async fn update_template(
         return Err(TemplateError::TemplateIdMissing.into_api_error());
     }
 
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .filter(|t| t.status != Status::Deleted)
-    .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+    queries::get_template(&state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
 
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -550,10 +532,7 @@ pub(crate) async fn get_templates(
         let mut filtered_templates: Vec<TemplateDto> = all_templates_view
             .templates
             .into_values()
-            .filter(|template| {
-                template.status != Status::Deleted
-                // TODO: Apply filtering logic based on request parameters
-            })
+            // TODO: Apply filtering logic based on request parameters
             .map(TemplateDto::from)
             .collect();
 
@@ -593,23 +572,11 @@ pub(crate) async fn get_template(
     RequestActor(actor): RequestActor,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .and_then(|template_view| {
-        if template_view.status == Status::Deleted {
-            None
-        } else {
-            Some(template_view)
-        }
-    })
-    .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    queries::get_template(&state, caller(actor), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -644,16 +611,10 @@ pub(crate) async fn delete_template(
         return Err(TemplateError::TemplateIdMissing.into_api_error());
     }
 
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .filter(|t| t.status != Status::Deleted)
-    .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+    queries::get_template(&state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
 
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),

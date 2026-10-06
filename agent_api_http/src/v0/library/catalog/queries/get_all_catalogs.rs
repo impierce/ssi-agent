@@ -38,7 +38,6 @@ pub(crate) async fn get_all_catalogs(
     .await?
     .map(|all_catalogs_view| {
         let filtered_catalogs: Vec<CatalogDto> = crate::utils::newest_first(all_catalogs_view.catalogs)
-            .filter(|catalog| !catalog.deleted)
             .map(CatalogDto::from)
             .collect();
 

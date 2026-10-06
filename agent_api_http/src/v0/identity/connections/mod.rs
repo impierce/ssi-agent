@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
+    queries,
     state::IdentityState,
 };
 use axum::{
@@ -17,6 +19,7 @@ use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
 
 pub mod openapi;
 
@@ -67,23 +70,19 @@ pub(crate) async fn post_connection(
     .await?;
 
     // Return the connection.
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &connection_id,
-        Some(&connection_id),
-        &state.query.connection,
-    )
-    .await?
-    .map(|connection_view| {
-        (
-            StatusCode::CREATED,
-            [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-            Json(connection_view),
-        )
-            .into_response()
-    })
-    // TODO: this *should* be an impossible error, what should we return here?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    queries::get_connection(&state, Caller::Internal, &connection_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|connection_view| {
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
+                Json(connection_view),
+            )
+                .into_response()
+        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -164,17 +163,11 @@ pub(crate) async fn get_connection(
     RequestActor(actor): RequestActor,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &id,
-        Some(&id),
-        &state.query.connection,
-    )
-    .await?
-    .filter(|view| !view.deleted)
-    .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    queries::get_connection(&state, caller(actor), &id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
