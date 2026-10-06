@@ -325,15 +325,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_all_authorization_requests_endpoint() {
-        let verification_state = Arc::new(
-            verification_state(
-                &InMemory,
-                VerificationServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &Default::default()).await);
         let mut app = router(verification_state);
 
         async fn all_authorization_requests(app: &mut Router) -> Vec<serde_json::Value> {

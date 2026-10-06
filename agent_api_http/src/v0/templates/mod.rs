@@ -1260,8 +1260,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_applies_tags_visibility_schema_and_holder_authorization() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         // W3C VC 1.1 templates cannot have schema properties attributes.
         command_handler(
             "template-to-update",

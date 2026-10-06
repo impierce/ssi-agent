@@ -445,8 +445,7 @@ pub mod tests {
         /// Adds a connection through the command handler, since `parse_url` only accepts the mock issuer's
         /// `http://127.0.0.1` address with the `allow-localhost` feature.
         async fn setup(mock_server: &MockServer) -> Router {
-            let state =
-                Arc::new(identity_state(&InMemory, IdentityServices::default(), &Default::default(), vec![]).await);
+            let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &Default::default()).await);
 
             internal_command_handler(
                 state.authorization_checker.clone(),

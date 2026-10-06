@@ -72,20 +72,17 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     event_bus.publish(unconfigured_event);
 
     // The configured event is published
-    let configured_event = CloudEvent::new(
-        "com.impierce.unicore.tx-code-generated",
-        "https://impierce.com/offer",
-    )
-    .with_subject("offer-1")
-    .with_data(serde_json::json!({
-        "TxCodeGenerated": {
-            "offer_id": "offer-1",
-            "tx_code": "12345",
-            "delivery_options": {
-                "recipient_email": "holder@example.test"
+    let configured_event = CloudEvent::new("com.impierce.unicore.tx-code-generated", "https://impierce.com/offer")
+        .with_subject("offer-1")
+        .with_data(serde_json::json!({
+            "TxCodeGenerated": {
+                "offer_id": "offer-1",
+                "tx_code": "12345",
+                "delivery_options": {
+                    "recipient_email": "holder@example.test"
+                }
             }
-        }
-    }));
+        }));
     let expected_event_id = configured_event.id.clone();
     event_bus.publish(configured_event);
 

@@ -4,23 +4,17 @@
 use agent_issuance::server_config::command::ServerConfigCommand;
 use agent_issuance::server_config::views::ServerConfigView;
 use agent_issuance::services::IssuanceServices;
-use agent_issuance::state::{initialize, IssuanceState, SERVER_CONFIG_ID};
+use agent_issuance::state::{initialize, issuance_state, IssuanceState, SERVER_CONFIG_ID};
 use agent_secret_manager::service::Service;
 use agent_shared::config::{config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
 use agent_shared::handlers::{public_command_handler, public_query_handler};
 use agent_shared::UrlAppendHelpers as _;
-use agent_store::{in_memory::InMemory, issuance_state};
+use agent_store::in_memory::InMemory;
 use jsonwebtoken::Algorithm;
 use serde_json::Value;
 
 async fn initialized_state() -> IssuanceState {
-    let state = issuance_state(
-        &InMemory,
-        IssuanceServices::default().await,
-        &Default::default(),
-        Default::default(),
-    )
-    .await;
+    let state = issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await;
     initialize(&state).await.unwrap();
 
     state

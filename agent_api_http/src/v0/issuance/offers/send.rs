@@ -114,9 +114,9 @@ mod tests {
         router,
     };
     use crate::API_VERSION;
-    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::{issuance_state, services::IssuanceServices};
     use agent_secret_manager::service::Service as _;
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::{to_bytes, Body},
         extract::Request,
@@ -133,15 +133,8 @@ mod tests {
 
     /// Returns an issuance router holding the credential offer `OFFER_ID`.
     async fn app_with_offer() -> Router {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
         create_test_template(&library_state).await;
