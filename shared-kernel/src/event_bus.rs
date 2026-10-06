@@ -148,10 +148,6 @@ pub struct EventFilter {
 impl EventFilter {
     #[must_use]
     pub fn matches(&self, event: &CloudEvent) -> bool {
-        // Internal provenance events are never forwarded to subscribers.
-        if event.extension.callertype.as_deref() == Some("internal") {
-            return false;
-        }
         if !self.event_types.is_empty()
             && !self.event_types.iter().any(|pattern| {
                 if pattern.eq_ignore_ascii_case(&event.event_type) {
@@ -1099,25 +1095,6 @@ mod tests {
         let received = subscriber.next().await.unwrap().unwrap();
         assert_eq!(received.extension.callerid.as_deref(), Some("user-123"));
         assert_eq!(received.extension.callertype.as_deref(), Some("user"));
-    }
-
-    #[test]
-    fn test_event_filter_excludes_internal_events() {
-        let filter = EventFilter::default();
-
-        let user_event = build_cloud_event("agg", "1", 1, "Created", serde_json::json!({}), None)
-            .with_caller(Some("u-1".into()), Some("user".into()));
-        let sa_event = build_cloud_event("agg", "1", 2, "Created", serde_json::json!({}), None)
-            .with_caller(Some("sa-1".into()), Some("service-account".into()));
-        let anon_event = build_cloud_event("agg", "1", 3, "Created", serde_json::json!({}), None)
-            .with_caller(None, Some("anonymous".into()));
-        let internal_event = build_cloud_event("agg", "1", 4, "Created", serde_json::json!({}), None)
-            .with_caller(None, Some("internal".into()));
-
-        assert!(filter.matches(&user_event));
-        assert!(filter.matches(&sa_event));
-        assert!(filter.matches(&anon_event));
-        assert!(!filter.matches(&internal_event));
     }
 
     #[test]
