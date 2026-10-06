@@ -33,7 +33,12 @@ pub trait ApplicationContext: Send + Sync + 'static {
     /// Execute a write-side command against the aggregate identified by `aggregate_id`.
     ///
     /// Returns the (possibly newly-created) aggregate ID on success.
-    async fn handle_command(&self, aggregate_id: &str, command: Self::Command) -> Result<String, Self::CommandError>;
+    async fn handle_command(
+        &self,
+        aggregate_id: &str,
+        command: Self::Command,
+        caller: &Caller,
+    ) -> Result<String, Self::CommandError>;
 
     /// Execute a read-side query, returning the projected view.
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError>;
@@ -212,7 +217,7 @@ async fn process_command<AC: ApplicationContext>(
     }
 
     let result = context
-        .handle_command(&msg.aggregate_id, msg.command)
+        .handle_command(&msg.aggregate_id, msg.command, &msg.caller)
         .await
         .map_err(ApplicationServiceError::Context);
 
@@ -313,6 +318,7 @@ mod tests {
             &self,
             aggregate_id: &str,
             _command: Self::Command,
+            _caller: &Caller,
         ) -> Result<String, Self::CommandError> {
             Ok(aggregate_id.to_string())
         }
@@ -354,6 +360,7 @@ mod tests {
             &self,
             _aggregate_id: &str,
             _command: Self::Command,
+            _caller: &Caller,
         ) -> Result<String, Self::CommandError> {
             Err(TestCommandError("command failed".into()))
         }
@@ -624,9 +631,7 @@ mod tests {
             }),
         );
 
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
         let result = service_handle
             .dispatch_command(Caller::Actor(actor.clone()), "aggregate-id".into(), "create".into())
             .await;
@@ -655,9 +660,7 @@ mod tests {
             }),
         );
 
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
         let result = service_handle
             .dispatch_query(Caller::Actor(actor.clone()), "my-query".into())
             .await;

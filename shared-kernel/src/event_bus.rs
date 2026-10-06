@@ -18,6 +18,26 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[allow(clippy::doc_markdown)]
+/// CNCF CloudEvents extension attributes.
+///
+/// Field names strictly follow the CloudEvents v1.0.2 specification:
+/// lowercase alphanumeric characters (`[a-z0-9]`) only without separators.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct Extension {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callerid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callertype: Option<String>,
+}
+
+impl Extension {
+    #[must_use]
+    pub fn new(callerid: Option<String>, callertype: Option<String>) -> Self {
+        Self { callerid, callertype }
+    }
+}
+
+#[allow(clippy::doc_markdown)]
 /// A CNCF CloudEvent envelope (v1.0 spec).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CloudEvent {
@@ -37,6 +57,9 @@ pub struct CloudEvent {
     pub time: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    #[serde(flatten)]
+    #[schema(inline)]
+    pub extension: Extension,
 }
 
 impl CloudEvent {
@@ -51,6 +74,7 @@ impl CloudEvent {
             subject: None,
             time: Some(Utc::now()),
             data: None,
+            extension: Extension::default(),
         }
     }
 
@@ -63,6 +87,19 @@ impl CloudEvent {
     #[must_use]
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.subject = Some(subject.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_caller(mut self, id: Option<String>, caller_type: Option<String>) -> Self {
+        self.extension.callerid = id;
+        self.extension.callertype = caller_type;
+        self
+    }
+
+    #[must_use]
+    pub fn with_extension(mut self, extension: Extension) -> Self {
+        self.extension = extension;
         self
     }
 }
@@ -94,6 +131,7 @@ pub fn build_cloud_event(
         subject: Some(aggregate_id.to_string()),
         time: occurred_at.or_else(|| Some(Utc::now())),
         data: Some(data),
+        extension: Extension::default(),
     }
 }
 
@@ -110,6 +148,10 @@ pub struct EventFilter {
 impl EventFilter {
     #[must_use]
     pub fn matches(&self, event: &CloudEvent) -> bool {
+        // Internal provenance events are never forwarded to subscribers.
+        if event.extension.callertype.as_deref() == Some("internal") {
+            return false;
+        }
         if !self.event_types.is_empty()
             && !self.event_types.iter().any(|pattern| {
                 if pattern.eq_ignore_ascii_case(&event.event_type) {
@@ -228,7 +270,7 @@ use std::time::{Duration, Instant};
 ///
 /// A duration rather than an event count because the gap it has to span is one: the change
 /// stream's delivery lag behind in-process dispatch, which stretches to the reconnect backoff.
-const DEDUP_WINDOW_TTL: Duration = Duration::from_secs(600);
+const DEDUP_WINDOW_TTL: Duration = Duration::from_mins(10);
 
 /// Caps memory when [`DEDUP_WINDOW_TTL`] would retain more than this under sustained throughput.
 const DEDUP_WINDOW_MAX_ENTRIES: usize = 50_000;
@@ -617,6 +659,9 @@ where
                 .map(|datetime| datetime.with_timezone(&chrono::Utc))
                 .or_else(|| Some(chrono::Utc::now()));
 
+            let callerid = envelope.metadata.get("callerid").filter(|s| !s.is_empty()).cloned();
+            let callertype = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
+
             let cloud_event = build_cloud_event(
                 A::TYPE,
                 aggregate_id,
@@ -624,7 +669,8 @@ where
                 &envelope.payload.event_type(),
                 payload,
                 occurred_at,
-            );
+            )
+            .with_caller(callerid, callertype);
 
             self.publish(cloud_event);
         }
@@ -1032,6 +1078,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_query_dispatch_preserves_metadata_caller() {
+        let handle = EventBusHandle::new(16);
+        let mut subscriber = handle.subscribe(EventFilter::default());
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("timestamp".to_string(), "2026-01-15T10:30:00Z".to_string());
+        metadata.insert("callerid".to_string(), "user-123".to_string());
+        metadata.insert("callertype".to_string(), "user".to_string());
+
+        let envelope = cqrs_es::EventEnvelope {
+            aggregate_id: "agg-1".to_string(),
+            sequence: 1,
+            payload: MockEvent::Created,
+            metadata,
+        };
+
+        Query::<MockAggregate>::dispatch(&handle, "agg-1", &[envelope]).await;
+
+        let received = subscriber.next().await.unwrap().unwrap();
+        assert_eq!(received.extension.callerid.as_deref(), Some("user-123"));
+        assert_eq!(received.extension.callertype.as_deref(), Some("user"));
+    }
+
+    #[test]
+    fn test_event_filter_excludes_internal_events() {
+        let filter = EventFilter::default();
+
+        let user_event = build_cloud_event("agg", "1", 1, "Created", serde_json::json!({}), None)
+            .with_caller(Some("u-1".into()), Some("user".into()));
+        let sa_event = build_cloud_event("agg", "1", 2, "Created", serde_json::json!({}), None)
+            .with_caller(Some("sa-1".into()), Some("service-account".into()));
+        let anon_event = build_cloud_event("agg", "1", 3, "Created", serde_json::json!({}), None)
+            .with_caller(None, Some("anonymous".into()));
+        let internal_event = build_cloud_event("agg", "1", 4, "Created", serde_json::json!({}), None)
+            .with_caller(None, Some("internal".into()));
+
+        assert!(filter.matches(&user_event));
+        assert!(filter.matches(&sa_event));
+        assert!(filter.matches(&anon_event));
+        assert!(!filter.matches(&internal_event));
+    }
+
+    #[test]
+    fn test_cloud_event_extension_flattening() {
+        let event = CloudEvent::new("com.impierce.unicore.test", "/services/test")
+            .with_caller(Some("user-123".into()), Some("user".into()));
+
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json.get("callerid"), Some(&serde_json::json!("user-123")));
+        assert_eq!(json.get("callertype"), Some(&serde_json::json!("user")));
+        assert!(json.get("extension").is_none());
+
+        let deserialized: CloudEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.extension.callerid.as_deref(), Some("user-123"));
+        assert_eq!(deserialized.extension.callertype.as_deref(), Some("user"));
+    }
+
+    #[test]
+    fn test_cloud_event_deserialization_without_extension() {
+        let json = serde_json::json!({
+            "id": "event-1",
+            "source": "/services/test",
+            "specversion": "1.0",
+            "type": "com.impierce.unicore.test",
+        });
+
+        let deserialized: CloudEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.extension.callerid, None);
+        assert_eq!(deserialized.extension.callertype, None);
+    }
+
+    #[tokio::test]
     async fn history_ascending_reports_truncation_when_resume_hits_the_limit() {
         let handle = EventBusHandle::new(16);
         for sequence in 1..=5 {
@@ -1108,7 +1226,7 @@ mod tests {
 
     #[test]
     fn dedup_window_evicts_by_count() {
-        let mut window = DedupWindow::with_limits(Duration::from_secs(600), 3);
+        let mut window = DedupWindow::with_limits(Duration::from_mins(10), 3);
 
         assert!(window.insert("a"));
         assert!(window.insert("b"));

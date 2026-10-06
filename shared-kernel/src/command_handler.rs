@@ -44,9 +44,44 @@ where
     A: Aggregate,
     A::Command: Send,
 {
-    let metadata: HashMap<String, String> = [("timestamp".to_string(), Utc::now().to_rfc3339())]
+    dispatch_with_caller(handler, aggregate_id, command, &crate::authorization::Caller::Anonymous).await
+}
+
+/// Dispatch a command to a [`CommandHandler`] with caller provenance and standard metadata.
+///
+/// If `caller` is an authenticated actor, caller metadata (`callerid`, `callertype`)
+/// is attached alongside the timestamp so that events emitted by the aggregate retain
+/// information about who produced them.
+///
+/// # Errors
+///
+/// Returns `AggregateError` if the handler fails to execute the command.
+pub async fn dispatch_with_caller<A>(
+    handler: &CommandHandler<A>,
+    aggregate_id: &str,
+    command: A::Command,
+    caller: &crate::authorization::Caller,
+) -> Result<(), AggregateError<A::Error>>
+where
+    A: Aggregate,
+    A::Command: Send,
+{
+    let mut metadata: HashMap<String, String> = [("timestamp".to_string(), Utc::now().to_rfc3339())]
         .into_iter()
         .collect();
+
+    match caller {
+        crate::authorization::Caller::Actor(actor) => {
+            metadata.insert("callerid".to_string(), actor.id().to_string());
+            metadata.insert("callertype".to_string(), actor.type_name().to_string());
+        }
+        crate::authorization::Caller::Internal => {
+            metadata.insert("callertype".to_string(), "internal".to_string());
+        }
+        crate::authorization::Caller::Anonymous => {
+            metadata.insert("callertype".to_string(), "anonymous".to_string());
+        }
+    }
 
     debug!(aggregate_id, "Dispatching command with metadata");
 
@@ -232,5 +267,73 @@ mod tests {
 
         let result = dispatch::<TestAggregate>(&handler, "agg-1", "bad".into()).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn dispatch_with_caller_attaches_user_caller_metadata() {
+        use crate::authorization::{Actor, Caller};
+
+        let capturing = Arc::new(CapturingHandler::new());
+        let handler: CommandHandler<TestAggregate> = capturing.clone();
+
+        let caller = Caller::Actor(Actor::user("user-uuid-123"));
+
+        dispatch_with_caller::<TestAggregate>(&handler, "agg-1", "create".into(), &caller)
+            .await
+            .unwrap();
+
+        let metadata = capturing.captured_metadata();
+        assert_eq!(metadata.get("callerid"), Some(&"user-uuid-123".to_string()));
+        assert_eq!(metadata.get("callertype"), Some(&"user".to_string()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_with_caller_attaches_service_account_caller_metadata() {
+        use crate::authorization::{Actor, Caller};
+
+        let capturing = Arc::new(CapturingHandler::new());
+        let handler: CommandHandler<TestAggregate> = capturing.clone();
+
+        let caller = Caller::Actor(Actor::service_account("sa-123"));
+
+        dispatch_with_caller::<TestAggregate>(&handler, "agg-1", "create".into(), &caller)
+            .await
+            .unwrap();
+
+        let metadata = capturing.captured_metadata();
+        assert_eq!(metadata.get("callerid"), Some(&"sa-123".to_string()));
+        assert_eq!(metadata.get("callertype"), Some(&"service-account".to_string()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_with_caller_attaches_internal_caller_metadata() {
+        use crate::authorization::Caller;
+
+        let capturing = Arc::new(CapturingHandler::new());
+        let handler: CommandHandler<TestAggregate> = capturing.clone();
+
+        dispatch_with_caller::<TestAggregate>(&handler, "agg-1", "create".into(), &Caller::Internal)
+            .await
+            .unwrap();
+
+        let metadata = capturing.captured_metadata();
+        assert_eq!(metadata.get("callerid"), None);
+        assert_eq!(metadata.get("callertype"), Some(&"internal".to_string()));
+    }
+
+    #[tokio::test]
+    async fn dispatch_with_caller_attaches_anonymous_caller_metadata() {
+        use crate::authorization::Caller;
+
+        let capturing = Arc::new(CapturingHandler::new());
+        let handler: CommandHandler<TestAggregate> = capturing.clone();
+
+        dispatch_with_caller::<TestAggregate>(&handler, "agg-1", "create".into(), &Caller::Anonymous)
+            .await
+            .unwrap();
+
+        let metadata = capturing.captured_metadata();
+        assert_eq!(metadata.get("callerid"), None);
+        assert_eq!(metadata.get("callertype"), Some(&"anonymous".to_string()));
     }
 }
