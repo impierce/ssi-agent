@@ -230,8 +230,10 @@ version = "0.1.0"
 dependencies = [
  "agent_shared",
  "async-nats",
+ "futures",
  "serde_json",
  "shared-kernel",
+ "testcontainers-modules",
  "tokio",
  "tokio-stream",
  "tracing",

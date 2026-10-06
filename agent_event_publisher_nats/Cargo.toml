@@ -17,3 +17,13 @@ tracing.workspace = true
 
 [dev-dependencies]
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+futures.workspace = true
+testcontainers-modules = { version = "0.15", features = ["nats"] }
+
+[features]
+# Enables the integration tests that start a NATS server in a Docker container.
+docker-tests = []
+
+[[test]]
+name = "nats"
+required-features = ["docker-tests"]
