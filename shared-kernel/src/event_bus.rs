@@ -154,12 +154,22 @@ impl EventFilter {
         }
         if !self.event_types.is_empty()
             && !self.event_types.iter().any(|pattern| {
-                if pattern.eq_ignore_ascii_case(&event.event_type) {
+                if pattern == "*" || pattern.eq_ignore_ascii_case(&event.event_type) {
                     return true;
+                }
+                if let Some(prefix) = pattern.strip_suffix('*') {
+                    if event
+                        .event_type
+                        .to_ascii_lowercase()
+                        .starts_with(&prefix.to_ascii_lowercase())
+                    {
+                        return true;
+                    }
                 }
                 let event_suffix = event
                     .event_type
                     .strip_prefix("com.impierce.unicore.")
+                    .or_else(|| event.event_type.strip_prefix("tech.impierce.unicore."))
                     .unwrap_or(&event.event_type);
                 let pattern_kebab = pattern.to_case(Case::Kebab);
                 event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)

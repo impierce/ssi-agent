@@ -79,14 +79,17 @@ pub fn router(state: Arc<EventsState>) -> Router {
         .layer(axum::middleware::from_fn(crate::reject_null_byte_uri))
 }
 
-/// Stream domain events as CloudEvents via SSE with Catch-Up.
+/// Stream integration events as CloudEvents via SSE.
+///
+/// Streams CloudEvents v1.0 carrying Published Language integration events (`tech.impierce.unicore.*`)
+/// and caller provenance extensions (`callerid`, `callertype`).
 ///
 /// # Note on delivery guarantee
 ///
 /// This is a **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber could
 /// miss events. Gaps are signalled where detectable (`lagged`, `truncated`), not prevented.
 ///
-/// This endpoint is suitable for a UI activity feed. Projections, syncs and audit consumers must reconcile against
+/// This endpoint is suitable for a UI activity feed and external subscribers. Projections, syncs and audit consumers must reconcile against
 /// the REST endpoints. Full detail in `problem-details/events`.
 #[utoipa::path(
     get,
