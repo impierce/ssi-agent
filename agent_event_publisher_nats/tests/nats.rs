@@ -82,12 +82,10 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     let configured_event = CloudEvent::new("com.impierce.unicore.tx-code-generated", "https://impierce.com/offer")
         .with_subject("offer-1")
         .with_data(serde_json::json!({
-            "TxCodeGenerated": {
-                "offer_id": "offer-1",
-                "tx_code": "12345",
-                "delivery_options": {
-                    "recipient_email": "holder@example.test"
-                }
+            "offer_id": "offer-1",
+            "tx_code": "12345",
+            "delivery_options": {
+                "recipient_email": "holder@example.test"
             }
         }));
     let expected_event_id = configured_event.id.clone();
@@ -100,7 +98,7 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     let cloud_event: Value = serde_json::from_slice(&message.payload).unwrap();
     assert_eq!(cloud_event["type"], "com.impierce.unicore.tx-code-generated");
     assert_eq!(cloud_event["id"], expected_event_id);
-    assert_eq!(cloud_event["data"]["TxCodeGenerated"]["tx_code"], "12345");
+    assert_eq!(cloud_event["data"]["tx_code"], "12345");
 
     assert!(
         tokio::time::timeout(Duration::from_millis(500), subscriber.next())

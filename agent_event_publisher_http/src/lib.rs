@@ -14,14 +14,24 @@ pub struct HttpEventPublisher {
     client: reqwest::Client,
     configs: Vec<EventPublisherHttp>,
     stream: BusEventStream,
+    timeout: Duration,
 }
 
 impl HttpEventPublisher {
-    /// Creates a new `HttpEventPublisher` with explicitly provided configurations.
+    /// Creates a new `HttpEventPublisher` with explicitly provided configurations and default timeout.
     ///
     /// Subscribes immediately to `event_bus` upon creation to prevent event loss.
     /// Returns `None` if `configs` contains no enabled endpoints.
     pub fn new(configs: Vec<EventPublisherHttp>, event_bus: &EventBusHandle) -> Option<Self> {
+        Self::with_timeout(configs, event_bus, DEFAULT_WEBHOOK_TIMEOUT)
+    }
+
+    /// Creates a new `HttpEventPublisher` with custom request timeout.
+    pub fn with_timeout(
+        configs: Vec<EventPublisherHttp>,
+        event_bus: &EventBusHandle,
+        timeout: Duration,
+    ) -> Option<Self> {
         let enabled_configs: Vec<_> = configs.into_iter().filter(|c| c.enabled).collect();
         if enabled_configs.is_empty() {
             return None;
@@ -42,6 +52,7 @@ impl HttpEventPublisher {
             client: reqwest::Client::new(),
             configs: enabled_configs,
             stream,
+            timeout,
         })
     }
 
@@ -92,7 +103,7 @@ impl HttpEventPublisher {
                     }
                 }
 
-                let req = req.json(&cloud_event).timeout(DEFAULT_WEBHOOK_TIMEOUT);
+                let req = req.json(&cloud_event).timeout(self.timeout);
                 let event_id = cloud_event.id.clone();
                 let target_url = target_config.target_url.clone();
 
@@ -157,7 +168,7 @@ mod tests {
             target_url: "http://localhost:12345/webhook".to_string(),
             headers: None,
             events: Events {
-                types: vec!["*".to_string()],
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
             },
         }];
         assert!(HttpEventPublisher::new(disabled_configs, &event_bus).is_none());
@@ -330,5 +341,44 @@ mod tests {
         }
 
         set_config().event_publishers.http.clear();
+    }
+
+    #[tokio::test]
+    async fn test_http_event_publisher_times_out_on_slow_endpoint() {
+        let mock_server = MockServer::start().await;
+
+        // Mock delays response by 200ms
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(200)))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let configs = vec![EventPublisherHttp {
+            enabled: true,
+            target_url: format!("{}/webhook", mock_server.uri()),
+            headers: None,
+            events: Events {
+                types: vec!["test.timeout.event".to_string()],
+            },
+        }];
+
+        let event_bus = EventBusHandle::new(100);
+        // Short 50ms timeout so the test runs in milliseconds without waiting 10s
+        let publisher = HttpEventPublisher::with_timeout(configs, &event_bus, Duration::from_millis(50))
+            .expect("Expected publisher instance when enabled");
+        let handle = publisher.spawn();
+
+        let event = CloudEvent::new("test.timeout.event", "https://example.com/test");
+        event_bus.publish(event);
+
+        // Allow 100ms for request to trigger and timeout
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Publisher task is still alive and did not hang or crash
+        assert!(!handle.is_finished());
+
+        handle.abort();
     }
 }

@@ -156,7 +156,7 @@ mod tests {
             subjects: vec![NatsSubject {
                 name: "test.subject".to_string(),
                 events: Events {
-                    types: vec!["*".to_string()],
+                    types: vec!["com.impierce.unicore.tx-code-generated".to_string()],
                 },
             }],
         };
