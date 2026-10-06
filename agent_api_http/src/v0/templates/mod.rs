@@ -111,7 +111,7 @@ pub struct CreateNewTemplateRequestBody {
             )),
             ("OpenBadges template" = (
                 description = "An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.",
-                value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual", "schema": { "type": "object", "properties": { "achievement.name": { "type": "string" }, "achievement.description": { "type": "string" }, "achievement.criteria.narrative": { "type": "string" } } } })
+                value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual", "schema": { "type": "object", "properties": { "achievement": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "criteria": { "type": "object", "properties": { "narrative": { "type": "string" } } } } } } } })
             ))
         )
     ),

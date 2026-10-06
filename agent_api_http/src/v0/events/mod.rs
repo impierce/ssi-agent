@@ -327,6 +327,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_events_sse_drops_internal_events() {
+        let bus_handle = EventBusHandle::new(16);
+        let user_event = shared_kernel::event_bus::build_cloud_event(
+            "credential",
+            "cred-1",
+            1,
+            "CredentialSigned",
+            serde_json::json!({"id": "cred-1"}),
+            None,
+        )
+        .with_caller(Some("user-1".into()), Some("user".into()));
+
+        let internal_event = shared_kernel::event_bus::build_cloud_event(
+            "credential",
+            "cred-2",
+            1,
+            "CredentialExpired",
+            serde_json::json!({"id": "cred-2"}),
+            None,
+        )
+        .with_caller(None, Some("internal".into()));
+
+        bus_handle.publish(user_event.clone());
+        bus_handle.publish(internal_event.clone());
+
+        let app = router(Arc::new(bus_handle.clone().into()));
+
+        let req = axum::http::Request::builder()
+            .uri("/v0/events?sources=credential")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let response = tower::ServiceExt::oneshot(app, req).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let mut body = response.into_body();
+        let frame = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            http_body_util::BodyExt::frame(&mut body),
+        )
+        .await
+        .ok()
+        .flatten()
+        .and_then(|frame_res| frame_res.ok())
+        .and_then(|frame| frame.into_data().ok());
+
+        let body_str = frame
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
+            .unwrap_or_default();
+
+        assert!(body_str.contains(&user_event.id));
+        assert!(!body_str.contains(&internal_event.id));
+    }
+
+    #[tokio::test]
     async fn test_events_sse_catchup_route() {
         let bus_handle = EventBusHandle::new(16);
         let event1 = shared_kernel::event_bus::build_cloud_event(
@@ -528,9 +583,7 @@ mod tests {
             .unwrap();
         req_with_actor
             .extensions_mut()
-            .insert(shared_kernel::authorization::Actor {
-                subject: "test-user".to_string(),
-            });
+            .insert(shared_kernel::authorization::Actor::user("test-user"));
         let response = tower::ServiceExt::oneshot(app, req_with_actor).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
     }

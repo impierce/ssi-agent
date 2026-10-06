@@ -25,7 +25,7 @@ use http::HeaderMap;
 use http_api_problem::ApiError;
 use http_body_util::BodyExt as _;
 use hyper::StatusCode;
-use shared_kernel::authorization::{Actor, ActorExtractor, ToActor};
+use shared_kernel::authorization::{ActorExtractor, ToActor};
 use std::{sync::Arc, time::Duration};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
@@ -248,14 +248,6 @@ impl<'a> HttpActorInput<'a> {
 }
 
 impl ToActor for HttpActorInput<'_> {
-    /// Raw HTTP credentials are not stable actor identifiers.
-    ///
-    /// Actor extractors should read credentials with [`ToActor::auth_value`] and map them to a
-    /// non-sensitive subject before returning an [`Actor`].
-    fn to_actor(&self) -> Option<Actor> {
-        None
-    }
-
     /// Read the header identified by `key` as a UTF-8 string slice.
     fn auth_value(&self, key: &str) -> Option<&str> {
         self.headers.get(key).and_then(|value| value.to_str().ok())
@@ -311,7 +303,7 @@ mod tests {
         credential_issuer_metadata::CredentialIssuerMetadata,
     };
     use serde_json::json;
-    use shared_kernel::authorization::NoActorExtractor;
+    use shared_kernel::authorization::{Actor, NoActorExtractor};
     use std::collections::HashMap;
     use tower::ServiceExt;
 
@@ -409,9 +401,7 @@ mod tests {
             input
                 .bearer_token()
                 .filter(|token| *token == "valid-token")
-                .map(|_| Actor {
-                    subject: "user@example.test".to_string(),
-                })
+                .map(|_| Actor::user("user@example.test"))
         }
     }
 
@@ -424,15 +414,13 @@ mod tests {
             input
                 .auth_value("x-custom-actor-token")
                 .filter(|token| *token == "valid-token")
-                .map(|_| Actor {
-                    subject: "custom@example.test".to_string(),
-                })
+                .map(|_| Actor::user("custom@example.test"))
         }
     }
 
     async fn actor_subject(RequestActor(actor): RequestActor) -> String {
         actor
-            .map(|actor| actor.subject)
+            .map(|actor| actor.subject.to_string())
             .unwrap_or_else(|| "anonymous".to_string())
     }
 

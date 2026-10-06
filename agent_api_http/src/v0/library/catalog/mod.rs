@@ -544,9 +544,7 @@ mod tests {
     #[tokio::test]
     async fn catalog_template_mutations_preserve_the_authorization_boundary() {
         let catalog_id = "catalog-1";
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
 
         for (operation_name, add) in [
             ("library.catalogs.templates.add", true),

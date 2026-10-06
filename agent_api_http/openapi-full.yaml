@@ -1017,12 +1017,18 @@ paths:
                   schema:
                     type: object
                     properties:
-                      achievement.name:
-                        type: string
-                      achievement.description:
-                        type: string
-                      achievement.criteria.narrative:
-                        type: string
+                      achievement:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          description:
+                            type: string
+                          criteria:
+                            type: object
+                            properties:
+                              narrative:
+                                type: string
               Standard template:
                 description: A simple example that will issue credentials in the W3C Verifiable Credentials Data Model v1.1 format.
                 value:
@@ -2673,41 +2679,57 @@ components:
         description: One segment of a Claim Path Pointer.
       minItems: 1
     CloudEvent:
-      type: object
+      allOf:
+      - type: object
+        description: |-
+          CNCF CloudEvents extension attributes.
+
+          Field names strictly follow the CloudEvents v1.0.2 specification:
+          lowercase alphanumeric characters (`[a-z0-9]`) only without separators.
+        properties:
+          callerid:
+            type:
+            - string
+            - 'null'
+          callertype:
+            type:
+            - string
+            - 'null'
+      - type: object
+        required:
+        - id
+        - source
+        - specversion
+        - type
+        properties:
+          data: {}
+          datacontenttype:
+            type:
+            - string
+            - 'null'
+          dataschema:
+            type:
+            - string
+            - 'null'
+          id:
+            type: string
+          source:
+            type: string
+          specversion:
+            type: string
+          subject:
+            type:
+            - string
+            - 'null'
+          time:
+            type:
+            - string
+            - 'null'
+            format: date-time
+          type:
+            type: string
+            example: com.impierce.unicore.offer-created
       description: A CNCF CloudEvent envelope (v1.0 spec).
-      required:
-      - id
-      - source
-      - specversion
-      - type
-      properties:
-        data: {}
-        datacontenttype:
-          type:
-          - string
-          - 'null'
-        dataschema:
-          type:
-          - string
-          - 'null'
-        id:
-          type: string
-        source:
-          type: string
-        specversion:
-          type: string
-        subject:
-          type:
-          - string
-          - 'null'
-        time:
-          type:
-          - string
-          - 'null'
-          format: date-time
-        type:
-          type: string
-          example: com.impierce.unicore.offer-created
     CnameCheck:
       type: object
       description: The outcome of checking one origin's DNS against the deployment's own host.

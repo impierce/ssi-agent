@@ -204,9 +204,10 @@ mod tests {
     #[async_trait::async_trait]
     impl ActorExtractor for HeaderActor {
         async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
-            input.bearer_token().filter(|token| *token == "test").map(|_| Actor {
-                subject: "administrator".into(),
-            })
+            input
+                .bearer_token()
+                .filter(|token| *token == "test")
+                .map(|_| Actor::user("administrator"))
         }
     }
 
