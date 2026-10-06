@@ -7,3 +7,5 @@ pub mod service;
 pub mod dns;
 pub mod services;
 pub mod state;
+
+pub use state::identity_state;

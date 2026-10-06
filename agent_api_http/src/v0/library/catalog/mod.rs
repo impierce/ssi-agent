@@ -517,7 +517,8 @@ pub(crate) async fn delete_catalog(
 mod tests {
     use super::*;
     use crate::handlers::public_command_handler;
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_library::library_state;
+    use agent_store::in_memory::InMemory;
     use shared_kernel::{
         async_trait,
         authorization::{
@@ -539,7 +540,7 @@ mod tests {
     }
 
     async fn catalog_state(requests: Arc<Mutex<Vec<AuthorizationRequest>>>, catalog_id: &str) -> Arc<LibraryState> {
-        let mut state = library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await;
+        let mut state = library_state(&InMemory, &Default::default(), vec![]).await;
 
         public_command_handler(
             catalog_id,
@@ -648,7 +649,7 @@ mod tests {
         use tower::ServiceExt;
 
         async fn setup() -> Router {
-            let state = Arc::new(library_state(&InMemory, &Default::default(), Default::default(), vec![]).await);
+            let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
             create_test_template(&state).await;
 
             crate::v0::library::router(state)

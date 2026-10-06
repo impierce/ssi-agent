@@ -111,8 +111,9 @@ pub(crate) async fn get_public_templates(State(state): State<Arc<LibraryState>>)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_library::library_state;
     use agent_library::template::views::{all_templates::AllTemplatesView, TemplateView};
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_store::in_memory::InMemory;
     use axum::body::Body;
     use cqrs_es::persist::ViewContext;
     use http::Request;
@@ -132,7 +133,7 @@ mod tests {
     /// Seeds the `all_templates` view directly so that each template's status, visibility and
     /// `modified_at` are fully controlled by the test.
     async fn app(templates: Vec<TemplateView>) -> axum::Router {
-        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![], vec![]).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let view = AllTemplatesView {
             templates: templates
@@ -231,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn returns_an_empty_list_when_the_view_does_not_exist_yet() {
-        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![], vec![]).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let (status, body) = get_public_templates(crate::public::router(Some(state))).await;
 

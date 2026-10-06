@@ -65,14 +65,16 @@ pub async fn token_status_list(
 pub mod tests {
     use std::sync::Arc;
 
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::{
         services::IssuanceServices,
         state::{initialize, IssuanceState},
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
         Router,
@@ -103,15 +105,8 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -208,7 +203,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,
