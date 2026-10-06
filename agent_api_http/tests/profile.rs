@@ -1,4 +1,5 @@
 use agent_api_http::v0::identity::router;
+use agent_identity::identity_state;
 use agent_identity::services::IdentityServices;
 use agent_identity::{
     profile::{aggregate::Source, command::ProfileCommand},
@@ -8,7 +9,7 @@ use agent_shared::{
     config::{config, config_mut, ApplicationConfiguration},
     handlers::command_handler as internal_command_handler,
 };
-use agent_store::{identity_state, in_memory::InMemory};
+use agent_store::in_memory::InMemory;
 use axum::{
     body::{to_bytes, Body},
     extract::Request,
@@ -41,7 +42,6 @@ async fn setup() -> (Arc<IdentityState>, Router) {
             &InMemory,
             IdentityServices::default(),
             &shared_kernel::EventBusHandle::default(),
-            vec![],
         )
         .await,
     );

@@ -1,16 +1,17 @@
 //! Startup must create the organisation profile from the configured display, and keep a profile that was
 //! provisioned through configuration in sync with it.
 
+use agent_identity::identity_state;
 use agent_identity::profile::aggregate::{Profile, Source};
 use agent_identity::profile::command::ProfileCommand;
 use agent_identity::services::IdentityServices;
 use agent_identity::state::{initialize, IdentityState, PROFILE_ID};
 use agent_shared::config::{config, Logo};
 use agent_shared::handlers::{public_command_handler, public_query_handler};
-use agent_store::{identity_state, in_memory::InMemory};
+use agent_store::in_memory::InMemory;
 
 async fn identity() -> IdentityState {
-    identity_state(&InMemory, IdentityServices::default(), &Default::default(), vec![]).await
+    identity_state(&InMemory, IdentityServices::default(), &Default::default()).await
 }
 
 async fn profile(state: &IdentityState) -> Profile {

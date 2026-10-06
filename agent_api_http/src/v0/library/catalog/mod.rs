@@ -594,7 +594,7 @@ mod tests {
         use tower::ServiceExt;
 
         async fn setup() -> Router {
-            let state = Arc::new(library_state(&InMemory, &Default::default(), Default::default(), vec![]).await);
+            let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
             create_test_template(&state).await;
 
             crate::v0::library::router(state)

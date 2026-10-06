@@ -383,30 +383,16 @@ pub mod tests {
                 Arc<agent_verification::state::VerificationState>,
             ) -> Box<dyn OpenId4VpPresentationService>,
         ) -> Router {
-            let issuance_state = Arc::new(
-                issuance_state(
-                    &InMemory,
-                    IssuanceServices::default().await,
-                    &Default::default(),
-                    Default::default(),
-                )
-                .await,
-            );
+            let issuance_state =
+                Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
             let verification_state = Arc::new(
-                agent_store::verification_state(
-                    &InMemory,
-                    VerificationServices::default().await,
-                    &Default::default(),
-                    Default::default(),
-                )
-                .await,
+                verification_state(&InMemory, VerificationServices::default().await, &Default::default()).await,
             );
             let authorization_state = Arc::new(
                 authorization_state(
                     &InMemory,
                     AuthorizationServices::default().await,
                     &Default::default(),
-                    Default::default(),
                     OAuth2AuthorizationRequestDomainServices::new(presentation_service(verification_state)),
                 )
                 .await,

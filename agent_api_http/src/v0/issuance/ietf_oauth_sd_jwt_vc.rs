@@ -223,10 +223,10 @@ mod tests {
         credentials::tests::{create_test_template_with_status_and_format, setup_library_state},
         router,
     };
-    use agent_issuance::services::IssuanceServices;
+    use agent_issuance::{issuance_state, services::IssuanceServices};
     use agent_library::template::aggregate::Status;
     use agent_secret_manager::service::Service as _;
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::{to_bytes, Body},
         extract::Request,
@@ -239,15 +239,8 @@ mod tests {
     /// Returns the issuance router and the ID of its only credential configuration, which uses the `vc+sd-jwt` format
     /// since only SD-JWT credential configurations describe their claims.
     async fn setup() -> (Router, String) {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
         create_test_template_with_status_and_format(&library_state, Status::Published, None, "vc+sd-jwt").await;
