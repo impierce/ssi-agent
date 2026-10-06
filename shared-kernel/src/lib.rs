@@ -14,6 +14,7 @@ pub mod authorization;
 pub mod command_handler;
 pub mod custom_queries;
 pub mod event_bus;
+pub mod integration_event;
 pub mod service_registry;
 pub mod view_repository;
 
@@ -29,6 +30,7 @@ pub use event_bus::{
     build_cloud_event, BusEventStream, CloudEvent, EventBus, EventBusError, EventBusHandle, EventFilter, EventSource,
     EventSourceStream, Extension, Position, SourceEvent, SubscribePosition,
 };
+pub use integration_event::IntegrationEvent;
 pub use slug::slugify;
 pub use strum;
 pub use uuid::Uuid;

@@ -154,8 +154,17 @@ impl EventFilter {
         }
         if !self.event_types.is_empty()
             && !self.event_types.iter().any(|pattern| {
-                if pattern.eq_ignore_ascii_case(&event.event_type) {
+                if pattern == "*" || pattern.eq_ignore_ascii_case(&event.event_type) {
                     return true;
+                }
+                if let Some(prefix) = pattern.strip_suffix('*') {
+                    if event
+                        .event_type
+                        .to_ascii_lowercase()
+                        .starts_with(&prefix.to_ascii_lowercase())
+                    {
+                        return true;
+                    }
                 }
                 let event_suffix = event
                     .event_type

@@ -1322,14 +1322,17 @@ paths:
     get:
       tags:
       - Events
-      summary: Stream domain events as CloudEvents via SSE with Catch-Up.
+      summary: Stream integration events as CloudEvents via SSE.
       description: |-
+        Streams CloudEvents v1.0 carrying Published Language integration events (`com.impierce.unicore.*`)
+        and caller provenance extensions (`callerid`, `callertype`).
+
         # Note on delivery guarantee
 
         This is a **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber could
         miss events. Gaps are signalled where detectable (`lagged`, `truncated`), not prevented.
 
-        This endpoint is suitable for a UI activity feed. Projections, syncs and audit consumers must reconcile against
+        This endpoint is suitable for a UI activity feed and external subscribers. Projections, syncs and audit consumers must reconcile against
         the REST endpoints. Full detail in `problem-details/events`.
       operationId: events_sse_handler
       parameters:

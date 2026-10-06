@@ -183,7 +183,7 @@ mod tests {
             subjects: vec![NatsSubject {
                 name: "unicore.events".to_string(),
                 events: Events {
-                    types: vec!["tech.impierce.unicore.credential.issued".to_string()],
+                    types: vec!["com.impierce.unicore.credential.issued".to_string()],
                 },
             }],
         };
@@ -200,7 +200,7 @@ mod tests {
         event_bus.publish(non_matching);
 
         // 2. Publish matching event
-        let matching = CloudEvent::new("tech.impierce.unicore.credential.issued", "https://example.com/issuer")
+        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
             .with_subject("sub-42")
             .with_caller(Some("caller-nats".to_string()), Some("api_key".to_string()))
             .with_data(serde_json::json!({ "status": "issued" }));
@@ -225,7 +225,7 @@ mod tests {
         // Verify JSON payload inside received message
         assert!(received_str.contains(&matching_id));
         assert!(received_str.contains("caller-nats"));
-        assert!(received_str.contains("tech.impierce.unicore.credential.issued"));
+        assert!(received_str.contains("com.impierce.unicore.credential.issued"));
 
         handle.abort();
         mock_server_handle.abort();

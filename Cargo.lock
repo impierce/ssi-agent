@@ -151,6 +151,7 @@ dependencies = [
  "axum 0.8.9",
  "chrono",
  "did_manager",
+ "futures",
  "identity_credential",
  "opentelemetry",
  "opentelemetry-appender-tracing",
