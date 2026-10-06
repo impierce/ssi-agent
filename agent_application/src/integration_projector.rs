@@ -1,223 +1,70 @@
-use agent_identity::ConnectionIntegrationEvent;
-use agent_issuance::IssuanceIntegrationEvent;
-use agent_library::TemplateIntegrationEvent;
-use agent_verification::VerificationIntegrationEvent;
+use agent_identity::project_identity_event;
+use agent_issuance::project_issuance_event;
+use agent_library::project_library_event;
+use agent_verification::project_verification_event;
 use futures::StreamExt;
-use shared_kernel::{
-    event_bus::{CloudEvent, EventBus, EventBusHandle, EventFilter},
-    IntegrationEvent,
-};
+use shared_kernel::event_bus::{CloudEvent, EventBus, EventBusHandle, EventFilter};
 use tracing::{debug, error};
 
-/// Spawns the background task that projects internal core domain events into public integration events.
+/// Function signature for integration event projectors.
+pub type IntegrationProjectorFn = fn(&CloudEvent) -> Option<CloudEvent>;
+
+/// Core domain integration event projectors in standard evaluation order.
+pub const CORE_INTEGRATION_PROJECTORS: &[IntegrationProjectorFn] = &[
+    project_issuance_event,
+    project_identity_event,
+    project_library_event,
+    project_verification_event,
+];
+
+/// Translates a single internal domain [`CloudEvent`] to a public [`CloudEvent`] by querying
+/// a slice of projector functions in order until one returns `Some`.
+#[must_use]
+pub fn project_event(domain_ce: &CloudEvent, projectors: &[IntegrationProjectorFn]) -> Option<CloudEvent> {
+    for projector in projectors {
+        if let Some(integration_ce) = projector(domain_ce) {
+            return Some(integration_ce);
+        }
+    }
+    None
+}
+
+/// Translates a single internal domain [`CloudEvent`] to a public [`CloudEvent`] using the core projectors.
+#[must_use]
+pub fn project_core_event(domain_ce: &CloudEvent) -> Option<CloudEvent> {
+    project_event(domain_ce, CORE_INTEGRATION_PROJECTORS)
+}
+
+/// Spawns the background task that projects internal core domain events into public integration events
+/// using the core domain projectors.
 pub fn start_core_integration_projector(domain_event_bus: EventBusHandle, integration_event_bus: EventBusHandle) {
+    start_integration_projector_with(domain_event_bus, integration_event_bus, CORE_INTEGRATION_PROJECTORS);
+}
+
+/// Spawns the background task that projects internal core domain events into public integration events
+/// using the supplied slice of projector functions.
+pub fn start_integration_projector_with(
+    domain_event_bus: EventBusHandle,
+    integration_event_bus: EventBusHandle,
+    projectors: &'static [IntegrationProjectorFn],
+) {
     let mut stream = domain_event_bus.subscribe(EventFilter::default());
     tokio::spawn(async move {
-        debug!("Core integration projector started");
+        debug!("Integration projector started");
 
         while let Some(event_result) = stream.next().await {
             match event_result {
                 Ok(domain_ce) => {
-                    if let Some(integration_ce) = project_core_event(&domain_ce) {
+                    if let Some(integration_ce) = project_event(&domain_ce, projectors) {
                         integration_event_bus.publish(integration_ce);
                     }
                 }
                 Err(err) => {
-                    error!("Error on domain_event_bus in core integration projector: {:?}", err);
+                    error!("Error on domain_event_bus in integration projector: {:?}", err);
                 }
             }
         }
     });
-}
-
-/// Translates a single internal domain [`CloudEvent`] to a public [`CloudEvent`] carrying an [`IntegrationEvent`].
-#[must_use]
-pub fn project_core_event(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-    let data = domain_ce.data.as_ref()?;
-    let caller_id = domain_ce.extension.callerid.clone();
-    let caller_type = domain_ce.extension.callertype.clone();
-
-    let mut result_ce = match domain_ce.event_type.as_str() {
-        // Issuance domain events
-        "com.impierce.unicore.credential-offer-created" => {
-            let offer_id = data
-                .get("offer_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-            let credential_ids = data
-                .get("credential_ids")
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|x| x.as_str().map(ToString::to_string)).collect())
-                .unwrap_or_default();
-            let pre_authorized_code = data
-                .get("pre_authorized_code")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string);
-
-            IssuanceIntegrationEvent::CredentialOffered {
-                offer_id,
-                credential_ids,
-                pre_authorized_code,
-            }
-            .into_cloud_event("/services/issuance", caller_id, caller_type)
-            .ok()?
-        }
-        "com.impierce.unicore.signed-credential-created" | "com.impierce.unicore.credential-signed" => {
-            let credential_id = data
-                .get("credential_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-            let status = data
-                .get("status")
-                .and_then(|v| v.as_str())
-                .unwrap_or("issued")
-                .to_string();
-
-            IssuanceIntegrationEvent::CredentialIssued { credential_id, status }
-                .into_cloud_event("/services/issuance", caller_id, caller_type)
-                .ok()?
-        }
-        "com.impierce.unicore.credential-status-updated" => {
-            let credential_id = data
-                .get("credential_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-
-            IssuanceIntegrationEvent::CredentialRevoked { credential_id }
-                .into_cloud_event("/services/issuance", caller_id, caller_type)
-                .ok()?
-        }
-
-        // Verification domain events
-        "com.impierce.unicore.authorization-request-created" => {
-            let request_id = domain_ce.subject.clone().unwrap_or_default();
-            let client_id = data
-                .get("authorization_request")
-                .and_then(|ar| ar.get("client_id").or_else(|| ar.get("client_id_scheme")))
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string);
-
-            VerificationIntegrationEvent::PresentationRequested { request_id, client_id }
-                .into_cloud_event("/services/verification", caller_id, caller_type)
-                .ok()?
-        }
-        "com.impierce.unicore.oid-4-vp-authorization-response-verified"
-        | "com.impierce.unicore.si-o-pv-2-authorization-response-verified" => {
-            let request_id = domain_ce.subject.clone().unwrap_or_default();
-            let validated = data.get("validated").and_then(|v| v.as_bool()).unwrap_or(true);
-
-            if validated {
-                VerificationIntegrationEvent::PresentationVerified {
-                    request_id,
-                    validated: true,
-                }
-                .into_cloud_event("/services/verification", caller_id, caller_type)
-                .ok()?
-            } else {
-                VerificationIntegrationEvent::PresentationFailed {
-                    request_id,
-                    reason: Some("Verification failed".to_string()),
-                }
-                .into_cloud_event("/services/verification", caller_id, caller_type)
-                .ok()?
-            }
-        }
-
-        // Identity connection domain events
-        "com.impierce.unicore.connection-added" => {
-            let connection_id = data
-                .get("connection_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-            let url = data.get("url").and_then(|v| v.as_str()).map(ToString::to_string);
-
-            ConnectionIntegrationEvent::InvitationCreated { connection_id, url }
-                .into_cloud_event("/services/connection", caller_id, caller_type)
-                .ok()?
-        }
-        "com.impierce.unicore.connection-synced" | "com.impierce.unicore.connection-changes-accepted" => {
-            let connection_id = data
-                .get("connection_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-
-            ConnectionIntegrationEvent::ConnectionEstablished { connection_id }
-                .into_cloud_event("/services/connection", caller_id, caller_type)
-                .ok()?
-        }
-
-        // Library template domain events
-        "com.impierce.unicore.template-created" => {
-            let template_id = data
-                .get("template_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-            let title = data
-                .get("title")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let data_model = data
-                .get("data_model")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-
-            TemplateIntegrationEvent::TemplateCreated {
-                template_id,
-                title,
-                data_model,
-            }
-            .into_cloud_event("/services/template", caller_id, caller_type)
-            .ok()?
-        }
-        "com.impierce.unicore.title-updated"
-        | "com.impierce.unicore.display-updated"
-        | "com.impierce.unicore.tags-updated"
-        | "com.impierce.unicore.status-updated"
-        | "com.impierce.unicore.visibility-updated"
-        | "com.impierce.unicore.description-updated"
-        | "com.impierce.unicore.type-updated" => {
-            let template_id = data
-                .get("template_id")
-                .and_then(|v| v.as_str())
-                .map(ToString::to_string)
-                .or_else(|| domain_ce.subject.clone())
-                .unwrap_or_default();
-            let title = data.get("title").and_then(|v| v.as_str()).map(ToString::to_string);
-            let status = data.get("status").and_then(|v| v.as_str()).map(ToString::to_string);
-
-            TemplateIntegrationEvent::TemplateUpdated {
-                template_id,
-                title,
-                status,
-            }
-            .into_cloud_event("/services/template", caller_id, caller_type)
-            .ok()?
-        }
-
-        // Unmapped internal domain events are intentionally dropped
-        _ => return None,
-    };
-
-    // Preserve the original event timestamp
-    if let Some(occurred_at) = domain_ce.time {
-        result_ce.time = Some(occurred_at);
-    }
-
-    Some(result_ce)
 }
 
 #[cfg(test)]
@@ -239,7 +86,7 @@ mod tests {
         let projected = project_core_event(&domain_ce).expect("expected projected event");
         assert_eq!(
             projected.event_type,
-            "tech.impierce.unicore.issuance.credential.offered"
+            "com.impierce.unicore.issuance.credential.offered"
         );
         assert_eq!(projected.source, "/services/issuance");
         assert_eq!(projected.subject.as_deref(), Some("offer-123"));
@@ -257,7 +104,7 @@ mod tests {
             }));
 
         let projected = project_core_event(&domain_ce).expect("expected projected event");
-        assert_eq!(projected.event_type, "tech.impierce.unicore.issuance.credential.issued");
+        assert_eq!(projected.event_type, "com.impierce.unicore.issuance.credential.issued");
         assert_eq!(projected.source, "/services/issuance");
         assert_eq!(projected.subject.as_deref(), Some("cred-abc"));
     }
@@ -275,7 +122,7 @@ mod tests {
         let projected_req = project_core_event(&req_ce).expect("expected projected event");
         assert_eq!(
             projected_req.event_type,
-            "tech.impierce.unicore.verification.presentation.requested"
+            "com.impierce.unicore.verification.presentation.requested"
         );
         assert_eq!(projected_req.subject.as_deref(), Some("req-123"));
 
@@ -288,7 +135,7 @@ mod tests {
         let projected_verified = project_core_event(&verified_ce).expect("expected projected event");
         assert_eq!(
             projected_verified.event_type,
-            "tech.impierce.unicore.verification.presentation.verified"
+            "com.impierce.unicore.verification.presentation.verified"
         );
 
         let failed_ce = CloudEvent::new(
@@ -300,8 +147,22 @@ mod tests {
         let projected_failed = project_core_event(&failed_ce).expect("expected projected event");
         assert_eq!(
             projected_failed.event_type,
-            "tech.impierce.unicore.verification.presentation.failed"
+            "com.impierce.unicore.verification.presentation.failed"
         );
+    }
+
+    #[test]
+    fn projects_connection_events() {
+        let ce = CloudEvent::new("com.impierce.unicore.connection-added", "/services/connection")
+            .with_subject("conn-1")
+            .with_data(json!({
+                "connection_id": "conn-1",
+                "url": "https://example.com/invitation"
+            }));
+        let projected = project_core_event(&ce).expect("expected projected event");
+        assert_eq!(projected.event_type, "com.impierce.unicore.connection.invitation.created");
+        assert_eq!(projected.source, "/services/connection");
+        assert_eq!(projected.subject.as_deref(), Some("conn-1"));
     }
 
     #[test]
@@ -314,7 +175,7 @@ mod tests {
                 "data_model": "open_badges_3-0"
             }));
         let projected = project_core_event(&ce).expect("expected projected event");
-        assert_eq!(projected.event_type, "tech.impierce.unicore.template.created");
+        assert_eq!(projected.event_type, "com.impierce.unicore.template.created");
         assert_eq!(projected.source, "/services/template");
         assert_eq!(projected.subject.as_deref(), Some("tmpl-1"));
     }
@@ -325,5 +186,25 @@ mod tests {
             .with_data(json!({ "nonce": "abc-123" }));
 
         assert!(project_core_event(&internal_ce).is_none());
+    }
+
+    #[test]
+    fn project_event_with_custom_projectors() {
+        fn custom_projector(ce: &CloudEvent) -> Option<CloudEvent> {
+            if ce.event_type == "com.custom.ping" {
+                Some(CloudEvent::new("com.custom.pong", "/services/custom"))
+            } else {
+                None
+            }
+        }
+
+        let custom_projectors: &[IntegrationProjectorFn] = &[
+            project_issuance_event,
+            custom_projector,
+        ];
+
+        let ping = CloudEvent::new("com.custom.ping", "/services/ping");
+        let projected = project_event(&ping, custom_projectors).expect("expected projected custom event");
+        assert_eq!(projected.event_type, "com.custom.pong");
     }
 }

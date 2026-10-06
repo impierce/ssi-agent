@@ -156,7 +156,7 @@ mod tests {
             target_url: format!("{}/webhook", mock_server.uri()),
             headers: Some(headers),
             events: Events {
-                types: vec!["tech.impierce.unicore.credential.issued".to_string()],
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
             },
         }];
 
@@ -169,7 +169,7 @@ mod tests {
         event_bus.publish(non_matching_event);
 
         // 2. Publish matching event -> should be forwarded to mock server
-        let matching_event = CloudEvent::new("tech.impierce.unicore.credential.issued", "https://example.com/issuer")
+        let matching_event = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
             .with_subject("subject-42")
             .with_caller(Some("caller-abc".to_string()), Some("api_key".to_string()))
             .with_data(serde_json::json!({ "credential_id": "cred-99" }));
@@ -188,7 +188,7 @@ mod tests {
         let received_event: CloudEvent =
             serde_json::from_slice(&received_requests[0].body).expect("Valid CloudEvent JSON");
         assert_eq!(received_event.id, matching_event_id);
-        assert_eq!(received_event.event_type, "tech.impierce.unicore.credential.issued");
+        assert_eq!(received_event.event_type, "com.impierce.unicore.credential.issued");
         assert_eq!(received_event.source, "https://example.com/issuer");
         assert_eq!(received_event.subject, Some("subject-42".to_string()));
         assert_eq!(received_event.extension.callerid, Some("caller-abc".to_string()));

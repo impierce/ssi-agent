@@ -44,7 +44,10 @@ use agent_issuance::issuance_state;
 use agent_library::library_state;
 use agent_verification::verification_state;
 pub mod integration_projector;
-pub use integration_projector::start_core_integration_projector;
+pub use integration_projector::{
+    project_core_event, project_event, start_core_integration_projector, start_integration_projector_with,
+    CORE_INTEGRATION_PROJECTORS, IntegrationProjectorFn,
+};
 
 pub struct ApplicationState {
     pub api: ApiState,

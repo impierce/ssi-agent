@@ -17,7 +17,7 @@ Building on `feat/actor-in-event` (which adds caller metadata extensions to `Clo
    All outbound event forwarders (HTTP webhooks, NATS broker) and streaming APIs (SSE `/v0/events`) emit standardized `CloudEvent` payloads.
 3. **Dual-Bus Architectural Isolation**:
    - `domain_event_bus`: Internal CQRS event store bus that captures private domain events emitted by aggregate commits across all bounded contexts.
-   - `integration_event_bus`: Public integration event bus that streams stable Published Language (PL) events (`tech.impierce.unicore.*`) to external consumers.
+   - `integration_event_bus`: Public integration event bus that streams stable Published Language (PL) events (`com.impierce.unicore.*`) to external consumers.
    - **Integration Projectors**: Background projector tasks (`start_core_integration_projector` and `start_ext_integration_projector`) translate internal domain events to public integration events, preserving caller provenance (`callerid`, `callertype`) and timestamps while dropping internal/unmapped events.
 4. **Configuration Simplification**:
    Replace duplicate aggregate event vectors with pattern-based matching:
@@ -26,7 +26,7 @@ Building on `feat/actor-in-event` (which adds caller metadata extensions to `Clo
        pub types: Vec<String>,
    }
    ```
-   Filter patterns support exact matches, wildcards (e.g. `tech.impierce.unicore.issuance.*`), and legacy kebab-case suffixes.
+   Filter patterns support exact matches, wildcards (e.g. `com.impierce.unicore.issuance.*`), and legacy kebab-case suffixes.
 
 ## Consequences
 

@@ -169,7 +169,6 @@ impl EventFilter {
                 let event_suffix = event
                     .event_type
                     .strip_prefix("com.impierce.unicore.")
-                    .or_else(|| event.event_type.strip_prefix("tech.impierce.unicore."))
                     .unwrap_or(&event.event_type);
                 let pattern_kebab = pattern.to_case(Case::Kebab);
                 event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)

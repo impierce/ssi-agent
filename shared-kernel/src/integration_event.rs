@@ -7,7 +7,7 @@ use serde::Serialize;
 /// integration events establish a stable contract for external consumers,
 /// webhook subscribers, and cross-system streaming.
 pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
-    /// Reverse-DNS event type, e.g. `tech.impierce.unicore.issuance.credential.offered`.
+    /// Reverse-DNS event type, e.g. `com.impierce.unicore.issuance.credential.offered`.
     fn event_type(&self) -> &'static str;
 
     /// Optional entity or aggregate subject ID.

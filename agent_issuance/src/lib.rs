@@ -15,5 +15,5 @@ pub mod integration_events;
 pub mod services;
 pub mod state;
 
-pub use integration_events::IssuanceIntegrationEvent;
+pub use integration_events::{project_issuance_event, IssuanceIntegrationEvent};
 pub use state::issuance_state;

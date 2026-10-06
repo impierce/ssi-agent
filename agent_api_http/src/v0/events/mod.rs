@@ -81,7 +81,7 @@ pub fn router(state: Arc<EventsState>) -> Router {
 
 /// Stream integration events as CloudEvents via SSE.
 ///
-/// Streams CloudEvents v1.0 carrying Published Language integration events (`tech.impierce.unicore.*`)
+/// Streams CloudEvents v1.0 carrying Published Language integration events (`com.impierce.unicore.*`)
 /// and caller provenance extensions (`callerid`, `callertype`).
 ///
 /// # Note on delivery guarantee

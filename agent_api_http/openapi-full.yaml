@@ -1324,7 +1324,7 @@ paths:
       - Events
       summary: Stream integration events as CloudEvents via SSE.
       description: |-
-        Streams CloudEvents v1.0 carrying Published Language integration events (`tech.impierce.unicore.*`)
+        Streams CloudEvents v1.0 carrying Published Language integration events (`com.impierce.unicore.*`)
         and caller provenance extensions (`callerid`, `callertype`).
 
         # Note on delivery guarantee
