@@ -1,4 +1,5 @@
-use agent_shared::config::{config, EventPublisherNats};
+use agent_shared::config::{config, EventPublisherNats, NatsSubject};
+use async_nats::Client;
 use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
@@ -6,7 +7,8 @@ use tracing::info;
 /// Background event publisher that subscribes to the [`EventBusHandle`] and publishes
 /// canonical [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s to configured NATS subjects.
 pub struct NatsEventPublisher {
-    config: EventPublisherNats,
+    client: Client,
+    subjects: Vec<NatsSubject>,
     stream: BusEventStream,
 }
 
@@ -14,43 +16,43 @@ impl NatsEventPublisher {
     /// Creates a new `NatsEventPublisher` with an explicitly provided configuration.
     ///
     /// Subscribes immediately to `event_bus` upon creation to prevent event loss.
-    /// Returns `None` if `config.enabled` is `false`.
-    pub fn new(config: EventPublisherNats, event_bus: &EventBusHandle) -> Option<Self> {
+    /// Returns `Ok(None)` if `config.enabled` is `false`.
+    /// Returns `Err` if connecting to NATS fails.
+    pub async fn new(
+        config: EventPublisherNats,
+        event_bus: &EventBusHandle,
+    ) -> Result<Option<Self>, async_nats::ConnectError> {
         if !config.enabled {
-            return None;
+            return Ok(None);
         }
 
         let stream = event_bus.subscribe(EventFilter::default());
 
-        Some(Self { config, stream })
+        info!("Connecting NATS event publisher to {}...", config.nats_url);
+        let client = async_nats::connect(&config.nats_url).await?;
+        info!("NATS event publisher connected successfully.");
+
+        Ok(Some(Self {
+            client,
+            subjects: config.subjects,
+            stream,
+        }))
     }
 
     /// Creates a `NatsEventPublisher` from the global application configuration.
-    pub fn from_config(event_bus: &EventBusHandle) -> Option<Self> {
-        let conf = config();
-        let nats_config = conf.event_publishers.nats.as_ref()?.clone();
-        Self::new(nats_config, event_bus)
+    pub async fn from_config(event_bus: &EventBusHandle) -> Result<Option<Self>, async_nats::ConnectError> {
+        let nats_config = config().event_publishers.nats.clone();
+        let Some(nats_config) = nats_config else {
+            return Ok(None);
+        };
+        Self::new(nats_config, event_bus).await
     }
 
     /// Runs the NATS event publisher loop.
     pub async fn run(mut self) {
-        let nats_url = self.config.nats_url;
-        let subjects = self.config.subjects;
-
-        info!("Connecting NATS event publisher to {}...", nats_url);
-        let client = match async_nats::connect(&nats_url).await {
-            Ok(c) => c,
-            Err(err) => {
-                tracing::error!("Failed to connect to NATS at {}: {:?}", nats_url, err);
-                return;
-            }
-        };
-
-        info!("NATS event publisher connected successfully.");
-
         while let Some(item) = self.stream.next().await {
             if let Ok(cloud_event) = item {
-                for subject_config in &subjects {
+                for subject_config in &self.subjects {
                     let filter = EventFilter {
                         event_types: subject_config.events.types.clone(),
                         ..Default::default()
@@ -68,7 +70,7 @@ impl NatsEventPublisher {
                         }
                     };
 
-                    if let Err(err) = client.publish(subject_name.clone(), payload.into()).await {
+                    if let Err(err) = self.client.publish(subject_name.clone(), payload.into()).await {
                         tracing::error!(
                             "Failed to publish CloudEvent {:?} to NATS subject {}: {:?}",
                             cloud_event.id,
@@ -113,7 +115,7 @@ mod tests {
             nats_url: "127.0.0.1:4222".to_string(),
             subjects: vec![],
         };
-        assert!(NatsEventPublisher::new(config, &event_bus).is_none());
+        assert!(NatsEventPublisher::new(config, &event_bus).await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -132,13 +134,8 @@ mod tests {
             }],
         };
 
-        let publisher =
-            NatsEventPublisher::new(config, &event_bus).expect("Expected NatsEventPublisher instance when enabled");
-        let handle = publisher.spawn();
-
-        // The background task should exit gracefully when connect fails
-        let res = tokio::time::timeout(Duration::from_secs(3), handle).await;
-        assert!(res.is_ok(), "Task should finish promptly on connection failure");
+        let res = NatsEventPublisher::new(config, &event_bus).await;
+        assert!(res.is_err(), "Expected connection to fail when server is unreachable");
     }
 
     #[tokio::test]
@@ -183,13 +180,16 @@ mod tests {
             subjects: vec![NatsSubject {
                 name: "unicore.events".to_string(),
                 events: Events {
-                    types: vec!["tech.impierce.unicore.credential.issued".to_string()],
+                    types: vec!["com.impierce.unicore.credential.issued".to_string()],
                 },
             }],
         };
 
         let event_bus = EventBusHandle::new(100);
-        let publisher = NatsEventPublisher::new(config, &event_bus).expect("Expected NatsEventPublisher when enabled");
+        let publisher = NatsEventPublisher::new(config, &event_bus)
+            .await
+            .unwrap()
+            .expect("Expected NatsEventPublisher when enabled");
         let handle = publisher.spawn();
 
         // Wait briefly for NATS handshake to complete
@@ -200,7 +200,7 @@ mod tests {
         event_bus.publish(non_matching);
 
         // 2. Publish matching event
-        let matching = CloudEvent::new("tech.impierce.unicore.credential.issued", "https://example.com/issuer")
+        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
             .with_subject("sub-42")
             .with_caller(Some("caller-nats".to_string()), Some("api_key".to_string()))
             .with_data(serde_json::json!({ "status": "issued" }));
@@ -225,7 +225,7 @@ mod tests {
         // Verify JSON payload inside received message
         assert!(received_str.contains(&matching_id));
         assert!(received_str.contains("caller-nats"));
-        assert!(received_str.contains("tech.impierce.unicore.credential.issued"));
+        assert!(received_str.contains("com.impierce.unicore.credential.issued"));
 
         handle.abort();
         mock_server_handle.abort();
@@ -241,7 +241,7 @@ mod tests {
         }
 
         let event_bus = EventBusHandle::new(100);
-        assert!(NatsEventPublisher::from_config(&event_bus).is_none());
+        assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
 
         {
             let mut conf = set_config();
@@ -252,12 +252,8 @@ mod tests {
             });
         }
 
-        let publisher = NatsEventPublisher::from_config(&event_bus);
-        assert!(publisher.is_some());
-        if let Some(p) = publisher {
-            let h = p.spawn();
-            h.abort();
-        }
+        let res = NatsEventPublisher::from_config(&event_bus).await;
+        assert!(res.is_err(), "Expected connection failure for unreachable NATS URL");
 
         set_config().event_publishers.nats = None;
     }

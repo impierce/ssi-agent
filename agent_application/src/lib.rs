@@ -144,7 +144,10 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     if let Some(publisher) = HttpEventPublisher::from_config(&event_bus) {
         publisher.spawn();
     }
-    if let Some(publisher) = NatsEventPublisher::from_config(&event_bus) {
+    if let Some(publisher) = NatsEventPublisher::from_config(&event_bus)
+        .await
+        .map_err(|err| io::Error::other(format!("Failed to connect to NATS: {err}")))?
+    {
         publisher.spawn();
     }
 

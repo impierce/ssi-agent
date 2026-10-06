@@ -46,13 +46,20 @@ async fn configured_offer_events_are_published_as_cloud_events() {
 
     // Without an enabled configuration, nothing is loaded.
     configure_nats(None);
-    assert!(NatsEventPublisher::from_config(&event_bus).is_none());
+    assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
     configure_nats(Some(nats_config(false, &nats_url)));
-    assert!(NatsEventPublisher::from_config(&event_bus).is_none());
+    assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
+
+    // An unreachable server fails loading instead of silently dropping events.
+    configure_nats(Some(nats_config(true, "nats://127.0.0.1:1")));
+    assert!(NatsEventPublisher::from_config(&event_bus).await.is_err());
 
     // Configure the publisher against the running NATS container
     configure_nats(Some(nats_config(true, &nats_url)));
-    let publisher = NatsEventPublisher::from_config(&event_bus).expect("publisher should load when enabled");
+    let publisher = NatsEventPublisher::from_config(&event_bus)
+        .await
+        .unwrap()
+        .expect("publisher should load when enabled");
     let publisher_handle = publisher.spawn();
 
     // Subscribe to NATS subject
