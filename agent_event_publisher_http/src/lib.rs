@@ -95,15 +95,20 @@ impl HttpEventPublisher {
                     continue;
                 }
 
-                let mut req = self.client.post(&target_config.target_url);
+                let mut req = self
+                    .client
+                    .post(&target_config.target_url)
+                    // CloudEvents JSON format envelope media type:
+                    // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
+                    .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json")
+                    .json(&cloud_event)
+                    .timeout(self.timeout);
 
                 if let Some(headers) = &target_config.headers {
                     for (header_name, header_value) in headers {
                         req = req.header(header_name.as_str(), header_value.to_str().unwrap_or(""));
                     }
                 }
-
-                let req = req.json(&cloud_event).timeout(self.timeout);
                 let event_id = cloud_event.id.clone();
                 let target_url = target_config.target_url.clone();
 
@@ -184,6 +189,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/webhook"))
             .and(header("x-webhook-secret", "supersecret"))
+            .and(header("content-type", "application/cloudevents+json"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
             .mount(&mock_server)

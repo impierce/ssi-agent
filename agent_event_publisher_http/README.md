@@ -32,7 +32,7 @@ Example:
 
 ```http
 POST /<target_url>
-Content-Type: application/json
+Content-Type: application/cloudevents+json
 
 {
   "specversion": "1.0",
