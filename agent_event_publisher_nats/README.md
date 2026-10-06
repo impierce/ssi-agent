@@ -19,18 +19,20 @@ event_publishers:
 
 ## Usage
 
-### 1. Load the publisher
+### 1. Load and spawn the publisher
 
 ```rust
 use agent_event_publisher_nats::NatsEventPublisher;
 
-let nats_publisher = NatsEventPublisher::from_config(&event_bus).await?;
+if let Some(nats_publisher) = NatsEventPublisher::from_config(&event_bus).await? {
+    nats_publisher.spawn();
+}
 ```
 
-The publisher currently implements the `Query<Offer>` trait and will automatically publish those events when they occur.
-Using example configuration, NATS will publish the event to "email.commands".
+The publisher subscribes to the shared kernel `EventBusHandle` and automatically forwards matching `CloudEvent`s to configured NATS subjects.
+Using the example configuration, matching events are published to "email.commands".
 
-### 3. Example published event
+### 2. Example published event
 
 When a `TxCodeGenerated` event occurs, it publishes a CloudEvent to the defined subject.
 For example:
