@@ -100,15 +100,13 @@ impl HttpEventPublisher {
                     .post(&target_config.target_url)
                     // CloudEvents JSON format envelope media type:
                     // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
-                    .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json")
-                    .json(&cloud_event)
-                    .timeout(self.timeout);
+                    .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json");
 
                 if let Some(headers) = &target_config.headers {
-                    for (header_name, header_value) in headers {
-                        req = req.header(header_name.as_str(), header_value.to_str().unwrap_or(""));
-                    }
+                    req = req.headers(headers.clone());
                 }
+
+                let req = req.json(&cloud_event).timeout(self.timeout);
                 let event_id = cloud_event.id.clone();
                 let target_url = target_config.target_url.clone();
 
@@ -185,6 +183,10 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert("x-webhook-secret", "supersecret".parse().unwrap());
+        headers.insert(
+            "x-custom-bytes",
+            reqwest::header::HeaderValue::from_bytes(b"non-ascii-\xff").unwrap(),
+        );
 
         Mock::given(method("POST"))
             .and(path("/webhook"))
@@ -237,6 +239,10 @@ mod tests {
         assert_eq!(received_event.subject, Some("subject-42".to_string()));
         assert_eq!(received_event.extension.callerid, Some("caller-abc".to_string()));
         assert_eq!(received_event.extension.callertype, Some("api_key".to_string()));
+        assert_eq!(
+            received_requests[0].headers.get("x-custom-bytes").unwrap().as_bytes(),
+            b"non-ascii-\xff"
+        );
         assert_eq!(
             received_event.data,
             Some(serde_json::json!({ "credential_id": "cred-99" }))
