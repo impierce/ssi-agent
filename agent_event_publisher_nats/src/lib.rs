@@ -26,6 +26,15 @@ impl NatsEventPublisher {
             return Ok(None);
         }
 
+        for subject in &config.subjects {
+            if subject.events.types.is_empty() {
+                tracing::warn!(
+                    "NATS subject '{}' has no event types configured in 'events.types'; no events will be published to this subject.",
+                    subject.name
+                );
+            }
+        }
+
         let stream = event_bus.subscribe(EventFilter::default());
 
         info!("Connecting NATS event publisher to {}...", config.nats_url);
@@ -53,6 +62,10 @@ impl NatsEventPublisher {
         while let Some(item) = self.stream.next().await {
             if let Ok(cloud_event) = item {
                 for subject_config in &self.subjects {
+                    if subject_config.events.types.is_empty() {
+                        continue;
+                    }
+
                     let filter = EventFilter {
                         event_types: subject_config.events.types.clone(),
                         ..Default::default()
@@ -226,6 +239,71 @@ mod tests {
         assert!(received_str.contains(&matching_id));
         assert!(received_str.contains("caller-nats"));
         assert!(received_str.contains("com.impierce.unicore.credential.issued"));
+
+        handle.abort();
+        mock_server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_nats_event_publisher_empty_types_does_not_publish() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let (received_sender, mut received_receiver) = tokio::sync::mpsc::channel::<Vec<u8>>(10);
+
+        let mock_server_handle = tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let info = b"INFO {\"server_id\":\"TEST\",\"server_name\":\"test\",\"version\":\"2.10.0\",\"proto\":1,\"headers\":true,\"max_payload\":1048576}\r\n";
+                let _ = socket.write_all(info).await;
+
+                let mut buf = vec![0u8; 8192];
+                loop {
+                    let n = match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => n,
+                    };
+                    let chunk = &buf[..n];
+
+                    if chunk.windows(4).any(|w| w == b"PING") {
+                        let _ = socket.write_all(b"PONG\r\n").await;
+                    }
+
+                    if chunk.starts_with(b"PUB") || chunk.starts_with(b"HPUB") {
+                        let _ = received_sender.send(chunk.to_vec()).await;
+                    }
+                }
+            }
+        });
+
+        // Configure subject with EMPTY types list
+        let config = EventPublisherNats {
+            enabled: true,
+            nats_url: local_addr.to_string(),
+            subjects: vec![NatsSubject {
+                name: "unicore.events".to_string(),
+                events: Events { types: vec![] },
+            }],
+        };
+
+        let event_bus = EventBusHandle::new(100);
+        let publisher = NatsEventPublisher::new(config, &event_bus)
+            .await
+            .unwrap()
+            .expect("Expected NatsEventPublisher when enabled");
+        let handle = publisher.spawn();
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let event = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
+            .with_data(serde_json::json!({ "status": "issued" }));
+        event_bus.publish(event);
+
+        // Wait to confirm no message is forwarded
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            received_receiver.try_recv().is_err(),
+            "Expected no event to be published when types is empty"
+        );
 
         handle.abort();
         mock_server_handle.abort();

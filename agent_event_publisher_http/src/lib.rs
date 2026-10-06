@@ -27,6 +27,15 @@ impl HttpEventPublisher {
             return None;
         }
 
+        for target in &enabled_configs {
+            if target.events.types.is_empty() {
+                tracing::warn!(
+                    "HTTP webhook target '{}' has no event types configured in 'events.types'; no events will be forwarded to this endpoint.",
+                    target.target_url
+                );
+            }
+        }
+
         let stream = event_bus.subscribe(EventFilter::default());
 
         Some(Self {
@@ -48,6 +57,10 @@ impl HttpEventPublisher {
         while let Some(item) = self.stream.next().await {
             if let Ok(cloud_event) = item {
                 for target_config in &self.configs {
+                    if target_config.events.types.is_empty() {
+                        continue;
+                    }
+
                     let filter = EventFilter {
                         event_types: target_config.events.types.clone(),
                         ..Default::default()
@@ -239,6 +252,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_http_event_publisher_empty_types_does_not_forward() {
+        let mock_server = MockServer::start().await;
+
+        // Expect 0 calls because types is empty
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let configs = vec![EventPublisherHttp {
+            enabled: true,
+            target_url: format!("{}/webhook", mock_server.uri()),
+            headers: None,
+            events: Events { types: vec![] },
+        }];
+
+        let event_bus = EventBusHandle::new(100);
+        let publisher = HttpEventPublisher::new(configs, &event_bus).expect("Expected publisher instance when enabled");
+        let handle = publisher.spawn();
+
+        let event = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer");
+        event_bus.publish(event);
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        mock_server.verify().await;
+
+        handle.abort();
+    }
+
+    #[tokio::test]
     async fn test_http_event_publisher_from_config() {
         let _guard = TEST_MUTEX.lock().await;
 
@@ -257,7 +303,7 @@ mod tests {
                 target_url: "http://localhost:12345/webhook".to_string(),
                 headers: None,
                 events: Events {
-                    types: vec!["*".to_string()],
+                    types: vec!["com.impierce.unicore.credential.issued".to_string()],
                 },
             }];
         }
