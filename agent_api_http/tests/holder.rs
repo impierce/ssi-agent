@@ -1,7 +1,7 @@
 use agent_api_http::v0::holder::router;
-use agent_holder::services::HolderServices;
+use agent_holder::{holder_state, services::HolderServices};
 use agent_secret_manager::{service::Service as _, subject::Subject};
-use agent_store::{holder_state, in_memory::InMemory};
+use agent_store::in_memory::InMemory;
 use axum::{
     body::{to_bytes, Body},
     extract::Request,
@@ -35,7 +35,6 @@ async fn setup() -> Router {
         &InMemory,
         Arc::new(HolderServices::new(test_subject().await)),
         &Default::default(),
-        vec![],
     )
     .await;
 

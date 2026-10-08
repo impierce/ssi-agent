@@ -8,3 +8,5 @@ pub mod dns;
 pub mod queries;
 pub mod services;
 pub mod state;
+
+pub use state::identity_state;

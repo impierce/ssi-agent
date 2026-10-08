@@ -33,11 +33,6 @@ impl Postgres {
     }
     // TODO: Run [Pool::close] during graceful shutdown to close all open connections.
 
-    pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
-        self.verify_events_with(event_verification::core_event_verifiers())
-            .await
-    }
-
     pub async fn verify_events_with(
         &self,
         verifiers: &[EventVerifier],
@@ -75,7 +70,7 @@ impl CqrsComponentBuilder for Postgres {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         &self,
         services: A::Services,
-        event_publishers: Vec<Box<dyn Query<A>>>,
+        queries: Vec<Box<dyn Query<A>>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
         Arc<dyn DynViewRepository<V, A>>,
@@ -98,7 +93,7 @@ impl CqrsComponentBuilder for Postgres {
             Arc::new(AggregateHandler::new(self.pool.clone(), services).with_parameters(
                 aggregate.clone(),
                 all_aggregates.clone(),
-                event_publishers,
+                queries,
                 &all_aggregates_name,
             )),
             aggregate,

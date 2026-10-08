@@ -34,17 +34,16 @@ event_publishers:
       headers:
         Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        server_config: []
-        credential: [UnsignedCredentialCreated, CredentialSigned]
-        # To enable the interactive authorization flow for OID4VCIm, the event below needs to be listened to.
-        # authorization_request: [OID4VPAuthorizationResponseVerified]
+        types: [UnsignedCredentialCreated, CredentialSigned]
+        # To enable the interactive authorization flow for OID4VCI, the event below needs to be listened to.
+        # types: [OID4VPAuthorizationResponseVerified]
   nats:
     enabled: true
     nats_url: "nats://localhost:4222"
     subjects:
       - name: "email.commands"
         events:
-          offer: [TxCodeGenerated, CredentialOfferEmailSent]
+          types: [TxCodeGenerated, CredentialOfferEmailSent]
 
 # These display parameters are interpreted by identity wallets.
 display:
