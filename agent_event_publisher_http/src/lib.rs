@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use agent_shared::config::{config, EventPublisherHttp};
-use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
+use shared_kernel::event_bus::{BusEventStream, CloudEvent, EventBus, EventBusError, EventBusHandle, EventFilter};
 use tokio_stream::StreamExt;
 use tracing::info;
 
@@ -95,45 +95,29 @@ impl HttpEventPublisher {
                     continue;
                 }
 
-                let mut req = self
-                    .client
-                    .post(&target_config.target_url)
-                    // CloudEvents JSON format envelope media type:
-                    // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
-                    .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json");
-
-                if let Some(headers) = &target_config.headers {
-                    req = req.headers(headers.clone());
-                }
-
-                let req = req.json(&cloud_event).timeout(self.timeout);
-                let event_id = cloud_event.id.clone();
-                let target_url = target_config.target_url.clone();
-
-                tokio::spawn(async move {
-                    match req.send().await {
-                        Ok(res) => {
-                            if res.status().is_success() {
-                                info!(
-                                    "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
-                                    event_id, target_url
-                                );
-                            } else {
-                                tracing::warn!("HTTP webhook target {} returned status {}", target_url, res.status());
-                            }
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
-                                event_id,
-                                target_url,
-                                err
-                            );
-                        }
-                    }
-                });
+                tokio::spawn(forward(
+                    self.request(target_config, &cloud_event),
+                    cloud_event.id.clone(),
+                    target_config.target_url.clone(),
+                ));
             }
         }
+    }
+
+    /// Builds the webhook request for `cloud_event` against `target`, with the configured headers and timeout.
+    fn request(&self, target: &EventPublisherHttp, cloud_event: &CloudEvent) -> reqwest::RequestBuilder {
+        let mut req = self
+            .client
+            .post(&target.target_url)
+            // CloudEvents JSON format envelope media type:
+            // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
+            .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json");
+
+        if let Some(headers) = &target.headers {
+            req = req.headers(headers.clone());
+        }
+
+        req.json(cloud_event).timeout(self.timeout)
     }
 
     /// Spawns the HTTP event publisher as a background task on the Tokio runtime.
@@ -142,17 +126,59 @@ impl HttpEventPublisher {
     }
 }
 
+/// Sends one webhook request and logs the outcome.
+///
+/// Returns the response status, or the transport error (which includes request timeouts).
+async fn forward(
+    req: reqwest::RequestBuilder,
+    event_id: String,
+    target_url: String,
+) -> Result<reqwest::StatusCode, reqwest::Error> {
+    match req.send().await {
+        Ok(res) => {
+            let status = res.status();
+            if status.is_success() {
+                info!(
+                    "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
+                    event_id, target_url
+                );
+            } else {
+                tracing::warn!("HTTP webhook target {} returned status {}", target_url, status);
+            }
+            Ok(status)
+        }
+        Err(err) => {
+            tracing::error!(
+                "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
+                event_id,
+                target_url,
+                err
+            );
+            Err(err)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use agent_shared::config::{set_config, EventPublisherHttp, Events};
     use reqwest::header::HeaderMap;
-    use shared_kernel::event_bus::CloudEvent;
     use tokio::sync::Mutex;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     static TEST_MUTEX: Mutex<()> = Mutex::const_new(());
+
+    /// Restores the global HTTP publisher configuration when dropped, so a failing test cannot leak its
+    /// configuration into the next one (ADR 0003 §2).
+    struct RestoreHttpConfig(Vec<EventPublisherHttp>);
+
+    impl Drop for RestoreHttpConfig {
+        fn drop(&mut self) {
+            set_config().event_publishers.http = std::mem::take(&mut self.0);
+        }
+    }
 
     #[tokio::test]
     async fn test_http_event_publisher_new_disabled() {
@@ -198,7 +224,7 @@ mod tests {
             target_url: format!("{}/webhook", mock_server.uri()),
             headers: Some(headers),
             events: Events {
-                types: vec!["tech.impierce.unicore.credential.issued".to_string()],
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
             },
         }];
 
@@ -211,7 +237,7 @@ mod tests {
         event_bus.publish(non_matching_event);
 
         // 2. Publish matching event -> should be forwarded to mock server
-        let matching_event = CloudEvent::new("tech.impierce.unicore.credential.issued", "https://example.com/issuer")
+        let matching_event = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
             .with_subject("subject-42")
             .with_caller(Some("caller-abc".to_string()), Some("api_key".to_string()))
             .with_data(serde_json::json!({ "credential_id": "cred-99" }));
@@ -230,7 +256,7 @@ mod tests {
         let received_event: CloudEvent =
             serde_json::from_slice(&received_requests[0].body).expect("Valid CloudEvent JSON");
         assert_eq!(received_event.id, matching_event_id);
-        assert_eq!(received_event.event_type, "tech.impierce.unicore.credential.issued");
+        assert_eq!(received_event.event_type, "com.impierce.unicore.credential.issued");
         assert_eq!(received_event.source, "https://example.com/issuer");
         assert_eq!(received_event.subject, Some("subject-42".to_string()));
         assert_eq!(received_event.extension.callerid, Some("caller-abc".to_string()));
@@ -320,26 +346,19 @@ mod tests {
     #[tokio::test]
     async fn test_http_event_publisher_from_config() {
         let _guard = TEST_MUTEX.lock().await;
-
-        {
-            let mut conf = set_config();
-            conf.event_publishers.http.clear();
-        }
+        let _restore = RestoreHttpConfig(std::mem::take(&mut set_config().event_publishers.http));
 
         let event_bus = EventBusHandle::new(100);
         assert!(HttpEventPublisher::from_config(&event_bus).is_none());
 
-        {
-            let mut conf = set_config();
-            conf.event_publishers.http = vec![EventPublisherHttp {
-                enabled: true,
-                target_url: "http://localhost:12345/webhook".to_string(),
-                headers: None,
-                events: Events {
-                    types: vec!["com.impierce.unicore.credential.issued".to_string()],
-                },
-            }];
-        }
+        set_config().event_publishers.http = vec![EventPublisherHttp {
+            enabled: true,
+            target_url: "http://localhost:12345/webhook".to_string(),
+            headers: None,
+            events: Events {
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
+            },
+        }];
 
         let publisher = HttpEventPublisher::from_config(&event_bus);
         assert!(publisher.is_some());
@@ -347,15 +366,13 @@ mod tests {
             let h = p.spawn();
             h.abort();
         }
-
-        set_config().event_publishers.http.clear();
     }
 
     #[tokio::test]
     async fn test_http_event_publisher_times_out_on_slow_endpoint() {
         let mock_server = MockServer::start().await;
 
-        // Mock delays response by 200ms
+        // The endpoint answers only after 200ms, well beyond the publisher's timeout.
         Mock::given(method("POST"))
             .and(path("/webhook"))
             .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(200)))
@@ -363,9 +380,10 @@ mod tests {
             .mount(&mock_server)
             .await;
 
+        let target_url = format!("{}/webhook", mock_server.uri());
         let configs = vec![EventPublisherHttp {
             enabled: true,
-            target_url: format!("{}/webhook", mock_server.uri()),
+            target_url: target_url.clone(),
             headers: None,
             events: Events {
                 types: vec!["test.timeout.event".to_string()],
@@ -373,20 +391,18 @@ mod tests {
         }];
 
         let event_bus = EventBusHandle::new(100);
-        // Short 50ms timeout so the test runs in milliseconds without waiting 10s
         let publisher = HttpEventPublisher::with_timeout(configs, &event_bus, Duration::from_millis(50))
             .expect("Expected publisher instance when enabled");
-        let handle = publisher.spawn();
 
+        // Send the request the publisher would spawn, so the outcome of the timeout is observable.
         let event = CloudEvent::new("test.timeout.event", "https://example.com/test");
-        event_bus.publish(event);
+        let request = publisher.request(&publisher.configs[0], &event);
+        let err = forward(request, event.id.clone(), target_url)
+            .await
+            .expect_err("Expected the request to be abandoned before the endpoint responds");
+        assert!(err.is_timeout(), "Expected a timeout error, got: {err:?}");
 
-        // Allow 100ms for request to trigger and timeout
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // Publisher task is still alive and did not hang or crash
-        assert!(!handle.is_finished());
-
-        handle.abort();
+        // The request did reach the endpoint; the publisher gave up waiting for the response.
+        mock_server.verify().await;
     }
 }

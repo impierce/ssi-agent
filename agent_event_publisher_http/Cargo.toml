@@ -7,11 +7,11 @@ publish.workspace = true
 
 [dependencies]
 agent_shared = { path = "../agent_shared" }
-shared-kernel = { path = "../shared-kernel" }
-tokio-stream.workspace = true
+shared-kernel.workspace = true
 
 reqwest.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

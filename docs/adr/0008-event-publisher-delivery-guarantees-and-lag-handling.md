@@ -9,8 +9,8 @@
 ## Context
 
 Previously, event publishers implemented `cqrs_es::Query<A>` directly:
-- When an aggregate committed, `query.dispatch` was invoked synchronously and awaited network I/O inline.
-- This guaranteed delivery with no dropped events, but tightly coupled aggregate write transactions to external network latency and broker availability.
+- When an aggregate committed, `query.dispatch` was invoked inline. The NATS publisher awaited the broker round-trip there; the HTTP publisher already sent its request from a detached task.
+- Delivery was attempted for every committed event but never guaranteed: a failed request or publish was only logged. The inline NATS publish still coupled aggregate write transactions to broker latency and availability.
 
 To decouple aggregate commits from network I/O, UniCore moved to an in-process pub/sub `EventBusHandle` backed by a `tokio::sync::broadcast::channel(1024)`:
 - Outbound publishers consume events asynchronously.

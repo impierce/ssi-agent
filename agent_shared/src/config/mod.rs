@@ -606,6 +606,7 @@ pub struct EventPublisherNats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct NatsSubject {
     pub name: String,
     #[serde(default)]
@@ -1539,5 +1540,23 @@ mod tests {
         let empty_format = r#"{}"#;
         let events: Events = serde_json::from_str(empty_format).unwrap();
         assert!(events.types.is_empty());
+    }
+
+    #[test]
+    fn test_nats_subject_rejects_unknown_fields() {
+        // A mistyped `events` key must not silently leave the subject without event types.
+        let mistyped_key = r#"{"name": "email.commands", "event": {"types": ["TxCodeGenerated"]}}"#;
+        let res: Result<NatsSubject, _> = serde_json::from_str(mistyped_key);
+        assert!(res.is_err(), "Expected unknown field 'event' to be rejected");
+
+        let valid_format = r#"{"name": "email.commands", "events": {"types": ["TxCodeGenerated"]}}"#;
+        let subject: NatsSubject = serde_json::from_str(valid_format).unwrap();
+        assert_eq!(subject.name, "email.commands");
+        assert_eq!(subject.events.types, vec!["TxCodeGenerated"]);
+
+        // `events` stays optional
+        let name_only = r#"{"name": "email.commands"}"#;
+        let subject: NatsSubject = serde_json::from_str(name_only).unwrap();
+        assert!(subject.events.types.is_empty());
     }
 }

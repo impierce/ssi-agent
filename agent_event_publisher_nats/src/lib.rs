@@ -133,6 +133,16 @@ mod tests {
 
     static TEST_MUTEX: Mutex<()> = Mutex::const_new(());
 
+    /// Restores the global NATS publisher configuration when dropped, so a failing test cannot leak its
+    /// configuration into the next one (ADR 0003 §2).
+    struct RestoreNatsConfig(Option<EventPublisherNats>);
+
+    impl Drop for RestoreNatsConfig {
+        fn drop(&mut self) {
+            set_config().event_publishers.nats = self.0.take();
+        }
+    }
+
     #[tokio::test]
     async fn test_nats_event_publisher_new_disabled() {
         let event_bus = EventBusHandle::new(100);
@@ -326,27 +336,18 @@ mod tests {
     #[tokio::test]
     async fn test_nats_event_publisher_from_config() {
         let _guard = TEST_MUTEX.lock().await;
-
-        {
-            let mut conf = set_config();
-            conf.event_publishers.nats = None;
-        }
+        let _restore = RestoreNatsConfig(set_config().event_publishers.nats.take());
 
         let event_bus = EventBusHandle::new(100);
         assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
 
-        {
-            let mut conf = set_config();
-            conf.event_publishers.nats = Some(EventPublisherNats {
-                enabled: true,
-                nats_url: "127.0.0.1:1".to_string(),
-                subjects: vec![],
-            });
-        }
+        set_config().event_publishers.nats = Some(EventPublisherNats {
+            enabled: true,
+            nats_url: "127.0.0.1:1".to_string(),
+            subjects: vec![],
+        });
 
         let res = NatsEventPublisher::from_config(&event_bus).await;
         assert!(res.is_err(), "Expected connection failure for unreachable NATS URL");
-
-        set_config().event_publishers.nats = None;
     }
 }
