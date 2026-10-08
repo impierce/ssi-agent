@@ -119,11 +119,7 @@ impl HttpEventPublisher {
                                     event_id, target_url
                                 );
                             } else {
-                                tracing::warn!(
-                                    "HTTP webhook target {} returned status {}",
-                                    target_url,
-                                    res.status()
-                                );
+                                tracing::warn!("HTTP webhook target {} returned status {}", target_url, res.status());
                             }
                         }
                         Err(err) => {
