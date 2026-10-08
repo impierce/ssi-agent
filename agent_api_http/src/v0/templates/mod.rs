@@ -1,7 +1,8 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
+use agent_library::queries;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
     DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Template, Visibility,
@@ -17,6 +18,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
@@ -109,7 +111,7 @@ pub struct CreateNewTemplateRequestBody {
             )),
             ("OpenBadges template" = (
                 description = "An OpenBadges 3.0 template. The fields `achievement.name`, `achievement.description`, and `achievement.criteria.narrative` must be explicitly included in the schema.",
-                value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual", "schema": { "type": "object", "properties": { "achievement.name": { "type": "string" }, "achievement.description": { "type": "string" }, "achievement.criteria.narrative": { "type": "string" } } } })
+                value = json!({ "title": "OpenBadges template", "dataModel": "open_badges_3-0", "holderType": "individual", "schema": { "type": "object", "properties": { "achievement": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "criteria": { "type": "object", "properties": { "narrative": { "type": "string" } } } } } } } })
             ))
         )
     ),
@@ -170,26 +172,22 @@ pub(crate) async fn create_template(
     .await?;
 
     // Return the template.
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .map(|template_view| {
-        (
-            StatusCode::CREATED,
-            [(
-                header::LOCATION,
-                &format!("{API_VERSION}/get-template-by-id/{template_id}"),
-            )],
-            Json(TemplateDto::from(template_view)),
-        )
-            .into_response()
-    })
-    // TODO: this *should* be an impossible error, what should we return here?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    queries::get_template(&state, Caller::Internal, &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|template_view| {
+            (
+                StatusCode::CREATED,
+                [(
+                    header::LOCATION,
+                    &format!("{API_VERSION}/get-template-by-id/{template_id}"),
+                )],
+                Json(TemplateDto::from(template_view)),
+            )
+                .into_response()
+        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -223,16 +221,10 @@ pub(crate) async fn duplicate_template(
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
-    let original_template = query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &source_template_id,
-        Some(&source_template_id),
-        &state.query.template,
-    )
-    .await?
-    .filter(|template| template.status != Status::Deleted)
-    .ok_or_else(|| TemplateError::SourceTemplateNotFound(source_template_id.clone()).into_api_error())?;
+    let original_template = queries::get_template(&state, caller(actor.clone()), &source_template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| TemplateError::SourceTemplateNotFound(source_template_id.clone()).into_api_error())?;
 
     let command = TemplateCommand::CreateNewTemplate {
         template_id: new_template_id.clone(),
@@ -262,14 +254,10 @@ pub(crate) async fn duplicate_template(
     .await?;
 
     // Return the duplicated template.
-    let new_template = internal_query_handler(
-        state.authorization_checker.clone(),
-        &new_template_id,
-        Some(&new_template_id),
-        &state.query.template,
-    )
-    .await?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
+    let new_template = queries::get_template(&state, Caller::Internal, &new_template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))?;
 
     Ok((
         StatusCode::CREATED,
@@ -339,16 +327,10 @@ pub(crate) async fn update_template(
         return Err(TemplateError::TemplateIdMissing.into_api_error());
     }
 
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .filter(|t| t.status != Status::Deleted)
-    .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+    queries::get_template(&state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
 
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -550,10 +532,7 @@ pub(crate) async fn get_templates(
         let mut filtered_templates: Vec<TemplateDto> = all_templates_view
             .templates
             .into_values()
-            .filter(|template| {
-                template.status != Status::Deleted
-                // TODO: Apply filtering logic based on request parameters
-            })
+            // TODO: Apply filtering logic based on request parameters
             .map(TemplateDto::from)
             .collect();
 
@@ -593,23 +572,11 @@ pub(crate) async fn get_template(
     RequestActor(actor): RequestActor,
     Path(template_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .and_then(|template_view| {
-        if template_view.status == Status::Deleted {
-            None
-        } else {
-            Some(template_view)
-        }
-    })
-    .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    queries::get_template(&state, caller(actor), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|template_view| (StatusCode::OK, Json(TemplateDto::from(template_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -644,16 +611,10 @@ pub(crate) async fn delete_template(
         return Err(TemplateError::TemplateIdMissing.into_api_error());
     }
 
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &state.query.template,
-    )
-    .await?
-    .filter(|t| t.status != Status::Deleted)
-    .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+    queries::get_template(&state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
 
     let command = TemplateCommand::DeleteTemplate {
         template_id: template_id.clone(),
@@ -674,7 +635,8 @@ pub(crate) async fn delete_template(
 mod tests {
     use super::*;
     use crate::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_library::library_state;
+    use agent_store::in_memory::InMemory;
     use axum::{body::to_bytes, response::IntoResponse};
     use serde_json::json;
     use std::sync::Arc;
@@ -844,8 +806,7 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_template_resets_visibility_and_hides_lineage() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "source-template", Visibility::Public).await;
 
         let response = duplicate_template(
@@ -871,8 +832,7 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_template_rejects_deleted_source_template() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "deleted-source", Visibility::Private).await;
 
         command_handler(
@@ -906,8 +866,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_template_returns_created_template() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = create_template(
             State(state),
@@ -943,8 +902,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_template_defaults_empty_display_name_to_title() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = create_template(
             State(state),
@@ -979,8 +937,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_requires_id() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = update_template(
             State(state),
@@ -1014,8 +971,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_rejects_deleted_template() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "deleted-template", Visibility::Private).await;
 
         command_handler(
@@ -1060,8 +1016,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_applies_type_and_credential_expiration_changes() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         let response = update_template(
@@ -1102,8 +1057,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_keeps_empty_display_name_and_resolves_it_on_read() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         let response = update_template(
@@ -1170,8 +1124,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_template_keeps_title_and_display_name_independent() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-update", Visibility::Private).await;
 
         update_template(
@@ -1236,8 +1189,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_templates_filters_deleted_and_sorts_latest_first() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template_with_title(&state, "older-template", "Older Template", Visibility::Private).await;
         create_source_template_with_title(&state, "newer-template", "Newer Template", Visibility::Private).await;
         create_source_template_with_title(&state, "deleted-template", "Deleted Template", Visibility::Private).await;
@@ -1268,9 +1220,131 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_template_applies_tags_visibility_schema_and_holder_authorization() {
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
+        // W3C VC 1.1 templates cannot have schema properties attributes.
+        command_handler(
+            "template-to-update",
+            &state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: "template-to-update".to_string(),
+                source_template_id: None,
+                title: "Template".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status: Status::Draft,
+                visibility: Visibility::Private,
+                credential_expiration: Some(Expiration::Never),
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(None),
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+            },
+        )
+        .await
+        .unwrap();
+        let update = |request: UpdateTemplateEndpointRequest| {
+            update_template(
+                State(state.clone()),
+                RequestActor(None),
+                Json(UpdateTemplateEndpointRequest {
+                    template_id: "template-to-update".to_string(),
+                    ..request
+                }),
+            )
+        };
+
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "first_name": { "type": "string" },
+                "last_name": { "type": "string" }
+            },
+            "required": ["first_name", "last_name"]
+        });
+        let schema_properties_attributes = HashMap::from([(
+            "/last_name".to_string(),
+            PropertyAttribute {
+                selectively_disclosable: true,
+                non_removable: false,
+                r#type: None,
+            },
+        )]);
+        let holder_authorization = Authorization {
+            pre_authorized: true,
+            tx_code_constraints: None,
+        };
+        let response = update(UpdateTemplateEndpointRequest {
+            tags: Some(vec!["education".to_string(), "diploma".to_string()]),
+            schema: Some(schema.clone()),
+            schema_properties_attributes: Some(schema_properties_attributes.clone()),
+            holder_authorization: Some(holder_authorization.clone()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            template.tags,
+            Some(vec!["education".to_string(), "diploma".to_string()])
+        );
+        assert_eq!(*template.schema, Some(schema));
+        assert_eq!(
+            template.schema_properties_attributes,
+            Some(schema_properties_attributes)
+        );
+        assert_eq!(template.holder_authorization, holder_authorization);
+
+        // A draft cannot be made public, but a published template can.
+        let response = update(UpdateTemplateEndpointRequest {
+            visibility: Some(Visibility::Public),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let response = update(UpdateTemplateEndpointRequest {
+            status: Some(Status::Published),
+            visibility: Some(Visibility::Public),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let template = query_handler("template-to-update", &state.query.template)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(template.status, Status::Published);
+        assert_eq!(template.visibility, Visibility::Public);
+
+        let response = delete_template(
+            State(state.clone()),
+            RequestActor(None),
+            Json(DeleteTemplateEndpointRequest {
+                template_id: String::new(),
+            }),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn delete_template_hides_template_from_get_endpoint() {
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         create_source_template(&state, "template-to-delete", Visibility::Private).await;
 
         let response = delete_template(
@@ -1299,8 +1373,7 @@ mod tests {
         // is preserved end-to-end: create template → retrieve via get endpoint → field still present.
         use agent_library::template::aggregate::FormFieldType;
 
-        let state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         let response = create_template(
             State(state.clone()),

@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
+use shared_kernel::view_repository::SoftDeletable;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[schema(as = Connection)]
@@ -77,5 +78,11 @@ impl View<Connection> for ConnectionView {
                 self.deleted = true;
             }
         }
+    }
+}
+
+impl SoftDeletable for ConnectionView {
+    fn is_deleted(&self) -> bool {
+        self.deleted
     }
 }

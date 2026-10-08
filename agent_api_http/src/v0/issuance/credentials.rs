@@ -1,6 +1,6 @@
-use crate::error::type_url;
+use crate::error::{type_url, IntoApiErrorExt};
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, internal_command_handler, internal_query_handler, query_handler};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -12,6 +12,7 @@ use agent_issuance::{
     offer::command::OfferCommand,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
+use agent_library::queries;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
 use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
@@ -131,22 +132,17 @@ async fn validate_credential_request(
             .finish());
     }
 
-    let template: Template = query_handler(
-        library_state.authorization_checker.clone(),
-        actor.clone(),
-        &request.template_id,
-        Some(&request.template_id),
-        &library_state.query.template,
-    )
-    .await?
-    .filter(|t| t.status != TemplateStatus::Deleted)
-    .ok_or_else(|| {
-        ApiError::builder(StatusCode::NOT_FOUND)
-            .title("Template Not Found")
-            .type_url(type_url("issuance#template-not-found"))
-            .message(format!("No template found with id: `{}`", request.template_id))
-            .finish()
-    })?;
+    // Look up the template by ID.
+    let template: Template = queries::get_template(library_state, caller(actor.clone()), &request.template_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| {
+            ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Template Not Found")
+                .type_url(type_url("issuance#template-not-found"))
+                .message(format!("No template found with id: `{}`", request.template_id))
+                .finish()
+        })?;
 
     if template.status != TemplateStatus::Published {
         return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
@@ -853,14 +849,15 @@ pub mod tests {
     use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
     use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+    use agent_issuance::issuance_state;
     use agent_issuance::{services::IssuanceServices, state::initialize};
+    use agent_library::library_state;
     use agent_library::template::aggregate::{DataModel, Display, Expiration, HolderType, Status, Visibility};
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
     use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
-    use agent_store::{issuance_state, library_state};
     use axum::{
         body::{self, Body},
         http::{self, Request, StatusCode},
@@ -912,7 +909,7 @@ pub mod tests {
     pub async fn setup_library_state(issuance_state: &Arc<IssuanceState>) -> Arc<LibraryState> {
         let (projection, view_handle) = CredentialConfigurationProjection::new(issuance_state.clone());
         let event_bus = shared_kernel::event_bus::EventBusHandle::default();
-        let lib = Arc::new(library_state(&InMemory, &event_bus, Default::default(), vec![Box::new(projection)]).await);
+        let lib = Arc::new(library_state(&InMemory, &event_bus, vec![Box::new(projection)]).await);
         assert!(
             view_handle.set(lib.query.template.clone()).is_ok(),
             "template view already initialized"
@@ -1286,15 +1283,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_patch_credential() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1309,15 +1299,8 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_credentials_endpoint() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1330,15 +1313,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint_requires_template_id() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1354,15 +1330,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint_requires_existing_template() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1378,19 +1347,11 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_credentials_endpoint_requires_credential_configuration() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         let template_id = create_new_template(
             &library_state,
             Status::Published,
@@ -1411,15 +1372,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_signed_credentials_require_published_template() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1448,15 +1402,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_unsigned_credentials_require_published_template() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1489,15 +1436,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_signed_credentials_ignore_expires_at_request_override() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1522,15 +1462,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_signed_credentials_must_match_template_configuration_format() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -1552,6 +1485,87 @@ pub mod tests {
         assert_eq!(body["title"], "Signed Credential Format Mismatch");
     }
 
+    #[tokio::test]
+    async fn test_all_credentials_lists_created_credentials_and_rejects_invalid_ones() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        async fn send(app: &mut Router, method: http::Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                        .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+        let all_credentials = format!("{API_VERSION}/credentials");
+
+        assert_eq!(
+            send(&mut app, http::Method::GET, &all_credentials, None).await,
+            (StatusCode::OK, json!([]))
+        );
+
+        // Signed credentials must be strings.
+        let (status, body) = send(
+            &mut app,
+            http::Method::POST,
+            &all_credentials,
+            Some(json!({
+                "templateId": template_id,
+                "offerId": OFFER_ID,
+                "credential": { "credentialSubject": CREDENTIAL_SUBJECT.clone() },
+                "isSigned": true,
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["title"], "Invalid Credential Type");
+
+        // Without `expiresAt`, the template's credential expiration applies.
+        let (status, _) = send(
+            &mut app,
+            http::Method::POST,
+            &all_credentials,
+            Some(json!({
+                "templateId": template_id,
+                "offerId": OFFER_ID,
+                "credential": { "credentialSubject": CREDENTIAL_SUBJECT.clone() },
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let credential_endpoint = credentials_with_template(&mut app, &template_id).await;
+
+        let (status, credentials) = send(&mut app, http::Method::GET, &all_credentials, None).await;
+        assert_eq!(status, StatusCode::OK);
+        let credentials = credentials.as_array().unwrap();
+        assert_eq!(credentials.len(), 2);
+        let (_, newest) = send(&mut app, http::Method::GET, &credential_endpoint, None).await;
+        assert_eq!(credentials[0], newest, "credentials are listed newest first");
+
+        let (status, _) = send(
+            &mut app,
+            http::Method::PATCH,
+            &format!("{API_VERSION}/credentials/unknown"),
+            Some(json!({ "credentialStatus": "INVALID" })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
     pub async fn batch_credentials_request(app: &mut Router, request: &Value) -> Response {
         app.call(
             Request::builder()
@@ -1567,15 +1581,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_batch_credentials_empty_returns_bad_request() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
         let mut app = router((issuance_state, library_state));
@@ -1597,15 +1604,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_batch_credentials_verify_only_success() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
         let template_id = create_test_template(&library_state).await;
@@ -1650,15 +1650,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_batch_credentials_execution_success() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
         let template_id = create_test_template(&library_state).await;
@@ -1722,15 +1715,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_batch_credentials_all_or_nothing_on_validation_failure() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
         let library_state = setup_library_state(&issuance_state).await;
         let template_id = create_test_template(&library_state).await;

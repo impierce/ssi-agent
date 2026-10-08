@@ -1,21 +1,27 @@
-use agent_shared::application_state::CommandHandler;
+use agent_shared::application_state::{CommandHandler, CqrsComponentBuilder};
 use agent_shared::handlers::{command_handler, public_query_handler};
 use oid4vc_core::Sign;
 use oid4vci::authorization_request::CodeChallengeMethod;
-use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
 
 use crate::domain::access_token::aggregate::AccessToken;
+use crate::domain::access_token::views::all_tokens::AllAccessTokensView;
 use crate::domain::access_token::views::AccessTokenView;
 use crate::domain::authorization_code::aggregate::AuthorizationCode;
+use crate::domain::authorization_code::views::all_authorization_codes::AllAuthorizationCodesView;
 use crate::domain::authorization_code::views::AuthorizationCodeView;
 use crate::domain::client::aggregate::Client;
 use crate::domain::client::command::ClientCommand;
+use crate::domain::client::views::all_clients::AllClientsView;
 use crate::domain::client::views::ClientView;
 use crate::domain::oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest;
+use crate::domain::oauth2_authorization_request::views::all_oauth2_authorization_requests::AllOAuth2AuthorizationRequestsView;
 use crate::domain::oauth2_authorization_request::views::OAuth2AuthorizationRequestView;
+use crate::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
 
 impl QueryOperation for ClientView {
     const OPERATION_NAME: &'static str = "authorization.clients.get";
@@ -137,5 +143,56 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
         .await?;
 
         Ok(())
+    }
+}
+
+/// Constructs the CQRS components and initializes the state for the Authorization bounded context.
+///
+/// Registers command handlers and view repositories for authorization codes, OAuth2 clients,
+/// authorization requests, and access tokens using the provided [`CqrsComponentBuilder`].
+pub async fn authorization_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<AuthorizationServices>,
+    event_bus: &EventBusHandle,
+    oauth2_authorization_request_domain_services: OAuth2AuthorizationRequestDomainServices,
+) -> AuthorizationState {
+    let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
+        .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
+            (),
+            vec![event_bus.query()],
+        )
+        .await;
+    let (client_command_handler, client, _all_clients) = builder
+        .commands_and_queries::<ClientView, Client, AllClientsView>((), vec![event_bus.query()])
+        .await;
+    let (
+        oauth2_authorization_request_command_handler,
+        oauth2_authorization_request,
+        _all_oauth2_authorization_requests,
+    ) = builder.commands_and_queries::<
+        OAuth2AuthorizationRequestView,
+        OAuth2AuthorizationRequest,
+        AllOAuth2AuthorizationRequestsView,
+    >(oauth2_authorization_request_domain_services, vec![event_bus.query()])
+    .await;
+    let (token_command_handler, access_token, _all_access_tokens) = builder
+        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), vec![event_bus.query()])
+        .await;
+
+    AuthorizationState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        command: CommandHandlers {
+            authorization_code: authorization_code_command_handler,
+            client: client_command_handler,
+            oauth2_authorization_request: oauth2_authorization_request_command_handler,
+            access_token: token_command_handler,
+        },
+        query: ViewRepositories {
+            client,
+            oauth2_authorization_request,
+            authorization_code,
+            access_token,
+        },
+        signer: services.signer.clone(),
     }
 }

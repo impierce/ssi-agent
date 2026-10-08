@@ -1,6 +1,8 @@
+use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::query_handler;
+use crate::handlers::caller;
 use crate::v0::library::catalog::CatalogDto;
+use agent_library::queries::get_catalog;
 use agent_library::state::LibraryState;
 use axum::{
     extract::{Path, State},
@@ -31,15 +33,9 @@ pub(crate) async fn get_catalog_by_id(
     RequestActor(actor): RequestActor,
     Path(catalog_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .and_then(|catalog_view| (!catalog_view.deleted).then_some(catalog_view))
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    get_catalog(&state, caller(actor), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }

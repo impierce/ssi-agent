@@ -199,6 +199,76 @@ pub mod tests {
         serde_json::from_slice(&body).unwrap()
     }
 
+    /// Asserts the status code and problem type each error maps to, since those are what API clients act on.
+    #[track_caller]
+    pub fn assert_problems<E: IntoApiErrorExt>(cases: impl IntoIterator<Item = (E, StatusCode, Option<&'static str>)>) {
+        for (error, status, problem_type) in cases {
+            let description = error.to_string();
+            let api_error = error.into_api_error();
+
+            assert_eq!(
+                (api_error.status(), api_error.type_url()),
+                (status, problem_type.map(type_url).as_deref()),
+                "{description}"
+            );
+        }
+    }
+
+    #[test]
+    fn wrapped_errors_successfully_convert_to_problem_details() {
+        let cases: [(ErrorWrapper<ApiError>, StatusCode, &str); 4] = [
+            (
+                ErrorWrapper::AggregateError(AggregateError::AggregateConflict),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "persistence#aggregate-conflict",
+            ),
+            (
+                ErrorWrapper::QueryHandlerError(QueryHandlerError::Authorization(AuthorizationError::Unauthorized)),
+                StatusCode::UNAUTHORIZED,
+                "authorization#unauthorized",
+            ),
+            (
+                ErrorWrapper::QueryHandlerError(QueryHandlerError::Persistence(PersistenceError::OptimisticLockError)),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "persistence#aggregate-conflict",
+            ),
+            (
+                ErrorWrapper::PersistenceError(PersistenceError::OptimisticLockError),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "persistence#aggregate-conflict",
+            ),
+        ];
+
+        for (error, status, problem_type) in cases {
+            let description = format!("{error:?}");
+            let api_error = IntoApiError::into_api_error(error);
+
+            assert_eq!(api_error.status(), status, "{description}");
+            assert_eq!(
+                api_error.type_url(),
+                Some(type_url(problem_type).as_str()),
+                "{description}"
+            );
+        }
+    }
+
+    #[test]
+    fn wrapped_errors_successfully_convert_to_public_errors() {
+        for error in [
+            ErrorWrapper::<TestPublicError>::AggregateError(AggregateError::AggregateConflict),
+            ErrorWrapper::QueryHandlerError(QueryHandlerError::Authorization(AuthorizationError::Forbidden)),
+            ErrorWrapper::QueryHandlerError(QueryHandlerError::Persistence(PersistenceError::OptimisticLockError)),
+            ErrorWrapper::PersistenceError(PersistenceError::OptimisticLockError),
+        ] {
+            assert!(matches!(PublicError::from(error), PublicError::InternalServerError));
+        }
+
+        assert!(matches!(
+            PublicError::from(ErrorWrapper::AggregateError(AggregateError::UserError(TestPublicError))),
+            PublicError::NotFoundError
+        ));
+    }
+
     #[tokio::test]
     async fn persistence_errors_successfully_convert_to_problem_details() {
         assert_eq!(

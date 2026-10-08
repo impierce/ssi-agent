@@ -162,6 +162,10 @@ impl Aggregate for Catalog {
                 }]
             }
             DeleteCatalog { catalog_id } => {
+                if self.deleted {
+                    return Err(CatalogError::CatalogNotFound(catalog_id));
+                }
+
                 vec![CatalogDeleted { id: catalog_id }]
             }
         };
@@ -219,9 +223,14 @@ impl Aggregate for Catalog {
 pub mod catalog_tests {
     use super::test_utils::*;
     use super::*;
+    use crate::catalog::services::CatalogServiceImpl;
+    use crate::template::aggregate::{Status, Template};
+    use crate::template::views::TemplateView;
     use async_trait::async_trait;
+    use cqrs_es::persist::{ViewContext, ViewRepository};
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
+    use shared_kernel::test_utils::in_memory::MemViewRepository;
     use std::sync::Arc;
 
     pub struct MockCatalogServices {
@@ -388,6 +397,37 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    async fn test_add_deleted_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
+        let template_view_repo = MemViewRepository::<TemplateView, Template>::default();
+        for (template_id, status) in [("template-001", Status::Published), ("template-002", Status::Deleted)] {
+            let view = TemplateView {
+                template_id: template_id.to_string(),
+                status,
+                ..Default::default()
+            };
+            ViewRepository::update_view(&template_view_repo, view, ViewContext::new(template_id.to_string(), 0))
+                .await
+                .unwrap();
+        }
+        let services = Arc::new(CatalogServiceImpl {
+            template_view_repo: Arc::new(template_view_repo),
+        });
+
+        CatalogTestFramework::with(services)
+            .given(vec![CatalogEvent::CatalogCreated {
+                id: catalog_id.clone(),
+                display,
+                visibility,
+            }])
+            .when(CatalogCommand::AddTemplateIds {
+                catalog_id,
+                template_ids: vec!["template-001".to_string(), "template-002".to_string()],
+            })
+            .then_expect_error_message(&CatalogError::TemplateNotFound("template-002".to_string()).to_string())
+    }
+
+    #[rstest]
+    #[serial_test::serial]
     async fn test_remove_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         let existing_templates = ["template-001".to_string(), "template-002".to_string()].to_vec();
         let to_remove = ["template-001".to_string()].to_vec();
@@ -449,6 +489,24 @@ pub mod catalog_tests {
                 catalog_id: catalog_id.clone(),
             })
             .then_expect_events(vec![CatalogEvent::CatalogDeleted { id: catalog_id }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_delete_catalog_twice(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
+        CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
+            .given(vec![
+                CatalogEvent::CatalogCreated {
+                    id: catalog_id.clone(),
+                    display,
+                    visibility,
+                },
+                CatalogEvent::CatalogDeleted { id: catalog_id.clone() },
+            ])
+            .when(CatalogCommand::DeleteCatalog {
+                catalog_id: catalog_id.clone(),
+            })
+            .then_expect_error_message(&CatalogError::CatalogNotFound(catalog_id).to_string())
     }
 }
 

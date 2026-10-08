@@ -226,8 +226,8 @@ pub mod tests {
     use crate::v0::verification::router;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::verification_state;
     use agent_verification::services::VerificationServices;
+    use agent_verification::verification_state;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -315,18 +315,47 @@ pub mod tests {
     #[tracing_test::traced_test]
     #[tokio::test]
     async fn test_authorization_requests_endpoint() {
-        let verification_state = Arc::new(
-            verification_state(
-                &InMemory,
-                VerificationServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &Default::default()).await);
         let mut app = router(verification_state);
 
         let result = authorization_requests(&mut app).await;
         assert!(!result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_all_authorization_requests_endpoint() {
+        let verification_state =
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &Default::default()).await);
+        let mut app = router(verification_state);
+
+        async fn all_authorization_requests(app: &mut Router) -> Vec<serde_json::Value> {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::GET)
+                        .uri(format!("{API_VERSION}/authorization_requests"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            serde_json::from_slice(&body).unwrap()
+        }
+
+        assert!(all_authorization_requests(&mut app).await.is_empty());
+
+        let form_url_encoded_authorization_request = authorization_requests(&mut app).await;
+
+        let all = all_authorization_requests(&mut app).await;
+        assert_eq!(all.len(), 1);
+        assert_eq!(
+            all[0]["form_url_encoded_authorization_request"],
+            form_url_encoded_authorization_request
+        );
+        assert_eq!(all[0]["validated"], false);
+        assert!(all[0]["vp_token"].is_null());
     }
 }

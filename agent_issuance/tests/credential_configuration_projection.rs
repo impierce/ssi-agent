@@ -1,6 +1,8 @@
 use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+use agent_issuance::issuance_state;
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
+use agent_library::library_state;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{DataModel, Display, PropertyAttribute, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
@@ -9,7 +11,6 @@ use agent_secret_manager::service::Service;
 use agent_shared::config::Authorization;
 use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
 use agent_store::in_memory::InMemory;
-use agent_store::{issuance_state, library_state};
 use cqrs_es::{EventEnvelope, Query};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -49,13 +50,12 @@ fn create_test_event_template_created(
 
 async fn setup() -> (Arc<IssuanceState>, Arc<LibraryState>, CredentialConfigurationProjection) {
     let bus = shared_kernel::event_bus::EventBusHandle::default();
-    let issuance =
-        Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus, Default::default()).await);
+    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus).await);
     let (projection, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
     // Build the library state WITHOUT the projection (the projection dispatches commands to issuance_state,
     // not to this library state). Then wire the real view repo into the projection's OnceLock handle so
     // that partial-update re-queries use the same MemRepository that the CQRS framework updates.
-    let lib_state = Arc::new(library_state(&InMemory, &bus, Default::default(), vec![]).await);
+    let lib_state = Arc::new(library_state(&InMemory, &bus, vec![]).await);
     assert!(
         template_view_handle.set(lib_state.query.template.clone()).is_ok(),
         "template view already initialized"

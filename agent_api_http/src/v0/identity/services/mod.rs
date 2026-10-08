@@ -1,11 +1,13 @@
 pub mod linked_domains;
 pub mod linked_vp;
 
+use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::query_handler;
+use crate::handlers::caller;
 use crate::v0::identity::well_known::did_configuration::DomainLinkageConfigurationSchema;
 use agent_identity::{
     document::openapi::DidService,
+    queries,
     service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
     state::IdentityState,
 };
@@ -73,21 +75,12 @@ pub(crate) async fn services(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let all_services = query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        "all_services",
-        None,
-        &state.query.all_services,
-    )
-    .await?
-    .map(|all_services_view| {
-        crate::utils::newest_first(all_services_view.services)
-            .filter(|service| !service.is_deleted)
-            .map(ServiceResponse::from)
-            .collect::<Vec<_>>()
-    })
-    .unwrap_or_default();
+    let all_services = queries::list_services(&state, caller(actor))
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
+    let all_services = crate::utils::newest_first(all_services.services)
+        .map(ServiceResponse::from)
+        .collect::<Vec<_>>();
 
     Ok((StatusCode::OK, Json(all_services)).into_response())
 }
@@ -113,17 +106,11 @@ pub(crate) async fn service(
     RequestActor(actor): RequestActor,
     Path(service_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &service_id,
-        Some(&service_id),
-        &state.query.service,
-    )
-    .await?
-    .filter(|service_view| !service_view.is_deleted)
-    .map(|service_view| (StatusCode::OK, Json(ServiceResponse::from(service_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    queries::get_service(&state, caller(actor), &service_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|service_view| (StatusCode::OK, Json(ServiceResponse::from(service_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[cfg(test)]
@@ -217,9 +204,10 @@ mod tests {
     #[async_trait::async_trait]
     impl ActorExtractor for HeaderActor {
         async fn extract_actor(&self, input: &dyn ToActor) -> Option<Actor> {
-            input.bearer_token().filter(|token| *token == "test").map(|_| Actor {
-                subject: "administrator".into(),
-            })
+            input
+                .bearer_token()
+                .filter(|token| *token == "test")
+                .map(|_| Actor::user("administrator"))
         }
     }
 
@@ -295,13 +283,8 @@ mod tests {
                 Arc::new(move || Timestamp::from_unix(clock.load(Ordering::SeqCst)).unwrap())
             };
             let event_bus = shared_kernel::EventBusHandle::default();
-            let mut state = agent_store::identity_state(
-                &agent_store::in_memory::InMemory,
-                Arc::new(services),
-                &event_bus,
-                vec![],
-            )
-            .await;
+            let mut state =
+                agent_identity::identity_state(&agent_store::in_memory::InMemory, Arc::new(services), &event_bus).await;
             initialize_documents(&state, &configuration).await.unwrap();
             let authorization = Arc::new(RecordingAuthorization::default());
             state.authorization_checker = authorization.clone();
@@ -1327,6 +1310,61 @@ mod tests {
         // An empty list is not a way to link nothing.
         fixture.add_linked_domains(&[], 400).await;
         fixture.remove_linked_domains(&[], 400).await;
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn services_and_documents_are_listed_and_retrievable_by_id() {
+        let fixture = &Fixture::new().await;
+        let get = |path: String| async move {
+            let (status, body) = fixture.request("GET", &path, None).await;
+            let body = if body.is_empty() {
+                Value::Null
+            } else {
+                serde_json::from_slice(&body).unwrap()
+            };
+            (status, body)
+        };
+
+        assert_eq!(get("/unicore/v0/services".into()).await, (200, json!([])));
+
+        fixture.link_own_origin(204).await;
+        let (status, services) = get("/unicore/v0/services".into()).await;
+        assert_eq!(status, 200);
+        let services = services.as_array().unwrap();
+        assert_eq!(services.len(), 1, "{services:?}");
+        let linked_domains = &services[0];
+        assert_eq!(linked_domains["service"]["type"], "LinkedDomains");
+        assert_eq!(linked_domains["origins"], json!(["https://example.org/"]));
+
+        let service_id = linked_domains["id"].as_str().unwrap();
+        assert_eq!(
+            get(format!("/unicore/v0/services/{service_id}")).await,
+            (200, linked_domains.clone())
+        );
+        assert_eq!(get("/unicore/v0/services/unknown".into()).await.0, 404);
+
+        // A service without any origin left is deleted, and no longer listed or retrievable.
+        fixture
+            .remove_linked_domains(&[fixture.configuration.public_url.as_str()], 204)
+            .await;
+        assert_eq!(get("/unicore/v0/services".into()).await, (200, json!([])));
+        assert_eq!(get(format!("/unicore/v0/services/{service_id}")).await.0, 404);
+
+        let (status, documents) = get("/unicore/v0/documents".into()).await;
+        assert_eq!(status, 200);
+        let did_web = documents
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|document| document["did_method"] == "did:web")
+            .unwrap_or_else(|| panic!("no did:web document in {documents}"));
+        let document_id = did_web["id"].as_str().unwrap();
+        assert_eq!(
+            get(format!("/unicore/v0/documents/{document_id}")).await,
+            (200, did_web.clone())
+        );
+        assert_eq!(get("/unicore/v0/documents/unknown".into()).await.0, 404);
     }
 
     fn decode_unverified_jwt_claims(jwt: &str) -> Value {

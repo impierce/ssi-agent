@@ -339,10 +339,13 @@ pub mod tests {
     use super::*;
     use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::SERVER_CONFIG_ID;
+    use agent_library::library_state;
     use agent_library::template::aggregate::{
         DataModel, Display, HolderType, Logo, Status as TemplateStatus, Visibility,
     };
@@ -352,7 +355,6 @@ pub mod tests {
     use agent_shared::generate_random_string;
     use agent_shared::handlers::public_command_handler as command_handler;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -381,19 +383,11 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         // Create a template and register a credential configuration for it.
         // (The CredentialConfigurationProjection is not wired in tests, so we do this manually.)
@@ -462,7 +456,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,

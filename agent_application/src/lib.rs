@@ -1,3 +1,4 @@
+pub mod event_verification;
 mod metadata;
 pub mod openapi;
 mod probes;
@@ -5,8 +6,8 @@ pub mod telemetry;
 
 use agent_api_http::{app, metrics::track_metrics, ApiState, API_VERSION};
 use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
-use agent_event_publisher_http::EventPublisherHttp;
-use agent_event_publisher_nats::EventPublisherNats;
+use agent_event_publisher_http::HttpEventPublisher;
+use agent_event_publisher_nats::NatsEventPublisher;
 use agent_holder::{presentation::aggregate::Presentation, services::HolderServices};
 use agent_identity::services::{IdentityServices, LinkedVerifiablePresentationSource};
 use agent_issuance::{
@@ -14,15 +15,9 @@ use agent_issuance::{
 };
 use agent_secret_manager::{service::Service as _, subject::Subject};
 use agent_shared::config::{config, EventStoreType};
-pub use agent_store::event_verification::{core_event_verifiers, EventVerifier};
-use agent_store::{
-    event_verification::{EventVerificationError, EventVerificationReport},
-    in_memory::InMemory,
-    mongodb::MongoDB,
-    postgres::Postgres,
-    EventPublisher,
-};
+use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres};
 use agent_verification::services::VerificationServices;
+pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
 use probes::{
     liveness::{healthz, livez},
     readiness::{readyz, ReadinessState},
@@ -41,6 +36,13 @@ pub use agent_identity::state::IdentityState;
 pub use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 pub use agent_library::state::LibraryState;
 pub use agent_verification::state::VerificationState;
+
+use agent_authorization::authorization_state;
+use agent_holder::holder_state;
+use agent_identity::identity_state;
+use agent_issuance::issuance_state;
+use agent_library::library_state;
+use agent_verification::verification_state;
 
 pub struct ApplicationState {
     pub api: ApiState,
@@ -139,41 +141,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
     let event_bus = shared_kernel::event_bus::EventBusHandle::default();
 
-    // TODO: Currently all these `*_event_publishers` are exactly the same, which is weird. We need some sort of layer
-    // between `agent_application` and `agent_store` that will provide a cleaner way of initializing the event
-    // publishers and sending them over to `agent_store`.
-    let identity_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    // Issuance events are also published to NATS.
-    let mut issuance_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    issuance_event_publishers.push(Box::new(EventPublisherNats::load().await.unwrap()));
-    let library_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    let authorization_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    let holder_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
-    let verification_event_publishers: Vec<Box<dyn EventPublisher>> = EventPublisherHttp::load()
-        .unwrap()
-        .into_iter()
-        .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-        .collect();
+    if let Some(publisher) = HttpEventPublisher::from_config(&event_bus) {
+        publisher.spawn();
+    }
+    if let Some(publisher) = NatsEventPublisher::from_config(&event_bus)
+        .await
+        .map_err(|err| io::Error::other(format!("Failed to connect to NATS: {err}")))?
+    {
+        publisher.spawn();
+    }
 
     let event_store_type = config().event_store.type_.clone();
     let event_verification;
@@ -185,19 +161,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             EventStoreType::Postgres => {
                 let builder = Postgres::new().await;
 
-                let issuance_state = Arc::new(
-                    agent_store::issuance_state(&builder, issuance_services, &event_bus, issuance_event_publishers)
-                        .await,
-                );
+                let issuance_state = Arc::new(issuance_state(&builder, issuance_services, &event_bus).await);
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
 
                 let library_state = Arc::new(
-                    agent_store::library_state(
+                    library_state(
                         &builder,
                         &event_bus,
-                        library_event_publishers,
                         vec![Box::new(credential_configuration_projection)],
                     )
                     .await,
@@ -207,41 +179,23 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     "template view already initialized"
                 );
 
-                let verification_state = Arc::new(
-                    agent_store::verification_state(
-                        &builder,
-                        verification_services,
-                        &event_bus,
-                        verification_event_publishers,
-                    )
-                    .await,
-                );
+                let verification_state =
+                    Arc::new(verification_state(&builder, verification_services, &event_bus).await);
 
                 let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
-                let holder_state = Arc::new(
-                    agent_store::holder_state(&builder, holder_services, &event_bus, holder_event_publishers).await,
-                );
+                let holder_state = Arc::new(holder_state(&builder, holder_services, &event_bus).await);
 
                 let states = (
-                    Arc::new(
-                        agent_store::identity_state(
-                            &builder,
-                            identity_services(&holder_state),
-                            &event_bus,
-                            identity_event_publishers,
-                        )
-                        .await,
-                    ),
+                    Arc::new(identity_state(&builder, identity_services(&holder_state), &event_bus).await),
                     library_state,
                     Arc::new(
-                        agent_store::authorization_state(
+                        authorization_state(
                             &builder,
                             authorization_services,
                             &event_bus,
-                            authorization_event_publishers,
                             oauth2_authorization_request_domain_services,
                         )
                         .await,
@@ -261,19 +215,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 // 2. Register MongoDB as the persistent history reader for complete historical catch-up queries.
                 event_bus.set_history_reader(Arc::new(mongo_source));
 
-                let issuance_state = Arc::new(
-                    agent_store::issuance_state(&builder, issuance_services, &event_bus, issuance_event_publishers)
-                        .await,
-                );
+                let issuance_state = Arc::new(issuance_state(&builder, issuance_services, &event_bus).await);
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
 
                 let library_state = Arc::new(
-                    agent_store::library_state(
+                    library_state(
                         &builder,
                         &event_bus,
-                        library_event_publishers,
                         vec![Box::new(credential_configuration_projection)],
                     )
                     .await,
@@ -283,41 +233,23 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     "template view already initialized"
                 );
 
-                let verification_state = Arc::new(
-                    agent_store::verification_state(
-                        &builder,
-                        verification_services,
-                        &event_bus,
-                        verification_event_publishers,
-                    )
-                    .await,
-                );
+                let verification_state =
+                    Arc::new(verification_state(&builder, verification_services, &event_bus).await);
 
                 let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
-                let holder_state = Arc::new(
-                    agent_store::holder_state(&builder, holder_services, &event_bus, holder_event_publishers).await,
-                );
+                let holder_state = Arc::new(holder_state(&builder, holder_services, &event_bus).await);
 
                 let states = (
-                    Arc::new(
-                        agent_store::identity_state(
-                            &builder,
-                            identity_services(&holder_state),
-                            &event_bus,
-                            identity_event_publishers,
-                        )
-                        .await,
-                    ),
+                    Arc::new(identity_state(&builder, identity_services(&holder_state), &event_bus).await),
                     library_state,
                     Arc::new(
-                        agent_store::authorization_state(
+                        authorization_state(
                             &builder,
                             authorization_services,
                             &event_bus,
-                            authorization_event_publishers,
                             oauth2_authorization_request_domain_services,
                         )
                         .await,
@@ -330,19 +262,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 states
             }
             EventStoreType::InMemory => {
-                let issuance_state = Arc::new(
-                    agent_store::issuance_state(&InMemory, issuance_services, &event_bus, issuance_event_publishers)
-                        .await,
-                );
+                let issuance_state = Arc::new(issuance_state(&InMemory, issuance_services, &event_bus).await);
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
 
                 let library_state = Arc::new(
-                    agent_store::library_state(
+                    library_state(
                         &InMemory,
                         &event_bus,
-                        library_event_publishers,
                         vec![Box::new(credential_configuration_projection)],
                     )
                     .await,
@@ -352,41 +280,23 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     "template view already initialized"
                 );
 
-                let verification_state = Arc::new(
-                    agent_store::verification_state(
-                        &InMemory,
-                        verification_services,
-                        &event_bus,
-                        verification_event_publishers,
-                    )
-                    .await,
-                );
+                let verification_state =
+                    Arc::new(verification_state(&InMemory, verification_services, &event_bus).await);
 
                 let oauth2_authorization_request_domain_services = OAuth2AuthorizationRequestDomainServices::new(
                     Box::new(VerificationAuthorizationAdapter::new(verification_state.clone())),
                 );
 
-                let holder_state = Arc::new(
-                    agent_store::holder_state(&InMemory, holder_services, &event_bus, holder_event_publishers).await,
-                );
+                let holder_state = Arc::new(holder_state(&InMemory, holder_services, &event_bus).await);
 
                 let states = (
-                    Arc::new(
-                        agent_store::identity_state(
-                            &InMemory,
-                            identity_services(&holder_state),
-                            &event_bus,
-                            identity_event_publishers,
-                        )
-                        .await,
-                    ),
+                    Arc::new(identity_state(&InMemory, identity_services(&holder_state), &event_bus).await),
                     library_state,
                     Arc::new(
-                        agent_store::authorization_state(
+                        authorization_state(
                             &InMemory,
                             authorization_services,
                             &event_bus,
-                            authorization_event_publishers,
                             oauth2_authorization_request_domain_services,
                         )
                         .await,

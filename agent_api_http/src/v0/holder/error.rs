@@ -165,7 +165,7 @@ impl IntoApiErrorExt for PresentationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::tests::into_json_value;
+    use crate::error::tests::{assert_problems, into_json_value};
     use serde_json::json;
 
     macro_rules! assert_problem_details {
@@ -263,6 +263,123 @@ mod tests {
                 "status": 500,
                 "detail": "Failed to sign presentation: no key"
             })
+        );
+    }
+
+    #[test]
+    fn every_offer_error_maps_to_a_problem_type() {
+        use OfferError::*;
+
+        assert_problems([
+            (
+                MissingCredentialOfferError,
+                StatusCode::NOT_FOUND,
+                Some("holder#credential-offer-not-found"),
+            ),
+            (
+                CredentialOfferStatusNotPendingError,
+                StatusCode::CONFLICT,
+                Some("holder#credential-offer-not-pending"),
+            ),
+            (
+                CredentialOfferStatusNotAcceptedError,
+                StatusCode::CONFLICT,
+                Some("holder#credential-offer-not-accepted"),
+            ),
+            (
+                MissingTokenResponseError,
+                StatusCode::CONFLICT,
+                Some("holder#missing-token-response"),
+            ),
+            (
+                MissingPreAuthorizedCodeError,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("holder#missing-pre-authorized-code"),
+            ),
+            (
+                MissingCredentialConfigurationsError,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("holder#missing-credential-configurations"),
+            ),
+            (
+                MissingCredentialConfigurationError,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("holder#missing-credential-configuration"),
+            ),
+            (
+                CredentialOfferByReferenceRetrievalError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#credential-offer-retrieval-failed"),
+            ),
+            (
+                CredentialIssuerMetadataRetrievalError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#credential-issuer-metadata-retrieval-failed"),
+            ),
+            (
+                AuthorizationServerMetadataRetrievalError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#authorization-server-metadata-retrieval-failed"),
+            ),
+            (
+                MissingTokenEndpointError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#missing-token-endpoint"),
+            ),
+            (
+                TokenResponseError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#token-request-failed"),
+            ),
+            (
+                CredentialResponseError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#credential-request-failed"),
+            ),
+            (
+                UnsupportedDeferredCredentialResponseError,
+                StatusCode::NOT_IMPLEMENTED,
+                Some("holder#unsupported-deferred-credential-response"),
+            ),
+            (
+                BatchCredentialRequestError,
+                StatusCode::NOT_IMPLEMENTED,
+                Some("holder#unsupported-batch-credential-request"),
+            ),
+            (
+                UnsupportedCredentialFormatError,
+                StatusCode::NOT_IMPLEMENTED,
+                Some("holder#unsupported-credential-format"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn every_presentation_error_maps_to_a_problem_type() {
+        use PresentationError::*;
+
+        assert_problems(
+            [
+                (
+                    MissingIdentifierError("error".to_string()),
+                    "holder#missing-holder-identifier",
+                ),
+                (
+                    InvalidUrlError("error".to_string()),
+                    "holder#invalid-holder-identifier-url",
+                ),
+                (
+                    PresentationBuilderError("error".to_string()),
+                    "holder#presentation-build-failed",
+                ),
+                (
+                    SerializationError("error".to_string()),
+                    "holder#presentation-serialization-failed",
+                ),
+                (KeyIdError, "holder#missing-signing-key-identifier"),
+                (SigningError("error".to_string()), "holder#presentation-signing-failed"),
+            ]
+            .map(|(error, problem_type)| (error, StatusCode::INTERNAL_SERVER_ERROR, Some(problem_type))),
         );
     }
 }

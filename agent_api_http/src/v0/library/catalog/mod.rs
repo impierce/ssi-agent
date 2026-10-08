@@ -2,7 +2,7 @@ pub mod openapi;
 pub mod queries;
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
     aggregate::{CatalogDisplay, CatalogVisibility},
@@ -17,11 +17,13 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 
+use agent_library::queries::get_catalog;
 use agent_library::state::LibraryState;
 use http::StatusCode;
 use http_api_problem::ApiError;
 use hyper::header;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
 use std::sync::Arc;
 
 /// Data transfer object for Catalogs.
@@ -100,22 +102,18 @@ pub(crate) async fn create_catalog(
     .await?;
 
     // Return the created catalog
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| {
-        (
-            StatusCode::CREATED,
-            [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
-            Json(CatalogDto::from(catalog_view)),
-        )
-            .into_response()
-    })
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    get_catalog(&state, Caller::Internal, &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| {
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
+                Json(CatalogDto::from(catalog_view)),
+            )
+                .into_response()
+        })
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -152,15 +150,10 @@ pub(crate) async fn add_templates_to_catalog(
         template_ids,
     }): Json<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::AddTemplateIds {
         catalog_id: catalog_id.clone(),
@@ -177,15 +170,11 @@ pub(crate) async fn add_templates_to_catalog(
     .await?;
 
     // Return the updated catalog
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    get_catalog(&state, Caller::Internal, &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -222,15 +211,10 @@ pub(crate) async fn remove_templates_from_catalog(
         template_ids,
     }): Json<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::RemoveTemplateIds {
         catalog_id: catalog_id.clone(),
@@ -247,15 +231,11 @@ pub(crate) async fn remove_templates_from_catalog(
     .await?;
 
     // Return the updated catalog
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    get_catalog(&state, Caller::Internal, &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -289,15 +269,10 @@ pub(crate) async fn change_catalog_appearance(
     RequestActor(actor): RequestActor,
     Json(ChangeCatalogAppearanceRequest { catalog_id, display }): Json<ChangeCatalogAppearanceRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::ChangeCatalogAppearance {
         catalog_id: catalog_id.clone(),
@@ -314,16 +289,11 @@ pub(crate) async fn change_catalog_appearance(
     .await?;
 
     // Return the updated catalog
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -356,15 +326,10 @@ pub(crate) async fn make_catalog_public(
     RequestActor(actor): RequestActor,
     Json(MakeCatalogPublicRequest { catalog_id }): Json<MakeCatalogPublicRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::MakeCatalogPublic {
         catalog_id: catalog_id.clone(),
@@ -380,16 +345,11 @@ pub(crate) async fn make_catalog_public(
     .await?;
 
     // Return the updated catalog
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -422,15 +382,10 @@ pub(crate) async fn make_catalog_private(
     RequestActor(actor): RequestActor,
     Json(MakeCatalogPrivateRequest { catalog_id }): Json<MakeCatalogPrivateRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::MakeCatalogPrivate {
         catalog_id: catalog_id.clone(),
@@ -446,16 +401,11 @@ pub(crate) async fn make_catalog_private(
     .await?;
 
     // Return the updated catalog
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -488,15 +438,10 @@ pub(crate) async fn delete_catalog(
     RequestActor(actor): RequestActor,
     Json(DeleteCatalogRequest { catalog_id }): Json<DeleteCatalogRequest>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &catalog_id,
-        Some(&catalog_id),
-        &state.query.catalog,
-    )
-    .await?
-    .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
+    get_catalog(&state, caller(actor.clone()), &catalog_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id.clone()).into_api_error())?;
 
     let command = CatalogCommand::DeleteCatalog {
         catalog_id: catalog_id.clone(),
@@ -517,7 +462,8 @@ pub(crate) async fn delete_catalog(
 mod tests {
     use super::*;
     use crate::handlers::public_command_handler;
-    use agent_store::{in_memory::InMemory, library_state};
+    use agent_library::library_state;
+    use agent_store::in_memory::InMemory;
     use shared_kernel::{
         async_trait,
         authorization::{
@@ -539,7 +485,7 @@ mod tests {
     }
 
     async fn catalog_state(requests: Arc<Mutex<Vec<AuthorizationRequest>>>, catalog_id: &str) -> Arc<LibraryState> {
-        let mut state = library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await;
+        let mut state = library_state(&InMemory, &Default::default(), vec![]).await;
 
         public_command_handler(
             catalog_id,
@@ -599,9 +545,7 @@ mod tests {
     #[tokio::test]
     async fn catalog_template_mutations_preserve_the_authorization_boundary() {
         let catalog_id = "catalog-1";
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
 
         for (operation_name, add) in [
             ("library.catalogs.templates.add", true),
@@ -635,6 +579,247 @@ mod tests {
             }
 
             assert_catalog_mutation_sequence(&requests.lock().unwrap(), &actor, catalog_id, operation_name);
+        }
+    }
+
+    mod endpoints {
+        use super::*;
+        use crate::{tests::TEMPLATE_ID, v0::issuance::credentials::tests::create_test_template};
+        use axum::{
+            body::{to_bytes, Body},
+            extract::Request,
+            Router,
+        };
+        use serde_json::{json, Value};
+        use tower::ServiceExt;
+
+        async fn setup() -> Router {
+            let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
+            create_test_template(&state).await;
+
+            crate::v0::library::router(state)
+        }
+
+        async fn send(app: &Router, request: Request<Body>) -> (StatusCode, http::HeaderMap, Value) {
+            let response = app.clone().oneshot(request).await.unwrap();
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+            (status, headers, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+
+        async fn post(app: &Router, path: &str, body: Value) -> (StatusCode, Value) {
+            let (status, _, body) = send(
+                app,
+                Request::post(format!("{API_VERSION}{path}"))
+                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await;
+
+            (status, body)
+        }
+
+        async fn get(app: &Router, path: &str) -> (StatusCode, Value) {
+            let (status, _, body) = send(
+                app,
+                Request::get(format!("{API_VERSION}{path}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+
+            (status, body)
+        }
+
+        async fn create(app: &Router, name: &str) -> String {
+            let (status, headers, catalog) = send(
+                app,
+                Request::post(format!("{API_VERSION}/create-new-catalog"))
+                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({ "display": { "name": name, "description": "Description" } }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(status, StatusCode::CREATED);
+
+            let catalog_id = catalog["id"].as_str().unwrap().to_string();
+            assert_eq!(
+                headers[header::LOCATION],
+                format!("{API_VERSION}/catalog/{catalog_id}").as_str()
+            );
+            assert_eq!(catalog["display"]["name"], name);
+            assert_eq!(catalog["visibility"], "Private");
+            assert_eq!(catalog["template_ids"], json!([]));
+
+            catalog_id
+        }
+
+        #[tokio::test]
+        async fn catalog_lifecycle() {
+            let app = setup().await;
+            let catalog_id = create(&app, "Catalog").await;
+
+            let (status, catalog) = get(&app, &format!("/get-catalog-by-id/{catalog_id}")).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalog["id"], catalog_id.as_str());
+
+            let (status, catalog) = post(
+                &app,
+                "/add-templates-to-catalog",
+                json!({ "catalogId": catalog_id, "templateIds": [TEMPLATE_ID] }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalog["template_ids"], json!([TEMPLATE_ID]));
+
+            let (status, catalog) = post(
+                &app,
+                "/remove-templates-from-catalog",
+                json!({ "catalogId": catalog_id, "templateIds": [TEMPLATE_ID] }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalog["template_ids"], json!([]));
+
+            let (status, catalog) = post(
+                &app,
+                "/change-catalog-appearance",
+                json!({ "catalogId": catalog_id, "display": { "name": "Renamed", "description": "Other" } }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalog["display"]["name"], "Renamed");
+            assert_eq!(catalog["display"]["description"], "Other");
+
+            let (status, catalog) = post(&app, "/make-catalog-public", json!({ "catalogId": catalog_id })).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalog["visibility"], "Public");
+
+            let (status, catalog) = post(&app, "/make-catalog-private", json!({ "catalogId": catalog_id })).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalog["visibility"], "Private");
+
+            let (status, catalogs) = get(&app, "/get-all-catalogs").await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalogs.as_array().unwrap().len(), 1);
+            assert_eq!(catalogs[0]["id"], catalog_id.as_str());
+
+            let (status, _) = post(&app, "/delete-catalog", json!({ "catalogId": catalog_id })).await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+
+            let (status, _) = get(&app, &format!("/get-catalog-by-id/{catalog_id}")).await;
+            assert_eq!(status, StatusCode::NOT_FOUND);
+
+            let (status, catalogs) = get(&app, "/get-all-catalogs").await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalogs, json!([]));
+        }
+
+        #[tokio::test]
+        async fn get_all_catalogs_is_empty_without_catalogs() {
+            let app = setup().await;
+
+            let (status, catalogs) = get(&app, "/get-all-catalogs").await;
+
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(catalogs, json!([]));
+        }
+
+        #[tokio::test]
+        async fn empty_catalog_names_are_rejected() {
+            let app = setup().await;
+
+            let (status, _) = post(
+                &app,
+                "/create-new-catalog",
+                json!({ "display": { "name": "  ", "description": "" } }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+
+            let catalog_id = create(&app, "Catalog").await;
+            let (status, _) = post(
+                &app,
+                "/change-catalog-appearance",
+                json!({ "catalogId": catalog_id, "display": { "name": "", "description": "" } }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+
+        #[tokio::test]
+        async fn adding_an_unknown_template_is_rejected() {
+            let app = setup().await;
+            let catalog_id = create(&app, "Catalog").await;
+
+            let (status, _) = post(
+                &app,
+                "/add-templates-to-catalog",
+                json!({ "catalogId": catalog_id, "templateIds": ["unknown-template"] }),
+            )
+            .await;
+
+            assert_eq!(status, StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn adding_a_deleted_template_is_rejected() {
+            let app = setup().await;
+            let catalog_id = create(&app, "Catalog").await;
+            let (status, _) = post(
+                &app,
+                "/update-template",
+                json!({ "id": TEMPLATE_ID, "status": "archived" }),
+            )
+            .await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+            let (status, _) = post(&app, "/delete-template", json!({ "id": TEMPLATE_ID })).await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+
+            let (status, _) = post(
+                &app,
+                "/add-templates-to-catalog",
+                json!({ "catalogId": catalog_id, "templateIds": [TEMPLATE_ID] }),
+            )
+            .await;
+
+            assert_eq!(status, StatusCode::NOT_FOUND);
+        }
+
+        #[tokio::test]
+        async fn mutations_on_unknown_or_deleted_catalogs_return_not_found() {
+            let app = setup().await;
+            let deleted_catalog_id = create(&app, "Catalog").await;
+            let (status, _) = post(&app, "/delete-catalog", json!({ "catalogId": deleted_catalog_id })).await;
+            assert_eq!(status, StatusCode::NO_CONTENT);
+
+            for catalog_id in ["unknown-catalog", deleted_catalog_id.as_str()] {
+                for (path, body) in [
+                    (
+                        "/add-templates-to-catalog",
+                        json!({ "catalogId": catalog_id, "templateIds": [TEMPLATE_ID] }),
+                    ),
+                    (
+                        "/remove-templates-from-catalog",
+                        json!({ "catalogId": catalog_id, "templateIds": [TEMPLATE_ID] }),
+                    ),
+                    (
+                        "/change-catalog-appearance",
+                        json!({ "catalogId": catalog_id, "display": { "name": "Renamed", "description": "" } }),
+                    ),
+                    ("/make-catalog-public", json!({ "catalogId": catalog_id })),
+                    ("/make-catalog-private", json!({ "catalogId": catalog_id })),
+                    ("/delete-catalog", json!({ "catalogId": catalog_id })),
+                ] {
+                    let (status, _) = post(&app, path, body).await;
+                    assert_eq!(status, StatusCode::NOT_FOUND, "{path} for catalog '{catalog_id}'");
+                }
+            }
         }
     }
 }

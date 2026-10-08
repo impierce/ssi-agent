@@ -41,10 +41,10 @@ url.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
-agent_secret_manager = { path = "../agent_secret_manager", features = [
-    "test_utils",
-] }
 agent_shared = { path = ".", features = ["test_utils"] }
+shared-kernel = { workspace = true, features = ["test-utils"] }
+
+oid4vc-core = { workspace = true, features = ["test-utils"] }
 serial_test = "3.0"
 tokio.workspace = true
 wiremock.workspace = true

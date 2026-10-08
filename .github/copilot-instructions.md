@@ -120,7 +120,7 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 - **.github/workflows/format-lint-test.yaml**: Runs `cargo fmt --check`, `cargo clippy`, `cargo test --workspace` on all PRs
 - **.github/workflows/audit.yaml**: Daily dependency audit via cargo-audit
 - **.github/workflows/check-licenses.yaml**: Weekly license check via cargo-deny
-- **.github/workflows/coverage.yaml**: Generates LCOV coverage, uploads to Codecov on main/next/beta/alpha
+- **.github/workflows/coverage.yaml**: Generates LCOV coverage, uploads to Codecov nightly (default branch) and on manual dispatch
 - **.github/workflows/build-push-docker.yaml**: Multi-platform Docker builds (amd64/arm64)
 
 ## Architecture & Key Constraints
