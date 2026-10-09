@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, internal_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
     connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
+    queries,
     state::IdentityState,
 };
 use axum::{
@@ -17,6 +19,7 @@ use hyper::{header, StatusCode};
 use identity_core::common::Url;
 use identity_did::DIDUrl;
 use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
 
 pub mod openapi;
 
@@ -67,23 +70,19 @@ pub(crate) async fn post_connection(
     .await?;
 
     // Return the connection.
-    internal_query_handler(
-        state.authorization_checker.clone(),
-        &connection_id,
-        Some(&connection_id),
-        &state.query.connection,
-    )
-    .await?
-    .map(|connection_view| {
-        (
-            StatusCode::CREATED,
-            [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
-            Json(connection_view),
-        )
-            .into_response()
-    })
-    // TODO: this *should* be an impossible error, what should we return here?
-    .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    queries::get_connection(&state, Caller::Internal, &connection_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|connection_view| {
+            (
+                StatusCode::CREATED,
+                [(header::LOCATION, &format!("{API_VERSION}/connections/{connection_id}"))],
+                Json(connection_view),
+            )
+                .into_response()
+        })
+        // TODO: this *should* be an impossible error, what should we return here?
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -164,17 +163,11 @@ pub(crate) async fn get_connection(
     RequestActor(actor): RequestActor,
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
-    query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &id,
-        Some(&id),
-        &state.query.connection,
-    )
-    .await?
-    .filter(|view| !view.deleted)
-    .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
-    .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
+    queries::get_connection(&state, caller(actor), &id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map(|connection_view| (StatusCode::OK, Json(connection_view)).into_response())
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -339,8 +332,8 @@ pub fn parse_url(input: &str) -> Result<Url, ApiError> {
 pub mod tests {
     use super::*;
 
-    use agent_identity::services::IdentityServices;
-    use agent_store::{identity_state, in_memory::InMemory};
+    use agent_identity::{identity_state, services::IdentityServices};
+    use agent_store::in_memory::InMemory;
     use cqrs_es::persist::ViewContext;
 
     #[test]
@@ -379,7 +372,7 @@ pub mod tests {
     #[tokio::test]
     async fn removed_connection_stays_hidden_after_repository_round_trip() {
         let event_bus = shared_kernel::EventBusHandle::default();
-        let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &event_bus, vec![]).await);
+        let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &event_bus).await);
         let connection_id = "removed-connection";
 
         state
@@ -445,8 +438,7 @@ pub mod tests {
         /// Adds a connection through the command handler, since `parse_url` only accepts the mock issuer's
         /// `http://127.0.0.1` address with the `allow-localhost` feature.
         async fn setup(mock_server: &MockServer) -> Router {
-            let state =
-                Arc::new(identity_state(&InMemory, IdentityServices::default(), &Default::default(), vec![]).await);
+            let state = Arc::new(identity_state(&InMemory, IdentityServices::default(), &Default::default()).await);
 
             internal_command_handler(
                 state.authorization_checker.clone(),

@@ -6,13 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-agent_authorization = { path = "../agent_authorization" }
-agent_holder = { path = "../agent_holder" }
-agent_identity = { path = "../agent_identity" }
-agent_issuance = { path = "../agent_issuance" }
-agent_library = { path = "../agent_library" }
 agent_shared = { path = "../agent_shared" }
-agent_verification = { path = "../agent_verification" }
 shared-kernel.workspace = true
 
 async-trait.workspace = true

@@ -613,183 +613,10 @@ pub struct NatsSubject {
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Events {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub access_token: Vec<AccessTokenEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub authorization_code: Vec<AuthorizationCodeEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub client: Vec<ClientEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub oauth2_authorization_request: Vec<OAuth2AuthorizationRequestEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub connection: Vec<ConnectionEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub document: Vec<DocumentEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub profile: Vec<ProfileEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub service: Vec<ServiceEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub template: Vec<TemplateEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub server_config: Vec<ServerConfigEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub credential: Vec<CredentialEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub offer: Vec<OfferEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub nonce: Vec<NonceEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub status_list: Vec<StatusListEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub holder_credential: Vec<HolderCredentialEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub presentation: Vec<PresentationEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub received_offer: Vec<ReceivedOfferEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub authorization_request: Vec<AuthorizationRequestEvent>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AccessTokenEvent {
-    AccessTokenIssued,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AuthorizationCodeEvent {
-    AuthorizationCodeCreated,
-    AuthorizationCodeRedeemed,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ClientEvent {
-    ClientRegistered,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum OAuth2AuthorizationRequestEvent {
-    OAuth2AuthorizationRequestCreated,
-    OAuth2AuthorizationRequestExpired,
-    ConsentGranted,
-    ConsentRejected,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ConnectionEvent {
-    ConnectionAdded,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum DocumentEvent {
-    DocumentCreated,
-    PublicKeyUpdated,
-    DocumentStatusUpdated,
-    ServiceAdded,
-    ServiceRemoved,
-    DocumentDidWebOverwritten,
-    DocumentPublished,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ProfileEvent {
-    ProfileCreated,
-    DisplayNameUpdated,
-    DescriptionUpdated,
-    LogoUpdated,
-    CountryUpdated,
-    SourceUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ServiceEvent {
-    LinkedDomainsAdded,
-    LinkedDomainsRemoved,
-    LinkedDomainsCredentialsRenewed,
-    LinkedVerifiablePresentationsAdded,
-    LinkedVerifiablePresentationsRemoved,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum TemplateEvent {
-    TemplateCreated,
-    TitleUpdated,
-    DisplayUpdated,
-    TagsUpdated,
-    StatusUpdated,
-    VisibilityUpdated,
-    DescriptionUpdated,
-    TypeUpdated,
-    SchemaUpdated,
-    CredentialExpirationUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ServerConfigEvent {
-    ServerMetadataInitialized,
-    CredentialConfigurationUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum CredentialEvent {
-    UnsignedCredentialCreated,
-    SignedCredentialCreated,
-    CredentialSigned,
-    NotificationReceived,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum OfferEvent {
-    CredentialOfferCreated,
-    CredentialsAdded,
-    FormUrlEncodedCredentialOfferCreated,
-    TokenResponseCreated,
-    CredentialRequestVerified,
-    CredentialResponseCreated,
-    TxCodeGenerated,
-    CredentialOfferEmailSent,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum StatusListEvent {
-    StatusListCreated,
-    IndexAdded,
-    IndexUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum NonceEvent {
-    NonceGenerated,
-    NonceRedeemed,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum HolderCredentialEvent {
-    CredentialAdded,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum PresentationEvent {
-    PresentationCreated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ReceivedOfferEvent {
-    CredentialOfferReceived,
-    CredentialOfferAccepted,
-    TokenResponseReceived,
-    CredentialResponseReceived,
-    CredentialOfferRejected,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AuthorizationRequestEvent {
-    AuthorizationRequestCreated,
-    FormUrlEncodedAuthorizationRequestCreated,
-    AuthorizationRequestObjectSigned,
-    SIOPv2AuthorizationResponseVerified,
-    OID4VPAuthorizationResponseVerified,
+    #[serde(default)]
+    pub types: Vec<String>,
 }
 
 /// All DID methods supported by UniCore
@@ -1690,5 +1517,27 @@ mod tests {
                 );
             },
         );
+    }
+
+    #[test]
+    fn test_events_rejects_unknown_fields() {
+        // Old beta config format: events: { credential: [...] }
+        let old_format = r#"{"credential": ["UnsignedCredentialCreated"]}"#;
+        let res: Result<Events, _> = serde_json::from_str(old_format);
+        assert!(res.is_err(), "Expected unknown field 'credential' to be rejected");
+
+        let unknown_format = r#"{"offer": ["TxCodeGenerated"]}"#;
+        let res: Result<Events, _> = serde_json::from_str(unknown_format);
+        assert!(res.is_err(), "Expected unknown field 'offer' to be rejected");
+
+        // Valid new format
+        let valid_format = r#"{"types": ["TxCodeGenerated", "CredentialSigned"]}"#;
+        let events: Events = serde_json::from_str(valid_format).unwrap();
+        assert_eq!(events.types, vec!["TxCodeGenerated", "CredentialSigned"]);
+
+        // Empty object defaults to empty types
+        let empty_format = r#"{}"#;
+        let events: Events = serde_json::from_str(empty_format).unwrap();
+        assert!(events.types.is_empty());
     }
 }

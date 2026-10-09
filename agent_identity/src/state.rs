@@ -14,11 +14,15 @@ use crate::{
 };
 use agent_shared::config::{config, config_mut, Display, SupportedDidMethod, ToggleOptions};
 use agent_shared::handlers::command_handler;
-use agent_shared::{application_state::CommandHandler, handlers::public_query_handler};
+use agent_shared::{
+    application_state::{CommandHandler, CqrsComponentBuilder},
+    handlers::public_query_handler,
+};
 use cqrs_es::persist::PersistenceError;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
-use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -691,5 +695,52 @@ pub async fn query_all_documents(
     match public_query_handler("all_documents", &state.query.all_documents).await? {
         Some(AllDocumentsView { documents }) => Ok(documents.into_iter().filter(query).collect()),
         None => Ok(Default::default()),
+    }
+}
+
+/// Constructs the CQRS components and initializes the state for the Identity bounded context.
+///
+/// Registers command handlers and view repositories for connection, document, profile,
+/// and service aggregates using the provided [`CqrsComponentBuilder`].
+pub async fn identity_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<crate::services::IdentityServices>,
+    event_bus: &EventBusHandle,
+) -> IdentityState {
+    let (connection_command_handler, connection, all_connections) = builder
+        .commands_and_queries::<ConnectionView, Connection, AllConnectionsView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+    let (document_command_handler, document, all_documents) = builder
+        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), vec![event_bus.query()])
+        .await;
+    let (profile_command_handler, profile, _all_profiles) = builder
+        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![event_bus.query()])
+        .await;
+    let (service_command_handler, service, all_services) = builder
+        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), vec![event_bus.query()])
+        .await;
+
+    IdentityState {
+        services,
+        service_lifecycle_lock: Default::default(),
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        command: CommandHandlers {
+            connection: connection_command_handler,
+            document: document_command_handler,
+            profile: profile_command_handler,
+            service: service_command_handler,
+        },
+        query: ViewRepositories {
+            connection,
+            all_connections,
+            document,
+            all_documents,
+            service,
+            all_services,
+            profile,
+        },
     }
 }

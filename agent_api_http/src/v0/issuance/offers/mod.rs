@@ -2,14 +2,15 @@ pub mod send;
 
 use crate::extractors::RequestActor;
 use crate::{
-    error::type_url,
-    handlers::{command_handler, query_handler},
+    error::{type_url, IntoApiErrorExt},
+    handlers::{caller, command_handler, query_handler},
 };
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
     state::IssuanceState,
 };
 use agent_library::{
+    queries,
     state::LibraryState,
     template::aggregate::{Status as TemplateStatus, Template},
 };
@@ -97,22 +98,16 @@ pub(crate) async fn offers(
     let mut templates = Vec::with_capacity(template_ids.len());
 
     for template_id in &template_ids {
-        let template: Template = query_handler(
-            library_state.authorization_checker.clone(),
-            actor.clone(),
-            template_id,
-            Some(template_id),
-            &library_state.query.template,
-        )
-        .await?
-        .filter(|t| t.status != TemplateStatus::Deleted)
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Template Not Found")
-                .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{template_id}`"))
-                .finish()
-        })?;
+        let template: Template = queries::get_template(&library_state, caller(actor.clone()), template_id)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)?
+            .ok_or_else(|| {
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Template Not Found")
+                    .type_url(type_url("issuance#template-not-found"))
+                    .message(format!("No template found with id: `{template_id}`"))
+                    .finish()
+            })?;
 
         // Template must be in "Published" status
         if template.status != TemplateStatus::Published {
@@ -269,13 +264,14 @@ pub mod tests {
         router,
     };
     use crate::API_VERSION;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
+    use agent_library::library_state;
     use agent_library::template::aggregate::{Expiration, Status};
     use agent_secret_manager::service::Service;
     use agent_shared::config::set_config;
     use agent_store::in_memory::InMemory;
-    use agent_store::{issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
@@ -360,19 +356,11 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_requires_existing_template() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         let mut app = router((issuance_state, library_state));
 
         let response = post_offer_request(&mut app, "missing-template").await;
@@ -386,19 +374,11 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_requires_template_id() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         let mut app = router((issuance_state, library_state));
 
         let response = post_offer_request(&mut app, "").await;
@@ -412,19 +392,11 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_requires_published_template() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         let template_id = create_test_template_with_status_and_format(
             &library_state,
             Status::Draft,
@@ -445,19 +417,11 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_offers_endpoint_accepts_published_template_without_pre_synced_configuration() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
         let template_id = create_new_template(
             &library_state,
             Status::Published,
@@ -481,15 +445,8 @@ pub mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn test_offers_endpoint() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -506,15 +463,8 @@ pub mod tests {
     #[tracing_test::traced_test]
     async fn test_offers_endpoint_by_reference() {
         set_config().credential_offer_by_value_enabled = false;
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;

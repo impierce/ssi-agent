@@ -240,16 +240,16 @@ pub mod tests {
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
-    use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
+    use agent_issuance::issuance_state;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
-    use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -294,8 +294,14 @@ pub mod tests {
         ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
-                .and(
-                    move |request: &wiremock::Request| match request.body_json::<OfferEvent>().unwrap() {
+                .and(move |request: &wiremock::Request| {
+                    let cloud_event: shared_kernel::event_bus::CloudEvent = request.body_json().unwrap();
+                    let data = cloud_event.data.unwrap();
+                    let offer_event: OfferEvent = serde_json::from_value(serde_json::json!({
+                        "CredentialRequestVerified": data
+                    }))
+                    .unwrap();
+                    match offer_event {
                         // Validate that the event is a `CredentialRequestVerified` event.
                         OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
@@ -354,8 +360,8 @@ pub mod tests {
                             true
                         }
                         _ => false,
-                    },
-                )
+                    }
+                })
                 .respond_with(ResponseTemplate::new(200))
                 .mount(self)
                 .await;
@@ -445,7 +451,7 @@ pub mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        let (external_server, issuance_event_publishers) = if with_external_server {
+        let (external_server, bus_opt) = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
@@ -455,33 +461,21 @@ pub mod tests {
             set_config().set_event_publisher_http_target_events(
                 0,
                 Events {
-                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                    ..Default::default()
+                    types: vec!["CredentialRequestVerified".to_string()],
                 },
             );
 
-            (
-                Some(external_server),
-                EventPublisherHttp::load()
-                    .unwrap()
-                    .into_iter()
-                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-                    .collect(),
-            )
+            let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+            if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&bus) {
+                publisher.spawn();
+            }
+            (Some(external_server), Some(bus))
         } else {
-            (None, Default::default())
+            (None, None)
         };
 
-        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &event_bus,
-                issuance_event_publishers,
-            )
-            .await,
-        );
+        let event_bus = bus_opt.unwrap_or_default();
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -527,7 +521,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &event_bus,
-                Default::default(),
                 Default::default(),
             )
             .await,

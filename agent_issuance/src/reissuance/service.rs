@@ -290,25 +290,17 @@ mod tests {
     use agent_issuance::reissuance::service::{CreateReissuanceRequest, ReissuanceService, ReissuanceServiceError};
     use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
-    use agent_issuance::state::{initialize, IssuanceState, SERVER_CONFIG_ID};
+    use agent_issuance::state::{initialize, issuance_state, IssuanceState, SERVER_CONFIG_ID};
     use agent_secret_manager::service::Service;
     use agent_shared::config::CredentialConfiguration;
     use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
-    use agent_store::{in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use serde_json::json;
     use shared_kernel::authorization::Caller;
     use std::sync::Arc;
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&state).await.unwrap();
         command_handler(
             SERVER_CONFIG_ID,

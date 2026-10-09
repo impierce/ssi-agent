@@ -1,11 +1,12 @@
 use agent_secret_manager::subject::Subject;
-use agent_shared::application_state::CommandHandler;
+use agent_shared::application_state::{CommandHandler, CqrsComponentBuilder};
 use agent_shared::config::{config, get_all_enabled_did_methods, get_all_enabled_signing_algorithms_supported};
 use agent_shared::handlers::{command_handler, public_query_handler};
 use agent_shared::UrlAppendHelpers;
 use oid4vci::credential_issuer::authorization_server_metadata::AuthorizationServerMetadata;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
-use shared_kernel::authorization::{AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, Caller, QueryOperation};
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -348,4 +349,76 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
     }
 
     Ok(())
+}
+
+/// Constructs the CQRS components and initializes the state for the Issuance bounded context.
+///
+/// Registers command handlers and view repositories for credentials, credential offers,
+/// public offers, server configurations, nonces, and status lists using the provided [`CqrsComponentBuilder`].
+pub async fn issuance_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<crate::services::IssuanceServices>,
+    event_bus: &EventBusHandle,
+) -> IssuanceState {
+    let (credential_command_handler, credential, all_credentials) = builder
+        .commands_and_queries::<CredentialView, Credential, AllCredentialsView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+    let (reissuance_command_handler, reissuance, all_reissuances) = builder
+        .commands_and_queries::<ReissuanceView, Reissuance, AllReissuancesView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+    let (offer_command_handler, offer, all_offers) = builder
+        .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), vec![event_bus.query()])
+        .await;
+    let (public_offer_command_handler, public_offer, all_public_offers) = builder
+        .commands_and_queries::<PublicOfferView, PublicOffer, AllPublicOffersView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+    let (server_config_command_handler, server_config, _all_server_configs) = builder
+        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(services.clone(), vec![event_bus.query()])
+        .await;
+    let (nonce_command_handler, nonce, _) = builder
+        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), vec![event_bus.query()])
+        .await;
+    let (status_list_command_handler, status_list, all_status_lists) = builder
+        .commands_and_queries::<StatusListView, StatusListAggregate, AllStatusListsView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+
+    IssuanceState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        command: CommandHandlers {
+            credential: credential_command_handler,
+            reissuance: reissuance_command_handler,
+            offer: offer_command_handler,
+            public_offer: public_offer_command_handler,
+            server_config: server_config_command_handler,
+            nonce: nonce_command_handler,
+            status_list: status_list_command_handler,
+        },
+        query: ViewRepositories {
+            server_config,
+            credential,
+            all_credentials,
+            reissuance,
+            all_reissuances,
+            offer,
+            all_offers,
+            public_offer,
+            all_public_offers,
+            nonce,
+            status_list,
+            all_status_lists,
+        },
+        subject: services.issuer.clone(),
+    }
 }

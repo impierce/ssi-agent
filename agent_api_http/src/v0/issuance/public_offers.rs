@@ -1,12 +1,12 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, public_query_handler, query_handler};
+use crate::handlers::{caller, command_handler, public_query_handler, query_handler};
 use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::public_offer::error::PublicOfferError;
 use agent_issuance::state::IssuanceState;
+use agent_library::queries;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::Status;
 use axum::Extension;
 use axum::{
     extract::State,
@@ -207,21 +207,10 @@ pub(crate) async fn create_public_offer(
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
 
-    let template = query_handler(
-        library_state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &library_state.query.template,
-    )
-    .await
-    .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
-    .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
-
-    // Only non-deleted templates can be offered publicly
-    if template.status == Status::Deleted {
-        return Err(PublicOfferError::TemplateNotFound.into_api_error());
-    }
+    let template = queries::get_template(&library_state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
+        .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     // Validate that the template schema only contains const-only leaf fields
     validate_schema_has_only_consts(&template.schema).map_err(|e| e.into_api_error())?;
@@ -356,6 +345,7 @@ pub(crate) async fn delete_public_offer(
 pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_id: &str) -> Result<bool, ApiError> {
     let aggregate_id = public_offer_aggregate_id(offer_id);
 
+    // Deleted offers must stay visible here: without a record, the offer would count as a normal offer.
     match public_query_handler(&aggregate_id, &state.query.public_offer).await? {
         Some(offer) => Ok(offer.active && !offer.deleted),
         // If there is no public-offer record, treat it as a normal offer.
@@ -370,13 +360,13 @@ mod tests {
     use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::router;
     use crate::API_VERSION;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_library::state::LibraryState;
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
@@ -410,15 +400,8 @@ mod tests {
     }
 
     async fn setup_app() -> (Router, Arc<LibraryState>) {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;

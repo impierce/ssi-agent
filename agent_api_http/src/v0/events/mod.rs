@@ -528,9 +528,7 @@ mod tests {
             .unwrap();
         req_with_actor
             .extensions_mut()
-            .insert(shared_kernel::authorization::Actor {
-                subject: "test-user".to_string(),
-            });
+            .insert(shared_kernel::authorization::Actor::user("test-user"));
         let response = tower::ServiceExt::oneshot(app, req_with_actor).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
     }

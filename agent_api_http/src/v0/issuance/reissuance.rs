@@ -205,19 +205,20 @@ mod tests {
         API_VERSION,
     };
     use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRequestDomainServices};
+    use agent_authorization::state::authorization_state;
     use agent_issuance::{
         credential::{aggregate::Status as CredentialStatus, command::CredentialCommand, entity::Data},
         nonce::command::NonceCommand,
         server_config::command::ServerConfigCommand,
         services::IssuanceServices,
-        state::{initialize, SERVER_CONFIG_ID},
+        state::{initialize, issuance_state, SERVER_CONFIG_ID},
     };
     use agent_secret_manager::service::Service;
     use agent_shared::{
         config::CredentialConfiguration,
         handlers::{public_command_handler as command_handler, public_query_handler as query_handler},
     };
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
         http::{self, header, Method, Request},
@@ -230,15 +231,7 @@ mod tests {
     const CREDENTIAL_PROOF_JWT: &str = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&state).await.unwrap();
         add_sd_jwt_credential_configuration(&state).await;
         state
@@ -317,10 +310,7 @@ mod tests {
     async fn post_reissuance(state: Arc<IssuanceState>) -> (StatusCode, Value) {
         let app = router((
             state,
-            Arc::new(
-                agent_store::library_state(&InMemory, &Default::default(), Default::default(), Default::default())
-                    .await,
-            ),
+            Arc::new(agent_library::state::library_state(&InMemory, &Default::default(), Default::default()).await),
         ));
         let response = app
             .oneshot(
@@ -411,7 +401,6 @@ mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 OAuth2AuthorizationRequestDomainServices::default(),
             )
             .await,
@@ -446,10 +435,7 @@ mod tests {
 
         let app = router((
             state.clone(),
-            Arc::new(
-                agent_store::library_state(&InMemory, &Default::default(), Default::default(), Default::default())
-                    .await,
-            ),
+            Arc::new(agent_library::state::library_state(&InMemory, &Default::default(), Default::default()).await),
         ));
         let response = app
             .oneshot(
@@ -501,10 +487,7 @@ mod tests {
 
         let app = router((
             state,
-            Arc::new(
-                agent_store::library_state(&InMemory, &Default::default(), Default::default(), Default::default())
-                    .await,
-            ),
+            Arc::new(agent_library::state::library_state(&InMemory, &Default::default(), Default::default()).await),
         ));
         let response = app
             .oneshot(
@@ -539,10 +522,7 @@ mod tests {
         let reissuance_id = created_body["id"].as_str().unwrap();
         let app = router((
             state,
-            Arc::new(
-                agent_store::library_state(&InMemory, &Default::default(), Default::default(), Default::default())
-                    .await,
-            ),
+            Arc::new(agent_library::state::library_state(&InMemory, &Default::default(), Default::default()).await),
         ));
         let response = app
             .oneshot(
@@ -569,10 +549,7 @@ mod tests {
         let state = test_state().await;
         let app = router((
             state,
-            Arc::new(
-                agent_store::library_state(&InMemory, &Default::default(), Default::default(), Default::default())
-                    .await,
-            ),
+            Arc::new(agent_library::state::library_state(&InMemory, &Default::default(), Default::default()).await),
         ));
 
         let response = app
@@ -600,12 +577,7 @@ mod tests {
         #[async_trait::async_trait]
         impl AuthorizationChecker for DenyActor {
             async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
-                assert_eq!(
-                    request.caller,
-                    Caller::Actor(Actor {
-                        subject: "denied-user".to_string()
-                    })
-                );
+                assert_eq!(request.caller, Caller::Actor(Actor::user("denied-user")));
                 Err(AuthorizationError::Forbidden)
             }
         }
@@ -613,9 +585,8 @@ mod tests {
         let mut state = test_state().await;
         create_original_credential(&state).await;
         Arc::get_mut(&mut state).unwrap().authorization_checker = Arc::new(DenyActor);
-        let library = Arc::new(
-            agent_store::library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await,
-        );
+        let library =
+            Arc::new(agent_library::state::library_state(&InMemory, &Default::default(), Default::default()).await);
         let app = router((state.clone(), library));
 
         for (method, path, body) in [
@@ -641,9 +612,7 @@ mod tests {
                 .header(header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                 .body(body)
                 .unwrap();
-            request.extensions_mut().insert(Actor {
-                subject: "denied-user".to_string(),
-            });
+            request.extensions_mut().insert(Actor::user("denied-user"));
             let response = app.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
         }

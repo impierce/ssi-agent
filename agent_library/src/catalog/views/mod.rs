@@ -5,6 +5,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
+use shared_kernel::view_repository::SoftDeletable;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize, ToSchema)]
@@ -53,5 +54,11 @@ impl View<Catalog> for CatalogView {
                 self.deleted = true;
             }
         }
+    }
+}
+
+impl SoftDeletable for CatalogView {
+    fn is_deleted(&self) -> bool {
+        self.deleted
     }
 }

@@ -1,291 +1,352 @@
-use agent_issuance::offer::aggregate::Offer;
-use agent_shared::config::config;
-use agent_store::{
-    AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
-    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ReissuanceEventPublisher,
-    ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
-};
+use agent_shared::config::{config, EventPublisherNats, NatsSubject};
 use async_nats::Client;
-use async_trait::async_trait;
-use cloudevents::binding::nats::NatsCloudEvent;
-use cloudevents::{EventBuilder, EventBuilderV10};
-use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
-use std::error::Error;
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
+use tokio_stream::StreamExt;
 use tracing::info;
-use uuid::Uuid;
 
-// This struct holds all the different aggregate event publishers. For now it only handles the Offer aggregate.
-#[derive(Default, Debug)]
-pub struct EventPublisherNats {
-    pub offer: Option<AggregateEventPublisherNats<Offer>>,
+/// Background event publisher that subscribes to the [`EventBusHandle`] and publishes
+/// canonical [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s to configured NATS subjects.
+pub struct NatsEventPublisher {
+    client: Client,
+    subjects: Vec<NatsSubject>,
+    stream: BusEventStream,
 }
 
-#[derive(Debug)]
-pub struct AggregateEventPublisherNats<A>
-where
-    A: Aggregate,
-{
-    pub nats_url: String,
-    pub subject: String,
-    pub target_events: Vec<String>,
-    pub client: Client,
-    _marker: std::marker::PhantomData<A>,
-}
-
-impl<A> AggregateEventPublisherNats<A>
-where
-    A: Aggregate,
-{
-    pub async fn new(nats_url: String, subject: String, target_events: Vec<String>) -> Result<Self, Box<dyn Error>> {
-        let client = async_nats::connect(&nats_url).await?;
-
-        Ok(AggregateEventPublisherNats {
-            nats_url,
-            subject,
-            target_events,
-            client,
-            _marker: std::marker::PhantomData,
-        })
-    }
-}
-
-impl EventPublisherNats {
-    pub async fn load() -> anyhow::Result<Self> {
-        // Get the NATS configuration. it's an Option<EventPublisherNats>
-        let nats_config = match &config().event_publishers.nats {
-            Some(config) => config.clone(),
-            // Return default if no NATS configuration is provided.
-            None => return Ok(EventPublisherNats::default()),
-        };
-
-        // If nats is not enabled, return an empty event publisher.
-        if !nats_config.enabled {
-            return Ok(EventPublisherNats::default());
+impl NatsEventPublisher {
+    /// Creates a new `NatsEventPublisher` with an explicitly provided configuration.
+    ///
+    /// Subscribes immediately to `event_bus` upon creation to prevent event loss.
+    /// Returns `Ok(None)` if `config.enabled` is `false`.
+    /// Returns `Err` if connecting to NATS fails.
+    pub async fn new(
+        config: EventPublisherNats,
+        event_bus: &EventBusHandle,
+    ) -> Result<Option<Self>, async_nats::ConnectError> {
+        if !config.enabled {
+            return Ok(None);
         }
 
-        let mut offer = None;
-
-        // Iterate through the list of subjects from the config.
-        for subject_config in &nats_config.subjects {
-            if !subject_config.events.offer.is_empty() {
-                offer = Some(
-                    AggregateEventPublisherNats::<Offer>::new(
-                        nats_config.nats_url.clone(),
-                        subject_config.name.clone(),
-                        subject_config.events.offer.iter().map(ToString::to_string).collect(),
-                    )
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to create NATS client: {}", e))?,
+        for subject in &config.subjects {
+            if subject.events.types.is_empty() {
+                tracing::warn!(
+                    "NATS subject '{}' has no event types configured in 'events.types'; no events will be published to this subject.",
+                    subject.name
                 );
-                break;
-                // TODO: Extend this to loop for other aggregates if added.
             }
         }
 
-        let event_publisher = EventPublisherNats { offer };
+        let stream = event_bus.subscribe(EventFilter::default());
 
-        info!("Loaded NATS event publisher: {:?}", event_publisher);
+        info!("Connecting NATS event publisher to {}...", config.nats_url);
+        let client = async_nats::connect(&config.nats_url).await?;
+        info!("NATS event publisher connected successfully.");
 
-        Ok(event_publisher)
-    }
-}
-
-impl EventPublisher for EventPublisherNats {
-    fn offer(&mut self) -> Option<OfferEventPublisher> {
-        self.offer
-            .take()
-            .map(|publisher| Box::new(publisher) as OfferEventPublisher)
+        Ok(Some(Self {
+            client,
+            subjects: config.subjects,
+            stream,
+        }))
     }
 
-    fn public_offer(&mut self) -> Option<agent_store::PublicOfferEventPublisher> {
-        None
+    /// Creates a `NatsEventPublisher` from the global application configuration.
+    pub async fn from_config(event_bus: &EventBusHandle) -> Result<Option<Self>, async_nats::ConnectError> {
+        let nats_config = config().event_publishers.nats.clone();
+        let Some(nats_config) = nats_config else {
+            return Ok(None);
+        };
+        Self::new(nats_config, event_bus).await
     }
 
-    fn nonce(&mut self) -> Option<NonceEventPublisher> {
-        None
-    }
+    /// Runs the NATS event publisher loop.
+    pub async fn run(mut self) {
+        while let Some(item) = self.stream.next().await {
+            let cloud_event = match item {
+                Ok(event) => event,
+                // See docs/adr/0008-event-publisher-delivery-guarantees-and-lag-handling.md
+                Err(EventBusError::Lagged(dropped_count)) => {
+                    tracing::warn!(
+                        "NATS event publisher lagged behind by {} events; events were dropped",
+                        dropped_count
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!("NATS event publisher encountered event bus error: {:?}", err);
+                    continue;
+                }
+            };
 
-    fn status_list(&mut self) -> Option<StatusListEventPublisher> {
-        None
-    }
+            for subject_config in &self.subjects {
+                if subject_config.events.types.is_empty() {
+                    continue;
+                }
 
-    fn document(&mut self) -> Option<DocumentEventPublisher> {
-        None
-    }
+                let filter = EventFilter {
+                    event_types: subject_config.events.types.clone(),
+                    ..Default::default()
+                };
+                if !filter.matches(&cloud_event) {
+                    continue;
+                }
 
-    fn profile(&mut self) -> Option<ProfileEventPublisher> {
-        None
-    }
+                let subject_name = subject_config.name.clone();
+                let payload = match serde_json::to_vec(&cloud_event) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::error!("Failed to serialize CloudEvent for NATS: {:?}", e);
+                        continue;
+                    }
+                };
 
-    fn service(&mut self) -> Option<ServiceEventPublisher> {
-        None
-    }
-
-    fn template(&mut self) -> Option<TemplateEventPublisher> {
-        None
-    }
-
-    fn authorization_code(&mut self) -> Option<AuthorizationCodeEventPublisher> {
-        None
-    }
-
-    fn client(&mut self) -> Option<ClientEventPublisher> {
-        None
-    }
-
-    fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
-        None
-    }
-
-    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
-        None
-    }
-
-    fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
-        None
-    }
-
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-        None
-    }
-
-    fn credential(&mut self) -> Option<CredentialEventPublisher> {
-        None
-    }
-
-    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
-        None
-    }
-
-    fn presentation(&mut self) -> Option<PresentationEventPublisher> {
-        None
-    }
-
-    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
-        None
-    }
-
-    fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
-        None
-    }
-
-    fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
-        None
-    }
-}
-
-#[async_trait]
-impl<A> Query<A> for AggregateEventPublisherNats<A>
-where
-    A: Aggregate,
-    A::Event: serde::Serialize + DomainEvent,
-{
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
-        for event in events {
-            if self.target_events.contains(&event.payload.event_type()) {
-                if let Err(e) = self.dispatch_event(aggregate_id, &event.payload).await {
+                if let Err(err) = self.client.publish(subject_name.clone(), payload.into()).await {
                     tracing::error!(
-                        "Failed to dispatch {} event for aggregate {}: {}",
-                        event.payload.event_type(),
-                        aggregate_id,
-                        e
+                        "Failed to publish CloudEvent {:?} to NATS subject {}: {:?}",
+                        cloud_event.id,
+                        subject_name,
+                        err
+                    );
+                } else {
+                    info!(
+                        "Published CloudEvent {:?} to NATS subject {}",
+                        cloud_event.id, subject_name
                     );
                 }
             }
         }
     }
-}
 
-impl<A> AggregateEventPublisherNats<A>
-where
-    A: Aggregate,
-    A::Event: serde::Serialize,
-{
-    async fn dispatch_event(&self, aggregate_id: &str, event: &A::Event) -> Result<(), Box<dyn Error>>
-    where
-        A::Event: DomainEvent,
-    {
-        // Generate a unique Id for each CloudEvent
-        let event_id = format!("{}-{}", aggregate_id, Uuid::new_v4());
-        let event_type = event.event_type();
-
-        // Use application URL from the configuration as the event source
-        let event_source = config().application_url.to_string();
-
-        // Construct the CloudEvent
-        let cloud_event = EventBuilderV10::new()
-            .id(event_id)
-            .source(event_source)
-            .ty(format!("offer.event.{}", event_type.to_lowercase()))
-            .data("application/json", serde_json::to_value(event)?)
-            .build()?;
-
-        // Convert Cloudevent into a formatted NATS message
-        let nats_event = NatsCloudEvent::from_event(cloud_event)?;
-
-        info!(
-            "Publishing {} for aggregate_id {} to NATS subject '{}': {}",
-            event_type,
-            aggregate_id,
-            self.subject,
-            String::from_utf8_lossy(&nats_event.payload)
-        );
-
-        let payload = nats_event.payload.into();
-        let subject = self.subject.clone();
-
-        self.client.publish(subject, payload).await?;
-        info!("Published transaction code to NATS subject: {}", self.subject);
-
-        Ok(())
+    /// Spawns the NATS event publisher as a background task on the Tokio runtime.
+    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(self.run())
     }
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
-    use serde_json::json;
+    use agent_shared::config::{set_config, EventPublisherNats, Events, NatsSubject};
+    use shared_kernel::event_bus::CloudEvent;
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::sync::Mutex;
 
-    #[test]
-    fn generate_test_event_id() {
-        let aggregate_id = "aggregate-12345";
-        let event_id = format!("{}-{}", aggregate_id, Uuid::new_v4());
-        println!("Event-ID: {}", event_id);
+    static TEST_MUTEX: Mutex<()> = Mutex::const_new(());
+
+    #[tokio::test]
+    async fn test_nats_event_publisher_new_disabled() {
+        let event_bus = EventBusHandle::new(100);
+
+        let config = EventPublisherNats {
+            enabled: false,
+            nats_url: "127.0.0.1:4222".to_string(),
+            subjects: vec![],
+        };
+        assert!(NatsEventPublisher::new(config, &event_bus).await.unwrap().is_none());
     }
 
     #[tokio::test]
-    async fn generate_test_nats_payload() {
-        // Create a test CloudEvent
-        let event = EventBuilderV10::new()
-            .id("test-123")
-            .source("https://impierce.com/offer")
-            .ty("email.command.txcodegenerated")
-            .data(
-                "application/json",
-                json!({
-                    "TxCodeGenerated": {
-                        "offer_id": "12345",
-                        "tx_code": "1234",
-                        "delivery_options": {
-                            "recipient_email": "andres-rocarey@example.test"
-                        },
+    async fn test_nats_event_publisher_connection_failure() {
+        let event_bus = EventBusHandle::new(100);
+
+        // Use a closed port that immediately fails connection
+        let config = EventPublisherNats {
+            enabled: true,
+            nats_url: "127.0.0.1:1".to_string(),
+            subjects: vec![NatsSubject {
+                name: "test.subject".to_string(),
+                events: Events {
+                    types: vec!["com.impierce.unicore.tx-code-generated".to_string()],
+                },
+            }],
+        };
+
+        let res = NatsEventPublisher::new(config, &event_bus).await;
+        assert!(res.is_err(), "Expected connection to fail when server is unreachable");
+    }
+
+    #[tokio::test]
+    async fn test_nats_event_publisher_publishes_to_mock_nats() {
+        // Bind mock NATS TCP listener on an ephemeral port
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let (received_sender, mut received_receiver) = tokio::sync::mpsc::channel::<Vec<u8>>(10);
+
+        // Spawn mock NATS server task
+        let mock_server_handle = tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                // 1. Send NATS server INFO greeting
+                let info = b"INFO {\"server_id\":\"TEST\",\"server_name\":\"test\",\"version\":\"2.10.0\",\"proto\":1,\"headers\":true,\"max_payload\":1048576}\r\n";
+                let _ = socket.write_all(info).await;
+
+                let mut buf = vec![0u8; 8192];
+                loop {
+                    let n = match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => n,
+                    };
+                    let chunk = &buf[..n];
+
+                    // Respond to PING with PONG
+                    if chunk.windows(4).any(|w| w == b"PING") {
+                        let _ = socket.write_all(b"PONG\r\n").await;
                     }
-                }),
-            )
-            .build()
-            .unwrap();
 
-        // Wrap the CloudEvent into a NATS message format
-        let nats_event = NatsCloudEvent::from_event(event).unwrap();
-        let payload_str = String::from_utf8_lossy(&nats_event.payload);
+                    // Forward published payloads (PUB / HPUB)
+                    if chunk.starts_with(b"PUB") || chunk.starts_with(b"HPUB") {
+                        let _ = received_sender.send(chunk.to_vec()).await;
+                    }
+                }
+            }
+        });
 
-        assert!(!payload_str.is_empty());
-        assert!(payload_str.contains("TxCodeGenerated"));
-        assert!(payload_str.contains("1234"));
+        let config = EventPublisherNats {
+            enabled: true,
+            nats_url: local_addr.to_string(),
+            subjects: vec![NatsSubject {
+                name: "unicore.events".to_string(),
+                events: Events {
+                    types: vec!["com.impierce.unicore.credential.issued".to_string()],
+                },
+            }],
+        };
 
-        println!("NATS Payload:");
-        println!("{}", payload_str);
+        let event_bus = EventBusHandle::new(100);
+        let publisher = NatsEventPublisher::new(config, &event_bus)
+            .await
+            .unwrap()
+            .expect("Expected NatsEventPublisher when enabled");
+        let handle = publisher.spawn();
+
+        // Wait briefly for NATS handshake to complete
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // 1. Publish non-matching event
+        let non_matching = CloudEvent::new("org.other.event", "https://example.com/other");
+        event_bus.publish(non_matching);
+
+        // 2. Publish matching event
+        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
+            .with_subject("sub-42")
+            .with_caller(Some("caller-nats".to_string()), Some("api_key".to_string()))
+            .with_data(serde_json::json!({ "status": "issued" }));
+
+        let matching_id = matching.id.clone();
+        event_bus.publish(matching);
+
+        // Receive the message published to mock NATS
+        let received = tokio::time::timeout(Duration::from_secs(3), received_receiver.recv())
+            .await
+            .expect("Mock NATS should receive published message")
+            .expect("Channel should not be closed");
+
+        let received_str = String::from_utf8_lossy(&received);
+        // Verify subject was published to
+        assert!(
+            received_str.contains("unicore.events"),
+            "Expected NATS message to contain subject 'unicore.events', got: {}",
+            received_str
+        );
+
+        // Verify JSON payload inside received message
+        assert!(received_str.contains(&matching_id));
+        assert!(received_str.contains("caller-nats"));
+        assert!(received_str.contains("com.impierce.unicore.credential.issued"));
+
+        handle.abort();
+        mock_server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_nats_event_publisher_empty_types_does_not_publish() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let (received_sender, mut received_receiver) = tokio::sync::mpsc::channel::<Vec<u8>>(10);
+
+        let mock_server_handle = tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let info = b"INFO {\"server_id\":\"TEST\",\"server_name\":\"test\",\"version\":\"2.10.0\",\"proto\":1,\"headers\":true,\"max_payload\":1048576}\r\n";
+                let _ = socket.write_all(info).await;
+
+                let mut buf = vec![0u8; 8192];
+                loop {
+                    let n = match socket.read(&mut buf).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => n,
+                    };
+                    let chunk = &buf[..n];
+
+                    if chunk.windows(4).any(|w| w == b"PING") {
+                        let _ = socket.write_all(b"PONG\r\n").await;
+                    }
+
+                    if chunk.starts_with(b"PUB") || chunk.starts_with(b"HPUB") {
+                        let _ = received_sender.send(chunk.to_vec()).await;
+                    }
+                }
+            }
+        });
+
+        // Configure subject with EMPTY types list
+        let config = EventPublisherNats {
+            enabled: true,
+            nats_url: local_addr.to_string(),
+            subjects: vec![NatsSubject {
+                name: "unicore.events".to_string(),
+                events: Events { types: vec![] },
+            }],
+        };
+
+        let event_bus = EventBusHandle::new(100);
+        let publisher = NatsEventPublisher::new(config, &event_bus)
+            .await
+            .unwrap()
+            .expect("Expected NatsEventPublisher when enabled");
+        let handle = publisher.spawn();
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let event = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
+            .with_data(serde_json::json!({ "status": "issued" }));
+        event_bus.publish(event);
+
+        // Wait to confirm no message is forwarded
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(
+            received_receiver.try_recv().is_err(),
+            "Expected no event to be published when types is empty"
+        );
+
+        handle.abort();
+        mock_server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_nats_event_publisher_from_config() {
+        let _guard = TEST_MUTEX.lock().await;
+
+        {
+            let mut conf = set_config();
+            conf.event_publishers.nats = None;
+        }
+
+        let event_bus = EventBusHandle::new(100);
+        assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
+
+        {
+            let mut conf = set_config();
+            conf.event_publishers.nats = Some(EventPublisherNats {
+                enabled: true,
+                nats_url: "127.0.0.1:1".to_string(),
+                subjects: vec![],
+            });
+        }
+
+        let res = NatsEventPublisher::from_config(&event_bus).await;
+        assert!(res.is_err(), "Expected connection failure for unreachable NATS URL");
+
+        set_config().event_publishers.nats = None;
     }
 }

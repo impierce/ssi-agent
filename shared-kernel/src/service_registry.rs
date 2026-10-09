@@ -199,6 +199,7 @@ mod tests {
             &self,
             aggregate_id: &str,
             _command: Self::Command,
+            _caller: &Caller,
         ) -> Result<String, Self::CommandError> {
             Ok(aggregate_id.to_string())
         }
@@ -287,9 +288,7 @@ mod tests {
         let (command_tx, mut command_rx) = mpsc::channel(16);
         let (query_tx, _query_rx) = mpsc::channel(16);
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
 
         let dispatch = tokio::spawn(async move {
             handle
@@ -298,12 +297,7 @@ mod tests {
         });
 
         let command = command_rx.recv().await.unwrap();
-        assert_eq!(
-            command.caller,
-            Caller::Actor(Actor {
-                subject: "user@example.test".to_string()
-            })
-        );
+        assert_eq!(command.caller, Caller::Actor(Actor::user("user@example.test")));
         assert_eq!(command.aggregate_id, "aggregate-id");
         assert_eq!(command.command, "create");
 
@@ -317,20 +311,13 @@ mod tests {
         let (command_tx, _command_rx) = mpsc::channel(16);
         let (query_tx, mut query_rx) = mpsc::channel(16);
         let handle = ServiceHandle::<EchoContext>::new(command_tx, query_tx);
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
 
         let dispatch =
             tokio::spawn(async move { handle.dispatch_query(Caller::Actor(actor), "my-query".into()).await });
 
         let query = query_rx.recv().await.unwrap();
-        assert_eq!(
-            query.caller,
-            Caller::Actor(Actor {
-                subject: "user@example.test".to_string()
-            })
-        );
+        assert_eq!(query.caller, Caller::Actor(Actor::user("user@example.test")));
         assert_eq!(query.query, "my-query");
 
         query.reply.send(Ok(TestView("my-query".into()))).unwrap();

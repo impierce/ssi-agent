@@ -1,725 +1,392 @@
-use agent_authorization::domain::{
-    access_token::aggregate::AccessToken, authorization_code::aggregate::AuthorizationCode, client::aggregate::Client,
-    oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest,
-};
-use agent_holder::presentation::aggregate::Presentation;
-use agent_identity::{
-    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
-    service::aggregate::Service,
-};
-use agent_issuance::{
-    credential::aggregate::Credential, nonce::aggregate::Nonce, offer::aggregate::Offer,
-    server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
-};
-use agent_library::template::aggregate::Template;
-use agent_shared::config::{config, EventPublisherHttp as EventPublisherHttpConfig};
-use agent_store::{
-    AccessTokenEventPublisher, AuthorizationCodeEventPublisher, AuthorizationRequestEventPublisher,
-    ClientEventPublisher, ConnectionEventPublisher, CredentialEventPublisher, DocumentEventPublisher, EventPublisher,
-    HolderCredentialEventPublisher, NonceEventPublisher, OAuth2AuthorizationRequestEventPublisher, OfferEventPublisher,
-    PresentationEventPublisher, ProfileEventPublisher, ReceivedOfferEventPublisher, ReissuanceEventPublisher,
-    ServerConfigEventPublisher, ServiceEventPublisher, StatusListEventPublisher, TemplateEventPublisher,
-};
-use agent_verification::authorization_request::aggregate::AuthorizationRequest;
-use async_trait::async_trait;
-use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
-use serde::Deserialize;
-use serde_with::skip_serializing_none;
+use std::time::Duration;
+
+use agent_shared::config::{config, EventPublisherHttp};
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
+use tokio_stream::StreamExt;
 use tracing::info;
 
-/// A struct that contains all the event publishers for the different aggregates.
-#[skip_serializing_none]
-#[derive(Debug, Deserialize, Default)]
-pub struct EventPublisherHttp {
-    // Authorization
-    pub access_token: Option<AggregateEventPublisherHttp<AccessToken>>,
-    pub authorization_code: Option<AggregateEventPublisherHttp<AuthorizationCode>>,
-    pub client: Option<AggregateEventPublisherHttp<Client>>,
-    pub oauth2_authorization_request: Option<AggregateEventPublisherHttp<OAuth2AuthorizationRequest>>,
+/// Default timeout for outgoing HTTP webhook requests.
+const DEFAULT_WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
-    // Identity
-    pub connection: Option<AggregateEventPublisherHttp<Connection>>,
-    pub document: Option<AggregateEventPublisherHttp<Document>>,
-    pub profile: Option<AggregateEventPublisherHttp<Profile>>,
-    pub service: Option<AggregateEventPublisherHttp<Service>>,
-
-    // Library
-    pub template: Option<AggregateEventPublisherHttp<Template>>,
-
-    // Issuance
-    pub server_config: Option<AggregateEventPublisherHttp<ServerConfig>>,
-    pub credential: Option<AggregateEventPublisherHttp<Credential>>,
-    pub offer: Option<AggregateEventPublisherHttp<Offer>>,
-    pub nonce: Option<AggregateEventPublisherHttp<Nonce>>,
-    pub status_list: Option<AggregateEventPublisherHttp<StatusListAggregate>>,
-
-    // Holder
-    pub holder_credential: Option<AggregateEventPublisherHttp<agent_holder::credential::aggregate::Credential>>,
-    pub presentation: Option<AggregateEventPublisherHttp<Presentation>>,
-    pub received_offer: Option<AggregateEventPublisherHttp<agent_holder::offer::aggregate::Offer>>,
-
-    // Verification
-    pub authorization_request: Option<AggregateEventPublisherHttp<AuthorizationRequest>>,
+/// Background event publisher that subscribes to the [`EventBusHandle`] and publishes
+/// canonical [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s to configured HTTP webhook endpoints.
+pub struct HttpEventPublisher {
+    client: reqwest::Client,
+    configs: Vec<EventPublisherHttp>,
+    stream: BusEventStream,
+    timeout: Duration,
 }
 
-impl EventPublisherHttp {
-    pub fn load() -> anyhow::Result<Vec<Self>> {
-        Self::load_from(&config().event_publishers.http)
+impl HttpEventPublisher {
+    /// Creates a new `HttpEventPublisher` with explicitly provided configurations and default timeout.
+    ///
+    /// Subscribes immediately to `event_bus` upon creation to prevent event loss.
+    /// Returns `None` if `configs` contains no enabled endpoints.
+    pub fn new(configs: Vec<EventPublisherHttp>, event_bus: &EventBusHandle) -> Option<Self> {
+        Self::with_timeout(configs, event_bus, DEFAULT_WEBHOOK_TIMEOUT)
     }
 
-    pub fn load_from(configurations: &[EventPublisherHttpConfig]) -> anyhow::Result<Vec<Self>> {
-        configurations
-            .iter()
-            .filter(|c| c.enabled)
-            .map(|event_publisher_http| {
-                let access_token = (!event_publisher_http.events.access_token.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<AccessToken>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .access_token
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let authorization_code = (!event_publisher_http.events.authorization_code.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<AuthorizationCode>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .authorization_code
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let client = (!event_publisher_http.events.client.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Client>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .client
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let oauth2_authorization_request =
-                    (!event_publisher_http.events.oauth2_authorization_request.is_empty()).then(|| {
-                        AggregateEventPublisherHttp::<OAuth2AuthorizationRequest>::new(
-                            event_publisher_http.target_url.clone(),
-                            event_publisher_http.headers.clone(),
-                            event_publisher_http
-                                .events
-                                .oauth2_authorization_request
-                                .iter()
-                                .map(ToString::to_string)
-                                .collect(),
-                        )
-                    });
-
-                let connection = (!event_publisher_http.events.connection.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Connection>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .connection
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let document = (!event_publisher_http.events.document.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Document>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .document
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let profile = (!event_publisher_http.events.profile.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Profile>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .profile
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let service = (!event_publisher_http.events.service.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Service>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .service
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let template = (!event_publisher_http.events.template.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Template>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .template
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let server_config = (!event_publisher_http.events.server_config.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<ServerConfig>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .server_config
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let credential = (!event_publisher_http.events.credential.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Credential>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .credential
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let offer = (!event_publisher_http.events.offer.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Offer>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .offer
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let nonce = (!event_publisher_http.events.nonce.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Nonce>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .nonce
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let status_list = (!event_publisher_http.events.status_list.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<StatusListAggregate>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .status_list
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let holder_credential = (!event_publisher_http.events.holder_credential.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<agent_holder::credential::aggregate::Credential>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .holder_credential
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let presentation = (!event_publisher_http.events.presentation.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<Presentation>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .presentation
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let received_offer = (!event_publisher_http.events.received_offer.is_empty()).then(|| {
-                    AggregateEventPublisherHttp::<agent_holder::offer::aggregate::Offer>::new(
-                        event_publisher_http.target_url.clone(),
-                        event_publisher_http.headers.clone(),
-                        event_publisher_http
-                            .events
-                            .received_offer
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                });
-
-                let authorization_request =
-                    (!event_publisher_http.events.authorization_request.is_empty()).then(|| {
-                        AggregateEventPublisherHttp::<AuthorizationRequest>::new(
-                            event_publisher_http.target_url.clone(),
-                            event_publisher_http.headers.clone(),
-                            event_publisher_http
-                                .events
-                                .authorization_request
-                                .iter()
-                                .map(ToString::to_string)
-                                .collect(),
-                        )
-                    });
-
-                let event_publisher = EventPublisherHttp {
-                    access_token,
-                    authorization_code,
-                    client,
-                    oauth2_authorization_request,
-                    connection,
-                    document,
-                    profile,
-                    service,
-                    template,
-                    server_config,
-                    credential,
-                    offer,
-                    nonce,
-                    status_list,
-                    holder_credential,
-                    presentation,
-                    received_offer,
-                    authorization_request,
-                };
-
-                info!("Loaded HTTP event publisher: {:?}", event_publisher);
-
-                Ok(event_publisher)
-            })
-            .collect()
-    }
-}
-
-impl EventPublisher for EventPublisherHttp {
-    fn connection(&mut self) -> Option<ConnectionEventPublisher> {
-        self.connection
-            .take()
-            .map(|publisher| Box::new(publisher) as ConnectionEventPublisher)
-    }
-
-    fn document(&mut self) -> Option<DocumentEventPublisher> {
-        self.document
-            .take()
-            .map(|publisher| Box::new(publisher) as DocumentEventPublisher)
-    }
-
-    fn profile(&mut self) -> Option<ProfileEventPublisher> {
-        self.profile
-            .take()
-            .map(|publisher| Box::new(publisher) as ProfileEventPublisher)
-    }
-
-    fn service(&mut self) -> Option<ServiceEventPublisher> {
-        self.service
-            .take()
-            .map(|publisher| Box::new(publisher) as ServiceEventPublisher)
-    }
-
-    fn template(&mut self) -> Option<TemplateEventPublisher> {
-        self.template
-            .take()
-            .map(|publisher| Box::new(publisher) as TemplateEventPublisher)
-    }
-
-    fn authorization_code(&mut self) -> Option<AuthorizationCodeEventPublisher> {
-        self.authorization_code
-            .take()
-            .map(|publisher| Box::new(publisher) as AuthorizationCodeEventPublisher)
-    }
-    fn client(&mut self) -> Option<ClientEventPublisher> {
-        self.client
-            .take()
-            .map(|publisher| Box::new(publisher) as ClientEventPublisher)
-    }
-    fn oauth2_authorization_request(&mut self) -> Option<OAuth2AuthorizationRequestEventPublisher> {
-        self.oauth2_authorization_request
-            .take()
-            .map(|publisher| Box::new(publisher) as OAuth2AuthorizationRequestEventPublisher)
-    }
-    fn access_token(&mut self) -> Option<AccessTokenEventPublisher> {
-        self.access_token
-            .take()
-            .map(|publisher| Box::new(publisher) as AccessTokenEventPublisher)
-    }
-
-    fn server_config(&mut self) -> Option<ServerConfigEventPublisher> {
-        self.server_config
-            .take()
-            .map(|publisher| Box::new(publisher) as ServerConfigEventPublisher)
-    }
-
-    fn credential(&mut self) -> Option<CredentialEventPublisher> {
-        self.credential
-            .take()
-            .map(|publisher| Box::new(publisher) as CredentialEventPublisher)
-    }
-
-    fn offer(&mut self) -> Option<OfferEventPublisher> {
-        self.offer
-            .take()
-            .map(|publisher| Box::new(publisher) as OfferEventPublisher)
-    }
-
-    fn public_offer(&mut self) -> Option<agent_store::PublicOfferEventPublisher> {
-        None
-    }
-
-    fn nonce(&mut self) -> Option<NonceEventPublisher> {
-        self.nonce
-            .take()
-            .map(|publisher| Box::new(publisher) as NonceEventPublisher)
-    }
-
-    fn status_list(&mut self) -> Option<StatusListEventPublisher> {
-        self.status_list
-            .take()
-            .map(|publisher| Box::new(publisher) as StatusListEventPublisher)
-    }
-
-    fn holder_credential(&mut self) -> Option<HolderCredentialEventPublisher> {
-        self.holder_credential
-            .take()
-            .map(|publisher| Box::new(publisher) as HolderCredentialEventPublisher)
-    }
-
-    fn presentation(&mut self) -> Option<PresentationEventPublisher> {
-        self.presentation
-            .take()
-            .map(|publisher| Box::new(publisher) as PresentationEventPublisher)
-    }
-
-    fn received_offer(&mut self) -> Option<ReceivedOfferEventPublisher> {
-        self.received_offer
-            .take()
-            .map(|publisher| Box::new(publisher) as ReceivedOfferEventPublisher)
-    }
-
-    fn authorization_request(&mut self) -> Option<AuthorizationRequestEventPublisher> {
-        self.authorization_request
-            .take()
-            .map(|publisher| Box::new(publisher) as AuthorizationRequestEventPublisher)
-    }
-
-    fn reissuance(&mut self) -> Option<ReissuanceEventPublisher> {
-        None
-    }
-}
-
-/// An event publisher for a specific aggregate that dispatches events to an HTTP endpoint.
-#[skip_serializing_none]
-#[derive(Deserialize)]
-pub struct AggregateEventPublisherHttp<A>
-where
-    A: Aggregate,
-{
-    pub target_url: String,
-    #[serde(with = "http_serde::option::header_map", default)]
-    pub headers: Option<reqwest::header::HeaderMap>,
-    pub target_events: Vec<String>,
-    #[serde(skip)]
-    pub client: reqwest::Client,
-    #[serde(skip)]
-    _marker: std::marker::PhantomData<A>,
-}
-
-impl<A: Aggregate> std::fmt::Debug for AggregateEventPublisherHttp<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AggregateEventPublisherHttp")
-            .field("target_url", &self.target_url)
-            .field("headers", &self.headers.as_ref().map(|_| "<REDACTED>"))
-            .field("target_events", &self.target_events)
-            .finish()
-    }
-}
-
-impl<A> AggregateEventPublisherHttp<A>
-where
-    A: Aggregate,
-{
-    pub fn new(target_url: String, headers: Option<reqwest::header::HeaderMap>, target_events: Vec<String>) -> Self {
-        AggregateEventPublisherHttp {
-            target_url,
-            headers,
-            target_events,
-            client: reqwest::Client::new(),
-            _marker: std::marker::PhantomData,
+    /// Creates a new `HttpEventPublisher` with custom request timeout.
+    pub fn with_timeout(
+        configs: Vec<EventPublisherHttp>,
+        event_bus: &EventBusHandle,
+        timeout: Duration,
+    ) -> Option<Self> {
+        let enabled_configs: Vec<_> = configs.into_iter().filter(|c| c.enabled).collect();
+        if enabled_configs.is_empty() {
+            return None;
         }
+
+        for target in &enabled_configs {
+            if target.events.types.is_empty() {
+                tracing::warn!(
+                    "HTTP webhook target '{}' has no event types configured in 'events.types'; no events will be forwarded to this endpoint.",
+                    target.target_url
+                );
+            }
+        }
+
+        let stream = event_bus.subscribe(EventFilter::default());
+
+        Some(Self {
+            client: reqwest::Client::new(),
+            configs: enabled_configs,
+            stream,
+            timeout,
+        })
     }
-}
 
-#[async_trait]
-impl<A> Query<A> for AggregateEventPublisherHttp<A>
-where
-    A: Aggregate,
-{
-    async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
-        for event in events {
-            if self.target_events.contains(&event.payload.event_type()) {
-                let mut request = self.client.post(&self.target_url).json(&event.payload);
+    /// Creates an `HttpEventPublisher` populated from the global application configuration.
+    pub fn from_config(event_bus: &EventBusHandle) -> Option<Self> {
+        Self::new(config().event_publishers.http.clone(), event_bus)
+    }
 
-                if let Some(headers) = &self.headers {
-                    request = request.headers(headers.clone());
+    /// Runs the HTTP event publisher loop.
+    pub async fn run(mut self) {
+        info!("Starting HTTP event publisher for {} endpoints...", self.configs.len());
+
+        while let Some(item) = self.stream.next().await {
+            let cloud_event = match item {
+                Ok(event) => event,
+                // See docs/adr/0008-event-publisher-delivery-guarantees-and-lag-handling.md
+                Err(EventBusError::Lagged(dropped_count)) => {
+                    tracing::warn!(
+                        "HTTP event publisher lagged behind by {} events; events were dropped",
+                        dropped_count
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!("HTTP event publisher encountered event bus error: {:?}", err);
+                    continue;
+                }
+            };
+
+            for target_config in &self.configs {
+                if target_config.events.types.is_empty() {
+                    continue;
                 }
 
-                info!(
-                    "Dispatching event: {:?} to HTTP endpoint: {:?} with headers: {:?}",
-                    event.payload, self.target_url, self.headers
-                );
+                let filter = EventFilter {
+                    event_types: target_config.events.types.clone(),
+                    ..Default::default()
+                };
+                if !filter.matches(&cloud_event) {
+                    continue;
+                }
 
-                // Send the request in a separate thread so that we don't have to await the response in the current thread.
-                tokio::task::spawn(async move {
-                    request
-                        .send()
-                        .await
-                        .inspect(|response| {
-                            info!("Response: {:?}", response);
-                        })
-                        .inspect_err(|error| {
-                            info!("Error: {:?}", error);
-                        })
-                        .ok();
+                let mut req = self
+                    .client
+                    .post(&target_config.target_url)
+                    // CloudEvents JSON format envelope media type:
+                    // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
+                    .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json");
+
+                if let Some(headers) = &target_config.headers {
+                    req = req.headers(headers.clone());
+                }
+
+                let req = req.json(&cloud_event).timeout(self.timeout);
+                let event_id = cloud_event.id.clone();
+                let target_url = target_config.target_url.clone();
+
+                tokio::spawn(async move {
+                    match req.send().await {
+                        Ok(res) => {
+                            if res.status().is_success() {
+                                info!(
+                                    "Successfully forwarded CloudEvent {:?} to HTTP webhook target {}",
+                                    event_id, target_url
+                                );
+                            } else {
+                                tracing::warn!("HTTP webhook target {} returned status {}", target_url, res.status());
+                            }
+                        }
+                        Err(err) => {
+                            tracing::error!(
+                                "Failed to send CloudEvent {:?} to HTTP webhook target {}: {:?}",
+                                event_id,
+                                target_url,
+                                err
+                            );
+                        }
+                    }
                 });
             }
         }
+    }
+
+    /// Spawns the HTTP event publisher as a background task on the Tokio runtime.
+    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(self.run())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_shared::config::{set_config, EventPublisherHttp, Events};
+    use reqwest::header::HeaderMap;
+    use shared_kernel::event_bus::CloudEvent;
+    use tokio::sync::Mutex;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use agent_issuance::offer::aggregate::Status;
-    use agent_issuance::offer::event::OfferEvent;
-    use agent_shared::config::{EventPublisherHttp as EventPublisherHttpConfig, Events};
-    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+    static TEST_MUTEX: Mutex<()> = Mutex::const_new(());
 
-    /// `dispatch` sends requests from a detached task, so wait until they arrive (or give up after a timeout).
-    async fn wait_for_requests(mock_server: &MockServer, count: usize) -> Vec<Request> {
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    #[tokio::test]
+    async fn test_http_event_publisher_new_disabled() {
+        let event_bus = EventBusHandle::new(100);
 
-        loop {
-            let received_requests = mock_server.received_requests().await.unwrap();
-            if received_requests.len() >= count || tokio::time::Instant::now() >= deadline {
-                return received_requests;
-            }
+        // Empty configs -> None
+        assert!(HttpEventPublisher::new(vec![], &event_bus).is_none());
 
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
+        // Only disabled configs -> None
+        let disabled_configs = vec![EventPublisherHttp {
+            enabled: false,
+            target_url: "http://localhost:12345/webhook".to_string(),
+            headers: None,
+            events: Events {
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
+            },
+        }];
+        assert!(HttpEventPublisher::new(disabled_configs, &event_bus).is_none());
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn it_works() {
+    #[tokio::test]
+    async fn test_http_event_publisher_publishes_matching_events() {
         let mock_server = MockServer::start().await;
 
+        let mut headers = HeaderMap::new();
+        headers.insert("x-webhook-secret", "supersecret".parse().unwrap());
+        headers.insert(
+            "x-custom-bytes",
+            reqwest::header::HeaderValue::from_bytes(b"non-ascii-\xff").unwrap(),
+        );
+
         Mock::given(method("POST"))
-            .and(path("/ssi-events-subscriber"))
+            .and(path("/webhook"))
+            .and(header("x-webhook-secret", "supersecret"))
+            .and(header("content-type", "application/cloudevents+json"))
             .respond_with(ResponseTemplate::new(200))
+            .expect(1)
             .mount(&mock_server)
             .await;
 
-        let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_static("Basic YWxhZGRpbjpvcGVuc2VzYW1l"),
-        );
-        let configuration = EventPublisherHttpConfig {
+        let configs = vec![EventPublisherHttp {
             enabled: true,
-            target_url: target_url.clone(),
+            target_url: format!("{}/webhook", mock_server.uri()),
             headers: Some(headers),
             events: Events {
-                offer: vec![agent_shared::config::OfferEvent::FormUrlEncodedCredentialOfferCreated],
-                ..Default::default()
+                types: vec!["tech.impierce.unicore.credential.issued".to_string()],
             },
-        };
-
-        let publisher = EventPublisherHttp::load_from(&[configuration])
-            .unwrap()
-            .into_iter()
-            .next()
-            .unwrap();
-
-        // A new event for the `Offer` aggregate.
-        let offer_event = OfferEvent::FormUrlEncodedCredentialOfferCreated {
-            offer_id: Default::default(),
-            form_url_encoded_credential_offer: "form_url_encoded_credential_offer".to_string(),
-            status: Status::Pending,
-        };
-
-        let events = [EventEnvelope::<Offer> {
-            aggregate_id: "offer-0001".to_string(),
-            sequence: 0,
-            payload: offer_event.clone(),
-            metadata: Default::default(),
         }];
 
-        // Dispatch the event.
-        publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
+        let event_bus = EventBusHandle::new(100);
+        let publisher = HttpEventPublisher::new(configs, &event_bus).expect("Expected publisher instance when enabled");
+        let handle = publisher.spawn();
 
-        let received_requests = wait_for_requests(&mock_server, 1).await;
-        let received_request = received_requests.first().expect("the event should be dispatched");
+        // 1. Publish non-matching event -> should NOT be forwarded to mock server
+        let non_matching_event = CloudEvent::new("com.other.domain.event", "https://example.com/other");
+        event_bus.publish(non_matching_event);
 
-        // Assert that the event was dispatched to the target URL.
-        assert_eq!(offer_event, serde_json::from_slice(&received_request.body).unwrap());
+        // 2. Publish matching event -> should be forwarded to mock server
+        let matching_event = CloudEvent::new("tech.impierce.unicore.credential.issued", "https://example.com/issuer")
+            .with_subject("subject-42")
+            .with_caller(Some("caller-abc".to_string()), Some("api_key".to_string()))
+            .with_data(serde_json::json!({ "credential_id": "cred-99" }));
 
-        // Assert that the request contained the expected headers.
+        let matching_event_id = matching_event.id.clone();
+        event_bus.publish(matching_event);
+
+        // Wait briefly for the spawned forwarder task to deliver the request
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        mock_server.verify().await;
+
+        let received_requests = mock_server.received_requests().await.unwrap();
+        assert_eq!(received_requests.len(), 1);
+
+        let received_event: CloudEvent =
+            serde_json::from_slice(&received_requests[0].body).expect("Valid CloudEvent JSON");
+        assert_eq!(received_event.id, matching_event_id);
+        assert_eq!(received_event.event_type, "tech.impierce.unicore.credential.issued");
+        assert_eq!(received_event.source, "https://example.com/issuer");
+        assert_eq!(received_event.subject, Some("subject-42".to_string()));
+        assert_eq!(received_event.extension.callerid, Some("caller-abc".to_string()));
+        assert_eq!(received_event.extension.callertype, Some("api_key".to_string()));
         assert_eq!(
-            "Basic YWxhZGRpbjpvcGVuc2VzYW1l",
-            received_request.headers.get("Authorization").unwrap()
+            received_requests[0].headers.get("x-custom-bytes").unwrap().as_bytes(),
+            b"non-ascii-\xff"
+        );
+        assert_eq!(
+            received_event.data,
+            Some(serde_json::json!({ "credential_id": "cred-99" }))
         );
 
-        // A new event for the `Offer` aggregate that the publisher is not interested in.
-        let offer_event = OfferEvent::CredentialRequestVerified {
-            offer_id: Default::default(),
-            subject_id: Some("subject_id".to_string()),
-        };
-
-        let events = [EventEnvelope::<Offer> {
-            aggregate_id: "offer-0002".to_string(),
-            sequence: 0,
-            payload: offer_event.clone(),
-            metadata: Default::default(),
-        }];
-
-        // Dispatch the event.
-        publisher.offer.as_ref().unwrap().dispatch("view_id", &events).await;
-
-        // Assert that the event was not dispatched to the target URL.
-        assert!(mock_server.received_requests().await.unwrap().len() == 1);
+        handle.abort();
     }
 
-    #[test]
-    fn load_creates_a_publisher_for_every_aggregate_with_target_events() {
-        use agent_shared::config as c;
+    #[tokio::test]
+    async fn test_http_event_publisher_handles_endpoint_error_gracefully() {
+        let mock_server = MockServer::start().await;
 
-        let target_url = "https://every-aggregate.example.com/events".to_string();
-        let disabled_target_url = "https://disabled.example.com/events".to_string();
-        let events = Events {
-            access_token: vec![c::AccessTokenEvent::AccessTokenIssued],
-            authorization_code: vec![c::AuthorizationCodeEvent::AuthorizationCodeCreated],
-            client: vec![c::ClientEvent::ClientRegistered],
-            oauth2_authorization_request: vec![c::OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated],
-            connection: vec![c::ConnectionEvent::ConnectionAdded],
-            document: vec![c::DocumentEvent::DocumentCreated],
-            profile: vec![c::ProfileEvent::ProfileCreated],
-            service: vec![c::ServiceEvent::LinkedDomainsAdded],
-            template: vec![c::TemplateEvent::TemplateCreated],
-            server_config: vec![c::ServerConfigEvent::ServerMetadataInitialized],
-            credential: vec![c::CredentialEvent::UnsignedCredentialCreated],
-            offer: vec![c::OfferEvent::CredentialOfferCreated],
-            nonce: vec![c::NonceEvent::NonceGenerated],
-            status_list: vec![c::StatusListEvent::StatusListCreated],
-            holder_credential: vec![c::HolderCredentialEvent::CredentialAdded],
-            presentation: vec![c::PresentationEvent::PresentationCreated],
-            received_offer: vec![c::ReceivedOfferEvent::CredentialOfferReceived],
-            authorization_request: vec![c::AuthorizationRequestEvent::AuthorizationRequestCreated],
-        };
-        let configurations = [
-            EventPublisherHttpConfig {
+        // Mock returns 500 Internal Server Error
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let configs = vec![EventPublisherHttp {
+            enabled: true,
+            target_url: format!("{}/webhook", mock_server.uri()),
+            headers: None,
+            events: Events {
+                types: vec!["test.error.event".to_string()],
+            },
+        }];
+
+        let event_bus = EventBusHandle::new(100);
+        let publisher = HttpEventPublisher::new(configs, &event_bus).expect("Expected publisher instance when enabled");
+        let handle = publisher.spawn();
+
+        let event = CloudEvent::new("test.error.event", "https://example.com/test");
+        event_bus.publish(event);
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        mock_server.verify().await;
+        // Verify task is still alive despite the 500 response
+        assert!(!handle.is_finished());
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_http_event_publisher_empty_types_does_not_forward() {
+        let mock_server = MockServer::start().await;
+
+        // Expect 0 calls because types is empty
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let configs = vec![EventPublisherHttp {
+            enabled: true,
+            target_url: format!("{}/webhook", mock_server.uri()),
+            headers: None,
+            events: Events { types: vec![] },
+        }];
+
+        let event_bus = EventBusHandle::new(100);
+        let publisher = HttpEventPublisher::new(configs, &event_bus).expect("Expected publisher instance when enabled");
+        let handle = publisher.spawn();
+
+        let event = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer");
+        event_bus.publish(event);
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        mock_server.verify().await;
+
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn test_http_event_publisher_from_config() {
+        let _guard = TEST_MUTEX.lock().await;
+
+        {
+            let mut conf = set_config();
+            conf.event_publishers.http.clear();
+        }
+
+        let event_bus = EventBusHandle::new(100);
+        assert!(HttpEventPublisher::from_config(&event_bus).is_none());
+
+        {
+            let mut conf = set_config();
+            conf.event_publishers.http = vec![EventPublisherHttp {
                 enabled: true,
-                target_url: target_url.clone(),
+                target_url: "http://localhost:12345/webhook".to_string(),
                 headers: None,
-                events: events.clone(),
+                events: Events {
+                    types: vec!["com.impierce.unicore.credential.issued".to_string()],
+                },
+            }];
+        }
+
+        let publisher = HttpEventPublisher::from_config(&event_bus);
+        assert!(publisher.is_some());
+        if let Some(p) = publisher {
+            let h = p.spawn();
+            h.abort();
+        }
+
+        set_config().event_publishers.http.clear();
+    }
+
+    #[tokio::test]
+    async fn test_http_event_publisher_times_out_on_slow_endpoint() {
+        let mock_server = MockServer::start().await;
+
+        // Mock delays response by 200ms
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(200)))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let configs = vec![EventPublisherHttp {
+            enabled: true,
+            target_url: format!("{}/webhook", mock_server.uri()),
+            headers: None,
+            events: Events {
+                types: vec!["test.timeout.event".to_string()],
             },
-            EventPublisherHttpConfig {
-                enabled: false,
-                target_url: disabled_target_url.clone(),
-                headers: None,
-                events,
-            },
-        ];
+        }];
 
-        let publishers = EventPublisherHttp::load_from(&configurations).unwrap();
-        let target_url_of = |publisher: &EventPublisherHttp| {
-            publisher
-                .offer
-                .as_ref()
-                .map(|offer| offer.target_url.clone())
-                .unwrap_or_default()
-        };
-        assert!(!publishers
-            .iter()
-            .any(|publisher| target_url_of(publisher) == disabled_target_url));
-        let mut publisher = publishers
-            .into_iter()
-            .find(|publisher| target_url_of(publisher) == target_url)
-            .unwrap();
+        let event_bus = EventBusHandle::new(100);
+        // Short 50ms timeout so the test runs in milliseconds without waiting 10s
+        let publisher = HttpEventPublisher::with_timeout(configs, &event_bus, Duration::from_millis(50))
+            .expect("Expected publisher instance when enabled");
+        let handle = publisher.spawn();
 
-        assert_eq!(
-            publisher.offer.as_ref().unwrap().target_events,
-            vec!["CredentialOfferCreated".to_string()]
-        );
-        assert!(publisher.access_token().is_some());
-        assert!(publisher.authorization_code().is_some());
-        assert!(publisher.client().is_some());
-        assert!(publisher.oauth2_authorization_request().is_some());
-        assert!(publisher.connection().is_some());
-        assert!(publisher.document().is_some());
-        assert!(publisher.profile().is_some());
-        assert!(publisher.service().is_some());
-        assert!(publisher.template().is_some());
-        assert!(publisher.server_config().is_some());
-        assert!(publisher.credential().is_some());
-        assert!(publisher.offer().is_some());
-        assert!(publisher.nonce().is_some());
-        assert!(publisher.status_list().is_some());
-        assert!(publisher.holder_credential().is_some());
-        assert!(publisher.presentation().is_some());
-        assert!(publisher.received_offer().is_some());
-        assert!(publisher.authorization_request().is_some());
-        assert!(publisher.public_offer().is_none());
+        let event = CloudEvent::new("test.timeout.event", "https://example.com/test");
+        event_bus.publish(event);
 
-        // Each publisher is handed out only once.
-        assert!(publisher.offer().is_none());
+        // Allow 100ms for request to trigger and timeout
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Publisher task is still alive and did not hang or crash
+        assert!(!handle.is_finished());
+
+        handle.abort();
     }
 }
