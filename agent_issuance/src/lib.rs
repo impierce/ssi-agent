@@ -6,6 +6,7 @@ pub mod credential;
 pub mod nonce;
 pub mod offer;
 pub mod public_offer;
+pub mod reissuance;
 pub mod server_config;
 pub mod status_list;
 pub mod utils;

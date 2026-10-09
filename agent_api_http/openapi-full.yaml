@@ -1439,6 +1439,26 @@ paths:
           description: Invalid path parameter
         '404':
           description: Catalog not found
+  /v0/get-credential-reissuance/{id}:
+    get:
+      tags:
+      - Issuance
+      operationId: get_credential_reissuance
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Credential reissuance relation retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reissuance'
+        '404':
+          description: Credential reissuance relation not found
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -1726,6 +1746,20 @@ paths:
           description: Operation forbidden
         '404':
           description: Signed credential presentation not found
+  /v0/list-all-credential-reissuances:
+    get:
+      tags:
+      - Issuance
+      operationId: list_all_credential_reissuances
+      responses:
+        '200':
+          description: All credential reissuance relations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reissuance'
   /v0/list-all-templates:
     get:
       tags:
@@ -1952,6 +1986,24 @@ paths:
           description: The profile was provisioned through configuration and cannot be modified at runtime
         '422':
           description: Request body does not match the expected schema
+  /v0/reissue-credential:
+    post:
+      tags:
+      - Issuance
+      operationId: reissue_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialReissuanceRequest'
+        required: true
+      responses:
+        '201':
+          description: Credential reissuance prepared successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
   /v0/remove-linked-domains:
     post:
       tags:
@@ -2837,6 +2889,60 @@ components:
           oneOf:
           - $ref: '#/components/schemas/CatalogVisibility'
           default: Private
+    CreateCredentialReissuanceRequest:
+      type: object
+      required:
+      - originalCredentialId
+      - credentialConfigurationId
+      - credential
+      - expiresAt
+      properties:
+        credential: {}
+        credentialConfigurationId:
+          type: string
+        expiresAt:
+          $ref: '#/components/schemas/CredentialExpiry'
+        originalCredentialId:
+          type: string
+        reason:
+          type:
+          - string
+          - 'null'
+        statusAction:
+          type:
+          - string
+          - 'null'
+        triggerType:
+          type:
+          - string
+          - 'null'
+        triggeredBy:
+          type:
+          - string
+          - 'null'
+    CreateCredentialReissuanceResponse:
+      type: object
+      required:
+      - id
+      - originalCredentialId
+      - newCredentialId
+      - offerId
+      - credentialConfigurationId
+      properties:
+        credentialConfigurationId:
+          type: string
+        credentialOffer:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        newCredentialId:
+          type: string
+        offerId:
+          type: string
+        originalCredentialId:
+          type: string
     CreateNewTemplateRequestBody:
       type: object
       properties:
@@ -4754,6 +4860,46 @@ components:
           format: int64
         request_uri:
           type: string
+    Reissuance:
+      type: object
+      required:
+      - id
+      - original_credential_id
+      - new_credential_id
+      - offer_id
+      - credential_configuration_id
+      properties:
+        created_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        credential_configuration_id:
+          type: string
+        id:
+          type: string
+        new_credential_id:
+          type: string
+        offer_id:
+          type: string
+        original_credential_id:
+          type: string
+        reason:
+          type:
+          - string
+          - 'null'
+        status_action:
+          type:
+          - string
+          - 'null'
+        trigger_type:
+          type:
+          - string
+          - 'null'
+        triggered_by:
+          type:
+          - string
+          - 'null'
     RemoveConnectionRequest:
       type: object
       required:

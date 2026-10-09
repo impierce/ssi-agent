@@ -21,6 +21,9 @@ use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
 use crate::public_offer::aggregate::PublicOffer;
 use crate::public_offer::views::{AllPublicOffersView, PublicOfferView};
+use crate::reissuance::aggregate::Reissuance;
+use crate::reissuance::views::all_reissuances::AllReissuancesView;
+use crate::reissuance::views::ReissuanceView;
 use crate::server_config::aggregate::ServerConfig;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
@@ -38,6 +41,14 @@ impl QueryOperation for CredentialView {
 
 impl QueryOperation for AllCredentialsView {
     const OPERATION_NAME: &'static str = "issuance.credentials.list";
+}
+
+impl QueryOperation for ReissuanceView {
+    const OPERATION_NAME: &'static str = "issuance.credential_reissuances.get";
+}
+
+impl QueryOperation for AllReissuancesView {
+    const OPERATION_NAME: &'static str = "issuance.credential_reissuances.list";
 }
 
 impl QueryOperation for OfferView {
@@ -90,6 +101,7 @@ impl std::fmt::Debug for IssuanceState {
 pub struct CommandHandlers {
     pub server_config: CommandHandler<ServerConfig>,
     pub credential: CommandHandler<Credential>,
+    pub reissuance: CommandHandler<Reissuance>,
     pub offer: CommandHandler<Offer>,
     pub nonce: CommandHandler<Nonce>,
     pub status_list: CommandHandler<StatusListAggregate>,
@@ -103,6 +115,8 @@ type Queries = ViewRepositories<
     dyn DynViewRepository<ServerConfigView, ServerConfig>,
     dyn DynViewRepository<CredentialView, Credential>,
     dyn DynViewRepository<AllCredentialsView, Credential>,
+    dyn DynViewRepository<ReissuanceView, Reissuance>,
+    dyn DynViewRepository<AllReissuancesView, Reissuance>,
     dyn DynViewRepository<OfferView, Offer>,
     dyn DynViewRepository<AllOffersView, Offer>,
     dyn DynViewRepository<NonceView, Nonce>,
@@ -112,11 +126,13 @@ type Queries = ViewRepositories<
     dyn DynViewRepository<AllPublicOffersView, PublicOffer>,
 >;
 
-pub struct ViewRepositories<SC, C, C1, O, O1, N, SL, SL1, PO, PO1>
+pub struct ViewRepositories<SC, C, C1, R, R1, O, O1, N, SL, SL1, PO, PO1>
 where
     SC: DynViewRepository<ServerConfigView, ServerConfig> + ?Sized,
     C: DynViewRepository<CredentialView, Credential> + ?Sized,
     C1: DynViewRepository<AllCredentialsView, Credential> + ?Sized,
+    R: DynViewRepository<ReissuanceView, Reissuance> + ?Sized,
+    R1: DynViewRepository<AllReissuancesView, Reissuance> + ?Sized,
     O: DynViewRepository<OfferView, Offer> + ?Sized,
     O1: DynViewRepository<AllOffersView, Offer> + ?Sized,
     N: DynViewRepository<NonceView, Nonce> + ?Sized,
@@ -128,6 +144,8 @@ where
     pub server_config: Arc<SC>,
     pub credential: Arc<C>,
     pub all_credentials: Arc<C1>,
+    pub reissuance: Arc<R>,
+    pub all_reissuances: Arc<R1>,
     pub offer: Arc<O>,
     pub all_offers: Arc<O1>,
     pub nonce: Arc<N>,
@@ -143,6 +161,8 @@ impl Clone for Queries {
             server_config: self.server_config.clone(),
             credential: self.credential.clone(),
             all_credentials: self.all_credentials.clone(),
+            reissuance: self.reissuance.clone(),
+            all_reissuances: self.all_reissuances.clone(),
             offer: self.offer.clone(),
             all_offers: self.all_offers.clone(),
             nonce: self.nonce.clone(),
@@ -346,6 +366,12 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             vec![event_bus.query()],
         )
         .await;
+    let (reissuance_command_handler, reissuance, all_reissuances) = builder
+        .commands_and_queries::<ReissuanceView, Reissuance, AllReissuancesView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
     let (offer_command_handler, offer, all_offers) = builder
         .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), vec![event_bus.query()])
         .await;
@@ -372,6 +398,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: CommandHandlers {
             credential: credential_command_handler,
+            reissuance: reissuance_command_handler,
             offer: offer_command_handler,
             public_offer: public_offer_command_handler,
             server_config: server_config_command_handler,
@@ -382,6 +409,8 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
             server_config,
             credential,
             all_credentials,
+            reissuance,
+            all_reissuances,
             offer,
             all_offers,
             public_offer,

@@ -12,7 +12,7 @@ use agent_identity::{
 };
 use agent_issuance::{
     credential::aggregate::Credential as IssuanceCredential, nonce::aggregate::Nonce,
-    offer::aggregate::Offer as IssuanceOffer, public_offer::aggregate::PublicOffer,
+    offer::aggregate::Offer as IssuanceOffer, public_offer::aggregate::PublicOffer, reissuance::aggregate::Reissuance,
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
 use agent_library::{catalog::aggregate::Catalog, template::aggregate::Template};
@@ -25,7 +25,7 @@ use std::sync::LazyLock;
 /// Used during application startup by persistent event stores (e.g. PostgreSQL, MongoDB)
 /// to verify that all historical persisted events can still be deserialized into current domain
 /// event definitions before the application transitions to the ready state.
-static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 20]> = LazyLock::new(|| {
+static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 21]> = LazyLock::new(|| {
     [
         EventVerifier::for_aggregate::<AccessToken>(),
         EventVerifier::for_aggregate::<AuthorizationCode>(),
@@ -39,6 +39,7 @@ static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 20]> = LazyLock::new(|| {
         EventVerifier::for_aggregate::<Catalog>(),
         EventVerifier::for_aggregate::<ServerConfig>(),
         EventVerifier::for_aggregate::<IssuanceCredential>(),
+        EventVerifier::for_aggregate::<Reissuance>(),
         EventVerifier::for_aggregate::<IssuanceOffer>(),
         EventVerifier::for_aggregate::<PublicOffer>(),
         EventVerifier::for_aggregate::<Nonce>(),
@@ -53,4 +54,41 @@ static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 20]> = LazyLock::new(|| {
 /// Returns a slice of all registered core aggregate event verifiers.
 pub fn core_event_verifiers() -> &'static [EventVerifier] {
     &CORE_EVENT_VERIFIERS[..]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_issuance::reissuance::event::ReissuanceEvent;
+    use agent_store::event_verification::{verify_events_with, RawStoredEvent};
+
+    #[test]
+    fn persisted_reissuance_events_are_recognized_by_core_verification() {
+        let event = ReissuanceEvent::ReissuanceCreated {
+            reissuance_id: "reissuance-id".to_string(),
+            original_credential_id: "original-id".to_string(),
+            new_credential_id: "new-id".to_string(),
+            offer_id: "offer-id".to_string(),
+            credential_configuration_id: "configuration-id".to_string(),
+            reason: None,
+            trigger_type: None,
+            triggered_by: None,
+            status_action: None,
+            created_at: "2026-10-09T00:00:00Z".parse().unwrap(),
+        };
+        let report = verify_events_with(
+            [RawStoredEvent {
+                aggregate_type: "reissuance".to_string(),
+                aggregate_id: "reissuance-id".to_string(),
+                sequence: 1,
+                event_type: "ReissuanceCreated".to_string(),
+                event_version: "1".to_string(),
+                payload: serde_json::to_value(event).unwrap(),
+            }],
+            core_event_verifiers(),
+        );
+
+        assert_eq!(report.checked, 1);
+        assert!(report.is_compatible(), "{:?}", report.incompatible);
+    }
 }
