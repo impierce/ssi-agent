@@ -1835,6 +1835,10 @@ pub mod tests {
         let (_, newest) = send(&mut app, http::Method::GET, &credential_endpoint, None).await;
         assert_eq!(credentials[0], newest, "credentials are listed newest first");
 
+        // Both credentials were added to the same offer.
+        let offer = offer_view(&issuance_state, OFFER_ID).await.unwrap();
+        assert_eq!(offer.credential_ids.len(), 2);
+
         let (status, _) = send(
             &mut app,
             http::Method::PATCH,

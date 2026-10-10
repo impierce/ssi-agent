@@ -35,7 +35,12 @@ impl View<Offer> for Offer {
                 credential_offer,
             } => {
                 self.offer_id.clone_from(offer_id);
-                self.credential_ids.clone_from(credential_ids);
+                // The event carries only the IDs added by this command, so extend rather than replace.
+                for credential_id in credential_ids {
+                    if !self.credential_ids.contains(credential_id) {
+                        self.credential_ids.push(credential_id.clone());
+                    }
+                }
                 self.credential_offer.replace(credential_offer.clone());
             }
             FormUrlEncodedCredentialOfferCreated {
