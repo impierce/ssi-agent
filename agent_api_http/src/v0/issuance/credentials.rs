@@ -1,6 +1,8 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use crate::extractors::RequestActor;
-use crate::handlers::{caller, command_handler, internal_command_handler, internal_query_handler, query_handler};
+use crate::handlers::{
+    authorize_command, caller, command_handler, internal_command_handler, internal_query_handler, query_handler,
+};
 use crate::API_VERSION;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
@@ -9,12 +11,16 @@ use agent_issuance::{
         command::CredentialCommand,
         entity::Data,
     },
-    offer::command::OfferCommand,
+    offer::{
+        aggregate::{DeliveryMethod, DeliveryOptions},
+        command::OfferCommand,
+    },
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_library::queries;
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
+use agent_shared::config::Authorization;
 use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
 use axum::Extension;
 use axum::{
@@ -32,6 +38,7 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use shared_kernel::authorization::Actor;
 use std::sync::Arc;
 
 /// Get credential by ID
@@ -78,53 +85,157 @@ pub struct CredentialsEndpointRequest {
     pub expires_at: Option<CredentialExpiry>,
 }
 
+/// One row of a batch: the claims for one holder.
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchCredentialRow {
+    /// The claims the credential asserts, validated as-is against the template schema. Values the
+    /// schema fixes with `const` must be included; the server does not fill them in.
+    pub claims: Value,
+    /// When set, the offer is sent to this address once the credential is created.
+    #[serde(default)]
+    pub recipient_email: Option<String>,
+}
+
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BatchCredentialsRequest {
-    /// When true, only validate — don't create credentials/offers or send emails.
+    /// The published template every row is validated against and issued from.
+    pub template_id: String,
+    /// Expiry applied to every credential; defaults to the template's credential expiration.
     #[serde(default)]
-    pub verify_only: bool,
-    /// The list of credential payloads to process.
-    pub credentials: Vec<CredentialsEndpointRequest>,
+    pub expires_at: Option<CredentialExpiry>,
+    /// One row per holder.
+    pub credentials: Vec<BatchCredentialRow>,
 }
 
-pub type BatchCredentialsResponse = Vec<String>;
+/// One violation of the template schema by a credential's claims.
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
+pub struct SchemaViolation {
+    /// JSON pointer to the offending value within the claims; empty for the claims object itself.
+    pub path: String,
+    pub message: String,
+}
 
+/// The RFC 9457 members of a problem, for embedding one problem inside another.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ProblemSummary {
+    pub title: Option<String>,
+    #[serde(rename = "type")]
+    pub type_url: Option<String>,
+    pub detail: Option<String>,
+    /// Present for `issuance#credential-schema-validation-failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub violations: Option<Vec<SchemaViolation>>,
+}
+
+impl From<&ApiError> for ProblemSummary {
+    fn from(error: &ApiError) -> Self {
+        let problem = error.to_http_api_problem();
+        Self {
+            title: problem.title,
+            type_url: problem.type_url,
+            detail: problem.detail,
+            violations: error
+                .fields()
+                .get("violations")
+                .cloned()
+                .and_then(|violations| serde_json::from_value(violations).ok()),
+        }
+    }
+}
+
+/// The outcome of one row of a batch request.
 #[derive(Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct BatchItemError {
-    /// 0-based index of the failing item in the request array.
+pub struct BatchItemResult {
+    /// 0-based index of the row in the request array.
     pub index: usize,
-    pub title: String,
+    /// `201` when the credential was created, `200` when the row was verified, otherwise the status
+    /// of `error`.
+    pub status: u16,
+    /// Set once the credential exists, even if a later step of the row failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_id: Option<String>,
+    /// Set once the offer exists, even if a later step of the row failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offer_id: Option<String>,
+    /// The `openid-credential-offer://…` string a wallet consumes; what a QR code encodes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_offer: Option<String>,
+    /// Whether an email with the offer was requested for `recipientEmail`. Arrival is not tracked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_requested: Option<bool>,
+    /// Why the row was rejected or could not be created; absent on success.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ProblemSummary>,
+}
+
+impl BatchItemResult {
+    fn verified(index: usize) -> Self {
+        Self {
+            index,
+            status: StatusCode::OK.as_u16(),
+            credential_id: None,
+            offer_id: None,
+            credential_offer: None,
+            email_requested: None,
+            error: None,
+        }
+    }
+
+    fn created(index: usize, issued: Issued) -> Self {
+        Self {
+            index,
+            status: StatusCode::CREATED.as_u16(),
+            credential_id: issued.credential_id,
+            offer_id: issued.offer_id,
+            credential_offer: issued.credential_offer,
+            email_requested: issued.email_requested,
+            error: None,
+        }
+    }
+
+    fn failed(index: usize, issued: Issued, error: &ApiError) -> Self {
+        Self {
+            index,
+            status: error.status().as_u16(),
+            credential_id: issued.credential_id,
+            offer_id: issued.offer_id,
+            credential_offer: issued.credential_offer,
+            email_requested: issued.email_requested,
+            error: Some(ProblemSummary::from(error)),
+        }
+    }
+}
+
+/// Problem details returned when no row of a batch request could be created.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct BatchFailedProblem {
     #[serde(rename = "type")]
     pub type_url: String,
+    pub title: String,
+    pub status: u16,
     pub detail: String,
+    /// The outcome of every row, in request order.
+    pub results: Vec<BatchItemResult>,
 }
 
-/// The validated output of a single credential payload, carrying all data needed
-/// for the execution phase without re-querying.
-struct ValidatedCredential {
-    credential_id: String,
-    credential_configuration_id: String,
-    command: CredentialCommand,
-    offer_id: String,
-    authorization: agent_shared::config::Authorization,
+/// A published template together with the credential configuration derived from it.
+struct ResolvedTemplate {
+    template: Template,
+    credential_configuration: CredentialConfigurationsSupportedObject,
+    authorization: Authorization,
 }
 
-/// Validates a single credential request payload and returns the data needed for execution.
-///
-/// This is the shared validation logic used by both the single `credentials()` and
-/// `batch_credentials()` handlers. It does NOT issue any CQRS commands.
-async fn validate_credential_request(
+/// Loads the template and its credential configuration, rejecting templates that cannot issue.
+async fn resolve_template(
     state: &Arc<IssuanceState>,
-    actor: &Option<shared_kernel::authorization::Actor>,
+    actor: &Option<Actor>,
     library_state: &Arc<LibraryState>,
-    request: &CredentialsEndpointRequest,
-) -> Result<ValidatedCredential, ApiError> {
-    let credential_id = uuid::Uuid::new_v4().to_string();
-    let credential_configuration_id = request.template_id.clone();
-
-    if request.template_id.is_empty() {
+    template_id: &str,
+) -> Result<ResolvedTemplate, ApiError> {
+    if template_id.is_empty() {
         return Err(ApiError::builder(StatusCode::BAD_REQUEST)
             .title("Missing Template ID")
             .type_url(type_url("issuance#missing-template-id"))
@@ -132,15 +243,14 @@ async fn validate_credential_request(
             .finish());
     }
 
-    // Look up the template by ID.
-    let template: Template = queries::get_template(library_state, caller(actor.clone()), &request.template_id)
+    let template: Template = queries::get_template(library_state, caller(actor.clone()), template_id)
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .ok_or_else(|| {
             ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Template Not Found")
                 .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{}`", request.template_id))
+                .message(format!("No template found with id: `{template_id}`"))
                 .finish()
         })?;
 
@@ -152,16 +262,6 @@ async fn validate_credential_request(
             .finish());
     }
 
-    if !request.is_signed {
-        if let Some(schema) = template.schema.as_ref() {
-            let data_to_validate = request
-                .credential
-                .get("credentialSubject")
-                .unwrap_or(&request.credential);
-            validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
-        }
-    }
-
     let (_, credential_configuration, authorization) = query_handler(
         state.authorization_checker.clone(),
         actor.clone(),
@@ -170,50 +270,44 @@ async fn validate_credential_request(
         &state.query.server_config,
     )
     .await?
-    .and_then(|server_config_view| {
-        server_config_view
-            .credential_configurations
-            .get(&credential_configuration_id)
-            .cloned()
-    })
+    .and_then(|server_config_view| server_config_view.credential_configurations.get(template_id).cloned())
     .ok_or_else(|| {
         ApiError::builder(StatusCode::NOT_FOUND)
             .title("No Credential Configuration Found")
             .type_url(type_url("issuance#no-credential-configuration-found"))
-            .message(format!(
-                "No Credential Configuration found with id: `{credential_configuration_id}`"
-            ))
+            .message(format!("No Credential Configuration found with id: `{template_id}`"))
             .finish()
     })?;
 
-    let command = if request.is_signed {
-        if !request.credential.is_string() {
-            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Credential Type")
-                .type_url(type_url("issuance#invalid-credential-type"))
-                .message("For signed credentials, the credential must be a string.")
-                .finish());
+    Ok(ResolvedTemplate {
+        template,
+        credential_configuration,
+        authorization,
+    })
+}
+
+impl ResolvedTemplate {
+    /// Wraps claims the way the template's format expects: `dc+sd-jwt` carries them flat, the
+    /// W3C-based formats under `credentialSubject`.
+    fn credential_from_claims(&self, claims: Value) -> Value {
+        if matches!(
+            self.credential_configuration.credential_format,
+            CredentialFormats::DcSdJwt(_)
+        ) {
+            claims
+        } else {
+            serde_json::json!({ "credentialSubject": claims })
         }
+    }
 
-        let signed_credential = match request.credential.as_str() {
-            Some(value) => value,
-            None => {
-                return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                    .title("Invalid Credential Type")
-                    .type_url(type_url("issuance#invalid-credential-type"))
-                    .message("For signed credentials, the credential must be a string.")
-                    .finish())
-            }
-        };
-
-        validate_signed_credential_format_matches_configuration(signed_credential, &credential_configuration)?;
-
-        CredentialCommand::CreateSignedCredential {
-            credential_id: credential_id.clone(),
-            signed_credential: request.credential.clone(),
-        }
-    } else {
-        if !request.credential.is_object() {
+    #[allow(clippy::result_large_err)]
+    fn unsigned_credential_command(
+        &self,
+        credential_id: &str,
+        credential: &Value,
+        expires_at: &Option<CredentialExpiry>,
+    ) -> Result<CredentialCommand, ApiError> {
+        if !credential.is_object() {
             return Err(ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
                 .type_url(type_url("issuance#invalid-credential-type"))
@@ -221,32 +315,210 @@ async fn validate_credential_request(
                 .finish());
         }
 
-        let expires_at = match &request.expires_at {
+        if let Some(schema) = self.template.schema.as_ref() {
+            let data_to_validate = credential.get("credentialSubject").unwrap_or(credential);
+            validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
+        }
+
+        let expires_at = match expires_at {
             Some(explicit) => {
-                let template_deadline = expiration_to_credential_expiry(&template.credential_expiration)?;
+                let template_deadline = expiration_to_credential_expiry(&self.template.credential_expiration)?;
                 validate_expiry_within_template_deadline(explicit, &template_deadline)?;
                 explicit.clone()
             }
-            None => expiration_to_credential_expiry(&template.credential_expiration)?,
+            None => expiration_to_credential_expiry(&self.template.credential_expiration)?,
         };
 
-        CredentialCommand::CreateUnsignedCredential {
-            credential_id: credential_id.clone(),
+        Ok(CredentialCommand::CreateUnsignedCredential {
+            credential_id: credential_id.to_owned(),
             data: Data {
-                raw: request.credential.clone(),
+                raw: credential.clone(),
             },
-            credential_configuration: Box::new(credential_configuration.clone()),
+            credential_configuration: Box::new(self.credential_configuration.clone()),
             expires_at,
-        }
-    };
+        })
+    }
 
-    Ok(ValidatedCredential {
+    #[allow(clippy::result_large_err)]
+    fn signed_credential_command(
+        &self,
+        credential_id: &str,
+        credential: &Value,
+    ) -> Result<CredentialCommand, ApiError> {
+        let Some(signed_credential) = credential.as_str() else {
+            return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Credential Type")
+                .type_url(type_url("issuance#invalid-credential-type"))
+                .message("For signed credentials, the credential must be a string.")
+                .finish());
+        };
+
+        validate_signed_credential_format_matches_configuration(signed_credential, &self.credential_configuration)?;
+
+        Ok(CredentialCommand::CreateSignedCredential {
+            credential_id: credential_id.to_owned(),
+            signed_credential: credential.clone(),
+        })
+    }
+
+    fn create_offer_command(&self, offer_id: &str, delivery_options: Option<DeliveryOptions>) -> OfferCommand {
+        // Extract the tx_code_constraints from the credential configuration if available.
+        let tx_code_constraints = self
+            .authorization
+            .pre_authorized
+            .then(|| self.authorization.tx_code_constraints.clone())
+            .flatten();
+
+        let grant_types = vec![if self.authorization.pre_authorized {
+            GrantType::PreAuthorizedCode
+        } else {
+            GrantType::AuthorizationCode
+        }];
+
+        OfferCommand::CreateCredentialOffer {
+            offer_id: offer_id.to_owned(),
+            template_ids: vec![self.template.template_id.clone()],
+            grant_types,
+            tx_code_constraints,
+            delivery_options,
+        }
+    }
+
+    fn add_to_offer_command(&self, offer_id: &str, credential_id: &str) -> OfferCommand {
+        OfferCommand::AddCredentials {
+            offer_id: offer_id.to_owned(),
+            credential_ids: vec![credential_id.to_owned()],
+            template_ids: vec![self.template.template_id.clone()],
+        }
+    }
+}
+
+/// A validated credential and the commands that create and offer it.
+struct ValidatedCredential {
+    credential_id: String,
+    offer_id: String,
+    create_credential: CredentialCommand,
+    create_offer: OfferCommand,
+    add_to_offer: OfferCommand,
+    send_offer: Option<OfferCommand>,
+}
+
+/// What executing a [`ValidatedCredential`] had produced when it finished or stopped.
+#[derive(Default)]
+struct Issued {
+    credential_id: Option<String>,
+    offer_id: Option<String>,
+    credential_offer: Option<String>,
+    email_requested: Option<bool>,
+}
+
+/// Creates the credential, creates its offer (or, if allowed, reuses an existing one), adds the
+/// credential to the offer and, when requested, sends the offer.
+///
+/// On failure, returns what had been created up to that point alongside the error, so callers can
+/// report it; events cannot be rolled back.
+async fn execute(
+    state: &Arc<IssuanceState>,
+    actor: &Option<Actor>,
+    item: ValidatedCredential,
+    reuse_existing_offer: bool,
+) -> Result<Issued, (ApiError, Issued)> {
+    let ValidatedCredential {
         credential_id,
-        credential_configuration_id,
-        command,
-        offer_id: request.offer_id.clone(),
-        authorization,
-    })
+        offer_id,
+        create_credential,
+        create_offer,
+        add_to_offer,
+        send_offer,
+    } = item;
+    let mut issued = Issued::default();
+
+    macro_rules! attempt {
+        ($result:expr) => {
+            match $result {
+                Ok(value) => value,
+                Err(error) => return Err((ApiError::from(error), issued)),
+            }
+        };
+    }
+
+    attempt!(
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &credential_id,
+            &state.command.credential,
+            create_credential,
+        )
+        .await
+    );
+    issued.credential_id = Some(credential_id.clone());
+
+    let offer_exists = reuse_existing_offer
+        && attempt!(
+            query_handler(
+                state.authorization_checker.clone(),
+                actor.clone(),
+                &offer_id,
+                Some(&offer_id),
+                &state.query.offer,
+            )
+            .await
+        )
+        .is_some();
+
+    if !offer_exists {
+        attempt!(
+            command_handler(
+                state.authorization_checker.clone(),
+                actor.clone(),
+                &offer_id,
+                &state.command.offer,
+                create_offer,
+            )
+            .await
+        );
+    }
+    issued.offer_id = Some(offer_id.clone());
+
+    attempt!(
+        command_handler(
+            state.authorization_checker.clone(),
+            actor.clone(),
+            &offer_id,
+            &state.command.offer,
+            add_to_offer,
+        )
+        .await
+    );
+
+    issued.credential_offer = attempt!(
+        internal_query_handler(
+            state.authorization_checker.clone(),
+            &offer_id,
+            Some(&offer_id),
+            &state.query.offer,
+        )
+        .await
+    )
+    .and_then(|offer_view| offer_view.form_url_encoded_credential_offer);
+
+    issued.email_requested = Some(false);
+    if let Some(send_offer) = send_offer {
+        attempt!(
+            command_handler(
+                state.authorization_checker.clone(),
+                actor.clone(),
+                &offer_id,
+                &state.command.offer,
+                send_offer,
+            )
+            .await
+        );
+        issued.email_requested = Some(true);
+    }
+
+    Ok(issued)
 }
 
 /// Create a credential
@@ -275,82 +547,25 @@ pub(crate) async fn credentials(
 ) -> Result<Response, ApiError> {
     let is_signed = request.is_signed;
 
-    let validated = validate_credential_request(&state, &actor, &library_state, &request).await?;
+    let resolved = resolve_template(&state, &actor, &library_state, &request.template_id).await?;
 
-    let ValidatedCredential {
-        credential_id,
-        credential_configuration_id,
-        command,
-        offer_id,
-        authorization,
-    } = validated;
-
-    // Create an unsigned/signed credential.
-    command_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &credential_id,
-        &state.command.credential,
-        command,
-    )
-    .await?;
-
-    // Create an offer if it does not exist yet.
-    if query_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &offer_id,
-        Some(&offer_id),
-        &state.query.offer,
-    )
-    .await?
-    .is_none()
-    {
-        // Extract the tx_code_constraints from the credential configuration if available.
-        let tx_code_constraints = authorization
-            .pre_authorized
-            .then_some(authorization.tx_code_constraints)
-            .flatten();
-
-        let grant_types = vec![if authorization.pre_authorized {
-            GrantType::PreAuthorizedCode
-        } else {
-            GrantType::AuthorizationCode
-        }];
-
-        let command = OfferCommand::CreateCredentialOffer {
-            offer_id: offer_id.clone(),
-            template_ids: vec![credential_configuration_id.clone()],
-            grant_types,
-            tx_code_constraints,
-            delivery_options: None,
-        };
-
-        command_handler(
-            state.authorization_checker.clone(),
-            actor.clone(),
-            &offer_id,
-            &state.command.offer,
-            command,
-        )
-        .await?
+    let credential_id = uuid::Uuid::new_v4().to_string();
+    let create_credential = if is_signed {
+        resolved.signed_credential_command(&credential_id, &request.credential)?
+    } else {
+        resolved.unsigned_credential_command(&credential_id, &request.credential, &request.expires_at)?
     };
 
-    let command = OfferCommand::AddCredentials {
-        offer_id: offer_id.clone(),
-        credential_ids: vec![credential_id.clone()],
-        template_ids: vec![credential_configuration_id],
+    let item = ValidatedCredential {
+        credential_id: credential_id.clone(),
+        offer_id: request.offer_id.clone(),
+        create_credential,
+        create_offer: resolved.create_offer_command(&request.offer_id, None),
+        add_to_offer: resolved.add_to_offer_command(&request.offer_id, &credential_id),
+        send_offer: None,
     };
 
-    // Add the credential to the offer.
-    command_handler(
-        state.authorization_checker.clone(),
-        actor.clone(),
-        &offer_id,
-        &state.command.offer,
-        command,
-    )
-    .await?;
+    execute(&state, &actor, item, true).await.map_err(|(error, _)| error)?;
 
     // Return the credential.
     internal_query_handler(
@@ -380,172 +595,221 @@ pub(crate) async fn credentials(
 
 const MAX_BATCH_SIZE: usize = 1000;
 
-/// Batch create credentials
+/// Verify a batch of credentials
 ///
-/// Validates and optionally creates multiple credentials in a single request.
-/// All payloads are validated first; if any fail, no credentials or offers are created
-/// and a detailed error response is returned. When `verifyOnly` is `true`, only
-/// validation is performed.
+/// Checks every row of a batch as `create-credentials-batch` would — the template must be
+/// published, each row's claims must satisfy its schema, and the caller must be allowed to create
+/// the credentials and offers — without creating anything. Always answers `200` with the outcome of
+/// every row; finding invalid rows is a successful verification. Values the template schema fixes
+/// with `const` must be present in the claims; the server does not fill them in.
 #[utoipa::path(
     post,
-    path = "/credentials/batch",
-    operation_id = "batch_create_credentials",
+    path = "/verify-credentials-batch",
+    operation_id = "verify_credentials_batch",
     tags = ["Credentials", "Issuance"],
     request_body = BatchCredentialsRequest,
     responses(
-        (status = 200, description = "All credentials validated (and created if verifyOnly is false)",
-            body = [String]),
-        (status = 400, description = "Empty batch or batch exceeds size limit"),
-        (status = 422, description = "One or more credentials failed validation"),
+        (status = 200, description = "The outcome of every row, in request order", body = [BatchItemResult]),
+        (status = 400, description = "Missing `templateId`, empty batch, or batch exceeds size limit"),
+        (status = 404, description = "Template or its credential configuration not found"),
+        (status = 422, description = "Template not published"),
     )
 )]
 #[axum_macros::debug_handler]
-pub(crate) async fn batch_credentials(
+pub(crate) async fn verify_credentials_batch(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(BatchCredentialsRequest {
-        verify_only,
-        credentials: requests,
-    }): Json<BatchCredentialsRequest>,
+    Json(request): Json<BatchCredentialsRequest>,
 ) -> Result<Response, ApiError> {
-    if requests.is_empty() {
-        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Empty Batch")
-            .type_url(type_url("issuance#empty-batch"))
-            .message("The `credentials` array must contain at least one item.")
+    let (validated, mut results) = validate_batch(&state, &actor, &library_state, &request).await?;
+
+    authorize_execution(&state, &actor, validated.iter().map(|(_, item)| item)).await?;
+
+    results.extend(validated.into_iter().map(|(index, _)| BatchItemResult::verified(index)));
+    results.sort_by_key(|result| result.index);
+
+    Ok((StatusCode::OK, Json(results)).into_response())
+}
+
+/// Create a batch of credentials
+///
+/// Creates one credential and one offer per row for a single template, in request order. Rows are
+/// independent: a row that fails does not hold back the others, and a row that fails part-way
+/// reports the IDs it did create. The response lists the outcome of every row: `201` when all were
+/// created, `207` when some failed and `422` when none could be created. Rows with a
+/// `recipientEmail` additionally have the offer sent to that address. Values the template schema
+/// fixes with `const` must be present in the claims; the server does not fill them in.
+#[utoipa::path(
+    post,
+    path = "/create-credentials-batch",
+    operation_id = "create_credentials_batch",
+    tags = ["Credentials", "Issuance"],
+    request_body = BatchCredentialsRequest,
+    responses(
+        (status = 201, description = "All credentials created", body = [BatchItemResult]),
+        (status = 207, description = "Some rows succeeded and some failed; see each row's `status`", body = [BatchItemResult]),
+        (status = 400, description = "Missing `templateId`, empty batch, or batch exceeds size limit"),
+        (status = 404, description = "Template or its credential configuration not found"),
+        (status = 422, description = "Template not published, or no row could be created (`results` says why for each)",
+            body = BatchFailedProblem, content_type = "application/problem+json"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn create_credentials_batch(
+    State(state): State<Arc<IssuanceState>>,
+    RequestActor(actor): RequestActor,
+    Extension(library_state): Extension<Arc<LibraryState>>,
+    Json(request): Json<BatchCredentialsRequest>,
+) -> Result<Response, ApiError> {
+    let (validated, mut results) = validate_batch(&state, &actor, &library_state, &request).await?;
+
+    authorize_execution(&state, &actor, validated.iter().map(|(_, item)| item)).await?;
+
+    for (index, item) in validated {
+        results.push(match execute(&state, &actor, item, false).await {
+            Ok(issued) => BatchItemResult::created(index, issued),
+            Err((error, issued)) => BatchItemResult::failed(index, issued, &error),
+        });
+    }
+    results.sort_by_key(|result| result.index);
+
+    let failed = results.iter().filter(|result| result.error.is_some()).count();
+    if failed == results.len() {
+        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Batch Failed")
+            .type_url(type_url("issuance#batch-failed"))
+            .message(format!("None of the {} credentials could be created.", results.len()))
+            .field("results", results)
             .finish());
     }
 
-    if requests.len() > MAX_BATCH_SIZE {
+    let status = if failed > 0 {
+        StatusCode::MULTI_STATUS
+    } else {
+        StatusCode::CREATED
+    };
+
+    Ok((status, Json(results)).into_response())
+}
+
+/// Rejects malformed batches, resolves the template and validates every row. Rows that fail are
+/// returned as results; rows that pass are returned with their index, ready to execute.
+async fn validate_batch(
+    state: &Arc<IssuanceState>,
+    actor: &Option<Actor>,
+    library_state: &Arc<LibraryState>,
+    request: &BatchCredentialsRequest,
+) -> Result<(Vec<(usize, ValidatedCredential)>, Vec<BatchItemResult>), ApiError> {
+    if request.credentials.is_empty() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Empty Batch")
+            .type_url(type_url("issuance#empty-batch"))
+            .message("The `credentials` array must contain at least one row.")
+            .finish());
+    }
+
+    if request.credentials.len() > MAX_BATCH_SIZE {
         return Err(ApiError::builder(StatusCode::BAD_REQUEST)
             .title("Batch Too Large")
             .type_url(type_url("issuance#batch-too-large"))
             .message(format!(
                 "Batch size {} exceeds the maximum of {MAX_BATCH_SIZE}.",
-                requests.len()
+                request.credentials.len()
             ))
             .finish());
     }
 
-    // Phase 1: Validate all credential payloads, collecting errors without short-circuiting.
-    let mut validated: Vec<ValidatedCredential> = Vec::with_capacity(requests.len());
-    let mut errors: Vec<BatchItemError> = Vec::new();
+    let resolved = resolve_template(state, actor, library_state, &request.template_id).await?;
 
-    for (index, request) in requests.iter().enumerate() {
-        match validate_credential_request(&state, &actor, &library_state, request).await {
-            Ok(v) => validated.push(v),
-            Err(api_error) => {
-                errors.push(BatchItemError {
-                    index,
-                    title: api_error.title().unwrap_or("Validation Error").to_string(),
-                    type_url: api_error.type_url().unwrap_or_default().to_string(),
-                    detail: api_error.message().unwrap_or_default().to_string(),
-                });
-            }
+    let mut validated = Vec::with_capacity(request.credentials.len());
+    let mut results = Vec::new();
+    for (index, row) in request.credentials.iter().enumerate() {
+        match validate_row(&resolved, row, &request.expires_at) {
+            Ok(item) => validated.push((index, item)),
+            Err(error) => results.push(BatchItemResult::failed(index, Issued::default(), &error)),
         }
     }
 
-    if !errors.is_empty() {
-        let error_count = errors.len();
-        let total_count = requests.len();
-        let body = serde_json::json!({
-            "type": type_url("issuance#batch-validation-failed"),
-            "title": "Batch Validation Failed",
-            "status": 422,
-            "detail": format!("{error_count} of {total_count} credentials failed validation."),
-            "errors": errors,
-        });
-        return Ok((StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response());
+    Ok((validated, results))
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_row(
+    resolved: &ResolvedTemplate,
+    row: &BatchCredentialRow,
+    expires_at: &Option<CredentialExpiry>,
+) -> Result<ValidatedCredential, ApiError> {
+    if !row.claims.is_object() {
+        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
+            .title("Invalid Credential Type")
+            .type_url(type_url("issuance#invalid-credential-type"))
+            .message("`claims` must be an object.")
+            .finish());
     }
 
-    // If verify_only, return success without executing any commands.
-    if verify_only {
-        return Ok((StatusCode::OK, Json(Vec::<String>::new())).into_response());
-    }
+    let credential_id = uuid::Uuid::new_v4().to_string();
+    let offer_id = uuid::Uuid::new_v4().to_string();
 
-    // Phase 2: Execute — create credentials, offers, and send emails.
-    // The returned offer IDs preserve the exact order of the credentials in the request payload.
-    let offer_ids: Vec<String> = validated.iter().map(|item| item.offer_id.clone()).collect();
-    for item in validated {
-        // Create the credential.
-        command_handler(
-            state.authorization_checker.clone(),
+    let credential = resolved.credential_from_claims(row.claims.clone());
+    let create_credential = resolved.unsigned_credential_command(&credential_id, &credential, expires_at)?;
+
+    // A blank address means "no email", so a CSV with an empty cell does not fail the row.
+    let recipient_email = row
+        .recipient_email
+        .as_deref()
+        .map(str::trim)
+        .filter(|recipient_email| !recipient_email.is_empty())
+        .map(str::to_owned);
+
+    let delivery_options = recipient_email.clone().map(|recipient_email| DeliveryOptions {
+        recipient_email: Some(recipient_email),
+    });
+    let send_offer = recipient_email.map(|recipient_email| OfferCommand::SendCredentialOffer {
+        offer_id: offer_id.clone(),
+        delivery_method: DeliveryMethod::Email { recipient_email },
+    });
+
+    Ok(ValidatedCredential {
+        create_offer: resolved.create_offer_command(&offer_id, delivery_options),
+        add_to_offer: resolved.add_to_offer_command(&offer_id, &credential_id),
+        credential_id,
+        offer_id,
+        create_credential,
+        send_offer,
+    })
+}
+
+/// Checks that the caller may execute every command the rows would issue, so that a verify run
+/// reports authorization failures and a create run does not fail row by row for them.
+async fn authorize_execution(
+    state: &Arc<IssuanceState>,
+    actor: &Option<Actor>,
+    items: impl Iterator<Item = &ValidatedCredential>,
+) -> Result<(), ApiError> {
+    let authorization_checker = state.authorization_checker.as_ref();
+
+    for item in items {
+        authorize_command(
+            authorization_checker,
             actor.clone(),
             &item.credential_id,
-            &state.command.credential,
-            item.command,
+            &item.create_credential,
         )
-        .await?;
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
 
-        // Create an offer if it does not exist yet.
-        if query_handler(
-            state.authorization_checker.clone(),
-            actor.clone(),
-            &item.offer_id,
-            Some(&item.offer_id),
-            &state.query.offer,
-        )
-        .await?
-        .is_none()
-        {
-            let tx_code_constraints = item
-                .authorization
-                .pre_authorized
-                .then_some(item.authorization.tx_code_constraints.clone())
-                .flatten();
-
-            let grant_types = vec![if item.authorization.pre_authorized {
-                GrantType::PreAuthorizedCode
-            } else {
-                GrantType::AuthorizationCode
-            }];
-
-            let command = OfferCommand::CreateCredentialOffer {
-                offer_id: item.offer_id.clone(),
-                template_ids: vec![item.credential_configuration_id.clone()],
-                grant_types,
-                tx_code_constraints,
-                delivery_options: None,
-            };
-
-            command_handler(
-                state.authorization_checker.clone(),
-                actor.clone(),
-                &item.offer_id,
-                &state.command.offer,
-                command,
-            )
-            .await?;
+        let offer_commands = [&item.create_offer, &item.add_to_offer]
+            .into_iter()
+            .chain(item.send_offer.as_ref());
+        for command in offer_commands {
+            authorize_command(authorization_checker, actor.clone(), &item.offer_id, command)
+                .await
+                .map_err(IntoApiErrorExt::into_api_error)?;
         }
-
-        // Add the credential to the offer.
-        let command = OfferCommand::AddCredentials {
-            offer_id: item.offer_id.clone(),
-            credential_ids: vec![item.credential_id.clone()],
-            template_ids: vec![item.credential_configuration_id.clone()],
-        };
-
-        command_handler(
-            state.authorization_checker.clone(),
-            actor.clone(),
-            &item.offer_id,
-            &state.command.offer,
-            command,
-        )
-        .await?;
-
-        // TODO: Determine where to retrieve the recipient email from.
-        // Options: per-item field, contact/connection store lookup, or global on the batch request.
-        // Once resolved, send the offer via email:
-        // let command = OfferCommand::SendCredentialOffer {
-        //     offer_id: item.offer_id.clone(),
-        //     delivery_method: DeliveryMethod::Email { recipient_email },
-        // };
-        // command_handler(..., command).await?;
     }
 
-    Ok((StatusCode::OK, Json(offer_ids)).into_response())
+    Ok(())
 }
 
 #[allow(clippy::result_large_err)]
@@ -816,12 +1080,20 @@ fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Res
         )
     })?;
 
-    let errors: Vec<String> = validator
+    let (violations, descriptions): (Vec<SchemaViolation>, Vec<String>) = validator
         .iter_errors(credential)
-        .map(|e| format!("Path `{}`: {} (schema path: {})", e.instance_path(), e, e.schema_path()))
-        .collect();
+        .map(|e| {
+            (
+                SchemaViolation {
+                    path: e.instance_path().to_string(),
+                    message: e.to_string(),
+                },
+                format!("Path `{}`: {} (schema path: {})", e.instance_path(), e, e.schema_path()),
+            )
+        })
+        .unzip();
 
-    if errors.is_empty() {
+    if violations.is_empty() {
         Ok(())
     } else {
         Err(Box::new(
@@ -830,13 +1102,14 @@ fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Res
                 .type_url(type_url("issuance#credential-schema-validation-failed"))
                 .message(format!(
                     "The credential does not match the template schema. Violations:\n{}",
-                    errors
+                    descriptions
                         .iter()
                         .enumerate()
                         .map(|(i, e)| format!("  [{}] {}", i + 1, e))
                         .collect::<Vec<_>>()
                         .join("\n")
                 ))
+                .field("violations", &violations)
                 .finish(),
         ))
     }
@@ -850,12 +1123,14 @@ pub mod tests {
     use crate::API_VERSION;
     use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
     use agent_issuance::issuance_state;
+    use agent_issuance::offer::{aggregate::Offer, error::OfferError};
     use agent_issuance::{services::IssuanceServices, state::initialize};
     use agent_library::library_state;
     use agent_library::template::aggregate::{DataModel, Display, Expiration, HolderType, Status, Visibility};
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_secret_manager::subject::Subject;
+    use agent_shared::application_state::{Command, CommandHandler};
     use agent_shared::config::TESTINDEX;
     use agent_store::in_memory::InMemory;
     use axum::{
@@ -864,10 +1139,14 @@ pub mod tests {
         Router,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use cqrs_es::AggregateError;
     use lazy_static::lazy_static;
     use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
     use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
     use serde_json::json;
+    use shared_kernel::authorization::{
+        AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
+    };
     use tower::Service as _;
 
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
@@ -1566,11 +1845,14 @@ pub mod tests {
         assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
-    pub async fn batch_credentials_request(app: &mut Router, request: &Value) -> Response {
+    const VERIFY_BATCH: &str = "/verify-credentials-batch";
+    const CREATE_BATCH: &str = "/create-credentials-batch";
+
+    pub async fn batch_request(app: &mut Router, path: &str, request: &Value) -> Response {
         app.call(
             Request::builder()
                 .method(http::Method::POST)
-                .uri(format!("{API_VERSION}/credentials/batch"))
+                .uri(format!("{API_VERSION}{path}"))
                 .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
                 .body(Body::from(serde_json::to_vec(request).unwrap()))
                 .unwrap(),
@@ -1579,64 +1861,19 @@ pub mod tests {
         .unwrap()
     }
 
-    #[tokio::test]
-    async fn test_batch_credentials_empty_returns_bad_request() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
-        initialize(&issuance_state).await.unwrap();
-        let library_state = setup_library_state(&issuance_state).await;
-        let mut app = router((issuance_state, library_state));
-
-        let response = batch_credentials_request(
-            &mut app,
-            &json!({
-                "verifyOnly": false,
-                "credentials": []
-            }),
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let body: Value =
-            serde_json::from_slice(&body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-        assert_eq!(body["title"], "Empty Batch");
+    fn valid_row() -> Value {
+        json!({ "claims": CREDENTIAL_SUBJECT.clone() })
     }
 
-    #[tokio::test]
-    async fn test_batch_credentials_verify_only_success() {
-        let issuance_state =
-            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
-        initialize(&issuance_state).await.unwrap();
-        let library_state = setup_library_state(&issuance_state).await;
-        let template_id = create_test_template(&library_state).await;
-        let mut app = router((issuance_state.clone(), library_state));
+    async fn json_body(response: Response) -> Value {
+        serde_json::from_slice(&body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
 
-        let offer_id = "test-offer-batch-verify";
-        let response = batch_credentials_request(
-            &mut app,
-            &json!({
-                "verifyOnly": true,
-                "credentials": [
-                    {
-                        "templateId": template_id,
-                        "offerId": offer_id,
-                        "credential": {
-                            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-                        },
-                        "expiresAt": "never"
-                    }
-                ]
-            }),
-        )
-        .await;
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body: Value =
-            serde_json::from_slice(&body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-        assert_eq!(body, json!([]));
-
-        // Verify that offer was NOT created because verifyOnly was true
-        assert!(query_handler(
+    async fn offer_view(
+        issuance_state: &Arc<IssuanceState>,
+        offer_id: &str,
+    ) -> Option<agent_issuance::offer::views::OfferView> {
+        query_handler(
             issuance_state.authorization_checker.clone(),
             None,
             offer_id,
@@ -1645,11 +1882,164 @@ pub mod tests {
         )
         .await
         .unwrap()
-        .is_none());
+    }
+
+    async fn credential_count(app: &mut Router) -> usize {
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credentials"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        json_body(response).await.as_array().unwrap().len()
+    }
+
+    /// Asserts a row was created and that its IDs address a credential that sits in its offer.
+    async fn assert_created(app: &mut Router, issuance_state: &Arc<IssuanceState>, result: &Value, index: usize) {
+        assert_eq!(result["index"], index);
+        assert_eq!(result["status"], 201);
+        assert!(result.get("error").is_none());
+
+        let credential_id = result["credentialId"].as_str().unwrap();
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credentials/{credential_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let offer = offer_view(issuance_state, result["offerId"].as_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(offer.credential_ids, vec![credential_id.to_string()]);
+        assert_eq!(
+            result["credentialOffer"].as_str(),
+            offer.form_url_encoded_credential_offer.as_deref()
+        );
+        assert!(result["credentialOffer"]
+            .as_str()
+            .unwrap()
+            .starts_with("openid-credential-offer://"));
+    }
+
+    /// Denies one operation and allows every other one.
+    struct DenyOperation(&'static str);
+
+    #[async_trait::async_trait]
+    impl AuthorizationChecker for DenyOperation {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            let operation_name = match &request.operation {
+                AuthorizationOperation::Command { operation_name, .. }
+                | AuthorizationOperation::Query { operation_name, .. } => operation_name,
+            };
+
+            if *operation_name == self.0 {
+                Err(AuthorizationError::Forbidden)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// Fails the n-th `AddCredentials`, so a batch breaks part-way through one row.
+    struct FailNthAddCredentials {
+        inner: CommandHandler<Offer>,
+        fail_at: usize,
+        seen: std::sync::atomic::AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl Command<Offer> for FailNthAddCredentials {
+        async fn execute_with_metadata(
+            &self,
+            aggregate_id: &str,
+            command: OfferCommand,
+            metadata: std::collections::HashMap<String, String>,
+        ) -> Result<(), AggregateError<OfferError>> {
+            if matches!(command, OfferCommand::AddCredentials { .. })
+                && self.seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1 == self.fail_at
+            {
+                return Err(AggregateError::AggregateConflict);
+            }
+
+            self.inner.execute_with_metadata(aggregate_id, command, metadata).await
+        }
     }
 
     #[tokio::test]
-    async fn test_batch_credentials_execution_success() {
+    async fn test_batch_rejects_empty_and_oversized_batches() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state, library_state));
+
+        for path in [VERIFY_BATCH, CREATE_BATCH] {
+            let response =
+                batch_request(&mut app, path, &json!({ "templateId": template_id, "credentials": [] })).await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(json_body(response).await["title"], "Empty Batch");
+
+            let rows: Vec<Value> = (0..=MAX_BATCH_SIZE).map(|_| valid_row()).collect();
+            let response = batch_request(
+                &mut app,
+                path,
+                &json!({ "templateId": template_id, "credentials": rows }),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(json_body(response).await["title"], "Batch Too Large");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_batch_template_problems_fail_the_whole_request() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let draft_template_id = create_test_template_with_status_and_format(
+            &library_state,
+            Status::Draft,
+            Some(Expiration::Never),
+            "jwt_vc_json",
+        )
+        .await;
+        let mut app = router((issuance_state, library_state));
+
+        for path in [VERIFY_BATCH, CREATE_BATCH] {
+            let response = batch_request(
+                &mut app,
+                path,
+                &json!({ "templateId": "missing-template", "credentials": [valid_row()] }),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(json_body(response).await["title"], "Template Not Found");
+
+            let response = batch_request(
+                &mut app,
+                path,
+                &json!({ "templateId": draft_template_id, "credentials": [valid_row()] }),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+            assert_eq!(json_body(response).await["title"], "Template Not Published");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_verify_batch_reports_every_row_and_creates_nothing() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
@@ -1657,64 +2047,85 @@ pub mod tests {
         let template_id = create_test_template(&library_state).await;
         let mut app = router((issuance_state.clone(), library_state));
 
-        let offer_id_1 = "test-offer-batch-exec-1";
-        let offer_id_2 = "test-offer-batch-exec-2";
-        let response = batch_credentials_request(
+        let response = batch_request(
             &mut app,
+            VERIFY_BATCH,
             &json!({
-                "verifyOnly": false,
+                "templateId": template_id,
                 "credentials": [
-                    {
-                        "templateId": template_id,
-                        "offerId": offer_id_1,
-                        "credential": {
-                            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-                        },
-                        "expiresAt": "never"
-                    },
-                    {
-                        "templateId": template_id,
-                        "offerId": offer_id_2,
-                        "credential": {
-                            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-                        },
-                        "expiresAt": "never"
-                    }
+                    valid_row(),
+                    { "claims": { "first_name": "Ferris" }, "recipientEmail": "ferris@example.org" },
+                    { "claims": "not an object" },
                 ]
             }),
         )
         .await;
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body: Value =
-            serde_json::from_slice(&body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-        assert_eq!(body, json!([offer_id_1, offer_id_2]));
+        assert_eq!(
+            response.headers().get(http::header::CONTENT_TYPE).unwrap(),
+            "application/json"
+        );
+        let results = json_body(response).await;
 
-        // Verify that offers were created
-        assert!(query_handler(
-            issuance_state.authorization_checker.clone(),
-            None,
-            offer_id_1,
-            Some(offer_id_1),
-            &issuance_state.query.offer,
-        )
-        .await
-        .unwrap()
-        .is_some());
-        assert!(query_handler(
-            issuance_state.authorization_checker.clone(),
-            None,
-            offer_id_2,
-            Some(offer_id_2),
-            &issuance_state.query.offer,
-        )
-        .await
-        .unwrap()
-        .is_some());
+        assert_eq!(results[0], json!({ "index": 0, "status": 200 }));
+
+        assert_eq!(results[1]["index"], 1);
+        assert_eq!(results[1]["status"], 422);
+        assert_eq!(results[1]["error"]["title"], "Credential Schema Validation Failed");
+        assert_eq!(
+            results[1]["error"]["type"],
+            type_url("issuance#credential-schema-validation-failed")
+        );
+        let violations = results[1]["error"]["violations"].as_array().unwrap();
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0]["path"], "");
+        assert!(violations[0]["message"].as_str().unwrap().contains("last_name"));
+
+        assert_eq!(results[2]["index"], 2);
+        assert_eq!(results[2]["status"], 400);
+        assert_eq!(results[2]["error"]["title"], "Invalid Credential Type");
+        assert_eq!(results[2]["error"]["detail"], "`claims` must be an object.");
+
+        assert_eq!(credential_count(&mut app).await, 0);
     }
 
     #[tokio::test]
-    async fn test_batch_credentials_all_or_nothing_on_validation_failure() {
+    async fn test_verify_batch_reports_forbidden_commands() {
+        let mut issuance_state =
+            issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await;
+        issuance_state.authorization_checker = Arc::new(DenyOperation("issuance.offers.send"));
+        let issuance_state = Arc::new(issuance_state);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        // Sending is only authorized when a row asks for an email.
+        let response = batch_request(
+            &mut app,
+            VERIFY_BATCH,
+            &json!({ "templateId": template_id, "credentials": [valid_row()] }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = batch_request(
+            &mut app,
+            VERIFY_BATCH,
+            &json!({
+                "templateId": template_id,
+                "credentials": [{ "claims": CREDENTIAL_SUBJECT.clone(), "recipientEmail": "ferris@example.org" }]
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(json_body(response).await["title"], "Forbidden");
+        assert_eq!(credential_count(&mut app).await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_create_batch_creates_one_credential_and_offer_per_row() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
@@ -1722,74 +2133,177 @@ pub mod tests {
         let template_id = create_test_template(&library_state).await;
         let mut app = router((issuance_state.clone(), library_state));
 
-        let offer_id_valid = "test-offer-should-not-exist";
-        let response = batch_credentials_request(
+        let response = batch_request(
             &mut app,
+            CREATE_BATCH,
             &json!({
-                "verifyOnly": false,
+                "templateId": template_id,
+                "expiresAt": "never",
                 "credentials": [
-                    // Item 0: valid
-                    {
-                        "templateId": template_id,
-                        "offerId": offer_id_valid,
-                        "credential": {
-                            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-                        },
-                        "expiresAt": "never"
-                    },
-                    // Item 1: invalid template ID (empty)
-                    {
-                        "templateId": "",
-                        "offerId": "offer-invalid-template",
-                        "credential": {
-                            "credentialSubject": CREDENTIAL_SUBJECT.clone(),
-                        },
-                        "expiresAt": "never"
-                    },
-                    // Item 2: invalid schema (missing required fields)
-                    {
-                        "templateId": template_id,
-                        "offerId": "offer-invalid-schema",
-                        "credential": {
-                            "credentialSubject": {
-                                "wrong_field": "data"
-                            }
-                        },
-                        "expiresAt": "never"
-                    }
+                    valid_row(),
+                    { "claims": CREDENTIAL_SUBJECT.clone(), "recipientEmail": "ferris@example.org" },
+                    { "claims": CREDENTIAL_SUBJECT.clone(), "recipientEmail": "   " },
                 ]
             }),
         )
         .await;
 
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        let body: Value =
-            serde_json::from_slice(&body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-        assert_eq!(body["title"], "Batch Validation Failed");
-        assert_eq!(body["detail"], "2 of 3 credentials failed validation.");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = json_body(response).await;
+        let results = body.as_array().unwrap();
+        assert_eq!(results.len(), 3);
 
-        let errors = body["errors"].as_array().expect("errors should be an array");
-        assert_eq!(errors.len(), 2);
+        for (index, result) in results.iter().enumerate() {
+            assert_created(&mut app, &issuance_state, result, index).await;
+        }
+        assert_eq!(results[0]["emailRequested"], false);
+        assert_eq!(results[1]["emailRequested"], true);
+        assert_eq!(results[2]["emailRequested"], false, "a blank address is no address");
 
-        // Check index 1 error (missing template ID)
-        assert_eq!(errors[0]["index"], 1);
-        assert_eq!(errors[0]["title"], "Missing Template ID");
+        // Every row got its own offer.
+        let offer_ids: std::collections::HashSet<&str> = results
+            .iter()
+            .map(|result| result["offerId"].as_str().unwrap())
+            .collect();
+        assert_eq!(offer_ids.len(), 3);
 
-        // Check index 2 error (schema validation failed)
-        assert_eq!(errors[1]["index"], 2);
-        assert_eq!(errors[1]["title"], "Credential Schema Validation Failed");
+        // The claims were wrapped for the template's W3C data model.
+        let credential_id = results[0]["credentialId"].as_str().unwrap();
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credentials/{credential_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            json_body(response).await["data"]["raw"]["credentialSubject"],
+            CREDENTIAL_SUBJECT.clone()
+        );
+    }
 
-        // Verify all-or-nothing: the valid item (index 0) was NOT created!
-        assert!(query_handler(
-            issuance_state.authorization_checker.clone(),
-            None,
-            offer_id_valid,
-            Some(offer_id_valid),
-            &issuance_state.query.offer,
+    #[tokio::test]
+    async fn test_create_batch_creates_valid_rows_and_reports_invalid_ones() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let response = batch_request(
+            &mut app,
+            CREATE_BATCH,
+            &json!({
+                "templateId": template_id,
+                "credentials": [
+                    { "claims": { "wrong_field": "data" } },
+                    valid_row(),
+                ]
+            }),
         )
-        .await
-        .unwrap()
-        .is_none());
+        .await;
+
+        assert_eq!(response.status(), StatusCode::MULTI_STATUS);
+        let body = json_body(response).await;
+        let results = body.as_array().unwrap();
+        assert_eq!(results.len(), 2);
+
+        assert_eq!(results[0]["index"], 0);
+        assert_eq!(results[0]["status"], 422);
+        assert!(results[0].get("credentialId").is_none());
+        assert!(results[0].get("offerId").is_none());
+        assert_eq!(results[0]["error"]["title"], "Credential Schema Validation Failed");
+        assert_eq!(results[0]["error"]["violations"].as_array().unwrap().len(), 2);
+
+        assert_created(&mut app, &issuance_state, &results[1], 1).await;
+        assert_eq!(credential_count(&mut app).await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_batch_reports_what_a_failing_row_had_created() {
+        let mut issuance_state =
+            issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await;
+        issuance_state.command.offer = Arc::new(FailNthAddCredentials {
+            inner: issuance_state.command.offer.clone(),
+            fail_at: 2,
+            seen: Default::default(),
+        });
+        let issuance_state = Arc::new(issuance_state);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let response = batch_request(
+            &mut app,
+            CREATE_BATCH,
+            &json!({ "templateId": template_id, "credentials": [valid_row(), valid_row(), valid_row()] }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::MULTI_STATUS);
+        let body = json_body(response).await;
+        let results = body.as_array().unwrap();
+        assert_eq!(results.len(), 3);
+
+        assert_created(&mut app, &issuance_state, &results[0], 0).await;
+        assert_created(&mut app, &issuance_state, &results[2], 2).await;
+
+        // Row 1 created its credential and offer, then failed to add one to the other.
+        assert_eq!(results[1]["index"], 1);
+        assert_eq!(results[1]["status"], 503);
+        assert!(results[1]["credentialId"].is_string());
+        assert!(results[1]["offerId"].is_string());
+        assert!(results[1].get("credentialOffer").is_none());
+        assert_eq!(results[1]["error"]["title"], "Aggregate Conflict");
+        assert_eq!(results[1]["error"]["type"], type_url("persistence#aggregate-conflict"));
+        let orphaned_offer = offer_view(&issuance_state, results[1]["offerId"].as_str().unwrap())
+            .await
+            .unwrap();
+        assert!(orphaned_offer.credential_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_create_batch_with_no_valid_row_is_a_problem() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let response = batch_request(
+            &mut app,
+            CREATE_BATCH,
+            &json!({
+                "templateId": template_id,
+                "credentials": [{ "claims": {} }, { "claims": [] }]
+            }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response.headers().get(http::header::CONTENT_TYPE).unwrap(),
+            "application/problem+json"
+        );
+        let body = json_body(response).await;
+        assert_eq!(body["type"], type_url("issuance#batch-failed"));
+        assert_eq!(body["title"], "Batch Failed");
+        assert_eq!(body["status"], 422);
+        assert_eq!(body["detail"], "None of the 2 credentials could be created.");
+
+        let results = body["results"].as_array().unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0]["status"], 422);
+        assert_eq!(results[0]["error"]["title"], "Credential Schema Validation Failed");
+        assert_eq!(results[1]["status"], 400);
+        assert_eq!(results[1]["error"]["title"], "Invalid Credential Type");
+        assert_eq!(credential_count(&mut app).await, 0);
     }
 
     mod expiration_to_credential_expiry_tests {

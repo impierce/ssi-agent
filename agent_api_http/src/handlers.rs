@@ -1,7 +1,8 @@
 use crate::error::ErrorWrapper;
 use cqrs_es::{Aggregate, View};
 use shared_kernel::authorization::{
-    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, Caller, CommandOperation, QueryOperation,
+    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation,
+    QueryOperation,
 };
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
@@ -28,6 +29,16 @@ where
     agent_shared::handlers::command_handler(authorization_checker, caller(actor), aggregate_id, state, command)
         .await
         .map_err(ErrorWrapper::CommandHandlerError)
+}
+
+/// Checks whether the actor may execute `command` on `aggregate_id`, without executing it.
+pub async fn authorize_command<C: CommandOperation>(
+    authorization_checker: &dyn AuthorizationChecker,
+    actor: Option<Actor>,
+    aggregate_id: &str,
+    command: &C,
+) -> Result<(), AuthorizationError> {
+    agent_shared::handlers::authorize_command(authorization_checker, caller(actor), aggregate_id, command).await
 }
 
 /// Executes a command that is a fixed, trusted continuation of an already-authorized operation.
