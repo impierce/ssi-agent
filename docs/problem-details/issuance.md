@@ -239,6 +239,33 @@ This error occurs when the credential data in the request does not satisfy the t
 - Update the credential payload so it satisfies the template schema.
 - When using a schema for credential-subject fields, ensure the request data under `credential.credentialSubject` matches that schema.
 
+## Empty Batch
+
+This error occurs when a batch credential request contains no rows. A batch must contain at least one row.
+
+### Resolution
+
+Provide at least one row in the `credentials` array.
+
+## Batch Too Large
+
+This error occurs when a batch credential request contains more rows than UniCore processes in one request. The limit is included in the error detail.
+
+### Resolution
+
+Split the rows over several batch requests that each stay within the limit.
+
+## Batch Failed
+
+This error occurs when none of the rows of a `create-credentials-batch` request could be created. A batch is best-effort: each row is validated and created on its own, and a failing row does not hold back the others. When at least one row succeeds the response is `201` (or `207 Multi-Status` if others failed) rather than this error. In every case the response lists the outcome of each row by its 0-based `index` in the request: its `status`, the `credentialId` and `offerId` once they exist (also for a row that failed afterwards), the `credentialOffer` string a wallet consumes, whether an email was requested, and on failure an `error` with the `title`, `type`, `detail` and, for schema failures, the `violations` of the problem that row would have produced on its own.
+
+Problems with the template (`issuance#template-not-found`, `issuance#template-not-published`, `issuance#no-credential-configuration-found`) or with the caller (`authorization#unauthorized`, `authorization#forbidden`) are not row errors; they fail the request with their own status before anything is created. The same checks run on `verify-credentials-batch`, which creates nothing and always answers `200` with the per-row outcome.
+
+### Resolution
+
+- Inspect the `error` of each entry in `results` and fix the row at that `index`.
+- Resubmit only the rows that failed; the ones that succeeded already exist. A failed row that reports a `credentialId` created a credential that was never offered; revoke it or offer it by hand.
+
 ## Template Not Eligible For Public Offer
 
 This error occurs when a template is used for a public offer but its schema contains non-constant leaf values. Public offers are only allowed for templates whose schema fully constrains leaf values with `const`, so the resulting credential content is predetermined.

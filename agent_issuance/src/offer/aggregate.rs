@@ -399,7 +399,12 @@ impl Aggregate for Offer {
                 credential_offer,
             } => {
                 self.offer_id = offer_id;
-                self.credential_ids = credential_ids;
+                // The event carries only the IDs added by this command, so extend rather than replace.
+                for credential_id in credential_ids {
+                    if !self.credential_ids.contains(&credential_id) {
+                        self.credential_ids.push(credential_id);
+                    }
+                }
                 self.credential_offer.replace(credential_offer);
             }
             FormUrlEncodedCredentialOfferCreated {
@@ -590,6 +595,29 @@ pub mod tests {
                     status: Status::Pending,
                 },
             ]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_adding_credentials_keeps_the_ones_already_in_the_offer(
+        offer_id: String,
+        #[future(awt)] credential_offer: CredentialOffer,
+    ) {
+        let mut offer = Offer::default();
+
+        for credential_ids in [
+            vec!["credential-1".to_string()],
+            vec!["credential-2".to_string(), "credential-1".to_string()],
+            vec!["credential-2".to_string()],
+        ] {
+            offer.apply(OfferEvent::CredentialsAdded {
+                offer_id: offer_id.clone(),
+                credential_ids,
+                credential_offer: credential_offer.clone(),
+            });
+        }
+
+        assert_eq!(offer.credential_ids, vec!["credential-1", "credential-2"]);
     }
 
     // Note: This test cannot use #[future(awt)] fixtures because rstest evaluates those fixtures
