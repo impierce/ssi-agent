@@ -130,22 +130,33 @@ where
     A: Aggregate,
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
 {
-    let operation_name = command.operation_name();
-    let authorization_request = AuthorizationRequest {
-        caller: caller.clone(),
-        operation: AuthorizationOperation::Command {
-            aggregate_id: aggregate_id.to_string(),
-            resource_id: None,
-            operation_name,
-        },
-    };
-
-    authorization_checker
-        .is_authorized(&authorization_request)
+    authorize_command(authorization_checker.as_ref(), caller.clone(), aggregate_id, &command)
         .await
         .map_err(CommandHandlerError::Authorization)?;
 
     command_handler_with_caller(aggregate_id, state, command, &caller).await
+}
+
+/// Checks whether the [`Caller`] may execute `command` on `aggregate_id`, without executing it.
+///
+/// This is the authorization step of [`command_handler`], exposed so that a dry run can report the
+/// same authorization failures the real run would.
+pub async fn authorize_command<C: CommandOperation>(
+    authorization_checker: &dyn AuthorizationChecker,
+    caller: Caller,
+    aggregate_id: &str,
+    command: &C,
+) -> Result<(), AuthorizationError> {
+    let authorization_request = AuthorizationRequest {
+        caller,
+        operation: AuthorizationOperation::Command {
+            aggregate_id: aggregate_id.to_string(),
+            resource_id: None,
+            operation_name: command.operation_name(),
+        },
+    };
+
+    authorization_checker.is_authorized(&authorization_request).await
 }
 
 /// Executes a command on an aggregate directly with caller provenance metadata, bypassing authorization.

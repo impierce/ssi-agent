@@ -969,6 +969,53 @@ paths:
           description: Invalid path parameter
         '404':
           description: Connection not found
+  /v0/create-credentials-batch:
+    post:
+      tags:
+      - Credentials
+      - Issuance
+      summary: Create a batch of credentials
+      description: |-
+        Creates one credential and one offer per row for a single template, in request order. Rows are
+        independent: a row that fails does not hold back the others, and a row that fails part-way
+        reports the IDs it did create. The response lists the outcome of every row: `201` when all were
+        created, `207` when some failed and `422` when none could be created. Rows with a
+        `recipientEmail` additionally have the offer sent to that address. Values the template schema
+        fixes with `const` must be present in the claims; the server does not fill them in.
+      operationId: create_credentials_batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCredentialsRequest'
+        required: true
+      responses:
+        '201':
+          description: All credentials created
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchItemResult'
+        '207':
+          description: Some rows succeeded and some failed; see each row's `status`
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchItemResult'
+        '400':
+          description: Missing `templateId`, empty batch, or batch exceeds size limit
+        '404':
+          description: Template or its credential configuration not found
+        '422':
+          description: Template not published, or no row could be created (`results` says why for each)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BatchFailedProblem'
   /v0/create-new-catalog:
     post:
       tags:
@@ -2148,6 +2195,40 @@ paths:
           description: Template not found
         '422':
           description: Request body does not match the expected schema
+  /v0/verify-credentials-batch:
+    post:
+      tags:
+      - Credentials
+      - Issuance
+      summary: Verify a batch of credentials
+      description: |-
+        Checks every row of a batch as `create-credentials-batch` would — the template must be
+        published, each row's claims must satisfy its schema, and the caller must be allowed to create
+        the credentials and offers — without creating anything. Always answers `200` with the outcome of
+        every row; finding invalid rows is a successful verification. Values the template schema fixes
+        with `const` must be present in the claims; the server does not fill them in.
+      operationId: verify_credentials_batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCredentialsRequest'
+        required: true
+      responses:
+        '200':
+          description: The outcome of every row, in request order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchItemResult'
+        '400':
+          description: Missing `templateId`, empty batch, or batch exceeds size limit
+        '404':
+          description: Template or its credential configuration not found
+        '422':
+          description: Template not published
   /v0/verify-linked-domains:
     get:
       tags:
@@ -2566,6 +2647,108 @@ components:
       properties:
         batch_size:
           $ref: '#/components/schemas/BatchSize'
+    BatchCredentialRow:
+      type: object
+      description: 'One row of a batch: the claims for one holder.'
+      required:
+      - claims
+      properties:
+        claims:
+          description: |-
+            The claims the credential asserts, validated as-is against the template schema. Values the
+            schema fixes with `const` must be included; the server does not fill them in.
+        recipientEmail:
+          type:
+          - string
+          - 'null'
+          description: When set, the offer is sent to this address once the credential is created.
+    BatchCredentialsRequest:
+      type: object
+      required:
+      - templateId
+      - credentials
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchCredentialRow'
+          description: One row per holder.
+        expiresAt:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialExpiry'
+            description: Expiry applied to every credential; defaults to the template's credential expiration.
+        templateId:
+          type: string
+          description: The published template every row is validated against and issued from.
+    BatchFailedProblem:
+      type: object
+      description: Problem details returned when no row of a batch request could be created.
+      required:
+      - type
+      - title
+      - status
+      - detail
+      - results
+      properties:
+        detail:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchItemResult'
+          description: The outcome of every row, in request order.
+        status:
+          type: integer
+          format: int32
+          minimum: 0
+        title:
+          type: string
+        type:
+          type: string
+    BatchItemResult:
+      type: object
+      description: The outcome of one row of a batch request.
+      required:
+      - index
+      - status
+      properties:
+        credentialId:
+          type:
+          - string
+          - 'null'
+          description: Set once the credential exists, even if a later step of the row failed.
+        credentialOffer:
+          type:
+          - string
+          - 'null'
+          description: The `openid-credential-offer://…` string a wallet consumes; what a QR code encodes.
+        emailRequested:
+          type:
+          - boolean
+          - 'null'
+          description: Whether an email with the offer was requested for `recipientEmail`. Arrival is not tracked.
+        error:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/ProblemSummary'
+            description: Why the row was rejected or could not be created; absent on success.
+        index:
+          type: integer
+          description: 0-based index of the row in the request array.
+          minimum: 0
+        offerId:
+          type:
+          - string
+          - 'null'
+          description: Set once the offer exists, even if a later step of the row failed.
+        status:
+          type: integer
+          format: int32
+          description: |-
+            `201` when the credential was created, `200` when the row was verified, otherwise the status
+            of `error`.
+          minimum: 0
     BatchSize:
       type: integer
       format: int32
@@ -4606,6 +4789,29 @@ components:
           type: array
           items:
             type: string
+    ProblemSummary:
+      type: object
+      description: The RFC 9457 members of a problem, for embedding one problem inside another.
+      properties:
+        detail:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        type:
+          type:
+          - string
+          - 'null'
+        violations:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/SchemaViolation'
+          description: Present for `issuance#credential-schema-validation-failed`.
     Profile:
       type: object
       required:
@@ -4772,6 +4978,18 @@ components:
           items:
             type: string
           default: []
+    SchemaViolation:
+      type: object
+      description: One violation of the template schema by a credential's claims.
+      required:
+      - path
+      - message
+      properties:
+        message:
+          type: string
+        path:
+          type: string
+          description: JSON pointer to the offending value within the claims; empty for the claims object itself.
     ServiceResource:
       oneOf:
       - type: object
