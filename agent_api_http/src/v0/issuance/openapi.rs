@@ -1,4 +1,3 @@
-use crate::v0::issuance::reissuance::{__path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances};
 use crate::v0::issuance::credentials::{
     __path_all_credentials, __path_create_credentials_batch, __path_credential, __path_credentials,
     __path_patch_credential, __path_verify_credentials_batch,
@@ -7,9 +6,12 @@ use crate::v0::issuance::offers::{
     __path_all_offers, __path_offer, __path_offers,
     send::{__path_individual_offer, __path_organization_offer},
 };
-use crate::v0::issuance::public_offers::{
-    __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer, __path_take_public_offer_offline,
-    __path_take_public_offer_online,
+use crate::v0::issuance::{
+    public_offers::{
+        __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer,
+        __path_take_public_offer_offline, __path_take_public_offer_online,
+    },
+    reissuance::{__path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances},
 };
 use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},

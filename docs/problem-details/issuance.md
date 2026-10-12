@@ -28,7 +28,7 @@ This error is raised when the system cannot find a credential configuration. The
 
 ### Resolution
 
-- **Review Template State:**  
+- **Review Template State:**
   Verify that the target template exists and is `Published` before issuing credentials or creating offers.
 
 ## Unsupported Credential Format
@@ -39,6 +39,8 @@ This error is raised when the system cannot find a credential configuration. The
 
 This error is raised when UniCore encounters a credential configuration that specifies a format it cannot process. This
 typically occurs when the credential configuration’s `format` does not match any of the supported formats.
+For manual reissuance, this also returns 400 when the configuration is not `dc+sd-jwt`
+or `vc+sd-jwt`; normal issuance may support additional formats.
 
 ### Resolution
 
@@ -274,3 +276,40 @@ This error occurs when a template is used for a public offer but its schema cont
 
 - Restrict the template schema to constant leaf values only.
 - If the credential content must remain dynamic, use a regular offer flow instead of a public offer.
+
+
+## Original Credential Not Found
+
+The original credential referenced by a reissuance request does not exist (404).
+Check `originalCredentialId` against the issuer's stored credentials.
+
+## Original Credential Not Issued
+
+The original credential is still Pending (400). Complete its initial issuance before
+requesting a replacement. Preparing an unsigned credential alone does not issue it.
+
+## Credential Configuration Mismatch
+
+The requested configuration has a different credential format or type from the original
+credential (400). Select the configuration used for the original credential. Changes to
+presentation metadata, such as display labels, do not prevent reissuance.
+
+## Reissuance Not Allowed
+
+The configured reissuance policy denied the request (403). Check the policy's conditions
+and the request's trigger metadata before retrying.
+
+## Reissuance Already Exists
+
+A reissuance relation with the supplied identifier already exists (409). Application
+callers must use a new identifier for a distinct relation; the HTTP endpoint generates it.
+
+## Credential Reissuance Failed
+
+The server could not construct the reissuance relation (500). Inspect server logs.
+Persistence and authorization failures use their existing problem types and status codes.
+
+## Invalid Template Expiration
+
+The template's expiration datetime or duration could not be parsed (500). Correct its
+expiration configuration before retrying issuance or reissuance.

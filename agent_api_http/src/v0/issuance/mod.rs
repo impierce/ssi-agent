@@ -26,11 +26,11 @@ use crate::v0::issuance::{
         all_offers, offer, offers,
         send::{individual_offer, organization_offer},
     },
-    reissuance::{all_credential_reissuances, credential_reissuance, credential_reissuances},
     public_offers::{
         all_public_offers, create_public_offer, delete_public_offer, take_public_offer_offline,
         take_public_offer_online,
     },
+    reissuance::{all_credential_reissuances, credential_reissuance, credential_reissuances},
 };
 use crate::API_VERSION;
 use agent_issuance::state::IssuanceState;
