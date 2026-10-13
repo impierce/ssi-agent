@@ -114,7 +114,7 @@ pub fn build_cloud_event(
     payload: serde_json::Value,
     occurred_at: Option<DateTime<Utc>>,
 ) -> CloudEvent {
-    let cloud_type = format!("com.impierce.unicore.{}", event_type.to_case(Case::Kebab));
+    let cloud_type = format!("com.impierce.unicore.{}", cloud_event_type_suffix(event_type));
     let source = format!("/services/{}", aggregate_type.to_lowercase());
     let id = format!("{aggregate_type}:{aggregate_id}:{sequence}");
 
@@ -132,6 +132,14 @@ pub fn build_cloud_event(
         time: occurred_at.or_else(|| Some(Utc::now())),
         data: Some(data),
         extension: Extension::default(),
+    }
+}
+
+fn cloud_event_type_suffix(event_type: &str) -> String {
+    if event_type.eq_ignore_ascii_case("OID4VPAuthorizationResponseVerified") {
+        "oid4vp-authorization-response-verified".to_string()
+    } else {
+        event_type.to_case(Case::Kebab)
     }
 }
 
@@ -157,7 +165,7 @@ impl EventFilter {
                     .event_type
                     .strip_prefix("com.impierce.unicore.")
                     .unwrap_or(&event.event_type);
-                let pattern_kebab = pattern.to_case(Case::Kebab);
+                let pattern_kebab = cloud_event_type_suffix(pattern);
                 event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)
             })
         {
@@ -690,6 +698,37 @@ mod tests {
         assert_eq!(event.id, "offer:123:4");
         assert_eq!(event.source, "/services/offer");
         assert_eq!(event.event_type, "com.impierce.unicore.offer-created");
+    }
+
+    #[test]
+    fn oid4vp_authorization_response_event_uses_canonical_type() {
+        let event = build_cloud_event(
+            "authorization_request",
+            "ar-1",
+            3,
+            "OID4VPAuthorizationResponseVerified",
+            serde_json::json!({"OID4VPAuthorizationResponseVerified": {"state": "state-1"}}),
+            None,
+        );
+
+        assert_eq!(
+            event.event_type,
+            "com.impierce.unicore.oid4vp-authorization-response-verified"
+        );
+        assert_eq!(event.data, Some(serde_json::json!({"state": "state-1"})));
+
+        for pattern in [
+            "OID4VPAuthorizationResponseVerified",
+            "oid4vpauthorizationresponseverified",
+            "oid4vp-authorization-response-verified",
+            "com.impierce.unicore.oid4vp-authorization-response-verified",
+        ] {
+            let filter = EventFilter {
+                event_types: vec![pattern.to_string()],
+                ..Default::default()
+            };
+            assert!(filter.matches(&event), "Event filter must match `{pattern}`");
+        }
     }
 
     #[test]
