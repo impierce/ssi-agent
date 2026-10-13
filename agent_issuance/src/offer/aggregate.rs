@@ -57,9 +57,13 @@ pub struct Offer {
     pub successful_issuances: u32,
 }
 
+/// Where an offer is delivered. Given when the offer is created, and replaced in the offer view by
+/// the latest delivery whenever the offer is sent, so the view tells who it last went to.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct DeliveryOptions {
     pub recipient_email: Option<String>,
+    /// The organization URL the offer was last sent to. Only set by sending, never on creation.
+    pub target_url: Option<Url>,
 }
 
 // Delivery methods for sending the credential offer. Not to be confused
@@ -859,6 +863,7 @@ pub mod test_utils {
     pub fn delivery_options() -> DeliveryOptions {
         DeliveryOptions {
             recipient_email: Some("testemail@test.com".to_string()),
+            target_url: None,
         }
     }
 

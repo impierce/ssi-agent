@@ -3633,11 +3633,20 @@ components:
           type: string
     DeliveryOptions:
       type: object
+      description: |-
+        Where an offer is delivered. Given when the offer is created, and replaced in the offer view by
+        the latest delivery whenever the offer is sent, so the view tells who it last went to.
       properties:
         recipient_email:
           type:
           - string
           - 'null'
+        target_url:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: The organization URL the offer was last sent to. Only set by sending, never on creation.
     DidDocument:
       type: object
       description: A DID document as defined by W3C DID Core.

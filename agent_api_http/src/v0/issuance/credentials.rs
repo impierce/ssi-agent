@@ -764,6 +764,7 @@ fn validate_row(
 
     let delivery_options = recipient_email.clone().map(|recipient_email| DeliveryOptions {
         recipient_email: Some(recipient_email),
+        target_url: None,
     });
     let send_offer = recipient_email.map(|recipient_email| OfferCommand::SendCredentialOffer {
         offer_id: offer_id.clone(),
