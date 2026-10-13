@@ -58,11 +58,11 @@ pub struct Offer {
 }
 
 /// Where an offer is delivered. Given when the offer is created, and replaced in the offer view by
-/// the latest delivery whenever the offer is sent, so the view tells who it last went to.
+/// the latest delivery whenever the offer is sent, so the view shows only who it last went to.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct DeliveryOptions {
     pub recipient_email: Option<String>,
-    /// The organization URL the offer was last sent to. Only set by sending, never on creation.
+    /// The organization URL the offer was last sent to.
     pub target_url: Option<Url>,
 }
 
