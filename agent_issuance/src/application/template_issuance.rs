@@ -8,6 +8,14 @@ use agent_shared::handlers::QueryHandlerError;
 use serde_json::Value;
 use shared_kernel::authorization::Caller;
 
+/// One violation of the template schema by a credential's claims.
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct SchemaViolation {
+    /// JSON pointer to the offending value within the claims; empty for the claims object itself.
+    pub path: String,
+    pub message: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum TemplateIssuanceError {
     #[error(transparent)]
@@ -24,8 +32,11 @@ pub enum TemplateIssuanceError {
     ExpirationExceedsTemplateLimit(String),
     #[error("The template's schema is not a valid JSON Schema: {0}")]
     InvalidSchema(String),
-    #[error("The credential does not match the template schema. Violations:\n{0}")]
-    SchemaValidation(String),
+    #[error("The credential does not match the template schema. Violations:\n{descriptions}")]
+    SchemaValidation {
+        violations: Vec<SchemaViolation>,
+        descriptions: String,
+    },
 }
 
 pub async fn published_template(
@@ -53,21 +64,30 @@ pub fn validate_credential_against_template(
         let data = credential.get("credentialSubject").unwrap_or(credential);
         let validator =
             jsonschema::validator_for(schema).map_err(|e| TemplateIssuanceError::InvalidSchema(e.to_string()))?;
-        let errors: Vec<String> = validator
+        let (violations, descriptions): (Vec<SchemaViolation>, Vec<String>) = validator
             .iter_errors(data)
             .enumerate()
             .map(|(i, e)| {
-                format!(
-                    "  [{}] Path `{}`: {} (schema path: {})",
-                    i + 1,
-                    e.instance_path(),
-                    e,
-                    e.schema_path()
+                (
+                    SchemaViolation {
+                        path: e.instance_path().to_string(),
+                        message: e.to_string(),
+                    },
+                    format!(
+                        "  [{}] Path `{}`: {} (schema path: {})",
+                        i + 1,
+                        e.instance_path(),
+                        e,
+                        e.schema_path()
+                    ),
                 )
             })
-            .collect();
-        if !errors.is_empty() {
-            return Err(TemplateIssuanceError::SchemaValidation(errors.join("\n")));
+            .unzip();
+        if !violations.is_empty() {
+            return Err(TemplateIssuanceError::SchemaValidation {
+                violations,
+                descriptions: descriptions.join("\n"),
+            });
         }
     }
     Ok(())

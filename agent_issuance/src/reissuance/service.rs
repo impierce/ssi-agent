@@ -792,7 +792,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             error,
-            ReissuanceServiceError::Template(TemplateIssuanceError::SchemaValidation(_))
+            ReissuanceServiceError::Template(TemplateIssuanceError::SchemaValidation { .. })
         ));
         assert_no_replacement(&state).await;
         command_handler(

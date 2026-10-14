@@ -233,6 +233,10 @@ This error occurs when a template contains a `schema` value that is not itself a
 
 ## Credential Schema Validation Failed
 
+Schema failures also include a `violations` array with each violation's JSON-pointer
+`path` and `message`. Credential creation, batch issuance, and reissuance use the same
+validation and error shape.
+
 This error occurs when the credential data in the request does not satisfy the template's JSON Schema. UniCore validates unsigned credential payloads against the template schema before creating the credential and returns the list of schema violations in the error detail.
 
 ### Resolution

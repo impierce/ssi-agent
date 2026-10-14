@@ -1,5 +1,5 @@
 use crate::{
-    offer::{command::OfferCommand, error::OfferError},
+    offer::{aggregate::DeliveryOptions, command::OfferCommand, error::OfferError},
     state::IssuanceState,
 };
 use agent_shared::{
@@ -8,6 +8,31 @@ use agent_shared::{
 };
 use oid4vci::credential_offer::GrantType;
 use shared_kernel::authorization::Caller;
+
+/// Derives an offer's grants and transaction-code constraints from the template authorization.
+pub fn create_credential_offer_command(
+    offer_id: &str,
+    configuration_id: &str,
+    authorization: &Authorization,
+    delivery_options: Option<DeliveryOptions>,
+) -> OfferCommand {
+    let tx_code_constraints = authorization
+        .pre_authorized
+        .then(|| authorization.tx_code_constraints.clone())
+        .flatten();
+    let grant_types = vec![if authorization.pre_authorized {
+        GrantType::PreAuthorizedCode
+    } else {
+        GrantType::AuthorizationCode
+    }];
+    OfferCommand::CreateCredentialOffer {
+        offer_id: offer_id.to_owned(),
+        template_ids: vec![configuration_id.to_owned()],
+        grant_types,
+        tx_code_constraints,
+        delivery_options,
+    }
+}
 
 pub enum OfferCreation {
     Fresh,
@@ -45,27 +70,12 @@ pub async fn ensure_offer_contains_credential(
         .is_none(),
     };
     if create {
-        let tx_code_constraints = authorization
-            .pre_authorized
-            .then_some(authorization.tx_code_constraints)
-            .flatten();
-        let grant_types = vec![if authorization.pre_authorized {
-            GrantType::PreAuthorizedCode
-        } else {
-            GrantType::AuthorizationCode
-        }];
         command_handler(
             state.authorization_checker.clone(),
             caller.clone(),
             offer_id,
             &state.command.offer,
-            OfferCommand::CreateCredentialOffer {
-                offer_id: offer_id.to_owned(),
-                template_ids: vec![configuration_id.to_owned()],
-                grant_types,
-                tx_code_constraints,
-                delivery_options: None,
-            },
+            create_credential_offer_command(offer_id, configuration_id, &authorization, None),
         )
         .await?;
     }

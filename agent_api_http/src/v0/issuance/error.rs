@@ -263,11 +263,14 @@ impl IntoApiErrorExt for TemplateIssuanceError {
                 "Invalid Template Schema",
                 "invalid-template-schema",
             ),
-            SchemaValidation(_) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "Credential Schema Validation Failed",
-                "credential-schema-validation-failed",
-            ),
+            SchemaValidation { violations, .. } => {
+                return ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Credential Schema Validation Failed")
+                    .type_url(type_url("issuance#credential-schema-validation-failed"))
+                    .message(message)
+                    .field("violations", violations)
+                    .finish()
+            }
         };
         ApiError::builder(status)
             .title(title)
