@@ -47,7 +47,6 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
             reason: None,
             trigger_type: None,
             triggered_by: None,
-            status_action: None,
         },
     )
     .await

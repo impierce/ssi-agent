@@ -18,7 +18,6 @@ impl View<Reissuance> for Reissuance {
                 reason,
                 trigger_type,
                 triggered_by,
-                status_action,
                 created_at,
             } => {
                 self.reissuance_id.clone_from(reissuance_id);
@@ -29,7 +28,6 @@ impl View<Reissuance> for Reissuance {
                 self.reason.clone_from(reason);
                 self.trigger_type.clone_from(trigger_type);
                 self.triggered_by.clone_from(triggered_by);
-                self.status_action.clone_from(status_action);
                 self.created_at.replace(*created_at);
             }
         }

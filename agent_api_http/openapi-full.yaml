@@ -3078,13 +3078,14 @@ components:
       - originalCredentialId
       - credentialConfigurationId
       - credential
-      - expiresAt
       properties:
         credential: {}
         credentialConfigurationId:
           type: string
         expiresAt:
-          $ref: '#/components/schemas/CredentialExpiry'
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/CredentialExpiry'
         originalCredentialId:
           type: string
         reason:
@@ -5088,10 +5089,6 @@ components:
         original_credential_id:
           type: string
         reason:
-          type:
-          - string
-          - 'null'
-        status_action:
           type:
           - string
           - 'null'

@@ -31,7 +31,7 @@ pub struct CreateReissuanceRequest {
     pub offer_id: String,
     pub credential_configuration_id: String,
     pub credential: serde_json::Value,
-    pub expires_at: CredentialExpiry,
+    pub expires_at: Option<CredentialExpiry>,
 
     pub reason: Option<String>,
     pub trigger_type: Option<String>,
@@ -158,7 +158,7 @@ where
         }
         let template = published_template(library_state, caller.clone(), &request.credential_configuration_id).await?;
         validate_credential_against_template(&request.credential, &template)?;
-        let expires_at = template_credential_expiry(&template, Some(request.expires_at))?;
+        let expires_at = template_credential_expiry(&template, request.expires_at)?;
 
         self.policy
             .authorize(&ReissuancePolicyRequest {
@@ -180,7 +180,6 @@ where
             reason: request.reason,
             trigger_type: request.trigger_type,
             triggered_by: request.triggered_by,
-            status_action: None,
         };
 
         command_handler(
@@ -462,7 +461,7 @@ mod tests {
             offer_id: "offer-id".to_string(),
             credential_configuration_id: credential_configuration_id.to_string(),
             credential,
-            expires_at: CredentialExpiry::Never,
+            expires_at: Some(CredentialExpiry::Never),
             reason: Some("data_changed".to_string()),
             trigger_type: Some("manual".to_string()),
             triggered_by: Some("unitrust".to_string()),
@@ -601,7 +600,6 @@ mod tests {
         assert_eq!(reissuance.reason.as_deref(), Some("data_changed"));
         assert_eq!(reissuance.trigger_type.as_deref(), Some("manual"));
         assert_eq!(reissuance.triggered_by.as_deref(), Some("unitrust"));
-        assert_eq!(reissuance.status_action, None);
     }
 
     #[async_std::test]
@@ -808,7 +806,7 @@ mod tests {
         .await
         .unwrap();
         let mut request = reissuance_request("SD-JWT VC", json!({"dob": "2010-01-01"}));
-        request.expires_at = CredentialExpiry::Fixed("2099-01-01T00:00:00Z".parse().unwrap());
+        request.expires_at = Some(CredentialExpiry::Fixed("2099-01-01T00:00:00Z".parse().unwrap()));
         let error = service
             .create(&state, &library, Caller::Anonymous, request)
             .await
@@ -836,7 +834,6 @@ mod tests {
                 reason: None,
                 trigger_type: None,
                 triggered_by: None,
-                status_action: None,
             },
         )
         .await
@@ -863,5 +860,35 @@ mod tests {
                 .is_none()
         );
         assert!(query_handler("offer-id", &state.query.offer).await.unwrap().is_none());
+    }
+
+    #[async_std::test]
+    async fn create_reissuance_defaults_expiration_from_template() {
+        let state = test_state().await;
+        create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
+        let library = test_library_state().await;
+        command_handler(
+            "SD-JWT VC",
+            &library.command.template,
+            agent_library::template::command::TemplateCommand::UpdateCredentialExpiration {
+                template_id: "SD-JWT VC".to_owned(),
+                credential_expiration: agent_library::template::aggregate::Expiration::DateTime(
+                    "2099-01-01T00:00:00Z".to_owned(),
+                ),
+            },
+        )
+        .await
+        .unwrap();
+        let mut request = reissuance_request("SD-JWT VC", json!({"first_name": "Ferris"}));
+        request.expires_at = None;
+        let response = ReissuanceService::default()
+            .create(&state, &library, Caller::Anonymous, request)
+            .await
+            .unwrap();
+        let credential = query_handler(&response.new_credential_id, &state.query.credential)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(credential.expires_at, Some("2099-01-01T00:00:00Z".parse().unwrap()));
     }
 }

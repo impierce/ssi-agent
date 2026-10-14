@@ -26,7 +26,8 @@ pub struct CreateCredentialReissuanceRequest {
     pub original_credential_id: String,
     pub credential_configuration_id: String,
     pub credential: serde_json::Value,
-    pub expires_at: CredentialExpiry,
+    #[serde(default)]
+    pub expires_at: Option<CredentialExpiry>,
     pub reason: Option<String>,
     // TODO stronger types
     pub trigger_type: Option<String>,
@@ -332,7 +333,6 @@ mod tests {
                                 "last_name": "Reissued",
                                 "dob": "2010-01-01"
                             },
-                            "expiresAt": "never",
                             "reason": "data_changed",
                             "triggerType": "manual",
                             "triggeredBy": "unitrust"
@@ -384,7 +384,6 @@ mod tests {
         );
         assert_eq!(reissuance.new_credential_id, new_credential_id);
         assert_eq!(reissuance.offer_id, offer_id);
-        assert_eq!(reissuance.status_action, None);
         assert_eq!(new_credential.data.unwrap().raw["last_name"], json!("Reissued"));
         assert_eq!(offer.credential_ids, vec![new_credential_id.to_string()]);
     }

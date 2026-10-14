@@ -14,7 +14,6 @@ pub enum ReissuanceEvent {
         reason: Option<String>,
         trigger_type: Option<String>,
         triggered_by: Option<String>,
-        status_action: Option<String>,
         created_at: DateTime<Utc>,
     },
 }

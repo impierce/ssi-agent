@@ -36,8 +36,9 @@ original, including its SD-JWT type parameters. Supported formats are `dc+sd-jwt
 `vc+sd-jwt`. Display metadata may change between issuances. The template must exist,
 remain Published, and accept the supplied payload under its current JSON Schema.
 Validation uses `credentialSubject` when present, otherwise the payload itself.
-`expiresAt` is required and must be an RFC 3339 timestamp within the template's current
-expiration deadline, or `"never"` when the template has no deadline.
+`expiresAt` is optional and defaults to the template's credential expiration. When
+provided, it must be an RFC 3339 timestamp within the template's current expiration
+deadline, or `"never"` when the template has no deadline.
 
 For an issued original under a published `SD-JWT VC` template with no expiration limit:
 
@@ -68,8 +69,8 @@ for additional restrictions; the HTTP endpoint uses the default policy.
 
 Reissuance does not revoke or suspend the original. Use the existing credential-status
 update endpoint when that is required. `statusAction` is unsupported and is rejected
-as an unknown request field. Historical events may still contain `status_action`
-metadata; it does not execute a status change.
+as an unknown request field. Historical events and views containing `status_action`
+remain readable; that obsolete metadata is ignored and omitted from new output.
 
 Validation failures occur before writes. The relation is persisted before the new
 credential and offer, so a failed relation command cannot expose an unlinked replacement.

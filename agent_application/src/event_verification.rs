@@ -73,9 +73,10 @@ mod tests {
             reason: None,
             trigger_type: None,
             triggered_by: None,
-            status_action: None,
             created_at: "2026-10-09T00:00:00Z".parse().unwrap(),
         };
+        let mut payload = serde_json::to_value(event).unwrap();
+        payload["ReissuanceCreated"]["status_action"] = serde_json::json!("replaced");
         let report = verify_events_with(
             [RawStoredEvent {
                 aggregate_type: "reissuance".to_string(),
@@ -83,7 +84,7 @@ mod tests {
                 sequence: 1,
                 event_type: "ReissuanceCreated".to_string(),
                 event_version: "1".to_string(),
-                payload: serde_json::to_value(event).unwrap(),
+                payload,
             }],
             core_event_verifiers(),
         );

@@ -12,7 +12,6 @@ pub enum ReissuanceCommand {
         reason: Option<String>,
         trigger_type: Option<String>,
         triggered_by: Option<String>,
-        status_action: Option<String>,
     },
 }
 

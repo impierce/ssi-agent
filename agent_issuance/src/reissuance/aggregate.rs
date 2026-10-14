@@ -26,7 +26,6 @@ pub struct Reissuance {
     pub reason: Option<String>,
     pub trigger_type: Option<String>,
     pub triggered_by: Option<String>,
-    pub status_action: Option<String>,
 
     pub created_at: Option<DateTime<Utc>>,
 }
@@ -57,7 +56,6 @@ impl Aggregate for Reissuance {
                 reason,
                 trigger_type,
                 triggered_by,
-                status_action,
             } => {
                 if self.created_at.is_some() {
                     return Err(ReissuanceError::AlreadyExists);
@@ -78,7 +76,6 @@ impl Aggregate for Reissuance {
                     original_credential_id,
                     reason,
                     reissuance_id,
-                    status_action,
                     trigger_type,
                     triggered_by,
                 }]
@@ -103,7 +100,6 @@ impl Aggregate for Reissuance {
                 reason,
                 trigger_type,
                 triggered_by,
-                status_action,
                 created_at,
             } => {
                 self.reissuance_id = reissuance_id;
@@ -114,7 +110,6 @@ impl Aggregate for Reissuance {
                 self.reason = reason;
                 self.trigger_type = trigger_type;
                 self.triggered_by = triggered_by;
-                self.status_action = status_action;
                 self.created_at = Some(created_at);
             }
         }
@@ -137,7 +132,6 @@ mod tests {
             reason: Some("data_changed".to_string()),
             trigger_type: Some("manual".to_string()),
             triggered_by: Some("unitrust".to_string()),
-            status_action: None,
         }
     }
 
@@ -165,7 +159,6 @@ mod tests {
             reason,
             trigger_type,
             triggered_by,
-            status_action,
             created_at,
         } = events
             .first()
@@ -180,7 +173,6 @@ mod tests {
         assert_eq!(reason.as_deref(), Some("data_changed"));
         assert_eq!(trigger_type.as_deref(), Some("manual"));
         assert_eq!(triggered_by.as_deref(), Some("unitrust"));
-        assert_eq!(status_action, None);
 
         reissuance.apply(ReissuanceCreated {
             reissuance_id,
@@ -191,7 +183,6 @@ mod tests {
             reason,
             trigger_type,
             triggered_by,
-            status_action,
             created_at,
         });
 
@@ -203,7 +194,6 @@ mod tests {
         assert_eq!(reissuance.reason.as_deref(), Some("data_changed"));
         assert_eq!(reissuance.trigger_type.as_deref(), Some("manual"));
         assert_eq!(reissuance.triggered_by.as_deref(), Some("unitrust"));
-        assert_eq!(reissuance.status_action, None);
         assert!(reissuance.created_at.is_some());
 
         let error = reissuance
@@ -212,27 +202,5 @@ mod tests {
             .expect_err("existing reissuance relation should not be recreated");
 
         assert_eq!(error, ReissuanceError::AlreadyExists);
-    }
-
-    #[async_std::test]
-    async fn create_reissuance_preserves_optional_status_action_metadata() {
-        let sink = EventSink::default();
-        let services = IssuanceServices::default().await;
-        let mut command = create_reissuance_command();
-        let ReissuanceCommand::CreateReissuance { status_action, .. } = &mut command;
-        *status_action = Some("replaced".to_string());
-
-        Reissuance::default()
-            .handle(command, &services, &sink)
-            .await
-            .expect("reissuance creation should succeed");
-        let events = sink.collect().await;
-
-        let ReissuanceCreated { status_action, .. } = events
-            .first()
-            .expect("reissuance creation should emit an event")
-            .clone();
-
-        assert_eq!(status_action.as_deref(), Some("replaced"));
     }
 }

@@ -94,8 +94,6 @@ dependencies = [
  "identity_did",
  "identity_document",
  "indexmap 2.14.0",
- "iso8601",
- "jsonschema 0.46.6",
  "jsonwebtoken",
  "lazy_static",
  "mime",
