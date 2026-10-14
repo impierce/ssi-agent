@@ -4,6 +4,11 @@ use crate::handlers::{
     authorize_command, caller, command_handler, internal_command_handler, internal_query_handler, query_handler,
 };
 use crate::API_VERSION;
+pub use agent_issuance::application::template_issuance::SchemaViolation;
+use agent_issuance::application::{
+    credential_offer::create_credential_offer_command,
+    template_issuance::{published_template, template_credential_expiry, validate_credential_against_template},
+};
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
     credential::{
@@ -17,9 +22,8 @@ use agent_issuance::{
     },
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
-use agent_library::queries;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{Expiration, Status as TemplateStatus, Template};
+use agent_library::template::aggregate::Template;
 use agent_shared::config::Authorization;
 use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
 use axum::Extension;
@@ -31,7 +35,6 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::header;
 use oauth_tsl::status_list::StatusType;
-use oid4vci::credential_offer::GrantType;
 use oid4vci::{
     credential_format_profiles::CredentialFormats,
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -107,14 +110,6 @@ pub struct BatchCredentialsRequest {
     pub expires_at: Option<CredentialExpiry>,
     /// One row per holder.
     pub credentials: Vec<BatchCredentialRow>,
-}
-
-/// One violation of the template schema by a credential's claims.
-#[derive(Serialize, Deserialize, utoipa::ToSchema)]
-pub struct SchemaViolation {
-    /// JSON pointer to the offending value within the claims; empty for the claims object itself.
-    pub path: String,
-    pub message: String,
 }
 
 /// The RFC 9457 members of a problem, for embedding one problem inside another.
@@ -235,32 +230,9 @@ async fn resolve_template(
     library_state: &Arc<LibraryState>,
     template_id: &str,
 ) -> Result<ResolvedTemplate, ApiError> {
-    if template_id.is_empty() {
-        return Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Missing Template ID")
-            .type_url(type_url("issuance#missing-template-id"))
-            .message("The `templateId` field is required and must not be empty.")
-            .finish());
-    }
-
-    let template: Template = queries::get_template(library_state, caller(actor.clone()), template_id)
+    let template = published_template(library_state, caller(actor.clone()), template_id)
         .await
-        .map_err(IntoApiErrorExt::into_api_error)?
-        .ok_or_else(|| {
-            ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Template Not Found")
-                .type_url(type_url("issuance#template-not-found"))
-                .message(format!("No template found with id: `{template_id}`"))
-                .finish()
-        })?;
-
-    if template.status != TemplateStatus::Published {
-        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-            .title("Template Not Published")
-            .type_url(type_url("issuance#template-not-published"))
-            .message("Credential issuance requires the template to be Published.")
-            .finish());
-    }
+        .map_err(IntoApiErrorExt::into_api_error)?;
 
     let (_, credential_configuration, authorization) = query_handler(
         state.authorization_checker.clone(),
@@ -315,19 +287,9 @@ impl ResolvedTemplate {
                 .finish());
         }
 
-        if let Some(schema) = self.template.schema.as_ref() {
-            let data_to_validate = credential.get("credentialSubject").unwrap_or(credential);
-            validate_credential_against_schema(data_to_validate, schema).map_err(|e| *e)?;
-        }
-
-        let expires_at = match expires_at {
-            Some(explicit) => {
-                let template_deadline = expiration_to_credential_expiry(&self.template.credential_expiration)?;
-                validate_expiry_within_template_deadline(explicit, &template_deadline)?;
-                explicit.clone()
-            }
-            None => expiration_to_credential_expiry(&self.template.credential_expiration)?,
-        };
+        validate_credential_against_template(credential, &self.template).map_err(IntoApiErrorExt::into_api_error)?;
+        let expires_at =
+            template_credential_expiry(&self.template, expires_at.clone()).map_err(IntoApiErrorExt::into_api_error)?;
 
         Ok(CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.to_owned(),
@@ -362,26 +324,12 @@ impl ResolvedTemplate {
     }
 
     fn create_offer_command(&self, offer_id: &str, delivery_options: Option<DeliveryOptions>) -> OfferCommand {
-        // Extract the tx_code_constraints from the credential configuration if available.
-        let tx_code_constraints = self
-            .authorization
-            .pre_authorized
-            .then(|| self.authorization.tx_code_constraints.clone())
-            .flatten();
-
-        let grant_types = vec![if self.authorization.pre_authorized {
-            GrantType::PreAuthorizedCode
-        } else {
-            GrantType::AuthorizationCode
-        }];
-
-        OfferCommand::CreateCredentialOffer {
-            offer_id: offer_id.to_owned(),
-            template_ids: vec![self.template.template_id.clone()],
-            grant_types,
-            tx_code_constraints,
+        create_credential_offer_command(
+            offer_id,
+            &self.template.template_id,
+            &self.authorization,
             delivery_options,
-        }
+        )
     }
 
     fn add_to_offer_command(&self, offer_id: &str, credential_id: &str) -> OfferCommand {
@@ -979,142 +927,6 @@ pub async fn patch_credential(
     }
 }
 
-/// Converts a template's `Expiration` value into a `CredentialExpiry` for the issuance pipeline.
-///
-/// - `Never` → `CredentialExpiry::Never`
-/// - `DateTime(s)` → `CredentialExpiry::Fixed(parsed datetime)`
-/// - `Duration(s)` → `CredentialExpiry::Fixed(Utc::now() + duration)`
-#[allow(clippy::result_large_err)]
-fn expiration_to_credential_expiry(expiration: &Expiration) -> Result<CredentialExpiry, ApiError> {
-    match expiration {
-        Expiration::Never => Ok(CredentialExpiry::Never),
-        Expiration::DateTime(s) => chrono::DateTime::parse_from_rfc3339(s)
-            .map(|dt| CredentialExpiry::Fixed(dt.with_timezone(&chrono::Utc)))
-            .map_err(|e| {
-                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                    .title("Invalid Template Expiration")
-                    .message(format!("Template expiration datetime `{s}` could not be parsed: {e}"))
-                    .finish()
-            }),
-        Expiration::Duration(s) => iso8601::duration(s)
-            .map_err(|_| {
-                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                    .title("Invalid Template Expiration")
-                    .message(format!("Template expiration duration `{s}` could not be parsed"))
-                    .finish()
-            })
-            .map(|d| {
-                let delta = match d {
-                    iso8601::Duration::YMDHMS {
-                        year,
-                        month,
-                        day,
-                        hour,
-                        minute,
-                        second,
-                        millisecond,
-                    } => {
-                        chrono::Duration::days(year as i64 * 365 + month as i64 * 30 + day as i64)
-                            + chrono::Duration::hours(hour as i64)
-                            + chrono::Duration::minutes(minute as i64)
-                            + chrono::Duration::seconds(second as i64)
-                            + chrono::Duration::milliseconds(millisecond as i64)
-                    }
-                    iso8601::Duration::Weeks(w) => chrono::Duration::weeks(w as i64),
-                };
-                CredentialExpiry::Fixed(chrono::Utc::now() + delta)
-            }),
-    }
-}
-
-/// Validates that an explicitly provided `expires_at` does not exceed the template's deadline.
-///
-/// - If the template deadline is `Never`, any explicit value is accepted.
-/// - If the explicit value is `Never` but the template has a fixed deadline, that is rejected.
-/// - Otherwise, the explicit datetime must be ≤ the template deadline.
-#[allow(clippy::result_large_err)]
-fn validate_expiry_within_template_deadline(
-    explicit: &CredentialExpiry,
-    deadline: &CredentialExpiry,
-) -> Result<(), ApiError> {
-    match (explicit, deadline) {
-        // Template has no deadline — anything goes.
-        (_, CredentialExpiry::Never) => Ok(()),
-        // Explicit is "never" but template enforces a deadline.
-        (CredentialExpiry::Never, CredentialExpiry::Fixed(limit)) => Err(ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Expiration Exceeds Template Limit")
-            .type_url(type_url("issuance#expiration-exceeds-template-limit"))
-            .message(format!(
-                "The template requires an expiration date not after {}",
-                limit.to_rfc3339()
-            ))
-            .finish()),
-        // Both are fixed — compare them.
-        (CredentialExpiry::Fixed(requested), CredentialExpiry::Fixed(limit)) => {
-            if requested > limit {
-                Err(ApiError::builder(StatusCode::BAD_REQUEST)
-                    .title("Expiration Exceeds Template Limit")
-                    .type_url(type_url("issuance#expiration-exceeds-template-limit"))
-                    .message(format!(
-                        "The template requires an expiration date not after {}",
-                        limit.to_rfc3339()
-                    ))
-                    .finish())
-            } else {
-                Ok(())
-            }
-        }
-    }
-}
-
-/// Validates the credential data against the template's JSON Schema.///
-/// Returns a detailed error response if validation fails, listing all schema violations.
-fn validate_credential_against_schema(credential: &Value, schema: &Value) -> Result<(), Box<ApiError>> {
-    let validator = jsonschema::validator_for(schema).map_err(|e| {
-        Box::new(
-            ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Invalid Template Schema")
-                .type_url(type_url("issuance#invalid-template-schema"))
-                .message(format!("The template's schema is not a valid JSON Schema: {e}"))
-                .finish(),
-        )
-    })?;
-
-    let (violations, descriptions): (Vec<SchemaViolation>, Vec<String>) = validator
-        .iter_errors(credential)
-        .map(|e| {
-            (
-                SchemaViolation {
-                    path: e.instance_path().to_string(),
-                    message: e.to_string(),
-                },
-                format!("Path `{}`: {} (schema path: {})", e.instance_path(), e, e.schema_path()),
-            )
-        })
-        .unzip();
-
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        Err(Box::new(
-            ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Credential Schema Validation Failed")
-                .type_url(type_url("issuance#credential-schema-validation-failed"))
-                .message(format!(
-                    "The credential does not match the template schema. Violations:\n{}",
-                    descriptions
-                        .iter()
-                        .enumerate()
-                        .map(|(i, e)| format!("  [{}] {}", i + 1, e))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ))
-                .field("violations", &violations)
-                .finish(),
-        ))
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -1122,6 +934,9 @@ pub mod tests {
     use crate::v0::issuance::{credential_issuer::token_status_list::tests::create_test_signed_credential, router};
     use crate::API_VERSION;
     use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+    use agent_issuance::application::template_issuance::{
+        expiration_to_credential_expiry, validate_expiry_within_template_deadline,
+    };
     use agent_issuance::issuance_state;
     use agent_issuance::offer::{aggregate::Offer, error::OfferError};
     use agent_issuance::{services::IssuanceServices, state::initialize};
@@ -2336,7 +2151,10 @@ pub mod tests {
         fn invalid_datetime_returns_error() {
             let result = expiration_to_credential_expiry(&Expiration::DateTime("not-a-date".to_string()));
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                result.unwrap_err().into_api_error().status(),
+                StatusCode::INTERNAL_SERVER_ERROR
+            );
         }
 
         #[test]
@@ -2375,7 +2193,10 @@ pub mod tests {
         fn invalid_duration_returns_error() {
             let result = expiration_to_credential_expiry(&Expiration::Duration("not-a-duration".to_string()));
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                result.unwrap_err().into_api_error().status(),
+                StatusCode::INTERNAL_SERVER_ERROR
+            );
         }
     }
 
@@ -2408,7 +2229,7 @@ pub mod tests {
             let result =
                 validate_expiry_within_template_deadline(&CredentialExpiry::Never, &fixed("2030-01-01T00:00:00Z"));
             assert!(result.is_err());
-            let err = result.unwrap_err();
+            let err = result.unwrap_err().into_api_error();
             assert_eq!(err.status(), StatusCode::BAD_REQUEST);
             assert!(err
                 .message()
@@ -2441,7 +2262,7 @@ pub mod tests {
                 &fixed("2030-01-01T00:00:00Z"),
             );
             assert!(result.is_err());
-            let err = result.unwrap_err();
+            let err = result.unwrap_err().into_api_error();
             assert_eq!(err.status(), StatusCode::BAD_REQUEST);
             assert!(err
                 .message()
