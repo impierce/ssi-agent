@@ -46,13 +46,20 @@ async fn configured_offer_events_are_published_as_cloud_events() {
 
     // Without an enabled configuration, nothing is loaded.
     configure_nats(None);
-    assert!(NatsEventPublisher::from_config(&event_bus).is_none());
+    assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
     configure_nats(Some(nats_config(false, &nats_url)));
-    assert!(NatsEventPublisher::from_config(&event_bus).is_none());
+    assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
+
+    // An unreachable server fails loading instead of silently dropping events.
+    configure_nats(Some(nats_config(true, "nats://127.0.0.1:1")));
+    assert!(NatsEventPublisher::from_config(&event_bus).await.is_err());
 
     // Configure the publisher against the running NATS container
     configure_nats(Some(nats_config(true, &nats_url)));
-    let publisher = NatsEventPublisher::from_config(&event_bus).expect("publisher should load when enabled");
+    let publisher = NatsEventPublisher::from_config(&event_bus)
+        .await
+        .unwrap()
+        .expect("publisher should load when enabled");
     let publisher_handle = publisher.spawn();
 
     // Subscribe to NATS subject
@@ -75,12 +82,10 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     let configured_event = CloudEvent::new("com.impierce.unicore.tx-code-generated", "https://impierce.com/offer")
         .with_subject("offer-1")
         .with_data(serde_json::json!({
-            "TxCodeGenerated": {
-                "offer_id": "offer-1",
-                "tx_code": "12345",
-                "delivery_options": {
-                    "recipient_email": "holder@example.test"
-                }
+            "offer_id": "offer-1",
+            "tx_code": "12345",
+            "delivery_options": {
+                "recipient_email": "holder@example.test"
             }
         }));
     let expected_event_id = configured_event.id.clone();
@@ -93,7 +98,7 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     let cloud_event: Value = serde_json::from_slice(&message.payload).unwrap();
     assert_eq!(cloud_event["type"], "com.impierce.unicore.tx-code-generated");
     assert_eq!(cloud_event["id"], expected_event_id);
-    assert_eq!(cloud_event["data"]["TxCodeGenerated"]["tx_code"], "12345");
+    assert_eq!(cloud_event["data"]["tx_code"], "12345");
 
     assert!(
         tokio::time::timeout(Duration::from_millis(500), subscriber.next())

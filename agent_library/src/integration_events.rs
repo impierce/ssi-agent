@@ -64,19 +64,13 @@ impl TryFrom<TemplateEvent> for TemplateIntegrationEvent {
                     data_model: data_model_str.to_string(),
                 })
             }
-            TemplateEvent::TitleUpdated {
-                template_id,
-                title,
-                ..
-            } => Ok(Self::TemplateUpdated {
+            TemplateEvent::TitleUpdated { template_id, title, .. } => Ok(Self::TemplateUpdated {
                 template_id,
                 title: Some(title),
                 status: None,
             }),
             TemplateEvent::StatusUpdated {
-                template_id,
-                status,
-                ..
+                template_id, status, ..
             } => {
                 let status_str = match status {
                     Status::Draft => "draft",

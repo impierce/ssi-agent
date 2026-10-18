@@ -57,11 +57,9 @@ impl TryFrom<OfferEvent> for IssuanceIntegrationEvent {
                 ..
             } => {
                 let credential_ids = match credential_offer {
-                    oid4vci::credential_offer::CredentialOffer::CredentialOffer(payload) => payload
-                        .credential_configuration_ids
-                        .iter()
-                        .cloned()
-                        .collect(),
+                    oid4vci::credential_offer::CredentialOffer::CredentialOffer(payload) => {
+                        payload.credential_configuration_ids.iter().cloned().collect()
+                    }
                     _ => Vec::new(),
                 };
 
@@ -81,16 +79,12 @@ impl TryFrom<CredentialEvent> for IssuanceIntegrationEvent {
 
     fn try_from(event: CredentialEvent) -> Result<Self, Self::Error> {
         match event {
-            CredentialEvent::SignedCredentialCreated { credential_id, .. } => {
-                Ok(Self::CredentialIssued {
-                    credential_id,
-                    status: "issued".to_string(),
-                })
-            }
-            CredentialEvent::CredentialSigned {
+            CredentialEvent::SignedCredentialCreated { credential_id, .. } => Ok(Self::CredentialIssued {
                 credential_id,
-                status,
-                ..
+                status: "issued".to_string(),
+            }),
+            CredentialEvent::CredentialSigned {
+                credential_id, status, ..
             } => {
                 let status_str = match status {
                     crate::credential::aggregate::Status::Pending => "pending",

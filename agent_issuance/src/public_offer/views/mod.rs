@@ -2,6 +2,7 @@ use crate::public_offer::aggregate::PublicOffer;
 use cqrs_es::View;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use shared_kernel::view_repository::SoftDeletable;
 
 /// Single aggregate view - projects a single PublicOffer from its events
 pub type PublicOfferView = PublicOffer;
@@ -30,6 +31,12 @@ impl View<PublicOffer> for PublicOfferView {
                 self.deleted = true;
             }
         }
+    }
+}
+
+impl SoftDeletable for PublicOfferView {
+    fn is_deleted(&self) -> bool {
+        self.deleted
     }
 }
 

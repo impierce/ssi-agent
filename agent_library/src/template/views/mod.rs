@@ -3,6 +3,7 @@ pub mod all_templates;
 use super::event::TemplateEvent;
 use crate::template::aggregate::{Status, Template};
 use cqrs_es::{EventEnvelope, View};
+use shared_kernel::view_repository::SoftDeletable;
 
 pub type TemplateView = Template;
 
@@ -147,11 +148,18 @@ impl View<Template> for Template {
     }
 }
 
+impl SoftDeletable for TemplateView {
+    fn is_deleted(&self) -> bool {
+        self.status == Status::Deleted
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::template::aggregate::{DataModel, Visibility};
     use crate::template::event::{Expiration, HolderType};
+    use crate::template::views::all_templates::AllTemplatesView;
     use std::collections::HashMap;
 
     fn event(payload: TemplateEvent) -> EventEnvelope<Template> {
@@ -239,5 +247,19 @@ mod tests {
         }));
 
         assert_eq!(view.status, Status::Deleted);
+        assert!(view.is_deleted());
+    }
+
+    #[test]
+    fn all_templates_view_drops_deleted_templates() {
+        let mut view = AllTemplatesView::default();
+        view.update(&created_event());
+        assert!(view.templates.contains_key("template-id"));
+
+        view.update(&event(TemplateEvent::TemplateDeleted {
+            template_id: "template-id".to_string(),
+        }));
+
+        assert!(view.templates.is_empty());
     }
 }

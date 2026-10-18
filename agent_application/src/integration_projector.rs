@@ -84,10 +84,7 @@ mod tests {
             .with_caller(Some("user-1".into()), Some("user".into()));
 
         let projected = project_core_event(&domain_ce).expect("expected projected event");
-        assert_eq!(
-            projected.event_type,
-            "com.impierce.unicore.issuance.credential.offered"
-        );
+        assert_eq!(projected.event_type, "com.impierce.unicore.issuance.credential.offered");
         assert_eq!(projected.source, "/services/issuance");
         assert_eq!(projected.subject.as_deref(), Some("offer-123"));
         assert_eq!(projected.extension.callerid.as_deref(), Some("user-1"));
@@ -160,7 +157,10 @@ mod tests {
                 "url": "https://example.com/invitation"
             }));
         let projected = project_core_event(&ce).expect("expected projected event");
-        assert_eq!(projected.event_type, "com.impierce.unicore.connection.invitation.created");
+        assert_eq!(
+            projected.event_type,
+            "com.impierce.unicore.connection.invitation.created"
+        );
         assert_eq!(projected.source, "/services/connection");
         assert_eq!(projected.subject.as_deref(), Some("conn-1"));
     }
@@ -198,10 +198,7 @@ mod tests {
             }
         }
 
-        let custom_projectors: &[IntegrationProjectorFn] = &[
-            project_issuance_event,
-            custom_projector,
-        ];
+        let custom_projectors: &[IntegrationProjectorFn] = &[project_issuance_event, custom_projector];
 
         let ping = CloudEvent::new("com.custom.ping", "/services/ping");
         let projected = project_event(&ping, custom_projectors).expect("expected projected custom event");

@@ -42,9 +42,7 @@ impl TryFrom<ConnectionEvent> for ConnectionIntegrationEvent {
 
     fn try_from(event: ConnectionEvent) -> Result<Self, Self::Error> {
         match event {
-            ConnectionEvent::ConnectionAdded {
-                connection_id, url, ..
-            } => Ok(Self::InvitationCreated {
+            ConnectionEvent::ConnectionAdded { connection_id, url, .. } => Ok(Self::InvitationCreated {
                 connection_id,
                 url: Some(url.to_string()),
             }),

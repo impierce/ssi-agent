@@ -3,6 +3,43 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository as CoreViewRepository},
     Aggregate, View,
 };
+use tracing::debug;
+
+/// A trait for views that support soft deletion.
+///
+/// Implement this on your view types to enable the generic
+/// [`load_by_id`] query helper.
+pub trait SoftDeletable {
+    fn is_deleted(&self) -> bool;
+}
+
+/// Load a view for reading, treating a soft-deleted view as missing.
+///
+/// Projections must keep loading through the repository directly: they need to see deleted views,
+/// otherwise the next event for a deleted entity would rebuild its view from `Default`.
+///
+/// # Errors
+///
+/// Returns `PersistenceError` if the underlying repository operation fails.
+/// Returns `Ok(None)` if the view doesn't exist or is soft-deleted.
+/// Returns `Ok(Some(view))` if the view exists and is not soft-deleted.
+pub async fn load_by_id<V, A>(repo: &dyn DynViewRepository<V, A>, id: &str) -> Result<Option<V>, PersistenceError>
+where
+    V: View<A> + SoftDeletable,
+    A: Aggregate,
+{
+    match repo.load(id).await? {
+        Some(view) if !view.is_deleted() => {
+            debug!(view_id = id, "View loaded");
+            Ok(Some(view))
+        }
+        Some(_) => {
+            debug!(view_id = id, "View is soft-deleted, treating as not found");
+            Ok(None)
+        }
+        None => Ok(None),
+    }
+}
 
 /// A dyn-compatible wrapper trait for view repository operations.
 ///
@@ -105,4 +142,115 @@ pub trait ViewRepositoryFactory {
     where
         V: View<A> + Clone + 'static,
         A: Aggregate + 'static;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::in_memory::MemViewRepository;
+    use cqrs_es::{event_sink::EventSink, DomainEvent, EventEnvelope};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Default, Debug, Serialize, Deserialize)]
+    struct TestAggregate;
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    struct TestEvent;
+
+    impl DomainEvent for TestEvent {
+        fn event_type(&self) -> String {
+            "TestEvent".into()
+        }
+        fn event_version(&self) -> String {
+            "1.0".into()
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestError;
+
+    impl std::fmt::Display for TestError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "TestError")
+        }
+    }
+
+    impl std::error::Error for TestError {}
+
+    impl Aggregate for TestAggregate {
+        const TYPE: &'static str = "TestAggregate";
+        type Command = String;
+        type Event = TestEvent;
+        type Error = TestError;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            _command: Self::Command,
+            _services: &Self::Services,
+            _sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn apply(&mut self, _: Self::Event) {}
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct TestView {
+        deleted: bool,
+    }
+
+    impl View<TestAggregate> for TestView {
+        fn update(&mut self, _event: &EventEnvelope<TestAggregate>) {}
+    }
+
+    impl SoftDeletable for TestView {
+        fn is_deleted(&self) -> bool {
+            self.deleted
+        }
+    }
+
+    async fn repository_with(views: &[(&str, TestView)]) -> MemViewRepository<TestView, TestAggregate> {
+        let repo = MemViewRepository::default();
+        for (id, view) in views {
+            CoreViewRepository::update_view(&repo, view.clone(), ViewContext::new(id.to_string(), 0))
+                .await
+                .unwrap();
+        }
+        repo
+    }
+
+    #[tokio::test]
+    async fn load_by_id_returns_none_for_missing_view() {
+        let repo = repository_with(&[]).await;
+
+        assert_eq!(load_by_id(&repo, "missing").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn load_by_id_returns_none_for_soft_deleted_view() {
+        let repo = repository_with(&[("deleted", TestView { deleted: true })]).await;
+
+        assert_eq!(load_by_id(&repo, "deleted").await.unwrap(), None);
+        // The repository itself still returns the view, so projections can keep applying events to it.
+        assert!(DynViewRepository::load(&repo, "deleted").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn load_by_id_returns_live_view() {
+        let repo = repository_with(&[("live", TestView { deleted: false })]).await;
+
+        assert_eq!(
+            load_by_id(&repo, "live").await.unwrap(),
+            Some(TestView { deleted: false })
+        );
+    }
+
+    #[tokio::test]
+    async fn load_by_id_accepts_boxed_view_repository() {
+        let repo = BoxedViewRepository::new(Box::new(repository_with(&[("live", TestView::default())]).await));
+
+        assert_eq!(load_by_id(&repo, "live").await.unwrap(), Some(TestView::default()));
+    }
 }

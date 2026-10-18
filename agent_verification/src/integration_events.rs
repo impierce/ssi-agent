@@ -171,8 +171,7 @@ mod tests {
             state: None,
             validated: true,
         };
-        let integration =
-            VerificationIntegrationEvent::try_from((&event, "req-1")).expect("should map");
+        let integration = VerificationIntegrationEvent::try_from((&event, "req-1")).expect("should map");
         assert_eq!(
             integration,
             VerificationIntegrationEvent::PresentationVerified {
@@ -189,8 +188,7 @@ mod tests {
             state: None,
             validated: false,
         };
-        let integration =
-            VerificationIntegrationEvent::try_from((&event, "req-1")).expect("should map");
+        let integration = VerificationIntegrationEvent::try_from((&event, "req-1")).expect("should map");
         assert_eq!(
             integration,
             VerificationIntegrationEvent::PresentationFailed {

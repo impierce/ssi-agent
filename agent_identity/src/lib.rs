@@ -6,6 +6,7 @@ pub mod service;
 
 pub mod dns;
 pub mod integration_events;
+pub mod queries;
 pub mod services;
 pub mod state;
 

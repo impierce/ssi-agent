@@ -34,7 +34,25 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
 
     let state = application_state().await;
     state.verify_persisted_events().await;
+    let issuance = state.api.issuance_state.as_ref().expect("issuance is enabled");
+    agent_shared::handlers::public_command_handler(
+        "persisted-reissuance",
+        &issuance.command.reissuance,
+        agent_issuance::reissuance::command::ReissuanceCommand::CreateReissuance {
+            reissuance_id: "persisted-reissuance".to_owned(),
+            original_credential_id: "original".to_owned(),
+            new_credential_id: "replacement".to_owned(),
+            offer_id: "replacement-offer".to_owned(),
+            credential_configuration_id: "configuration".to_owned(),
+            reason: None,
+            trigger_type: None,
+            triggered_by: None,
+        },
+    )
+    .await
+    .unwrap();
     let app = router(state);
+    assert_reissuance_views(&app).await;
 
     let (status, _) = send(&app, Request::get("/readyz").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
@@ -60,6 +78,7 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
 
     state.verify_persisted_events().await;
     let app = router(state);
+    assert_reissuance_views(&app).await;
 
     let (status, _) = send(&app, Request::get("/readyz").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
@@ -77,4 +96,29 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     let (status, profile) = send(&app, Request::get("/v0/profile").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(profile["source"], "Provisioned");
+}
+
+async fn assert_reissuance_views(app: &Router) {
+    let (status, relation) = send(
+        app,
+        Request::get("/v0/get-credential-reissuance/persisted-reissuance")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(relation["new_credential_id"], "replacement");
+    let (status, relations) = send(
+        app,
+        Request::get("/v0/list-all-credential-reissuances")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(relations
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|relation| relation["id"] == "persisted-reissuance"));
 }

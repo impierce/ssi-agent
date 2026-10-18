@@ -64,6 +64,7 @@ impl TokenIssuanceService {
         // TODO: This mirrors the `public_offer_aggregate_id()`. Aggregate IDs should be generated in a consistent way in a single place.
         let aggregate_id = format!("public_offer:{offer_id}");
 
+        // Deleted offers must stay visible here: without a record, the offer would count as a normal offer.
         let public_offer = public_query_handler(&aggregate_id, &issuance_state.query.public_offer)
             .await
             .map_err(|err| TokenIssuanceError::Internal(err.to_string()))?;

@@ -114,7 +114,7 @@ pub fn build_cloud_event(
     payload: serde_json::Value,
     occurred_at: Option<DateTime<Utc>>,
 ) -> CloudEvent {
-    let cloud_type = format!("com.impierce.unicore.{}", event_type.to_case(Case::Kebab));
+    let cloud_type = format!("com.impierce.unicore.{}", cloud_event_type_suffix(event_type));
     let source = format!("/services/{}", aggregate_type.to_lowercase());
     let id = format!("{aggregate_type}:{aggregate_id}:{sequence}");
 
@@ -135,6 +135,14 @@ pub fn build_cloud_event(
     }
 }
 
+fn cloud_event_type_suffix(event_type: &str) -> String {
+    if event_type.eq_ignore_ascii_case("OID4VPAuthorizationResponseVerified") {
+        "oid4vp-authorization-response-verified".to_string()
+    } else {
+        event_type.to_case(Case::Kebab)
+    }
+}
+
 /// Criteria for filtering events on the event bus.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventFilter {
@@ -148,10 +156,6 @@ pub struct EventFilter {
 impl EventFilter {
     #[must_use]
     pub fn matches(&self, event: &CloudEvent) -> bool {
-        // Internal provenance events are never forwarded to subscribers.
-        if event.extension.callertype.as_deref() == Some("internal") {
-            return false;
-        }
         if !self.event_types.is_empty()
             && !self.event_types.iter().any(|pattern| {
                 if pattern == "*" || pattern.eq_ignore_ascii_case(&event.event_type) {
@@ -170,7 +174,7 @@ impl EventFilter {
                     .event_type
                     .strip_prefix("com.impierce.unicore.")
                     .unwrap_or(&event.event_type);
-                let pattern_kebab = pattern.to_case(Case::Kebab);
+                let pattern_kebab = cloud_event_type_suffix(pattern);
                 event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)
             })
         {
@@ -706,6 +710,37 @@ mod tests {
     }
 
     #[test]
+    fn oid4vp_authorization_response_event_uses_canonical_type() {
+        let event = build_cloud_event(
+            "authorization_request",
+            "ar-1",
+            3,
+            "OID4VPAuthorizationResponseVerified",
+            serde_json::json!({"OID4VPAuthorizationResponseVerified": {"state": "state-1"}}),
+            None,
+        );
+
+        assert_eq!(
+            event.event_type,
+            "com.impierce.unicore.oid4vp-authorization-response-verified"
+        );
+        assert_eq!(event.data, Some(serde_json::json!({"state": "state-1"})));
+
+        for pattern in [
+            "OID4VPAuthorizationResponseVerified",
+            "oid4vpauthorizationresponseverified",
+            "oid4vp-authorization-response-verified",
+            "com.impierce.unicore.oid4vp-authorization-response-verified",
+        ] {
+            let filter = EventFilter {
+                event_types: vec![pattern.to_string()],
+                ..Default::default()
+            };
+            assert!(filter.matches(&event), "Event filter must match `{pattern}`");
+        }
+    }
+
+    #[test]
     fn test_build_cloud_event_unwraps_tagged_variant() {
         let tagged_payload = serde_json::json!({
             "TemplateCreated": {
@@ -1108,25 +1143,6 @@ mod tests {
         let received = subscriber.next().await.unwrap().unwrap();
         assert_eq!(received.extension.callerid.as_deref(), Some("user-123"));
         assert_eq!(received.extension.callertype.as_deref(), Some("user"));
-    }
-
-    #[test]
-    fn test_event_filter_excludes_internal_events() {
-        let filter = EventFilter::default();
-
-        let user_event = build_cloud_event("agg", "1", 1, "Created", serde_json::json!({}), None)
-            .with_caller(Some("u-1".into()), Some("user".into()));
-        let sa_event = build_cloud_event("agg", "1", 2, "Created", serde_json::json!({}), None)
-            .with_caller(Some("sa-1".into()), Some("service-account".into()));
-        let anon_event = build_cloud_event("agg", "1", 3, "Created", serde_json::json!({}), None)
-            .with_caller(None, Some("anonymous".into()));
-        let internal_event = build_cloud_event("agg", "1", 4, "Created", serde_json::json!({}), None)
-            .with_caller(None, Some("internal".into()));
-
-        assert!(filter.matches(&user_event));
-        assert!(filter.matches(&sa_event));
-        assert!(filter.matches(&anon_event));
-        assert!(!filter.matches(&internal_event));
     }
 
     #[test]

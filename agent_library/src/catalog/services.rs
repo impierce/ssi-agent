@@ -1,7 +1,7 @@
 use crate::template::aggregate::Template;
 use crate::template::views::TemplateView;
 use async_trait::async_trait;
-use shared_kernel::view_repository::DynViewRepository;
+use shared_kernel::view_repository::{load_by_id, DynViewRepository};
 use std::sync::Arc;
 
 #[async_trait]
@@ -18,7 +18,12 @@ impl CatalogServices for CatalogServiceImpl {
     async fn check_all_templates_exist(&self, ids: &[String]) -> Vec<String> {
         let mut templates = Vec::new();
         for id in ids {
-            if self.template_view_repo.load(id).await.ok().flatten().is_none() {
+            if load_by_id(self.template_view_repo.as_ref(), id)
+                .await
+                .ok()
+                .flatten()
+                .is_none()
+            {
                 templates.push(id.clone());
             }
         }

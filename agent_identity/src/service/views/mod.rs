@@ -2,6 +2,7 @@ pub mod all_services;
 
 use super::aggregate::Service;
 use cqrs_es::{EventEnvelope, View};
+use shared_kernel::view_repository::SoftDeletable;
 
 pub type ServiceView = Service;
 impl View<Service> for Service {
@@ -51,5 +52,11 @@ impl View<Service> for Service {
                 presentation_ids,
             } => self.apply_linked_verifiable_presentations_removed(service_id.clone(), presentation_ids),
         }
+    }
+}
+
+impl SoftDeletable for ServiceView {
+    fn is_deleted(&self) -> bool {
+        self.is_deleted
     }
 }

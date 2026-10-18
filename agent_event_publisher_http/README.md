@@ -5,7 +5,7 @@ A simple HTTP event publisher for the SSI Agent.
 To make use of this publisher you need to configure it by adding one or more entries to the `http` array in your configuration file.
 
 - The `target_url` is the URL to which the events will be published.
-- The `target_events` is a list of events that will be published to the `target_url`.
+- The `events.types` list specifies which event types will be forwarded to the `target_url`.
 
 Example:
 
@@ -17,29 +17,34 @@ event_publishers:
       headers:
         authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        server_config: []
-        credential: [UnsignedCredentialCreated, CredentialSigned]
+        types: [UnsignedCredentialCreated, CredentialSigned]
     - enabled: false
       target_url: "https://another-endpoint.example.org/events"
       events:
-        offer: [CredentialOfferCreated]
+        types: [CredentialOfferCreated]
 ```
 
 ### Request format
 
-The events will be sent as a POST request with the event as JSON in the body.
+The events will be sent as a POST request with the CloudEvent v1.0 formatted JSON in the body.
 
 Example:
 
 ```http
 POST /<target_url>
-Content-Type: application/json
+Content-Type: application/cloudevents+json
 
 {
-  "SignedCredentialCreated": {
-    "credential_id": "1c69e4cb-e75f-4f56-9418-f46cb441e639",
-    "signed_credential": [...]
-    "notification_id": "6327889a-7c72-4ba3-bb84-f7da3c3d82cb"
+  "specversion": "1.0",
+  "id": "credential:1c69e4cb-e75f-4f56-9418-f46cb441e639:1",
+  "source": "/services/credential",
+  "type": "com.impierce.unicore.credential-signed",
+  "datacontenttype": "application/json",
+  "time": "2026-10-06T18:00:00Z",
+  "callerid": "u-1",
+  "callertype": "user",
+  "data": {
+    "credential_id": "1c69e4cb-e75f-4f56-9418-f46cb441e639"
   }
 }
 ```

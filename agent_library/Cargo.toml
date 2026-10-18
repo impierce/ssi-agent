@@ -31,6 +31,7 @@ rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
 agent_library = { path = ".", features = ["test_utils"] }
+shared-kernel = { workspace = true, features = ["test-utils"] }
 
 async-std.workspace = true
 serial_test = "3.0"

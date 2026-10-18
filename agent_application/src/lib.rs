@@ -46,7 +46,7 @@ use agent_verification::verification_state;
 pub mod integration_projector;
 pub use integration_projector::{
     project_core_event, project_event, start_core_integration_projector, start_integration_projector_with,
-    CORE_INTEGRATION_PROJECTORS, IntegrationProjectorFn,
+    IntegrationProjectorFn, CORE_INTEGRATION_PROJECTORS,
 };
 
 pub struct ApplicationState {
@@ -164,7 +164,10 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     if let Some(publisher) = HttpEventPublisher::from_config(&integration_event_bus) {
         publisher.spawn();
     }
-    if let Some(publisher) = NatsEventPublisher::from_config(&integration_event_bus) {
+    if let Some(publisher) = NatsEventPublisher::from_config(&integration_event_bus)
+        .await
+        .map_err(|err| io::Error::other(format!("Failed to connect to NATS: {err}")))?
+    {
         publisher.spawn();
     }
 
