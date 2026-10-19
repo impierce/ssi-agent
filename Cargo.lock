@@ -393,6 +393,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent_kms"
+version = "0.1.0"
+dependencies = [
+ "agent_shared",
+ "agent_store",
+ "async-trait",
+ "cqrs-es",
+ "indexmap 2.14.0",
+ "serde",
+ "shared-kernel",
+ "strum 0.26.3",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "utoipa",
+]
+
+[[package]]
 name = "agent_library"
 version = "0.1.0"
 dependencies = [
