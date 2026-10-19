@@ -20,6 +20,7 @@ members = [
     "shared-kernel",
 
     "infrastructure/stores/mongodb",
+    "infrastructure/adapters/kms-aws",
     "infrastructure/adapters/verification-authorization",
 ]
 
