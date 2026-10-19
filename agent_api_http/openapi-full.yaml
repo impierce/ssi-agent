@@ -620,6 +620,34 @@ paths:
                 type: string
         '404':
           description: The authorization request does not exist
+  /v0/add-key-provider:
+    post:
+      tags:
+      - Key Management
+      summary: Add a key provider
+      description: |-
+        Connects this instance to a key provider. Only one provider of each type can be added. The in-memory provider
+        is only available in the development profile.
+      operationId: add_key_provider
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddKeyProviderRequest'
+        required: true
+      responses:
+        '201':
+          description: Key provider added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyProvider'
+        '400':
+          description: Missing name, or a provider type that is not available in this profile
+        '409':
+          description: A provider of this type, or with this name, already exists
+        '422':
+          description: Request body does not match the expected schema
   /v0/add-linked-domains:
     post:
       tags:
@@ -1446,6 +1474,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Catalog'
+  /v0/get-all-key-providers:
+    get:
+      tags:
+      - Key Management
+      summary: List all key providers
+      description: Lists the key providers this instance is connected to, in the order they were added.
+      operationId: get_all_key_providers
+      responses:
+        '200':
+          description: All key providers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeyProvider'
   /v0/get-all-public-offers:
     get:
       tags:
@@ -2051,6 +2095,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
+  /v0/remove-key-provider:
+    post:
+      tags:
+      - Key Management
+      summary: Remove a key provider
+      description: Disconnects this instance from a key provider. No keys are deleted at the provider.
+      operationId: remove_key_provider
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyProviderTypeRequest'
+        required: true
+      responses:
+        '204':
+          description: Key provider removed
+        '404':
+          description: No provider of this type has been added
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-linked-domains:
     post:
       tags:
@@ -2224,6 +2288,32 @@ paths:
           description: Public offer not found
         '422':
           description: Request body does not match the expected schema
+  /v0/test-key-provider-connection:
+    post:
+      tags:
+      - Key Management
+      summary: Test a key provider connection
+      description: |-
+        Checks whether an added key provider can be reached with the current credentials. The outcome is returned but
+        not stored, so an unreachable provider is a successful response with `reachable` set to `false`.
+      operationId: test_key_provider_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyProviderTypeRequest'
+        required: true
+      responses:
+        '200':
+          description: The connection was tested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        '404':
+          description: No provider of this type has been added
+        '422':
+          description: Request body does not match the expected schema
   /v0/update-template:
     post:
       tags:
@@ -2363,6 +2453,17 @@ components:
       properties:
         url:
           type: string
+    AddKeyProviderRequest:
+      type: object
+      required:
+      - providerType
+      - name
+      properties:
+        name:
+          type: string
+          description: A name for the provider, unique across all providers. It can't be changed later.
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     AddTemplatesRequest:
       type: object
       properties:
@@ -3045,6 +3146,19 @@ components:
           type:
           - string
           - 'null'
+    ConnectionTestResult:
+      type: object
+      description: The outcome of a connection test. It is not stored.
+      required:
+      - reachable
+      properties:
+        message:
+          type:
+          - string
+          - 'null'
+          description: Why the provider could not be reached, as reported by the provider.
+        reachable:
+          type: boolean
     ConsentForm:
       type: object
       required:
@@ -4289,6 +4403,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AlgIdentifier'
+    KeyProvider:
+      type: object
+      description: A key provider this instance is connected to.
+      required:
+      - provider_type
+      - name
+      properties:
+        name:
+          type: string
+        provider_type:
+          $ref: '#/components/schemas/KeyProviderType'
+    KeyProviderType:
+      type: string
+      description: |-
+        The kinds of key providers an instance can connect to. An instance connects to at most one provider of each type,
+        so the type also identifies the provider.
+      enum:
+      - in_memory
+      - aws_kms_ambient
+    KeyProviderTypeRequest:
+      type: object
+      required:
+      - providerType
+      properties:
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     LdpVcCredentialDefinition:
       type: object
       description: Credential definition for the `ldp_vc` format.
@@ -5735,6 +5875,8 @@ tags:
   description: Create and manage templates which provide the structure for credentials to be issued.
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
+- name: Key Management
+  description: Connect key providers that will hold this instance's signing keys. Only available when the `kms` feature flag is enabled.
 - name: Authorization Requests
   description: Manage requests for verifiable presentations and their responses.
 - name: Public

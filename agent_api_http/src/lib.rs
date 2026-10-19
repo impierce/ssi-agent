@@ -11,6 +11,7 @@ use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
 use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
+use agent_kms::KmsState;
 use agent_library::state::LibraryState;
 use agent_shared::config::config;
 use agent_verification::state::VerificationState;
@@ -44,6 +45,8 @@ pub struct ApiState {
     pub holder_state: Option<Arc<HolderState>>,
     pub verification_state: Option<Arc<VerificationState>>,
     pub events_state: Option<Arc<v0::events::EventsState>>,
+    /// Only present when the `kms` feature flag is enabled.
+    pub kms_state: Option<Arc<KmsState>>,
 }
 
 /// Build the top-level API router.
@@ -69,6 +72,7 @@ pub(crate) fn app_with_base_path<E>(
         holder_state,
         verification_state,
         events_state,
+        kms_state,
     }: ApiState,
     actor_extractor: Arc<E>,
     application_base_path: &str,
@@ -100,6 +104,7 @@ where
         )
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
+        .merge(kms_state.map(v0::kms::router).unwrap_or_default())
         .merge(public::router(library_state))
         // Trace layers
         .layer(
