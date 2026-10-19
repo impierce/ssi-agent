@@ -9,6 +9,7 @@ members = [
     "agent_holder",
     "agent_identity",
     "agent_issuance",
+    "agent_kms",
     "agent_library",
     "agent_macros",
     "agent_secret_manager",
