@@ -1,7 +1,9 @@
+use crate::authorization_request::aggregate::AuthorizationRequest;
 use crate::authorization_request::event::AuthorizationRequestEvent;
+use cqrs_es::EventEnvelope;
 use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
-use shared_kernel::IntegrationEvent;
+use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
 /// Marker error indicating that a domain event has no public integration event mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +20,8 @@ pub enum VerificationIntegrationEvent {
     PresentationVerified {
         request_id: String,
         validated: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        state: Option<String>,
     },
     PresentationFailed {
         request_id: String,
@@ -55,12 +59,13 @@ impl TryFrom<(&AuthorizationRequestEvent, &str)> for VerificationIntegrationEven
                     client_id: Some(authorization_request.client_id()),
                 })
             }
-            AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified { validated, .. }
-            | AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified { validated, .. } => {
+            AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified { state, validated, .. }
+            | AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified { state, validated, .. } => {
                 if *validated {
                     Ok(Self::PresentationVerified {
                         request_id: request_id.to_string(),
                         validated: true,
+                        state: state.clone(),
                     })
                 } else {
                     Ok(Self::PresentationFailed {
@@ -74,95 +79,19 @@ impl TryFrom<(&AuthorizationRequestEvent, &str)> for VerificationIntegrationEven
     }
 }
 
-impl VerificationIntegrationEvent {
-    /// Attempts to project an internal verification domain [`CloudEvent`] to an integration [`CloudEvent`].
-    /// Returns `None` if the event type is unmapped or cannot be projected.
-    pub fn project_from(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-        let caller_id = domain_ce.extension.callerid.clone();
-        let caller_type = domain_ce.extension.callertype.clone();
-        let data = domain_ce.data.as_ref()?;
-        let request_id = domain_ce.subject.clone().unwrap_or_default();
-
-        let integration_event = match domain_ce.event_type.as_str() {
-            "com.impierce.unicore.authorization-request-created" => {
-                if let Ok(event) = serde_json::from_value::<AuthorizationRequestEvent>(serde_json::json!({
-                    "AuthorizationRequestCreated": data
-                })) {
-                    Self::try_from((&event, request_id.as_str())).ok()?
-                } else {
-                    let client_id = data
-                        .get("authorization_request")
-                        .and_then(|ar| ar.get("client_id").or_else(|| ar.get("client_id_scheme")))
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string);
-
-                    Self::PresentationRequested { request_id, client_id }
-                }
-            }
-            "com.impierce.unicore.oid-4-vp-authorization-response-verified" => {
-                if let Ok(event) = serde_json::from_value::<AuthorizationRequestEvent>(serde_json::json!({
-                    "OID4VPAuthorizationResponseVerified": data
-                })) {
-                    Self::try_from((&event, request_id.as_str())).ok()?
-                } else {
-                    let validated = data.get("validated").and_then(|v| v.as_bool()).unwrap_or(true);
-                    if validated {
-                        Self::PresentationVerified {
-                            request_id,
-                            validated: true,
-                        }
-                    } else {
-                        Self::PresentationFailed {
-                            request_id,
-                            reason: Some("Verification failed".to_string()),
-                        }
-                    }
-                }
-            }
-            "com.impierce.unicore.si-o-pv-2-authorization-response-verified" => {
-                if let Ok(event) = serde_json::from_value::<AuthorizationRequestEvent>(serde_json::json!({
-                    "SIOPv2AuthorizationResponseVerified": data
-                })) {
-                    Self::try_from((&event, request_id.as_str())).ok()?
-                } else {
-                    let validated = data.get("validated").and_then(|v| v.as_bool()).unwrap_or(true);
-                    if validated {
-                        Self::PresentationVerified {
-                            request_id,
-                            validated: true,
-                        }
-                    } else {
-                        Self::PresentationFailed {
-                            request_id,
-                            reason: Some("Verification failed".to_string()),
-                        }
-                    }
-                }
-            }
-            _ => return None,
-        };
-
-        let mut result_ce = integration_event
-            .into_cloud_event("/services/verification", caller_id, caller_type)
-            .ok()?;
-
-        if let Some(occurred_at) = domain_ce.time {
-            result_ce.time = Some(occurred_at);
-        }
-
-        Some(result_ce)
+impl ProjectIntegrationEvent for AuthorizationRequest {
+    fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+        VerificationIntegrationEvent::try_from((&envelope.payload, envelope.aggregate_id.as_str()))
+            .ok()?
+            .into_projected_cloud_event(envelope, "/services/verification")
+            .ok()
     }
-}
-
-/// Project an internal domain [`CloudEvent`] to a [`VerificationIntegrationEvent`] if applicable.
-#[must_use]
-pub fn project_verification_event(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-    VerificationIntegrationEvent::project_from(domain_ce)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn try_from_siopv2_verified() {
@@ -177,7 +106,22 @@ mod tests {
             VerificationIntegrationEvent::PresentationVerified {
                 request_id: "req-1".to_string(),
                 validated: true,
+                state: None,
             }
+        );
+
+        let envelope = EventEnvelope {
+            aggregate_id: "req-1".to_string(),
+            sequence: 3,
+            payload: event,
+            metadata: HashMap::default(),
+        };
+        let projected =
+            AuthorizationRequest::project_integration_event(&envelope).expect("should project SIOPv2 domain event");
+        assert_eq!(projected.id, "authorization_request:req-1:3");
+        assert_eq!(
+            projected.event_type,
+            "com.impierce.unicore.verification.presentation.verified"
         );
     }
 

@@ -376,22 +376,16 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
         .commands_and_queries::<OfferView, Offer, AllOffersView>(services.clone(), vec![event_bus.query()])
         .await;
     let (public_offer_command_handler, public_offer, all_public_offers) = builder
-        .commands_and_queries::<PublicOfferView, PublicOffer, AllPublicOffersView>(
-            services.clone(),
-            vec![event_bus.query()],
-        )
+        .commands_and_queries::<PublicOfferView, PublicOffer, AllPublicOffersView>(services.clone(), vec![])
         .await;
     let (server_config_command_handler, server_config, _all_server_configs) = builder
-        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(services.clone(), vec![event_bus.query()])
+        .commands_and_queries::<ServerConfigView, ServerConfig, ServerConfig>(services.clone(), vec![])
         .await;
     let (nonce_command_handler, nonce, _) = builder
-        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), vec![event_bus.query()])
+        .commands_and_queries::<NonceView, Nonce, NonceView>(services.clone(), vec![])
         .await;
     let (status_list_command_handler, status_list, all_status_lists) = builder
-        .commands_and_queries::<StatusListView, StatusListAggregate, AllStatusListsView>(
-            services.clone(),
-            vec![event_bus.query()],
-        )
+        .commands_and_queries::<StatusListView, StatusListAggregate, AllStatusListsView>(services.clone(), vec![])
         .await;
 
     IssuanceState {

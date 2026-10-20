@@ -2966,7 +2966,7 @@ components:
             format: date-time
           type:
             type: string
-            example: com.impierce.unicore.offer-created
+            example: com.impierce.unicore.issuance.credential.offered
       description: A CNCF CloudEvent envelope (v1.0 spec).
     CnameCheck:
       type: object

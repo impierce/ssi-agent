@@ -1,7 +1,9 @@
+use crate::connection::aggregate::Connection;
 use crate::connection::event::ConnectionEvent;
+use cqrs_es::EventEnvelope;
 use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
-use shared_kernel::IntegrationEvent;
+use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
 /// Marker error indicating that a domain event has no public integration event mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,89 +57,20 @@ impl TryFrom<ConnectionEvent> for ConnectionIntegrationEvent {
     }
 }
 
-impl ConnectionIntegrationEvent {
-    /// Translates an internal identity connection domain [`CloudEvent`] to a [`ConnectionIntegrationEvent`].
-    #[must_use]
-    pub fn project_from(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-        let data = domain_ce.data.as_ref()?;
-        let caller_id = domain_ce.extension.callerid.clone();
-        let caller_type = domain_ce.extension.callertype.clone();
-
-        let integration_event = match domain_ce.event_type.as_str() {
-            "com.impierce.unicore.connection-added" => {
-                if let Ok(event) = serde_json::from_value::<ConnectionEvent>(serde_json::json!({
-                    "ConnectionAdded": data
-                })) {
-                    Self::try_from(event).ok()?
-                } else {
-                    let connection_id = data
-                        .get("connection_id")
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string)
-                        .or_else(|| domain_ce.subject.clone())
-                        .unwrap_or_default();
-                    let url = data.get("url").and_then(|v| v.as_str()).map(ToString::to_string);
-
-                    Self::InvitationCreated { connection_id, url }
-                }
-            }
-            "com.impierce.unicore.connection-synced" => {
-                if let Ok(event) = serde_json::from_value::<ConnectionEvent>(serde_json::json!({
-                    "ConnectionSynced": data
-                })) {
-                    Self::try_from(event).ok()?
-                } else {
-                    let connection_id = data
-                        .get("connection_id")
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string)
-                        .or_else(|| domain_ce.subject.clone())
-                        .unwrap_or_default();
-
-                    Self::ConnectionEstablished { connection_id }
-                }
-            }
-            "com.impierce.unicore.connection-changes-accepted" => {
-                if let Ok(event) = serde_json::from_value::<ConnectionEvent>(serde_json::json!({
-                    "ConnectionChangesAccepted": data
-                })) {
-                    Self::try_from(event).ok()?
-                } else {
-                    let connection_id = data
-                        .get("connection_id")
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string)
-                        .or_else(|| domain_ce.subject.clone())
-                        .unwrap_or_default();
-
-                    Self::ConnectionEstablished { connection_id }
-                }
-            }
-            _ => return None,
-        };
-
-        let mut result_ce = integration_event
-            .into_cloud_event("/services/connection", caller_id, caller_type)
-            .ok()?;
-
-        if let Some(occurred_at) = domain_ce.time {
-            result_ce.time = Some(occurred_at);
-        }
-
-        Some(result_ce)
+impl ProjectIntegrationEvent for Connection {
+    fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+        ConnectionIntegrationEvent::try_from(envelope.payload.clone())
+            .ok()?
+            .into_projected_cloud_event(envelope, "/services/connection")
+            .ok()
     }
-}
-
-/// Project an internal domain [`CloudEvent`] to a [`ConnectionIntegrationEvent`] if applicable.
-#[must_use]
-pub fn project_identity_event(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-    ConnectionIntegrationEvent::project_from(domain_ce)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use identity_core::common::Url;
+    use std::collections::HashMap;
 
     #[test]
     fn try_from_connection_added() {
@@ -150,7 +83,7 @@ mod tests {
             last_interacted_at: None,
             validations: vec![],
         };
-        let integration = ConnectionIntegrationEvent::try_from(event).expect("should map");
+        let integration = ConnectionIntegrationEvent::try_from(event.clone()).expect("should map");
         assert_eq!(
             integration,
             ConnectionIntegrationEvent::InvitationCreated {
@@ -158,6 +91,16 @@ mod tests {
                 url: Some("https://example.com/invite".to_string()),
             }
         );
+
+        let envelope = EventEnvelope {
+            aggregate_id: "conn-1".to_string(),
+            sequence: 1,
+            payload: event,
+            metadata: HashMap::default(),
+        };
+        let projected = Connection::project_integration_event(&envelope).expect("should project");
+        assert_eq!(projected.id, "connection:conn-1:1");
+        assert!(projected.time.is_some());
     }
 
     #[test]

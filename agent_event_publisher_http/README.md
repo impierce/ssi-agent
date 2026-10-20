@@ -5,7 +5,7 @@ A simple HTTP event publisher for the SSI Agent.
 To make use of this publisher you need to configure it by adding one or more entries to the `http` array in your configuration file.
 
 - The `target_url` is the URL to which the events will be published.
-- The `events.types` list specifies which event types will be forwarded to the `target_url`.
+- The `events.types` list specifies which integration event types or patterns will be forwarded to the `target_url`.
 
 Example:
 
@@ -17,11 +17,14 @@ event_publishers:
       headers:
         authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        types: [UnsignedCredentialCreated, CredentialSigned]
+        types:
+          - "com.impierce.unicore.issuance.credential.offered"
+          - "com.impierce.unicore.issuance.credential.issued"
     - enabled: false
       target_url: "https://another-endpoint.example.org/events"
       events:
-        types: [CredentialOfferCreated]
+        types:
+          - "com.impierce.unicore.verification.presentation.verified"
 ```
 
 ### Request format
@@ -37,172 +40,33 @@ Content-Type: application/cloudevents+json
 {
   "specversion": "1.0",
   "id": "credential:1c69e4cb-e75f-4f56-9418-f46cb441e639:1",
-  "source": "/services/credential",
-  "type": "com.impierce.unicore.credential-signed",
+  "source": "/services/issuance",
+  "type": "com.impierce.unicore.issuance.credential.issued",
+  "subject": "1c69e4cb-e75f-4f56-9418-f46cb441e639",
   "datacontenttype": "application/json",
   "time": "2026-10-06T18:00:00Z",
   "callerid": "u-1",
   "callertype": "user",
   "data": {
-    "credential_id": "1c69e4cb-e75f-4f56-9418-f46cb441e639"
+    "credential_id": "1c69e4cb-e75f-4f56-9418-f46cb441e639",
+    "status": "issued"
   }
 }
 ```
 
-### Available events
+### Available integration events
 
-#### `access_token`
-
-```
-AccessTokenIssued
-```
-
-#### `authorization_code`
-
-```
-AuthorizationCodeCreated
-AuthorizationCodeRedeemed
-```
-
-#### `client`
-
-```
-ClientRegistered
-```
-
-#### `oauth2_authorization_request`
-
-```
-OAuth2AuthorizationRequestCreated
-OAuth2AuthorizationRequestExpired
-ConsentGranted
-ConsentRejected
-```
-
-#### `connection`
-
-```
-ConnectionAdded
-```
-
-#### `document`
-
-```
-DocumentCreated
-PublicKeyUpdated
-DocumentStatusUpdated
-ServiceAdded
-ServiceRemoved
-DocumentDidWebOverwritten
-DocumentPublished
-```
-
-#### `profile`
-
-```
-ProfileCreated,
-DisplayNameUpdated,
-DescriptionUpdated,
-LogoUpdated,
-CountryUpdated,
-SourceUpdated,
-```
-
-#### `service`
-
-```
-LinkedDomainsAdded
-LinkedDomainsRemoved
-LinkedDomainsCredentialsRenewed
-LinkedVerifiablePresentationsAdded
-LinkedVerifiablePresentationsRemoved
-```
-
-#### `template`
-
-```
-TemplateCreated
-TitleUpdated
-DisplayUpdated
-TagsUpdated
-StatusUpdated
-VisibilityUpdated
-DescriptionUpdated
-TypeUpdated
-SchemaUpdated
-CredentialExpirationUpdated
-```
-
-#### `server_config`
-
-```
-ServerMetadataLoaded
-CredentialConfigurationUpdated
-```
-
-#### `credential`
-
-```
-UnsignedCredentialCreated
-SignedCredentialCreated
-CredentialSigned
-NotificationReceived
-```
-
-#### `offer`
-
-```
-CredentialOfferCreated
-CredentialsAdded
-FormUrlEncodedCredentialOfferCreated
-TokenResponseCreated
-CredentialRequestVerified
-CredentialResponseCreated
-```
-
-#### `holder_credential`
-
-```
-CredentialAdded
-```
-
-#### `presentation`
-
-```
-PresentationCreated
-```
-
-#### `received_offer`
-
-```
-CredentialOfferReceived
-CredentialOfferAccepted
-TokenResponseReceived
-CredentialResponseReceived
-CredentialOfferRejected
-```
-
-#### `authorization_request`
-
-```
-AuthorizationRequestCreated
-FormUrlEncodedAuthorizationRequestCreated
-AuthorizationRequestObjectSigned
-SIOPv2AuthorizationResponseVerified
-OID4VPAuthorizationResponseVerified
-```
-
-#### `nonce`
-
-```
-NonceGenerated
-NonceRedeemed
-```
-
-#### `status_list`
-
-```
-StatusListCreated
-IndexAdded
-IndexUpdated
-```
+| Event Type | Source | Subject | Description |
+| :--- | :--- | :--- | :--- |
+| `com.impierce.unicore.issuance.credential.offered` | `/services/issuance` | Offer ID | Credential offer created and ready for holder interaction. |
+| `com.impierce.unicore.issuance.credential.request_verified` | `/services/issuance` | Offer ID | Holder credential request verified against offer. |
+| `com.impierce.unicore.issuance.credential.issued` | `/services/issuance` | Credential ID | Verifiable credential cryptographically signed and issued. |
+| `com.impierce.unicore.issuance.credential.revoked` | `/services/issuance` | Credential ID | Credential status updated or revoked. |
+| `com.impierce.unicore.issuance.credential.reissued` | `/services/issuance` | Reissuance ID | Credential reissued from an existing credential. |
+| `com.impierce.unicore.verification.presentation.requested` | `/services/verification` | Request ID | Presentation exchange requested from holder. |
+| `com.impierce.unicore.verification.presentation.verified` | `/services/verification` | Request ID | Cryptographic presentation verified successfully. |
+| `com.impierce.unicore.verification.presentation.failed` | `/services/verification` | Request ID | Presentation verification failed or rejected. |
+| `com.impierce.unicore.connection.invitation.created` | `/services/connection` | Connection ID | Invitation created for peer connection. |
+| `com.impierce.unicore.connection.established` | `/services/connection` | Connection ID | Peer connection synced or accepted. |
+| `com.impierce.unicore.template.created` | `/services/template` | Template ID | Credential template created in library. |
+| `com.impierce.unicore.template.updated` | `/services/template` | Template ID | Credential template metadata or status updated. |

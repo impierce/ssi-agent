@@ -1,7 +1,9 @@
+use crate::template::aggregate::Template;
 use crate::template::event::{DataModel, Status, TemplateEvent};
+use cqrs_es::EventEnvelope;
 use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
-use shared_kernel::IntegrationEvent;
+use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
 /// Marker error indicating that a domain event has no public integration event mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,126 +100,19 @@ impl TryFrom<TemplateEvent> for TemplateIntegrationEvent {
     }
 }
 
-impl TemplateIntegrationEvent {
-    /// Translates an internal template domain [`CloudEvent`] to a [`TemplateIntegrationEvent`].
-    #[must_use]
-    pub fn project_from(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-        let data = domain_ce.data.as_ref()?;
-        let caller_id = domain_ce.extension.callerid.clone();
-        let caller_type = domain_ce.extension.callertype.clone();
-
-        let integration_event = match domain_ce.event_type.as_str() {
-            "com.impierce.unicore.template-created" => {
-                if let Ok(event) = serde_json::from_value::<TemplateEvent>(serde_json::json!({
-                    "TemplateCreated": data
-                })) {
-                    Self::try_from(event).ok()?
-                } else {
-                    let template_id = data
-                        .get("template_id")
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string)
-                        .or_else(|| domain_ce.subject.clone())
-                        .unwrap_or_default();
-                    let title = data
-                        .get("title")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                    let data_model = data
-                        .get("data_model")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-
-                    Self::TemplateCreated {
-                        template_id,
-                        title,
-                        data_model,
-                    }
-                }
-            }
-            "com.impierce.unicore.title-updated" => {
-                if let Ok(event) = serde_json::from_value::<TemplateEvent>(serde_json::json!({
-                    "TitleUpdated": data
-                })) {
-                    Self::try_from(event).ok()?
-                } else {
-                    let template_id = data
-                        .get("template_id")
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string)
-                        .or_else(|| domain_ce.subject.clone())
-                        .unwrap_or_default();
-                    let title = data.get("title").and_then(|v| v.as_str()).map(ToString::to_string);
-                    Self::TemplateUpdated {
-                        template_id,
-                        title,
-                        status: None,
-                    }
-                }
-            }
-            "com.impierce.unicore.status-updated" => {
-                if let Ok(event) = serde_json::from_value::<TemplateEvent>(serde_json::json!({
-                    "StatusUpdated": data
-                })) {
-                    Self::try_from(event).ok()?
-                } else {
-                    let template_id = data
-                        .get("template_id")
-                        .and_then(|v| v.as_str())
-                        .map(ToString::to_string)
-                        .or_else(|| domain_ce.subject.clone())
-                        .unwrap_or_default();
-                    let status = data.get("status").and_then(|v| v.as_str()).map(ToString::to_string);
-                    Self::TemplateUpdated {
-                        template_id,
-                        title: None,
-                        status,
-                    }
-                }
-            }
-            "com.impierce.unicore.display-updated"
-            | "com.impierce.unicore.tags-updated"
-            | "com.impierce.unicore.visibility-updated"
-            | "com.impierce.unicore.description-updated"
-            | "com.impierce.unicore.type-updated" => {
-                let template_id = data
-                    .get("template_id")
-                    .and_then(|v| v.as_str())
-                    .map(ToString::to_string)
-                    .or_else(|| domain_ce.subject.clone())
-                    .unwrap_or_default();
-                Self::TemplateUpdated {
-                    template_id,
-                    title: None,
-                    status: None,
-                }
-            }
-            _ => return None,
-        };
-
-        let mut result_ce = integration_event
-            .into_cloud_event("/services/template", caller_id, caller_type)
-            .ok()?;
-
-        if let Some(occurred_at) = domain_ce.time {
-            result_ce.time = Some(occurred_at);
-        }
-
-        Some(result_ce)
+impl ProjectIntegrationEvent for Template {
+    fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+        TemplateIntegrationEvent::try_from(envelope.payload.clone())
+            .ok()?
+            .into_projected_cloud_event(envelope, "/services/template")
+            .ok()
     }
-}
-
-/// Project an internal domain [`CloudEvent`] to a [`TemplateIntegrationEvent`] if applicable.
-#[must_use]
-pub fn project_library_event(domain_ce: &CloudEvent) -> Option<CloudEvent> {
-    TemplateIntegrationEvent::project_from(domain_ce)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn try_from_title_updated() {
@@ -226,7 +121,7 @@ mod tests {
             title: "New Title".to_string(),
             modified_at: "2026-01-01T00:00:00Z".to_string(),
         };
-        let integration = TemplateIntegrationEvent::try_from(event).expect("should map");
+        let integration = TemplateIntegrationEvent::try_from(event.clone()).expect("should map");
         assert_eq!(
             integration,
             TemplateIntegrationEvent::TemplateUpdated {
@@ -235,6 +130,16 @@ mod tests {
                 status: None,
             }
         );
+
+        let envelope = EventEnvelope {
+            aggregate_id: "tmpl-1".to_string(),
+            sequence: 2,
+            payload: event,
+            metadata: HashMap::default(),
+        };
+        let projected = Template::project_integration_event(&envelope).expect("should project");
+        assert_eq!(projected.id, "template:tmpl-1:2");
+        assert!(projected.time.is_some());
     }
 
     #[test]

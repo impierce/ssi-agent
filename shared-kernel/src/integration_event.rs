@@ -1,5 +1,7 @@
 use crate::event_bus::CloudEvent;
-use serde::Serialize;
+use cqrs_es::{Aggregate, EventEnvelope};
+use serde::{de::DeserializeOwned, Serialize};
+use std::collections::HashMap;
 
 /// A formal Integration Event in the Published Language (PL).
 ///
@@ -38,4 +40,102 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
         }
         Ok(ce)
     }
+
+    /// Projects this integration event into a CNCF [`CloudEvent`] v1.0 preserving the originating
+    /// [`EventEnvelope<A>`]'s deterministic `id` (`{A::TYPE}:{aggregate_id}:{sequence}`),
+    /// `timestamp`, and caller provenance (`callerid`, `callertype`).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`serde_json::Error`] if serialization of `self` into a JSON value fails.
+    fn into_projected_cloud_event<A: Aggregate>(
+        self,
+        envelope: &EventEnvelope<A>,
+        source: &str,
+    ) -> Result<CloudEvent, serde_json::Error>
+    where
+        Self: Sized,
+    {
+        let caller_id = envelope.metadata.get("callerid").filter(|s| !s.is_empty()).cloned();
+        let caller_type = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
+        let mut ce = self.into_cloud_event(source, caller_id, caller_type)?;
+        ce.id = format!("{}:{}:{}", A::TYPE, envelope.aggregate_id, envelope.sequence);
+        if let Some(occurred_at) = envelope
+            .metadata
+            .get("timestamp")
+            .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
+            .map(|datetime| datetime.with_timezone(&chrono::Utc))
+        {
+            ce.time = Some(occurred_at);
+        }
+        Ok(ce)
+    }
+}
+
+/// Implemented by [`Aggregate`]s whose domain events project into public [`IntegrationEvent`]s.
+///
+/// Aggregates that only emit private internal domain events do not implement this trait.
+pub trait ProjectIntegrationEvent: Aggregate {
+    /// Projects a domain [`EventEnvelope`] for this aggregate into a public [`CloudEvent`],
+    /// returning `None` if the domain event has no public integration event mapping.
+    fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent>;
+}
+
+/// Type-erased descriptor for projecting persisted domain events of a specific [`Aggregate`] into
+/// public [`CloudEvent`]s when reading from a persistent store (such as `MongoDB` Change Streams
+/// or historical catch-up queries).
+#[derive(Clone, Copy)]
+pub struct EventProjector {
+    aggregate_type: &'static str,
+    project: fn(&str, usize, serde_json::Value, HashMap<String, String>) -> Option<CloudEvent>,
+}
+
+impl EventProjector {
+    #[must_use]
+    pub const fn for_aggregate<A>() -> Self
+    where
+        A: ProjectIntegrationEvent,
+        A::Event: DeserializeOwned,
+    {
+        Self {
+            aggregate_type: A::TYPE,
+            project: project_stored_event::<A>,
+        }
+    }
+
+    #[must_use]
+    pub const fn aggregate_type(&self) -> &'static str {
+        self.aggregate_type
+    }
+
+    #[must_use]
+    pub fn project(
+        &self,
+        aggregate_id: &str,
+        sequence: usize,
+        payload: serde_json::Value,
+        metadata: HashMap<String, String>,
+    ) -> Option<CloudEvent> {
+        (self.project)(aggregate_id, sequence, payload, metadata)
+    }
+}
+
+fn project_stored_event<A>(
+    aggregate_id: &str,
+    sequence: usize,
+    payload: serde_json::Value,
+    metadata: HashMap<String, String>,
+) -> Option<CloudEvent>
+where
+    A: ProjectIntegrationEvent,
+    A::Event: DeserializeOwned,
+{
+    let payload: A::Event = serde_json::from_value(payload).ok()?;
+    let envelope = EventEnvelope {
+        aggregate_id: aggregate_id.to_string(),
+        sequence,
+        payload,
+        metadata,
+    };
+    A::project_integration_event(&envelope)
 }
