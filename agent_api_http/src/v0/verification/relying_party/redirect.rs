@@ -201,17 +201,17 @@ pub mod tests {
         set_config().set_event_publisher_http_target_events(
             0,
             Events {
-                types: vec!["SIOPv2AuthorizationResponseVerified".to_string()],
+                types: vec!["com.impierce.unicore.verification.presentation.verified".to_string()],
             },
         );
 
-        let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&bus) {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+        if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&event_bus) {
             publisher.spawn();
         }
 
         let verification_state =
-            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &bus).await);
+            Arc::new(verification_state(&InMemory, VerificationServices::default().await, &event_bus).await);
 
         let mut app = router(verification_state);
 

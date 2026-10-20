@@ -504,14 +504,12 @@ mod tests {
     async fn sse_response_body_chunks_are_not_logged_by_tracing_layer() {
         let bus_handle = shared_kernel::event_bus::EventBusHandle::new(16);
         let events_state = Arc::new(v0::events::EventsState::from(bus_handle.clone()));
-        bus_handle.publish(shared_kernel::event_bus::build_cloud_event(
-            "test",
-            "test-1",
-            1,
-            "TestEvent",
-            serde_json::json!({"secret": "sensitive-data"}),
-            None,
-        ));
+        bus_handle.publish(
+            shared_kernel::event_bus::CloudEvent::new("com.impierce.unicore.test.event", "/services/test")
+                .with_id("test:test-1:1")
+                .with_subject("test-1")
+                .with_data(serde_json::json!({"secret": "sensitive-data"})),
+        );
 
         let app = app_with_base_path(
             ApiState {

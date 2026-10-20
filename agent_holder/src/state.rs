@@ -102,24 +102,18 @@ impl Clone for Queries {
 pub async fn holder_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<crate::services::HolderServices>,
-    event_bus: &EventBusHandle,
+    _event_bus: &EventBusHandle,
 ) -> HolderState {
-    let (holder_credential_command_handler, holder_credential, all_holder_credential) = builder
-        .commands_and_queries::<Credential, Credential, AllHolderCredentialsView>(
-            services.clone(),
-            vec![event_bus.query()],
-        )
+    let (holder_credential_command_handler, holder_credential, all_holder_credentials) = builder
+        .commands_and_queries::<Credential, Credential, AllHolderCredentialsView>(services.clone(), vec![])
         .await;
 
     let (presentation_command_handler, presentation, all_presentations) = builder
-        .commands_and_queries::<Presentation, Presentation, AllPresentationsView>(
-            services.clone(),
-            vec![event_bus.query()],
-        )
+        .commands_and_queries::<Presentation, Presentation, AllPresentationsView>(services.clone(), vec![])
         .await;
 
     let (received_offer_command_handler, received_offer, all_received_offers) = builder
-        .commands_and_queries::<Offer, Offer, AllReceivedOffersView>(services.clone(), vec![event_bus.query()])
+        .commands_and_queries::<Offer, Offer, AllReceivedOffersView>(services.clone(), vec![])
         .await;
 
     HolderState {
@@ -131,7 +125,7 @@ pub async fn holder_state<CCB: CqrsComponentBuilder>(
         },
         query: ViewRepositories {
             holder_credential,
-            all_holder_credentials: all_holder_credential,
+            all_holder_credentials,
             presentation,
             all_presentations,
             received_offer,

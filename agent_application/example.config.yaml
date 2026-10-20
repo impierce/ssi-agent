@@ -24,9 +24,8 @@ signing_algorithms_supported:
     enabled: false
 
 # agent_event_publisher_http
-# Configure here to which events will be dispatched to a specific `target_url`. In the example below, the
-# `EventPublisherHttp` will listen for the `UnsignedCredentialCreated` and `CredentialSigned` events.
-# The events will be dispatched to the `https://my-domain.example.org/event-subscriber` endpoint.
+# Configure here which integration events will be dispatched to a specific `target_url`. In the example below, the
+# HTTP forwarder listens for issuance events matching the pattern. The CloudEvents will be dispatched to the target endpoint.
 event_publishers:
   http:
     - enabled: false
@@ -34,16 +33,20 @@ event_publishers:
       headers:
         Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        types: [UnsignedCredentialCreated, CredentialSigned]
+        types:
+          - "com.impierce.unicore.issuance.credential.offered"
+          - "com.impierce.unicore.issuance.credential.issued"
         # To enable the interactive authorization flow for OID4VCI, the event below needs to be listened to.
-        # types: [OID4VPAuthorizationResponseVerified]
+        # types:
+        #   - "com.impierce.unicore.verification.presentation.verified"
   nats:
     enabled: true
     nats_url: "nats://localhost:4222"
     subjects:
       - name: "email.commands"
         events:
-          types: [TxCodeGenerated, CredentialOfferEmailSent]
+          types:
+            - "com.impierce.unicore.issuance.credential.offered"
 
 # These display parameters are interpreted by identity wallets.
 display:
