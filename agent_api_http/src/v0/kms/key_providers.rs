@@ -1,15 +1,16 @@
-use crate::error::IntoApiErrorExt;
+use crate::error::{type_url, IntoApiErrorExt};
 use crate::extractors::RequestActor;
 use crate::handlers::{caller, command_handler, query_handler};
+use agent_kms::adapter::ProviderKey;
 use agent_kms::key_provider::{
     aggregate::KeyProviderType,
     command::KeyProviderCommand,
     views::{all_key_providers::AllKeyProvidersView, KeyProviderView},
 };
-use agent_kms::state::{get_key_provider, test_key_provider_connection as test_connection};
+use agent_kms::state::{get_key_provider, list_key_provider_keys, test_key_provider_connection as test_connection};
 use agent_kms::KmsState;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
@@ -205,4 +206,40 @@ pub(crate) async fn test_key_provider_connection(
     };
 
     Ok((StatusCode::OK, Json(result)).into_response())
+}
+
+/// List the keys in a key provider
+///
+/// Lists the keys that exist in an added key provider and that this instance's credentials can see, as reported
+/// by the provider. Nothing is stored, and the keys are not used by UniCore yet.
+#[utoipa::path(
+    get,
+    path = "/get-key-provider-keys/{provider_type}",
+    operation_id = "get_key_provider_keys",
+    tags = ["Key Management"],
+    params(("provider_type" = KeyProviderType, Path, description = "The type of the added key provider")),
+    responses(
+        (status = 200, description = "The keys in the provider", body = [ProviderKey]),
+        (status = 404, description = "No provider of this type has been added"),
+        (status = 502, description = "The provider could not be reached"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn get_key_provider_keys(
+    State(state): State<Arc<KmsState>>,
+    RequestActor(actor): RequestActor,
+    Path(provider_type): Path<KeyProviderType>,
+) -> Result<Response, ApiError> {
+    let keys = list_key_provider_keys(&state, caller(actor), provider_type)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .map_err(|error| {
+            ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("Key Provider Unreachable")
+                .type_url(type_url("kms#key-provider-unreachable"))
+                .message(error.to_string())
+                .finish()
+        })?;
+
+    Ok((StatusCode::OK, Json(keys)).into_response())
 }

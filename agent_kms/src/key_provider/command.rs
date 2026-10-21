@@ -31,3 +31,14 @@ impl CommandOperation for TestKeyProviderConnection {
         "kms.key_providers.test_connection"
     }
 }
+
+/// Listing a provider's keys changes no state but calls out to the provider, so it is authorized like
+/// [`TestKeyProviderConnection`].
+#[derive(Debug)]
+pub struct ListKeyProviderKeys;
+
+impl CommandOperation for ListKeyProviderKeys {
+    fn operation_name(&self) -> &'static str {
+        "kms.key_providers.keys.list"
+    }
+}

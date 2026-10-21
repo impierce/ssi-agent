@@ -3,7 +3,7 @@
 //! Credentials and region are resolved through the standard AWS chain: environment variables, shared config files,
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
-use agent_kms::adapter::{ConnectionError, KeyProviderAdapter};
+use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey};
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
 use aws_sdk_kms::{
@@ -79,6 +79,31 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
             .map(|_| ())
             .map_err(|error| ConnectionError(describe(&error)))
     }
+
+    /// Lists every key the credentials can see, following AWS's pagination.
+    async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError> {
+        let client = self.client().await;
+        let mut keys = Vec::new();
+        let mut marker = None;
+        loop {
+            let page = client
+                .list_keys()
+                .set_marker(marker)
+                .send()
+                .await
+                .map_err(|error| ConnectionError(describe(&error)))?;
+            keys.extend(page.keys().iter().filter_map(|key| {
+                Some(ProviderKey {
+                    id: key.key_id()?.to_string(),
+                    resource_name: key.key_arn().map(str::to_string),
+                })
+            }));
+            match page.next_marker() {
+                Some(next) if page.truncated() => marker = Some(next.to_string()),
+                _ => return Ok(keys),
+            }
+        }
+    }
 }
 
 /// Describes why AWS could not be reached. AWS's own error code and message are clear enough to show as is; other
@@ -109,7 +134,7 @@ mod tests {
     use aws_sdk_kms::config::{Credentials, Region};
     use serde_json::json;
     use wiremock::{
-        matchers::{header, method},
+        matchers::{body_partial_json, header, method},
         Mock, MockBuilder, MockServer, ResponseTemplate,
     };
 
@@ -161,6 +186,37 @@ mod tests {
             error.to_string(),
             "AccessDeniedException: User is not authorized to perform: kms:ListKeys"
         );
+    }
+
+    #[tokio::test]
+    async fn lists_keys_across_pages() {
+        let server = MockServer::start().await;
+        list_keys()
+            .and(body_partial_json(json!({ "Marker": "page-2" })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "Keys": [{ "KeyId": "key-2", "KeyArn": "arn:aws:kms:eu-central-1:123456789012:key/key-2" }],
+                "Truncated": false
+            })))
+            .mount(&server)
+            .await;
+        list_keys()
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "Keys": [{ "KeyId": "key-1", "KeyArn": "arn:aws:kms:eu-central-1:123456789012:key/key-1" }],
+                "Truncated": true,
+                "NextMarker": "page-2"
+            })))
+            .mount(&server)
+            .await;
+
+        let ids: Vec<_> = provider(&server.uri())
+            .list_keys()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|key| key.id)
+            .collect();
+
+        assert_eq!(ids, ["key-1", "key-2"]);
     }
 
     #[tokio::test]
