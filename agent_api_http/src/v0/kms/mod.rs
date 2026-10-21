@@ -10,7 +10,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use key_providers::{add_key_provider, get_all_key_providers, remove_key_provider, test_key_provider_connection};
+use key_providers::{
+    add_key_provider, get_all_key_providers, get_key_provider_keys, remove_key_provider, test_key_provider_connection,
+};
 use std::sync::Arc;
 
 pub fn router(kms_state: Arc<KmsState>) -> Router {
@@ -20,6 +22,7 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
             Router::new()
                 .route("/add-key-provider", post(add_key_provider))
                 .route("/get-all-key-providers", get(get_all_key_providers))
+                .route("/get-key-provider-keys/{provider_type}", get(get_key_provider_keys))
                 .route("/remove-key-provider", post(remove_key_provider))
                 .route("/test-key-provider-connection", post(test_key_provider_connection)),
         )
@@ -48,6 +51,10 @@ mod tests {
     #[async_trait]
     impl KeyProviderAdapter for Unreachable {
         async fn test_connection(&self) -> Result<(), ConnectionError> {
+            Err(ConnectionError("no credentials".to_string()))
+        }
+
+        async fn list_keys(&self) -> Result<Vec<agent_kms::adapter::ProviderKey>, ConnectionError> {
             Err(ConnectionError("no credentials".to_string()))
         }
     }
@@ -95,6 +102,7 @@ mod tests {
             ("POST", "/v0/add-key-provider"),
             ("POST", "/v0/remove-key-provider"),
             ("POST", "/v0/test-key-provider-connection"),
+            ("GET", "/v0/get-key-provider-keys/aws_kms_ambient"),
         ] {
             assert_eq!(send(&app, method, uri, None).await.0, StatusCode::NOT_FOUND, "{uri}");
         }
@@ -186,6 +194,27 @@ mod tests {
             send(&app, "POST", "/v0/add-key-provider", Some(add)).await.0,
             StatusCode::CONFLICT
         );
+    }
+
+    #[tokio::test]
+    async fn lists_the_keys_of_an_added_provider() {
+        let app = app_with_kms().await;
+        for provider_type in ["in_memory", "aws_kms_ambient"] {
+            send(
+                &app,
+                "POST",
+                "/v0/add-key-provider",
+                Some(json!({ "providerType": provider_type, "name": provider_type })),
+            )
+            .await;
+        }
+
+        let (status, body) = send(&app, "GET", "/v0/get-key-provider-keys/in_memory", None).await;
+        assert_eq!((status, body), (StatusCode::OK, json!([])));
+
+        let (status, body) = send(&app, "GET", "/v0/get-key-provider-keys/aws_kms_ambient", None).await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
+        assert_eq!(body["detail"], json!("no credentials"));
     }
 
     #[tokio::test]

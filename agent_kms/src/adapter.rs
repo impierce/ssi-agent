@@ -10,11 +10,24 @@ use thiserror::Error;
 #[error("{0}")]
 pub struct ConnectionError(pub String);
 
-/// A connection to an external key provider. Only reachability for now; key operations will be added later.
+/// A key that exists in a key provider, as reported by the provider.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct ProviderKey {
+    /// The provider's identifier for the key.
+    pub id: String,
+    /// The provider's full resource name for the key, where it has one (an ARN for AWS KMS).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_name: Option<String>,
+}
+
+/// A connection to an external key provider. Key operations will be added later.
 #[async_trait]
 pub trait KeyProviderAdapter: Send + Sync {
     /// Checks that the provider can be reached with the configured credentials.
     async fn test_connection(&self) -> Result<(), ConnectionError>;
+
+    /// Lists the keys that exist in the provider and that the configured credentials can see.
+    async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError>;
 }
 
 /// The adapter for each provider type this instance can use.
@@ -27,5 +40,9 @@ pub struct InMemoryKeyProvider;
 impl KeyProviderAdapter for InMemoryKeyProvider {
     async fn test_connection(&self) -> Result<(), ConnectionError> {
         Ok(())
+    }
+
+    async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError> {
+        Ok(Vec::new())
     }
 }

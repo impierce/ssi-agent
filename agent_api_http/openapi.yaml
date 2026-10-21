@@ -1027,6 +1027,35 @@ paths:
                 $ref: '#/components/schemas/Reissuance'
         '404':
           description: Credential reissuance relation not found
+  /v0/get-key-provider-keys/{provider_type}:
+    get:
+      tags:
+      - Key Management
+      summary: List the keys in a key provider
+      description: |-
+        Lists the keys that exist in an added key provider and that this instance's credentials can see, as reported
+        by the provider. Nothing is stored, and the keys are not used by UniCore yet.
+      operationId: get_key_provider_keys
+      parameters:
+      - name: provider_type
+        in: path
+        description: The type of the added key provider
+        required: true
+        schema:
+          $ref: '#/components/schemas/KeyProviderType'
+      responses:
+        '200':
+          description: The keys in the provider
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProviderKey'
+        '404':
+          description: No provider of this type has been added
+        '502':
+          description: The provider could not be reached
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -3532,6 +3561,20 @@ components:
               This can be used by frontends to preserve field type information for visualizations.
               Purely a rendering hint that UniCore stores as given and never validates against the
               schema or the issued values.
+    ProviderKey:
+      type: object
+      description: A key that exists in a key provider, as reported by the provider.
+      required:
+      - id
+      properties:
+        id:
+          type: string
+          description: The provider's identifier for the key.
+        resource_name:
+          type:
+          - string
+          - 'null'
+          description: The provider's full resource name for the key, where it has one (an ARN for AWS KMS).
     PublicOfferStatusDto:
       type: object
       required:

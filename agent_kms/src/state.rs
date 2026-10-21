@@ -1,7 +1,7 @@
-use crate::adapter::{ConnectionError, KeyProviderAdapters};
+use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKey};
 use crate::key_provider::{
     aggregate::{KeyProvider, KeyProviderType},
-    command::TestKeyProviderConnection,
+    command::{ListKeyProviderKeys, TestKeyProviderConnection},
     services::KeyProviderServices,
     views::{all_key_providers::AllKeyProvidersView, KeyProviderView},
 };
@@ -10,7 +10,7 @@ use agent_shared::{
     handlers::{authorize_command, live_query_handler, QueryHandlerError},
 };
 use shared_kernel::authorization::{
-    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, QueryOperation,
+    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation, QueryOperation,
 };
 use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
@@ -129,32 +129,53 @@ pub async fn test_key_provider_connection(
     caller: Caller,
     provider_type: KeyProviderType,
 ) -> Result<Result<(), ConnectionError>, TestConnectionError> {
+    let adapter = added_provider_adapter(state, caller, provider_type, &TestKeyProviderConnection).await?;
+    Ok(adapter.test_connection().await)
+}
+
+/// Lists the keys that exist in an added provider. Nothing is stored.
+///
+/// The outer `Result` fails when the request couldn't be made; the inner one carries the provider's answer.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, the provider hasn't been added, or this instance has no adapter for it.
+pub async fn list_key_provider_keys(
+    state: &KmsState,
+    caller: Caller,
+    provider_type: KeyProviderType,
+) -> Result<Result<Vec<ProviderKey>, ConnectionError>, TestConnectionError> {
+    let adapter = added_provider_adapter(state, caller, provider_type, &ListKeyProviderKeys).await?;
+    Ok(adapter.list_keys().await)
+}
+
+/// The adapter of an added provider, after checking that the caller may perform `operation` on it.
+async fn added_provider_adapter<C: CommandOperation>(
+    state: &KmsState,
+    caller: Caller,
+    provider_type: KeyProviderType,
+    operation: &C,
+) -> Result<Arc<dyn KeyProviderAdapter>, TestConnectionError> {
     let id = provider_type.to_string();
-    authorize_command(
-        state.authorization_checker.as_ref(),
-        caller.clone(),
-        &id,
-        &TestKeyProviderConnection,
-    )
-    .await
-    .map_err(TestConnectionError::Authorization)?;
+    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, operation)
+        .await
+        .map_err(TestConnectionError::Authorization)?;
 
     get_key_provider(state, caller, provider_type)
         .await?
         .ok_or(TestConnectionError::NotFound(provider_type))?;
 
-    let adapter = state
+    state
         .adapters
         .get(&provider_type)
-        .ok_or(TestConnectionError::Unsupported(provider_type))?;
-
-    Ok(adapter.test_connection().await)
+        .cloned()
+        .ok_or(TestConnectionError::Unsupported(provider_type))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapter::{InMemoryKeyProvider, KeyProviderAdapter};
+    use crate::adapter::InMemoryKeyProvider;
     use crate::key_provider::{command::KeyProviderCommand, error::KeyProviderError};
     use agent_shared::handlers::{command_handler, CommandHandlerError};
     use agent_store::in_memory::InMemory;
@@ -166,6 +187,10 @@ mod tests {
     #[async_trait]
     impl KeyProviderAdapter for Unreachable {
         async fn test_connection(&self) -> Result<(), ConnectionError> {
+            Err(ConnectionError("connection refused".to_string()))
+        }
+
+        async fn list_keys(&self) -> Result<Vec<crate::adapter::ProviderKey>, ConnectionError> {
             Err(ConnectionError("connection refused".to_string()))
         }
     }
