@@ -15,7 +15,7 @@ use agent_issuance::{
     offer::aggregate::Offer as IssuanceOffer, public_offer::aggregate::PublicOffer, reissuance::aggregate::Reissuance,
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
-use agent_kms::key_provider::aggregate::KeyProvider;
+use agent_kms::key_provider::aggregate::KeyProviders;
 use agent_library::{catalog::aggregate::Catalog, template::aggregate::Template};
 pub use agent_store::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier};
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
@@ -49,7 +49,7 @@ static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 22]> = LazyLock::new(|| {
         EventVerifier::for_aggregate::<Presentation>(),
         EventVerifier::for_aggregate::<ReceivedOffer>(),
         EventVerifier::for_aggregate::<AuthorizationRequest>(),
-        EventVerifier::for_aggregate::<KeyProvider>(),
+        EventVerifier::for_aggregate::<KeyProviders>(),
     ]
 });
 

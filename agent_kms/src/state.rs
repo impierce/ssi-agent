@@ -1,13 +1,13 @@
 use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKey};
 use crate::key_provider::{
-    aggregate::{KeyProvider, KeyProviderType},
+    aggregate::{KeyProviderType, KeyProviders},
     command::{ListKeyProviderKeys, TestKeyProviderConnection},
     services::KeyProviderServices,
-    views::{all_key_providers::AllKeyProvidersView, KeyProviderView},
+    views::KeyProvidersView,
 };
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
-    handlers::{authorize_command, live_query_handler, QueryHandlerError},
+    handlers::{authorize_command, query_handler, QueryHandlerError},
 };
 use shared_kernel::authorization::{
     AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation, QueryOperation,
@@ -17,11 +17,7 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use thiserror::Error;
 
-impl QueryOperation for KeyProviderView {
-    const OPERATION_NAME: &'static str = "kms.key_providers.get";
-}
-
-impl QueryOperation for AllKeyProvidersView {
+impl QueryOperation for KeyProvidersView {
     const OPERATION_NAME: &'static str = "kms.key_providers.list";
 }
 
@@ -35,22 +31,17 @@ pub struct KmsState {
 
 #[derive(Clone)]
 pub struct CommandHandlers {
-    pub key_provider: CommandHandler<KeyProvider>,
+    pub key_providers: CommandHandler<KeyProviders>,
 }
 
 #[derive(Clone)]
 pub struct Queries {
-    pub key_provider: Arc<dyn DynViewRepository<KeyProviderView, KeyProvider>>,
-    pub all_key_providers: Arc<dyn DynViewRepository<AllKeyProvidersView, KeyProvider>>,
+    pub key_providers: Arc<dyn DynViewRepository<KeyProvidersView, KeyProviders>>,
 }
 
 /// Constructs the CQRS components of the KMS bounded context.
 ///
 /// `adapters` holds the adapter for every provider type this instance can connect to.
-///
-/// # Panics
-///
-/// Panics if the key provider services were already given a view repository, which would be a wiring bug.
 pub async fn kms_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_bus: &EventBusHandle,
@@ -59,29 +50,37 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
 ) -> KmsState {
     let services = Arc::new(KeyProviderServices::new(development_providers_allowed));
 
-    let (key_provider_command_handler, key_provider, all_key_providers) = builder
-        .commands_and_queries::<KeyProviderView, KeyProvider, AllKeyProvidersView>(
-            services.clone(),
-            vec![event_bus.query()],
-        )
+    // There is only one key providers aggregate, so its own view already lists every provider and the
+    // all-aggregates view is not needed.
+    let (key_providers_command_handler, key_providers, _) = builder
+        .commands_and_queries::<KeyProvidersView, KeyProviders, KeyProvidersView>(services, vec![event_bus.query()])
         .await;
-
-    assert!(
-        services.all_key_providers.set(all_key_providers.clone()).is_ok(),
-        "key provider view already initialized"
-    );
 
     KmsState {
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: CommandHandlers {
-            key_provider: key_provider_command_handler,
+            key_providers: key_providers_command_handler,
         },
-        query: Queries {
-            key_provider,
-            all_key_providers,
-        },
+        query: Queries { key_providers },
         adapters: Arc::new(adapters),
     }
+}
+
+/// Returns every key provider this instance is connected to, by type, in the order they were added.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized or the providers can't be loaded.
+pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyProvidersView, QueryHandlerError> {
+    Ok(query_handler(
+        state.authorization_checker.clone(),
+        caller,
+        KeyProviders::ID,
+        None,
+        &state.query.key_providers,
+    )
+    .await?
+    .unwrap_or_default())
 }
 
 #[derive(Debug, Error)]
@@ -96,25 +95,20 @@ pub enum TestConnectionError {
     Unsupported(KeyProviderType),
 }
 
-/// Returns the provider of the given type, or `None` if it hasn't been added or has been removed.
+/// Returns the name of the provider of the given type, or `None` if it hasn't been added or has been removed.
 ///
 /// # Errors
 ///
-/// Fails when the caller isn't authorized or the provider can't be loaded.
+/// Fails when the caller isn't authorized or the providers can't be loaded.
 pub async fn get_key_provider(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Option<KeyProviderView>, QueryHandlerError> {
-    let id = provider_type.to_string();
-    live_query_handler(
-        state.authorization_checker.as_ref(),
-        caller,
-        &id,
-        Some(&id),
-        state.query.key_provider.as_ref(),
-    )
-    .await
+) -> Result<Option<String>, QueryHandlerError> {
+    Ok(get_key_providers(state, caller)
+        .await?
+        .providers
+        .shift_remove(&provider_type))
 }
 
 /// Checks whether an added provider is reachable. The outcome is returned, not stored.
@@ -207,12 +201,13 @@ mod tests {
         kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await
     }
 
-    async fn add(state: &KmsState, provider_type: KeyProviderType, name: &str) -> Result<(), KeyProviderError> {
+    /// Adds a provider. A rejected command is `Err(Some(error))`; one that lost a concurrent write is `Err(None)`.
+    async fn add(state: &KmsState, provider_type: KeyProviderType, name: &str) -> Result<(), Option<KeyProviderError>> {
         command_handler(
             state.authorization_checker.clone(),
             Caller::Internal,
-            &provider_type.to_string(),
-            &state.command.key_provider,
+            KeyProviders::ID,
+            &state.command.key_providers,
             KeyProviderCommand::AddKeyProvider {
                 provider_type,
                 name: name.to_string(),
@@ -220,7 +215,8 @@ mod tests {
         )
         .await
         .map_err(|error| match error {
-            CommandHandlerError::Aggregate(AggregateError::UserError(error)) => error,
+            CommandHandlerError::Aggregate(AggregateError::UserError(error)) => Some(error),
+            CommandHandlerError::Aggregate(AggregateError::AggregateConflict) => None,
             error => panic!("unexpected error: {error}"),
         })
     }
@@ -234,18 +230,8 @@ mod tests {
             .await
             .unwrap();
 
-        let all = state
-            .query
-            .all_key_providers
-            .load(AllKeyProvidersView::VIEW_ID)
-            .await
-            .unwrap()
-            .unwrap();
-        let names: Vec<_> = all
-            .key_providers
-            .values()
-            .map(|provider| provider.name.as_str())
-            .collect();
+        let all = get_key_providers(&state, Caller::Internal).await.unwrap();
+        let names: Vec<_> = all.providers.values().map(String::as_str).collect();
         assert_eq!(names, ["Local keys", "Production keys"]);
     }
 
@@ -257,8 +243,30 @@ mod tests {
 
         assert_eq!(
             add(&state, KeyProviderType::AwsKmsAmbient, "Keys").await,
-            Err(KeyProviderError::NameTaken("Keys".to_string()))
+            Err(Some(KeyProviderError::NameTaken("Keys".to_string())))
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_additions_cannot_both_take_the_same_name() {
+        for _ in 0..50 {
+            let state = state().await;
+
+            let (in_memory, aws) = tokio::join!(
+                add(&state, KeyProviderType::InMemory, "Keys"),
+                add(&state, KeyProviderType::AwsKmsAmbient, "Keys"),
+            );
+
+            assert!(in_memory.is_ok() != aws.is_ok(), "{in_memory:?} {aws:?}");
+            assert_eq!(
+                get_key_providers(&state, Caller::Internal)
+                    .await
+                    .unwrap()
+                    .providers
+                    .len(),
+                1
+            );
+        }
     }
 
     #[tokio::test]

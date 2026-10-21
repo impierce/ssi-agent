@@ -10,36 +10,36 @@ impl IntoApiErrorExt for KeyProviderError {
             KeyProviderError::AlreadyAdded(_) => (
                 StatusCode::CONFLICT,
                 "Key Provider Already Added",
-                Some("kms#key-provider-already-added"),
+                "kms#key-provider-already-added",
             ),
             KeyProviderError::NotFound(_) => (
                 StatusCode::NOT_FOUND,
                 "Key Provider Not Found",
-                Some("kms#key-provider-not-found"),
+                "kms#key-provider-not-found",
             ),
             KeyProviderError::DevelopmentOnly(_) => (
                 StatusCode::BAD_REQUEST,
                 "Key Provider Not Available",
-                Some("kms#key-provider-development-only"),
+                "kms#key-provider-development-only",
             ),
             KeyProviderError::MissingName => (
                 StatusCode::BAD_REQUEST,
                 "Key Provider Name Missing",
-                Some("kms#missing-key-provider-name"),
+                "kms#missing-key-provider-name",
             ),
             KeyProviderError::NameTaken(_) => (
                 StatusCode::CONFLICT,
                 "Key Provider Name Taken",
-                Some("kms#key-provider-name-taken"),
+                "kms#key-provider-name-taken",
             ),
-            KeyProviderError::Lookup(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error", None),
         };
 
-        let mut builder = ApiError::builder(status).title(title);
-        if let Some(problem_type) = problem_type {
-            builder = builder.type_url(type_url(problem_type)).message(self.to_string());
-        }
-        builder.source(self).finish()
+        ApiError::builder(status)
+            .title(title)
+            .type_url(type_url(problem_type))
+            .message(self.to_string())
+            .source(self)
+            .finish()
     }
 }
 
