@@ -42,6 +42,12 @@ pub struct KeyProviders {
 impl KeyProviders {
     /// The ID of the single key providers aggregate.
     pub const ID: &'static str = "key_providers";
+
+    /// The form in which a provider name is stored.
+    #[must_use]
+    pub fn normalize_name(name: &str) -> String {
+        name.trim().to_string()
+    }
 }
 
 impl Aggregate for KeyProviders {
@@ -72,7 +78,7 @@ impl Aggregate for KeyProviders {
                     return Err(KeyProviderError::DevelopmentOnly(provider_type));
                 }
 
-                let name = name.trim().to_string();
+                let name = Self::normalize_name(&name);
                 if name.is_empty() {
                     return Err(KeyProviderError::MissingName);
                 }

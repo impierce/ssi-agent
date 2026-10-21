@@ -116,7 +116,7 @@ mod tests {
             &app,
             "POST",
             "/v0/add-key-provider",
-            Some(json!({ "providerType": "in_memory", "name": "Local keys" })),
+            Some(json!({ "providerType": "in_memory", "name": "  Local keys  " })),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED);

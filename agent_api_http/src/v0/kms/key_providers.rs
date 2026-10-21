@@ -6,9 +6,7 @@ use agent_kms::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
     command::KeyProviderCommand,
 };
-use agent_kms::state::{
-    get_key_provider, get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection,
-};
+use agent_kms::state::{get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection};
 use agent_kms::KmsState;
 use axum::{
     extract::{Path, State},
@@ -18,7 +16,6 @@ use axum::{
 use http::StatusCode;
 use http_api_problem::ApiError;
 use serde::{Deserialize, Serialize};
-use shared_kernel::authorization::Caller;
 use std::sync::Arc;
 
 /// A key provider this instance is connected to.
@@ -75,20 +72,22 @@ pub(crate) async fn add_key_provider(
     RequestActor(actor): RequestActor,
     Json(AddKeyProviderRequest { provider_type, name }): Json<AddKeyProviderRequest>,
 ) -> Result<Response, ApiError> {
+    let name = KeyProviders::normalize_name(&name);
     command_handler(
         state.authorization_checker.clone(),
         actor,
         KeyProviders::ID,
         &state.command.key_providers,
-        KeyProviderCommand::AddKeyProvider { provider_type, name },
+        KeyProviderCommand::AddKeyProvider {
+            provider_type,
+            name: name.clone(),
+        },
     )
     .await?;
 
-    get_key_provider(&state, Caller::Internal, provider_type)
-        .await
-        .map_err(IntoApiErrorExt::into_api_error)?
-        .map(|name| (StatusCode::CREATED, Json(KeyProviderDto { provider_type, name })).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+    // Answer from the accepted command rather than the view: the event is stored at this point, but a failed view
+    // update would otherwise turn a successful add into an error.
+    Ok((StatusCode::CREATED, Json(KeyProviderDto { provider_type, name })).into_response())
 }
 
 /// List all key providers
