@@ -1,5 +1,4 @@
 use crate::key_provider::aggregate::KeyProviderType;
-use cqrs_es::persist::PersistenceError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,8 +13,6 @@ pub enum KeyProviderError {
     MissingName,
     #[error("Another key provider is already named `{0}`")]
     NameTaken(String),
-    #[error("Failed to look up existing key providers: {0}")]
-    Lookup(#[from] PersistenceError),
 }
 
 impl PartialEq for KeyProviderError {

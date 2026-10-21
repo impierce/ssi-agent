@@ -16,9 +16,13 @@ use tokio::sync::OnceCell;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
+/// Upper bound for one whole request, including resolving the ambient AWS configuration and credentials on first
+/// use, which the SDK's own timeouts don't cover.
+const REQUEST_DEADLINE: Duration = Duration::from_secs(30);
 
 pub struct AwsKmsAmbientKeyProvider {
     client: OnceCell<Client>,
+    deadline: Duration,
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -28,6 +32,7 @@ impl AwsKmsAmbientKeyProvider {
     pub fn new() -> Self {
         Self {
             client: OnceCell::new(),
+            deadline: REQUEST_DEADLINE,
         }
     }
 
@@ -36,7 +41,30 @@ impl AwsKmsAmbientKeyProvider {
     pub fn with_client(client: Client) -> Self {
         Self {
             client: OnceCell::new_with(Some(client)),
+            deadline: REQUEST_DEADLINE,
         }
+    }
+
+    /// Replaces the upper bound for one whole request.
+    #[must_use]
+    pub fn with_deadline(self, deadline: Duration) -> Self {
+        Self { deadline, ..self }
+    }
+
+    /// Runs `request`, failing with a [`ConnectionError`] once the deadline passes.
+    async fn within_deadline<T>(
+        &self,
+        request: impl std::future::Future<Output = Result<T, ConnectionError>>,
+    ) -> Result<T, ConnectionError> {
+        // The SDK's futures are large, so keep them on the heap rather than in every caller's future.
+        tokio::time::timeout(self.deadline, Box::pin(request))
+            .await
+            .unwrap_or_else(|_| {
+                Err(ConnectionError(format!(
+                    "AWS KMS did not respond within {} seconds",
+                    self.deadline.as_secs_f32()
+                )))
+            })
     }
 
     async fn client(&self) -> &Client {
@@ -68,41 +96,47 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
     /// Lists at most one key, which needs working credentials, a region and the `kms:ListKeys` permission. The
     /// check is not retried, so an unreachable provider is reported straight away.
     async fn test_connection(&self) -> Result<(), ConnectionError> {
-        self.client()
-            .await
-            .list_keys()
-            .limit(1)
-            .customize()
-            .config_override(KmsConfigBuilder::default().retry_config(RetryConfig::disabled()))
-            .send()
-            .await
-            .map(|_| ())
-            .map_err(|error| ConnectionError(describe(&error)))
+        self.within_deadline(async {
+            self.client()
+                .await
+                .list_keys()
+                .limit(1)
+                .customize()
+                .config_override(KmsConfigBuilder::default().retry_config(RetryConfig::disabled()))
+                .send()
+                .await
+                .map(|_| ())
+                .map_err(|error| ConnectionError(describe(&error)))
+        })
+        .await
     }
 
     /// Lists every key the credentials can see, following AWS's pagination.
     async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError> {
-        let client = self.client().await;
-        let mut keys = Vec::new();
-        let mut marker = None;
-        loop {
-            let page = client
-                .list_keys()
-                .set_marker(marker)
-                .send()
-                .await
-                .map_err(|error| ConnectionError(describe(&error)))?;
-            keys.extend(page.keys().iter().filter_map(|key| {
-                Some(ProviderKey {
-                    id: key.key_id()?.to_string(),
-                    resource_name: key.key_arn().map(str::to_string),
-                })
-            }));
-            match page.next_marker() {
-                Some(next) if page.truncated() => marker = Some(next.to_string()),
-                _ => return Ok(keys),
+        self.within_deadline(async {
+            let client = self.client().await;
+            let mut keys = Vec::new();
+            let mut marker = None;
+            loop {
+                let page = client
+                    .list_keys()
+                    .set_marker(marker)
+                    .send()
+                    .await
+                    .map_err(|error| ConnectionError(describe(&error)))?;
+                keys.extend(page.keys().iter().filter_map(|key| {
+                    Some(ProviderKey {
+                        id: key.key_id()?.to_string(),
+                        resource_name: key.key_arn().map(str::to_string),
+                    })
+                }));
+                match page.next_marker() {
+                    Some(next) if page.truncated() => marker = Some(next.to_string()),
+                    _ => return Ok(keys),
+                }
             }
-        }
+        })
+        .await
     }
 }
 
@@ -217,6 +251,20 @@ mod tests {
             .collect();
 
         assert_eq!(ids, ["key-1", "key-2"]);
+    }
+
+    #[tokio::test]
+    async fn gives_up_when_aws_does_not_respond_in_time() {
+        let server = MockServer::start().await;
+        list_keys()
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
+            .mount(&server)
+            .await;
+        let provider = provider(&server.uri()).with_deadline(Duration::from_millis(200));
+
+        let error = provider.test_connection().await.unwrap_err();
+
+        assert_eq!(error.to_string(), "AWS KMS did not respond within 0.2 seconds");
     }
 
     #[tokio::test]

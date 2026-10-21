@@ -1,13 +1,14 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use crate::extractors::RequestActor;
-use crate::handlers::{caller, command_handler, query_handler};
+use crate::handlers::{caller, command_handler};
 use agent_kms::adapter::ProviderKey;
 use agent_kms::key_provider::{
-    aggregate::KeyProviderType,
+    aggregate::{KeyProviderType, KeyProviders},
     command::KeyProviderCommand,
-    views::{all_key_providers::AllKeyProvidersView, KeyProviderView},
 };
-use agent_kms::state::{get_key_provider, list_key_provider_keys, test_key_provider_connection as test_connection};
+use agent_kms::state::{
+    get_key_provider, get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection,
+};
 use agent_kms::KmsState;
 use axum::{
     extract::{Path, State},
@@ -26,15 +27,6 @@ use std::sync::Arc;
 pub struct KeyProviderDto {
     pub provider_type: KeyProviderType,
     pub name: String,
-}
-
-impl KeyProviderDto {
-    fn from_view(view: KeyProviderView) -> Option<Self> {
-        Some(Self {
-            provider_type: view.provider_type?,
-            name: view.name,
-        })
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -86,8 +78,8 @@ pub(crate) async fn add_key_provider(
     command_handler(
         state.authorization_checker.clone(),
         actor,
-        &provider_type.to_string(),
-        &state.command.key_provider,
+        KeyProviders::ID,
+        &state.command.key_providers,
         KeyProviderCommand::AddKeyProvider { provider_type, name },
     )
     .await?;
@@ -95,8 +87,7 @@ pub(crate) async fn add_key_provider(
     get_key_provider(&state, Caller::Internal, provider_type)
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
-        .and_then(KeyProviderDto::from_view)
-        .map(|provider| (StatusCode::CREATED, Json(provider)).into_response())
+        .map(|name| (StatusCode::CREATED, Json(KeyProviderDto { provider_type, name })).into_response())
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
@@ -117,21 +108,13 @@ pub(crate) async fn get_all_key_providers(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let providers: Vec<KeyProviderDto> = query_handler(
-        state.authorization_checker.clone(),
-        actor,
-        AllKeyProvidersView::VIEW_ID,
-        None,
-        &state.query.all_key_providers,
-    )
-    .await?
-    .map(|view| {
-        view.key_providers
-            .into_values()
-            .filter_map(KeyProviderDto::from_view)
-            .collect()
-    })
-    .unwrap_or_default();
+    let providers: Vec<KeyProviderDto> = get_key_providers(&state, caller(actor))
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?
+        .providers
+        .into_iter()
+        .map(|(provider_type, name)| KeyProviderDto { provider_type, name })
+        .collect();
 
     Ok((StatusCode::OK, Json(providers)).into_response())
 }
@@ -160,8 +143,8 @@ pub(crate) async fn remove_key_provider(
     command_handler(
         state.authorization_checker.clone(),
         actor,
-        &provider_type.to_string(),
-        &state.command.key_provider,
+        KeyProviders::ID,
+        &state.command.key_providers,
         KeyProviderCommand::RemoveKeyProvider { provider_type },
     )
     .await?;

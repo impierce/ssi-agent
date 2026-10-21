@@ -2,6 +2,7 @@ use crate::key_provider::{
     command::KeyProviderCommand, error::KeyProviderError, event::KeyProviderEvent, services::KeyProviderServices,
 };
 use cqrs_es::{event_sink::EventSink, Aggregate};
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use strum::{Display, EnumString};
@@ -28,25 +29,28 @@ impl KeyProviderType {
     }
 }
 
+/// The key providers this instance is connected to.
+///
+/// All providers live in one aggregate, so that "one provider per type" and "unique names" are checked against
+/// every provider in the same write: concurrent additions conflict instead of both succeeding.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct KeyProvider {
-    pub provider_type: Option<KeyProviderType>,
-    pub name: String,
+pub struct KeyProviders {
+    /// Provider names by type, in the order the providers were added.
+    pub providers: IndexMap<KeyProviderType, String>,
 }
 
-impl KeyProvider {
-    fn is_added(&self) -> bool {
-        self.provider_type.is_some()
-    }
+impl KeyProviders {
+    /// The ID of the single key providers aggregate.
+    pub const ID: &'static str = "key_providers";
 }
 
-impl Aggregate for KeyProvider {
+impl Aggregate for KeyProviders {
     type Command = KeyProviderCommand;
     type Event = KeyProviderEvent;
     type Error = KeyProviderError;
     type Services = Arc<KeyProviderServices>;
 
-    const TYPE: &'static str = "key_provider";
+    const TYPE: &'static str = "key_providers";
 
     async fn handle(
         &mut self,
@@ -61,7 +65,7 @@ impl Aggregate for KeyProvider {
 
         let events = match command {
             AddKeyProvider { provider_type, name } => {
-                if self.is_added() {
+                if self.providers.contains_key(&provider_type) {
                     return Err(KeyProviderError::AlreadyAdded(provider_type));
                 }
                 if provider_type.is_development_only() && !services.development_providers_allowed {
@@ -72,14 +76,14 @@ impl Aggregate for KeyProvider {
                 if name.is_empty() {
                     return Err(KeyProviderError::MissingName);
                 }
-                if services.is_name_taken(&name).await? {
+                if self.providers.values().any(|existing| *existing == name) {
                     return Err(KeyProviderError::NameTaken(name));
                 }
 
                 vec![KeyProviderAdded { provider_type, name }]
             }
             RemoveKeyProvider { provider_type } => {
-                if !self.is_added() {
+                if !self.providers.contains_key(&provider_type) {
                     return Err(KeyProviderError::NotFound(provider_type));
                 }
 
@@ -97,10 +101,11 @@ impl Aggregate for KeyProvider {
     fn apply(&mut self, event: Self::Event) {
         match event {
             KeyProviderEvent::KeyProviderAdded { provider_type, name } => {
-                self.provider_type = Some(provider_type);
-                self.name = name;
+                self.providers.insert(provider_type, name);
             }
-            KeyProviderEvent::KeyProviderRemoved { .. } => *self = Self::default(),
+            KeyProviderEvent::KeyProviderRemoved { provider_type } => {
+                self.providers.shift_remove(&provider_type);
+            }
         }
     }
 }
@@ -110,7 +115,7 @@ mod tests {
     use super::*;
     use cqrs_es::test::TestFramework;
 
-    type KeyProviderTestFramework = TestFramework<KeyProvider>;
+    type KeyProviderTestFramework = TestFramework<KeyProviders>;
 
     fn services(development_providers_allowed: bool) -> Arc<KeyProviderServices> {
         Arc::new(KeyProviderServices::new(development_providers_allowed))
@@ -204,6 +209,17 @@ mod tests {
                 name: "Production keys".to_string(),
             })
             .then_expect_events(vec![added(KeyProviderType::AwsKmsAmbient, "Production keys")]);
+    }
+
+    #[test]
+    fn rejects_a_name_used_by_a_provider_of_another_type() {
+        KeyProviderTestFramework::with(services(true))
+            .given(vec![added(KeyProviderType::InMemory, "Keys")])
+            .when(KeyProviderCommand::AddKeyProvider {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                name: "Keys".to_string(),
+            })
+            .then_expect_error(KeyProviderError::NameTaken("Keys".to_string()));
     }
 
     #[test]
