@@ -9,7 +9,7 @@ use axum::{
 };
 use http::StatusCode;
 use hyper::header;
-use oauth_tsl::relying_party::StatusListTokenResponseType;
+use identity_kit::sd_jwt_vc::StatusListToken;
 
 use crate::v0::issuance::error::PublicError;
 use crate::v0::openapi::PROTOCOL_TAG;
@@ -50,10 +50,7 @@ pub async fn token_status_list(
     Ok((
         StatusCode::OK,
         [
-            (
-                header::CONTENT_TYPE,
-                StatusListTokenResponseType::Jwt.to_string().as_str(),
-            ),
+            (header::CONTENT_TYPE, StatusListToken::MEDIA_TYPE),
             (header::CONTENT_ENCODING, "gzip"),
         ],
         compressed_jwt_token,
@@ -74,17 +71,15 @@ pub mod tests {
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
+    use agent_shared::credential_status_checker::{decode_status_list_token, decompress_gzip};
     use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
         Router,
     };
     use http::{Request, StatusCode};
+    use identity_kit::sd_jwt_vc::StatusListToken;
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
-    use oauth_tsl::{
-        relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
-        tokens::status_list_token::StatusListTyp,
-    };
     use oid4vc_core::authentication::verify::Verify;
     use shared_kernel::authorization::Caller;
 
@@ -123,7 +118,7 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
+                    .header(http::header::ACCEPT, StatusListToken::MEDIA_TYPE)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -156,17 +151,15 @@ pub mod tests {
             }
         };
 
-        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
+        let status_list_token = decode_status_list_token(&jwt_status_list_token, &decoding_key).unwrap();
 
-        assert_eq!(jwt_header.typ.unwrap(), StatusListTyp::Jwt.to_string());
+        assert_eq!(jwt_header.typ.unwrap(), StatusListToken::TYP);
         assert_eq!(
-            decoded_jwt.claims.sub,
+            status_list_token.sub,
             config().public_url.as_str().to_owned() + "ietf-oauth-token-status-list/0"
         );
-        assert_eq!(decoded_jwt.claims.encoded_status_list.status_size, BITS_PER_STATUS);
-
-        let status_list = decoded_jwt.claims.encoded_status_list.decode_decompress().unwrap();
-        assert_eq!(status_list.len(), STATUS_LIST_BYTES_AMOUNT);
+        assert_eq!(status_list_token.status_list.bits(), BITS_PER_STATUS);
+        assert_eq!(status_list_token.status_list.as_bytes().len(), STATUS_LIST_BYTES_AMOUNT);
     }
 
     /// This test helper creates a signed credential with the following parameters:

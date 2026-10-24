@@ -486,7 +486,7 @@ pub mod tests {
     use crate::DOCUMENTATION_URL;
     use agent_library::json_schema_validation::JsonSchemaError;
     use axum::response::IntoResponse as _;
-    use oauth_tsl::error::OAuthTSLError;
+    use identity_kit::sd_jwt_vc::StatusListError as TokenStatusListError;
     use serde_json::{json, Value};
 
     const UNEXPECTED: Option<&str> = Some("unexpected#unexpected-error");
@@ -606,7 +606,7 @@ pub mod tests {
                 StatusListError::FailedToSetIndex(0, "error".to_string()),
                 StatusListError::GzipCompressionError,
                 StatusListError::JwtEncodeError,
-                StatusListError::StatusListEncodingError(OAuthTSLError::InvalidContentType),
+                StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
                 StatusListError::StatusListNotFound("0".to_string()),
                 StatusListError::StatusListQueryError,
                 StatusListError::StatusListUrlParsingError,
@@ -762,7 +762,7 @@ pub mod tests {
             ),
             (StatusListError::JwtEncodeError, StatusCode::INTERNAL_SERVER_ERROR, None),
             (
-                StatusListError::StatusListEncodingError(OAuthTSLError::InvalidContentType),
+                StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),
