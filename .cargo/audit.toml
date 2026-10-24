@@ -34,12 +34,6 @@ ignore = [
     # TODO: revisit when the IOTA SDK updates its lru dependency to a patched version.
     "RUSTSEC-2026-0002",
 
-    # RUSTSEC-2026-0049: rustls-webpki v0.102.8 — CRL distribution point matching bug
-    # Only relevant when CRL revocation checking is enabled. The async-nats NATS event
-    # publisher (the sole consumer of this webpki version) does not configure TLS with CRL
-    # revocation checking, so this code path is never reached.
-    "RUSTSEC-2026-0049",
-
     # RUSTSEC-2026-0097: rand v0.7.3 — Unsound when a custom logger calls rand::rng()
     # Triggers aliased mutable references during ThreadRng reseeding only when all of these
     # hold simultaneously: log+thread_rng features enabled, a custom logger defined that
