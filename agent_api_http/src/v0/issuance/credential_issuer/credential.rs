@@ -7,6 +7,7 @@ use crate::{
         openapi::PROTOCOL_TAG,
     },
 };
+use agent_issuance::status_list::status_type::StatusType;
 use agent_issuance::{
     application::{
         access_token_validation_service::{AccessTokenValidationError, AccessTokenValidationService},
@@ -25,7 +26,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use oauth_tsl::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
@@ -173,7 +173,7 @@ pub(crate) async fn credential(
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
         let command = StatusListCommand::AddIndex {
-            status: StatusType::VALID,
+            status: StatusType::Valid,
         };
 
         public_command_handler(&status_list_id, &state.command.status_list, command).await?;

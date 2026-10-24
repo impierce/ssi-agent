@@ -301,8 +301,9 @@ paths:
       - Protocol
       summary: Get a status list token
       description: |-
-        Returns a gzip-encoded Status List Token, as defined by
+        Returns a Status List Token, as defined by
         [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+        The response is gzip-encoded if the request's `Accept-Encoding` allows it.
       operationId: token_status_list
       parameters:
       - name: path
@@ -318,7 +319,7 @@ paths:
             Content-Encoding:
               schema:
                 type: string
-              description: Always `gzip`
+              description: '`gzip` if the request''s `Accept-Encoding` allows it'
           content:
             application/statuslist+jwt:
               schema:

@@ -4,6 +4,7 @@ use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
 use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
 use crate::services::IssuanceServices;
+use crate::status_list::status_type::StatusType;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
 use agent_secret_manager::subject::Subject;
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
@@ -13,9 +14,8 @@ use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
+use identity_kit::sd_jwt_vc::StatusListToken;
 use jsonwebtoken::Header;
-use oauth_tsl::status_list::StatusType;
-use oauth_tsl::tokens::status_list_token::StatusListTyp;
 use oid4vc_core::{jwt, Sign as _, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{self, VcSdJwt, VcSdJwtParameters};
@@ -445,7 +445,7 @@ impl Aggregate for Credential {
                     signed_credential,
                     credential_status: CredentialStatus {
                         index,
-                        status: StatusType::VALID,
+                        status: StatusType::Valid,
                         status_list_url: status_list_url.to_string(),
                     },
                     status: Status::Issued,
@@ -581,7 +581,7 @@ fn build_signed_w3c_credential_data(
     credential_data.insert_if_none(
         &["credentialStatus"],
         json!({
-            "type": StatusListTyp::Jwt.to_string(),
+            "type": StatusListToken::TYP,
             "id": status_list_url.to_string(),
             "uri": status_list_url.to_string(),
             "idx": status_index,
@@ -1127,7 +1127,7 @@ pub mod credential_tests {
             status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
                 .unwrap()
                 .to_string(),
-            status: StatusType::VALID,
+            status: StatusType::Valid,
         };
 
         CredentialTestFramework::with(IssuanceServices::default().await)

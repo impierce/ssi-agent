@@ -1,18 +1,15 @@
+use anyhow::bail;
 use async_trait::async_trait;
-use jsonwebtoken::decode_header;
-use oauth_tsl::{
-    relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
-    status_list::{StatusList, StatusType},
-};
+use flate2::read::GzDecoder;
+use identity_kit::sd_jwt_vc::{Status, StatusListToken};
+use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use oid4vc_core::{
     credential_status_verifier::CredentialStatusVerifier, verification_material_resolver::VerificationMaterialResolver,
 };
 use reqwest::{header, redirect::Policy, Client};
-use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
+use std::{io::Read, sync::Arc, time::Duration};
 use thiserror::Error;
 use tracing::{info, warn};
-use url::Url;
 
 use crate::convert_iota_jwk_to_decoding_key;
 
@@ -56,8 +53,11 @@ impl CredentialStatusChecker {
     /// Returns `FailedToGetCredentialStatus` for operational issues (can't fetch, decode, etc.)
     /// Returns `CredentialStatusInvalid` for actual status validation failures.
     async fn verify_status_claim(&self, status_claim: serde_json::Value) -> Result<(), CredentialStatusCheckerError> {
-        if let Ok(status_claim) = serde_json::from_value::<StatusClaim>(status_claim) {
-            info!("Succesfully parsed `status` claim {status_claim:#?}");
+        if let Some(status_list_ref) = serde_json::from_value::<Status>(status_claim)
+            .ok()
+            .and_then(|status| status.status_list)
+        {
+            info!("Succesfully parsed `status` claim {status_list_ref:#?}");
 
             // 3xx redirects should be followed, but infinite loops are caught after 5 redirects.
             // The timeout of 10 seconds is an estimated guess of how long a status list request should take at maximum.
@@ -69,14 +69,15 @@ impl CredentialStatusChecker {
 
             // The `accept_header` parameter determines the expected response format, currently we can only process the JWT format.
             let response = client
-                .get(status_claim.status_list.uri)
-                .header(header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
+                .get(&status_list_ref.uri)
+                .header(header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                .header(header::ACCEPT_ENCODING, "gzip")
                 .send()
                 .await
                 .and_then(reqwest::Response::error_for_status)
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            // TODO: Move this logic to OAuth TSL library
+            // TODO: Move this logic to IdentityKit
             let is_gzipped = response
                 .headers()
                 .get(header::CONTENT_ENCODING)
@@ -115,32 +116,20 @@ impl CredentialStatusChecker {
                 CredentialStatusCheckerError::FailedToGetCredentialStatus("Failed to create decoding key".to_string()),
             )?;
 
-            // TODO: move this logic to the OAuth TSL library.
-            let decoded_jwt = decrypt_status_list_token(&status_list_jwt, decoding_key)
+            // TODO: move this logic to IdentityKit.
+            let status_list_token = decode_status_list_token(&status_list_jwt, &decoding_key)
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            let status_list: StatusList = decoded_jwt.claims.encoded_status_list.try_into().map_err(|_| {
-                CredentialStatusCheckerError::FailedToGetCredentialStatus("Failed to decode status list".to_string())
-            })?;
-
-            // Converting it into StatusType means we choose the default status types as defined in the OAuth TSL library.
-            // However, get_status returns a u8, which can be interpreted anyway ssi-agent wants as explained in the OAuth TSL spec, meaning we could define our own status types here.
-            let status = StatusType::try_from(status_list.get_status(status_claim.status_list.idx as usize).map_err(
-                |_| {
-                    CredentialStatusCheckerError::FailedToGetCredentialStatus(
-                        "Failed to get credential status from index".to_string(),
-                    )
-                },
-            )?)
-            .map_err(|_| {
+            let status = status_list_token.status_list.get(status_list_ref.idx).ok_or_else(|| {
                 CredentialStatusCheckerError::FailedToGetCredentialStatus(
                     "Failed to get credential status from index".to_string(),
                 )
             })?;
 
-            match status {
-                StatusType::VALID => Ok(()),
-                _ => Err(CredentialStatusCheckerError::CredentialStatusInvalid),
+            if status.is_valid() {
+                Ok(())
+            } else {
+                Err(CredentialStatusCheckerError::CredentialStatusInvalid)
             }
         } else {
             warn!("Unable to parse `status` claim as per the OAuth Token Status List specification, skipping credential status check");
@@ -149,17 +138,40 @@ impl CredentialStatusChecker {
     }
 }
 
-// TODO: move this structs to the OAuth TSL library
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatusClaim {
-    pub status_list: StatusListClaim,
+/// Decompresses a gzip-encoded response body.
+pub fn decompress_gzip(data: &[u8]) -> std::io::Result<String> {
+    let mut decompressed = String::new();
+    GzDecoder::new(data).read_to_string(&mut decompressed)?;
+    Ok(decompressed)
 }
 
-// TODO: move this structs to the OAuth TSL library
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatusListClaim {
-    pub idx: u64,
-    pub uri: Url,
+/// Verifies the signature of a status list token JWT and decodes its claims. Tokens issued in the future or expired
+/// are rejected.
+pub fn decode_status_list_token(status_list_jwt: &str, decoding_key: &DecodingKey) -> anyhow::Result<StatusListToken> {
+    let header = decode_header(status_list_jwt)?;
+    if header.typ.as_deref() != Some(StatusListToken::TYP) {
+        bail!("Invalid `typ` in the status list token header: {:?}", header.typ);
+    }
+
+    let mut validation = Validation::new(header.alg);
+    validation.set_required_spec_claims(&["sub"]);
+    validation.validate_exp = false;
+    validation.validate_aud = false;
+
+    let status_list_token = decode::<StatusListToken>(status_list_jwt, decoding_key, &validation)?.claims;
+
+    let now = chrono::Utc::now().timestamp();
+    if status_list_token.iat > now {
+        bail!(
+            "The status list token is issued in the future: `iat` is {}",
+            status_list_token.iat
+        );
+    }
+    if let Some(exp) = status_list_token.exp.filter(|exp| *exp < now) {
+        bail!("The status list token expired at {exp}");
+    }
+
+    Ok(status_list_token)
 }
 
 #[cfg(test)]

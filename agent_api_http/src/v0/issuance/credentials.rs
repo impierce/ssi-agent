@@ -10,6 +10,7 @@ use agent_issuance::application::{
     template_issuance::{published_template, template_credential_expiry, validate_credential_against_template},
 };
 use agent_issuance::status_list::command::StatusListCommand;
+use agent_issuance::status_list::status_type::StatusType;
 use agent_issuance::{
     credential::{
         aggregate::{Credential, CredentialExpiry, CredentialStatus},
@@ -34,7 +35,6 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oauth_tsl::status_list::StatusType;
 use oid4vci::{
     credential_format_profiles::CredentialFormats,
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -947,6 +947,7 @@ pub mod tests {
     use agent_secret_manager::subject::Subject;
     use agent_shared::application_state::{Command, CommandHandler};
     use agent_shared::config::TESTINDEX;
+    use agent_shared::credential_status_checker::{decode_status_list_token, decompress_gzip};
     use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
@@ -955,9 +956,8 @@ pub mod tests {
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use cqrs_es::AggregateError;
+    use identity_kit::sd_jwt_vc::StatusListToken;
     use lazy_static::lazy_static;
-    use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
-    use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
     use serde_json::json;
     use shared_kernel::authorization::{
         AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
@@ -1346,7 +1346,8 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
+                    .header(http::header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                    .header(http::header::ACCEPT_ENCODING, "gzip")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1370,9 +1371,10 @@ pub mod tests {
             }
         };
 
-        let status = check_status_in_status_list_token_jwt(&jwt_status_list_token, TESTINDEX, decoding_key).unwrap();
+        let status_list_token = decode_status_list_token(&jwt_status_list_token, &decoding_key).unwrap();
+        let status = status_list_token.status_list.get(TESTINDEX as u64);
 
-        assert_eq!(status, StatusType::INVALID as u8);
+        assert_eq!(status, Some(identity_kit::sd_jwt_vc::StatusType::INVALID));
     }
 
     #[tokio::test]
