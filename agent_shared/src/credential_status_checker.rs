@@ -1,17 +1,15 @@
 use anyhow::bail;
 use async_trait::async_trait;
 use flate2::read::GzDecoder;
-use identity_kit::sd_jwt_vc::StatusListToken;
+use identity_kit::sd_jwt_vc::{Status, StatusListToken};
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use oid4vc_core::{
     credential_status_verifier::CredentialStatusVerifier, verification_material_resolver::VerificationMaterialResolver,
 };
 use reqwest::{header, redirect::Policy, Client};
-use serde::{Deserialize, Serialize};
 use std::{io::Read, sync::Arc, time::Duration};
 use thiserror::Error;
 use tracing::{info, warn};
-use url::Url;
 
 use crate::convert_iota_jwk_to_decoding_key;
 
@@ -55,8 +53,11 @@ impl CredentialStatusChecker {
     /// Returns `FailedToGetCredentialStatus` for operational issues (can't fetch, decode, etc.)
     /// Returns `CredentialStatusInvalid` for actual status validation failures.
     async fn verify_status_claim(&self, status_claim: serde_json::Value) -> Result<(), CredentialStatusCheckerError> {
-        if let Ok(status_claim) = serde_json::from_value::<StatusClaim>(status_claim) {
-            info!("Succesfully parsed `status` claim {status_claim:#?}");
+        if let Some(status_list_ref) = serde_json::from_value::<Status>(status_claim)
+            .ok()
+            .and_then(|status| status.status_list)
+        {
+            info!("Succesfully parsed `status` claim {status_list_ref:#?}");
 
             // 3xx redirects should be followed, but infinite loops are caught after 5 redirects.
             // The timeout of 10 seconds is an estimated guess of how long a status list request should take at maximum.
@@ -68,14 +69,14 @@ impl CredentialStatusChecker {
 
             // The `accept_header` parameter determines the expected response format, currently we can only process the JWT format.
             let response = client
-                .get(status_claim.status_list.uri)
+                .get(&status_list_ref.uri)
                 .header(header::ACCEPT, StatusListToken::MEDIA_TYPE)
                 .send()
                 .await
                 .and_then(reqwest::Response::error_for_status)
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            // TODO: Move this logic to OAuth TSL library
+            // TODO: Move this logic to IdentityKit
             let is_gzipped = response
                 .headers()
                 .get(header::CONTENT_ENCODING)
@@ -114,18 +115,15 @@ impl CredentialStatusChecker {
                 CredentialStatusCheckerError::FailedToGetCredentialStatus("Failed to create decoding key".to_string()),
             )?;
 
-            // TODO: move this logic to the OAuth TSL library.
+            // TODO: move this logic to IdentityKit.
             let status_list_token = decode_status_list_token(&status_list_jwt, &decoding_key)
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            let status = status_list_token
-                .status_list
-                .get(status_claim.status_list.idx)
-                .ok_or_else(|| {
-                    CredentialStatusCheckerError::FailedToGetCredentialStatus(
-                        "Failed to get credential status from index".to_string(),
-                    )
-                })?;
+            let status = status_list_token.status_list.get(status_list_ref.idx).ok_or_else(|| {
+                CredentialStatusCheckerError::FailedToGetCredentialStatus(
+                    "Failed to get credential status from index".to_string(),
+                )
+            })?;
 
             if status.is_valid() {
                 Ok(())
@@ -173,19 +171,6 @@ pub fn decode_status_list_token(status_list_jwt: &str, decoding_key: &DecodingKe
     }
 
     Ok(status_list_token)
-}
-
-// TODO: move this structs to the OAuth TSL library
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatusClaim {
-    pub status_list: StatusListClaim,
-}
-
-// TODO: move this structs to the OAuth TSL library
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StatusListClaim {
-    pub idx: u64,
-    pub uri: Url,
 }
 
 #[cfg(test)]
