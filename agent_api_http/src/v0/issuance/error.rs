@@ -147,7 +147,6 @@ impl IntoApiErrorExt for StatusListError {
         match self {
             AggregateNotFound => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             FailedToSetIndex(_, _) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            GzipCompressionError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             JwtEncodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListEncodingError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
@@ -429,7 +428,6 @@ impl IntoPublicError for StatusListError {
         match self {
             AggregateNotFound => PublicError::InternalServerError,
             FailedToSetIndex(_, _) => PublicError::InternalServerError,
-            GzipCompressionError => PublicError::InternalServerError,
             JwtEncodeError => PublicError::InternalServerError,
             StatusListEncodingError(_) => PublicError::InternalServerError,
             StatusListNotFound(_) => PublicError::NotFoundError,
@@ -604,7 +602,6 @@ pub mod tests {
             [
                 StatusListError::AggregateNotFound,
                 StatusListError::FailedToSetIndex(0, "error".to_string()),
-                StatusListError::GzipCompressionError,
                 StatusListError::JwtEncodeError,
                 StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
                 StatusListError::StatusListNotFound("0".to_string()),
@@ -752,11 +749,6 @@ pub mod tests {
             ),
             (
                 StatusListError::FailedToSetIndex(0, "error".to_string()),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                None,
-            ),
-            (
-                StatusListError::GzipCompressionError,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),

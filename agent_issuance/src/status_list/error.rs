@@ -7,8 +7,6 @@ pub enum StatusListError {
     AggregateNotFound,
     #[error("Failed to set index `{0}` due to error: {1}")]
     FailedToSetIndex(usize, String),
-    #[error("Failed to Gzip compress the JWT token.")]
-    GzipCompressionError,
     #[error("Failed to encode the status list token as JWT.")]
     JwtEncodeError,
     #[error("Failed to encode and compress the status list claim: {0:?}")]

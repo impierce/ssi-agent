@@ -71,6 +71,7 @@ impl CredentialStatusChecker {
             let response = client
                 .get(&status_list_ref.uri)
                 .header(header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                .header(header::ACCEPT_ENCODING, "gzip")
                 .send()
                 .await
                 .and_then(reqwest::Response::error_for_status)

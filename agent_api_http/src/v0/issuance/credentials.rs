@@ -1347,6 +1347,7 @@ pub mod tests {
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
                     .header(http::header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                    .header(http::header::ACCEPT_ENCODING, "gzip")
                     .body(Body::empty())
                     .unwrap(),
             )

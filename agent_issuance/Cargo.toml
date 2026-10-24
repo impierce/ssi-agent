@@ -17,7 +17,6 @@ base64.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
 derivative.workspace = true
-flate2.workspace = true
 identity-kit.workspace = true
 identity_core.workspace = true
 identity_credential.workspace = true
