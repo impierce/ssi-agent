@@ -1,8 +1,10 @@
+use agent_shared::config::BITS_PER_STATUS;
 use utoipa::openapi::{
     schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, OneOfBuilder, Schema, SchemaFormat, Type,
 };
 
-/// A status of the IETF OAuth Token Status List: the name of a registered status or the status value.
+/// A status of the IETF OAuth Token Status List: the name of a registered status or the status value, up to the largest
+/// value the status list holds.
 pub fn status_type() -> Schema {
     Schema::OneOf(
         OneOfBuilder::new()
@@ -15,7 +17,7 @@ pub fn status_type() -> Schema {
                 ObjectBuilder::new()
                     .schema_type(SchemaType::Type(Type::Integer))
                     .minimum(Some(0))
-                    .maximum(Some(255)),
+                    .maximum(Some((1u16 << BITS_PER_STATUS) - 1)),
             )
             .build(),
     )
