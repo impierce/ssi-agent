@@ -1216,7 +1216,7 @@ paths:
         '404':
           description: Credential not found
         '422':
-          description: Request body does not match the expected schema
+          description: Request body does not match the expected schema, or the status list can't hold the status
   /v0/delete-catalog:
     post:
       tags:
@@ -3658,7 +3658,7 @@ components:
             - INVALID
             - SUSPENDED
           - type: integer
-            maximum: 255
+            maximum: 3
             minimum: 0
         status_list_url:
           type: string
@@ -4824,7 +4824,7 @@ components:
             - INVALID
             - SUSPENDED
           - type: integer
-            maximum: 255
+            maximum: 3
             minimum: 0
     PatchProfileEndpointRequest:
       type: object
