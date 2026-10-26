@@ -2,7 +2,7 @@
 use agent_shared::config::TESTINDEX;
 use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_kit::sd_jwt_vc::{StatusList, StatusType};
+use identity_kit::status_list::{StatusList, StatusType};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

@@ -12,10 +12,8 @@ use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::jose::{JwsHeader, Signer as _};
-use identity_kit::sd_jwt_vc::{
-    self, Confirmation, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusListToken,
-    StatusType,
-};
+use identity_kit::sd_jwt_vc::{Confirmation, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims};
+use identity_kit::status_list::{StatusListRef, StatusListToken, StatusType};
 use jsonwebtoken::Header;
 use oid4vc_core::{jwt, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
@@ -277,8 +275,10 @@ impl Aggregate for Credential {
                 // Status claim as per the IETF OAuth Token Status List specification.
                 let status_list_url = get_status_list_url(status_list_id)?;
 
-                let status_claim =
-                    sd_jwt_vc::Status::status_list(StatusListRef::new(status_list_url.to_string(), index as u64));
+                let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
+                    status_list_url.to_string(),
+                    index as u64,
+                ));
 
                 // Use the credential root `id` as `jti`. DC SD-JWTs have no root `id`, so derive the same
                 // `urn:uuid:` identifier that W3C credentials receive during unsigned credential creation.
@@ -924,7 +924,7 @@ async fn sign_dc_sd_jwt(
     jti: Url,
     iss: identity_core::common::Url,
     iat: DateTime<Utc>,
-    status_claim: sd_jwt_vc::Status,
+    status_claim: identity_kit::status_list::Status,
     expires_at: Option<DateTime<Utc>>,
     holder_kid: Option<String>,
 ) -> Result<serde_json::Value, CredentialError> {
@@ -1342,7 +1342,7 @@ pub mod credential_tests {
         let iss = Url::parse("https://example.com/issuer").unwrap();
         let iat = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
         let expires_at = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
-        let status_claim = sd_jwt_vc::Status::status_list(StatusListRef::new(
+        let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
             "https://example.com/status-lists/0",
             TESTINDEX as u64,
         ));

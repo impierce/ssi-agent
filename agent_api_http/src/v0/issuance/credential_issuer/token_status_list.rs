@@ -9,7 +9,7 @@ use axum::{
 };
 use http::StatusCode;
 use hyper::header;
-use identity_kit::sd_jwt_vc::StatusListToken;
+use identity_kit::status_list::StatusListToken;
 
 use crate::v0::issuance::error::PublicError;
 use crate::v0::openapi::PROTOCOL_TAG;
@@ -76,7 +76,7 @@ pub mod tests {
         Router,
     };
     use http::{Request, StatusCode};
-    use identity_kit::sd_jwt_vc::StatusListToken;
+    use identity_kit::status_list::StatusListToken;
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
     use oid4vc_core::authentication::verify::Verify;
     use shared_kernel::authorization::Caller;
