@@ -5,7 +5,7 @@ use agent_issuance::{
 };
 use agent_library::template::aggregate::Template;
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
-pub use shared_kernel::EventProjector;
+pub use shared_kernel::{EventProjector, IntegrationEventGroupDoc};
 use std::sync::LazyLock;
 
 /// Statically initialized list of integration event projectors for all core aggregates
@@ -19,9 +19,9 @@ static CORE_EVENT_PROJECTORS: LazyLock<[EventProjector; 6]> = LazyLock::new(|| {
         EventProjector::for_aggregate::<IssuanceOffer>(),
         EventProjector::for_aggregate::<IssuanceCredential>(),
         EventProjector::for_aggregate::<Reissuance>(),
+        EventProjector::for_aggregate::<AuthorizationRequest>(),
         EventProjector::for_aggregate::<Connection>(),
         EventProjector::for_aggregate::<Template>(),
-        EventProjector::for_aggregate::<AuthorizationRequest>(),
     ]
 });
 
@@ -29,6 +29,13 @@ static CORE_EVENT_PROJECTORS: LazyLock<[EventProjector; 6]> = LazyLock::new(|| {
 #[must_use]
 pub fn core_event_projectors() -> &'static [EventProjector] {
     &CORE_EVENT_PROJECTORS[..]
+}
+
+/// Returns documentation metadata for all core integration event groups, derived directly from
+/// [`core_event_projectors`].
+#[must_use]
+pub fn core_integration_event_docs() -> Vec<IntegrationEventGroupDoc> {
+    shared_kernel::collect_projector_docs(core_event_projectors())
 }
 
 #[cfg(test)]
@@ -189,5 +196,56 @@ mod tests {
         assert_eq!(projected.event_type, "com.impierce.unicore.template.created");
         assert_eq!(projected.source, "/services/template");
         assert_eq!(projected.subject.as_deref(), Some("tmpl-1"));
+    }
+
+    fn generated_core_integration_events_markdown() -> String {
+        shared_kernel::render_integration_events_markdown(
+            "Integration Events Reference",
+            &core_integration_event_docs(),
+        )
+    }
+
+    fn updated_http_publisher_readme(existing: &str) -> String {
+        const HEADER: &str = "### Available integration events\n";
+        let prefix = existing.split_once(HEADER).map_or(existing, |(before, _)| before);
+        let table = shared_kernel::render_integration_events_summary_table(&core_integration_event_docs());
+        format!("{prefix}{HEADER}\n{table}")
+    }
+
+    #[test]
+    fn generate_integration_events_docs() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let docs_path = manifest_dir.join("../docs/integration-events.md");
+        let latest_docs = generated_core_integration_events_markdown();
+        if std::fs::read_to_string(&docs_path).ok().as_deref() != Some(latest_docs.as_str()) {
+            std::fs::write(&docs_path, &latest_docs).unwrap();
+        }
+
+        let readme_path = manifest_dir.join("../agent_event_publisher_http/README.md");
+        let existing_readme = std::fs::read_to_string(&readme_path).unwrap();
+        let latest_readme = updated_http_publisher_readme(&existing_readme);
+        if existing_readme != latest_readme {
+            std::fs::write(&readme_path, &latest_readme).unwrap();
+        }
+    }
+
+    #[test]
+    fn integration_events_docs_are_up_to_date() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let docs_path = manifest_dir.join("../docs/integration-events.md");
+        let current_docs = std::fs::read_to_string(&docs_path).unwrap();
+        assert_eq!(
+            current_docs,
+            generated_core_integration_events_markdown(),
+            "docs/integration-events.md is out of date. Run `cargo test generate_integration_events_docs`."
+        );
+
+        let readme_path = manifest_dir.join("../agent_event_publisher_http/README.md");
+        let current_readme = std::fs::read_to_string(&readme_path).unwrap();
+        assert_eq!(
+            current_readme,
+            updated_http_publisher_readme(&current_readme),
+            "agent_event_publisher_http/README.md is out of date. Run `cargo test generate_integration_events_docs`."
+        );
     }
 }

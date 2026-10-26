@@ -1,100 +1,116 @@
 use crate::template::aggregate::Template;
 use crate::template::event::{DataModel, Status, TemplateEvent, Visibility};
 use cqrs_es::EventEnvelope;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// Public integration events emitted by the credential template library bounded context.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
 #[serde(untagged)]
+#[integration_event(source = "/services/template")]
 pub enum TemplateIntegrationEvent {
+    /// Credential template created in library.
+    #[integration_event(rename = "com.impierce.unicore.template.created")]
     TemplateCreated {
+        /// Unique identifier of the created template.
+        #[integration_event(subject)]
         template_id: String,
+        /// Human-readable title of the template.
         title: String,
+        /// Credential data model identifier (e.g. `"open_badges_3-0"`, `"w3c_vc_data_model_v2-0"`).
         data_model: String,
     },
+    /// Credential template title updated.
+    #[integration_event(rename = "com.impierce.unicore.template.title_updated")]
     TitleUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
+        /// Updated human-readable title of the template.
         title: String,
     },
+    /// Credential template lifecycle status updated.
+    #[integration_event(rename = "com.impierce.unicore.template.status_updated")]
     StatusUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
+        /// Updated lifecycle status (`"draft"`, `"published"`, `"archived"`, or `"deleted"`).
         status: String,
     },
+    /// Credential template visibility updated.
+    #[integration_event(rename = "com.impierce.unicore.template.visibility_updated")]
     VisibilityUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
+        /// Updated visibility (`"private"` or `"public"`).
         visibility: String,
     },
+    /// Credential template display configuration updated.
+    #[integration_event(rename = "com.impierce.unicore.template.display_updated")]
     DisplayUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template tags updated.
+    #[integration_event(rename = "com.impierce.unicore.template.tags_updated")]
     TagsUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template description updated.
+    #[integration_event(rename = "com.impierce.unicore.template.description_updated")]
     DescriptionUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template type values updated.
+    #[integration_event(rename = "com.impierce.unicore.template.type_updated")]
     TypeUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template JSON schema updated.
+    #[integration_event(rename = "com.impierce.unicore.template.schema_updated")]
     SchemaUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template schema property attributes updated.
+    #[integration_event(rename = "com.impierce.unicore.template.schema_properties_attributes_updated")]
     SchemaPropertiesAttributesUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template expiration settings updated.
+    #[integration_event(rename = "com.impierce.unicore.template.credential_expiration_updated")]
     CredentialExpirationUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template holder authorization settings updated.
+    #[integration_event(rename = "com.impierce.unicore.template.holder_authorization_updated")]
     HolderAuthorizationUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template deleted from library.
+    #[integration_event(rename = "com.impierce.unicore.template.deleted")]
     TemplateDeleted {
+        /// Unique identifier of the deleted template.
+        #[integration_event(subject)]
         template_id: String,
     },
-}
-
-impl IntegrationEvent for TemplateIntegrationEvent {
-    const SOURCE: &'static str = "/services/template";
-
-    fn event_type(&self) -> &'static str {
-        match self {
-            Self::TemplateCreated { .. } => "com.impierce.unicore.template.created",
-            Self::TitleUpdated { .. } => "com.impierce.unicore.template.title_updated",
-            Self::StatusUpdated { .. } => "com.impierce.unicore.template.status_updated",
-            Self::VisibilityUpdated { .. } => "com.impierce.unicore.template.visibility_updated",
-            Self::DisplayUpdated { .. } => "com.impierce.unicore.template.display_updated",
-            Self::TagsUpdated { .. } => "com.impierce.unicore.template.tags_updated",
-            Self::DescriptionUpdated { .. } => "com.impierce.unicore.template.description_updated",
-            Self::TypeUpdated { .. } => "com.impierce.unicore.template.type_updated",
-            Self::SchemaUpdated { .. } => "com.impierce.unicore.template.schema_updated",
-            Self::SchemaPropertiesAttributesUpdated { .. } => {
-                "com.impierce.unicore.template.schema_properties_attributes_updated"
-            }
-            Self::CredentialExpirationUpdated { .. } => "com.impierce.unicore.template.credential_expiration_updated",
-            Self::HolderAuthorizationUpdated { .. } => "com.impierce.unicore.template.holder_authorization_updated",
-            Self::TemplateDeleted { .. } => "com.impierce.unicore.template.deleted",
-        }
-    }
-
-    fn subject(&self) -> Option<String> {
-        let template_id = match self {
-            Self::TemplateCreated { template_id, .. }
-            | Self::TitleUpdated { template_id, .. }
-            | Self::StatusUpdated { template_id, .. }
-            | Self::VisibilityUpdated { template_id, .. }
-            | Self::DisplayUpdated { template_id }
-            | Self::TagsUpdated { template_id }
-            | Self::DescriptionUpdated { template_id }
-            | Self::TypeUpdated { template_id }
-            | Self::SchemaUpdated { template_id }
-            | Self::SchemaPropertiesAttributesUpdated { template_id }
-            | Self::CredentialExpirationUpdated { template_id }
-            | Self::HolderAuthorizationUpdated { template_id }
-            | Self::TemplateDeleted { template_id } => template_id,
-        };
-        Some(template_id.clone())
-    }
 }
 
 impl From<TemplateEvent> for TemplateIntegrationEvent {
@@ -171,7 +187,7 @@ impl ProjectIntegrationEvent for Template {
 
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         TemplateIntegrationEvent::from(envelope.payload.clone())
-            .into_projected_cloud_event(envelope, "/services/template")
+            .into_projected_cloud_event(envelope)
             .ok()
     }
 }

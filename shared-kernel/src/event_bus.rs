@@ -998,6 +998,13 @@ mod tests {
 
     impl crate::integration_event::IntegrationEvent for MockEvent {
         const SOURCE: &'static str = "/services/mock";
+        const DOCS: crate::integration_event::IntegrationEventGroupDoc =
+            crate::integration_event::IntegrationEventGroupDoc {
+                name: "MockEvent",
+                source: "/services/mock",
+                description: "Mock integration event.",
+                variants: &[],
+            };
 
         fn event_type(&self) -> &'static str {
             "com.impierce.unicore.mock.created"
@@ -1013,11 +1020,7 @@ mod tests {
 
         fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
             use crate::integration_event::IntegrationEvent as _;
-            envelope
-                .payload
-                .clone()
-                .into_projected_cloud_event(envelope, "/services/mock")
-                .ok()
+            envelope.payload.clone().into_projected_cloud_event(envelope).ok()
         }
     }
 

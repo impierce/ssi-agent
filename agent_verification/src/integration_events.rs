@@ -2,7 +2,7 @@ use crate::authorization_request::aggregate::AuthorizationRequest;
 use crate::authorization_request::event::AuthorizationRequestEvent;
 use cqrs_es::EventEnvelope;
 use oid4vp::token::vp_token_validator::DecodedVpToken;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
@@ -10,47 +10,46 @@ use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnmappedEvent;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// Public integration events emitted by the core presentation verification bounded context.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
 #[serde(untagged)]
+#[integration_event(source = "/services/verification")]
 pub enum VerificationIntegrationEvent {
+    /// OID4VP presentation exchange requested from holder.
+    #[integration_event(rename = "com.impierce.unicore.verification.presentation.requested")]
     PresentationRequested {
+        /// Unique identifier of the authorization request.
+        #[integration_event(subject)]
         request_id: String,
+        /// Relying party `client_id` associated with the request.
         #[serde(skip_serializing_if = "Option::is_none")]
         client_id: Option<String>,
     },
+    /// Cryptographic presentation verified successfully.
+    #[integration_event(rename = "com.impierce.unicore.verification.presentation.verified")]
     PresentationVerified {
+        /// Unique identifier of the authorization request.
+        #[integration_event(subject)]
         request_id: String,
+        /// Whether the cryptographic presentation validation succeeded (`true`).
         validated: bool,
+        /// Optional OAuth2 `state` value echoed from the authorization response.
         #[serde(skip_serializing_if = "Option::is_none")]
         state: Option<String>,
+        /// Decoded verifiable presentations extracted from an OID4VP `vp_token` response.
         #[serde(skip_serializing_if = "Option::is_none")]
         presentations: Option<DecodedVpToken>,
     },
+    /// Presentation verification failed or rejected.
+    #[integration_event(rename = "com.impierce.unicore.verification.presentation.failed")]
     PresentationFailed {
+        /// Unique identifier of the authorization request.
+        #[integration_event(subject)]
         request_id: String,
+        /// Human-readable reason for the verification failure.
         #[serde(skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
-}
-
-impl IntegrationEvent for VerificationIntegrationEvent {
-    const SOURCE: &'static str = "/services/verification";
-
-    fn event_type(&self) -> &'static str {
-        match self {
-            Self::PresentationRequested { .. } => "com.impierce.unicore.verification.presentation.requested",
-            Self::PresentationVerified { .. } => "com.impierce.unicore.verification.presentation.verified",
-            Self::PresentationFailed { .. } => "com.impierce.unicore.verification.presentation.failed",
-        }
-    }
-
-    fn subject(&self) -> Option<String> {
-        match self {
-            Self::PresentationRequested { request_id, .. }
-            | Self::PresentationVerified { request_id, .. }
-            | Self::PresentationFailed { request_id, .. } => Some(request_id.clone()),
-        }
-    }
 }
 
 impl TryFrom<(&AuthorizationRequestEvent, &str)> for VerificationIntegrationEvent {
@@ -109,7 +108,7 @@ impl ProjectIntegrationEvent for AuthorizationRequest {
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         VerificationIntegrationEvent::try_from((&envelope.payload, envelope.aggregate_id.as_str()))
             .ok()?
-            .into_projected_cloud_event(envelope, "/services/verification")
+            .into_projected_cloud_event(envelope)
             .ok()
     }
 }
