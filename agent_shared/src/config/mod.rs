@@ -1531,9 +1531,15 @@ mod tests {
         assert!(res.is_err(), "Expected unknown field 'offer' to be rejected");
 
         // Valid new format
-        let valid_format = r#"{"types": ["TxCodeGenerated", "CredentialSigned"]}"#;
+        let valid_format = r#"{"types": ["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.signed"]}"#;
         let events: Events = serde_json::from_str(valid_format).unwrap();
-        assert_eq!(events.types, vec!["TxCodeGenerated", "CredentialSigned"]);
+        assert_eq!(
+            events.types,
+            vec![
+                "com.impierce.unicore.issuance.credential.offered",
+                "com.impierce.unicore.issuance.credential.signed"
+            ]
+        );
 
         // Empty object defaults to empty types
         let empty_format = r#"{}"#;

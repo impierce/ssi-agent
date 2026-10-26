@@ -59,6 +59,8 @@ Content-Type: application/cloudevents+json
 | Event Type | Source | Subject | Description |
 | :--- | :--- | :--- | :--- |
 | `com.impierce.unicore.issuance.credential.offered` | `/services/issuance` | Offer ID | Credential offer created and ready for holder interaction. |
+| `com.impierce.unicore.issuance.offer.tx_code_generated` | `/services/issuance` | Offer ID | Transaction code generated for a credential offer. |
+| `com.impierce.unicore.issuance.offer.email_sent` | `/services/issuance` | Offer ID | Credential offer delivery via email requested. |
 | `com.impierce.unicore.issuance.credential.request_verified` | `/services/issuance` | Offer ID | Holder credential request verified against offer. |
 | `com.impierce.unicore.issuance.credential.issued` | `/services/issuance` | Credential ID | Verifiable credential cryptographically signed and issued. |
 | `com.impierce.unicore.issuance.credential.revoked` | `/services/issuance` | Credential ID | Credential status updated or revoked. |

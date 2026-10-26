@@ -1,6 +1,6 @@
 use crate::credential::aggregate::Credential;
 use crate::credential::event::CredentialEvent;
-use crate::offer::aggregate::Offer;
+use crate::offer::aggregate::{DeliveryOptions, Offer};
 use crate::offer::event::OfferEvent;
 use crate::reissuance::aggregate::Reissuance;
 use crate::reissuance::event::ReissuanceEvent;
@@ -8,6 +8,7 @@ use cqrs_es::EventEnvelope;
 use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
+use url::Url;
 
 /// Marker error indicating that a domain event has no public integration event mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,22 @@ pub enum IssuanceIntegrationEvent {
         credential_ids: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pre_authorized_code: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tx_code: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        delivery_options: Option<DeliveryOptions>,
+    },
+    TxCodeGenerated {
+        offer_id: String,
+        tx_code: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        delivery_options: Option<DeliveryOptions>,
+    },
+    CredentialOfferEmailSent {
+        offer_id: String,
+        recipient_email: String,
+        form_url_encoded_credential_offer: String,
+        offer_link: Url,
     },
     CredentialRequestVerified {
         offer_id: String,
@@ -46,6 +63,8 @@ impl IntegrationEvent for IssuanceIntegrationEvent {
     fn event_type(&self) -> &'static str {
         match self {
             Self::CredentialOffered { .. } => "com.impierce.unicore.issuance.credential.offered",
+            Self::TxCodeGenerated { .. } => "com.impierce.unicore.issuance.offer.tx_code_generated",
+            Self::CredentialOfferEmailSent { .. } => "com.impierce.unicore.issuance.offer.email_sent",
             Self::CredentialRequestVerified { .. } => "com.impierce.unicore.issuance.credential.request_verified",
             Self::CredentialIssued { .. } => "com.impierce.unicore.issuance.credential.issued",
             Self::CredentialRevoked { .. } => "com.impierce.unicore.issuance.credential.revoked",
@@ -55,9 +74,10 @@ impl IntegrationEvent for IssuanceIntegrationEvent {
 
     fn subject(&self) -> Option<String> {
         match self {
-            Self::CredentialOffered { offer_id, .. } | Self::CredentialRequestVerified { offer_id, .. } => {
-                Some(offer_id.clone())
-            }
+            Self::CredentialOffered { offer_id, .. }
+            | Self::TxCodeGenerated { offer_id, .. }
+            | Self::CredentialOfferEmailSent { offer_id, .. }
+            | Self::CredentialRequestVerified { offer_id, .. } => Some(offer_id.clone()),
             Self::CredentialIssued { credential_id, .. } | Self::CredentialRevoked { credential_id } => {
                 Some(credential_id.clone())
             }
@@ -75,6 +95,8 @@ impl TryFrom<OfferEvent> for IssuanceIntegrationEvent {
                 offer_id,
                 pre_authorized_code,
                 credential_offer,
+                tx_code,
+                delivery_options,
                 ..
             } => {
                 let credential_ids = match credential_offer {
@@ -88,8 +110,31 @@ impl TryFrom<OfferEvent> for IssuanceIntegrationEvent {
                     offer_id,
                     credential_ids,
                     pre_authorized_code: Some(pre_authorized_code),
+                    tx_code,
+                    delivery_options,
                 })
             }
+            OfferEvent::TxCodeGenerated {
+                offer_id,
+                tx_code,
+                delivery_options,
+            } => Ok(Self::TxCodeGenerated {
+                offer_id,
+                tx_code,
+                delivery_options,
+            }),
+            OfferEvent::CredentialOfferEmailSent {
+                offer_id,
+                recipient_email,
+                form_url_encoded_credential_offer,
+                offer_link,
+                ..
+            } => Ok(Self::CredentialOfferEmailSent {
+                offer_id,
+                recipient_email,
+                form_url_encoded_credential_offer,
+                offer_link,
+            }),
             OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                 Ok(Self::CredentialRequestVerified { offer_id, subject_id })
             }
@@ -247,5 +292,39 @@ mod tests {
         assert_eq!(projected.source, "/services/issuance");
         assert_eq!(projected.subject.as_deref(), Some("reissue-1"));
         assert_eq!(projected.extension.callerid.as_deref(), Some("actor-1"));
+    }
+
+    #[test]
+    fn try_from_tx_code_generated_and_email_sent() {
+        let tx_event = OfferEvent::TxCodeGenerated {
+            offer_id: "offer-1".to_string(),
+            tx_code: "123456".to_string(),
+            delivery_options: Some(DeliveryOptions {
+                recipient_email: Some("holder@example.test".to_string()),
+            }),
+        };
+        let integration = IssuanceIntegrationEvent::try_from(tx_event).expect("should map");
+        assert_eq!(
+            integration.event_type(),
+            "com.impierce.unicore.issuance.offer.tx_code_generated"
+        );
+        assert_eq!(integration.subject().as_deref(), Some("offer-1"));
+        let json = serde_json::to_value(&integration).unwrap();
+        assert_eq!(json["tx_code"], "123456");
+        assert_eq!(json["delivery_options"]["recipient_email"], "holder@example.test");
+
+        let email_event = OfferEvent::CredentialOfferEmailSent {
+            offer_id: "offer-1".to_string(),
+            recipient_email: "holder@example.test".to_string(),
+            form_url_encoded_credential_offer: "openid-credential-offer://...".to_string(),
+            offer_link: Url::parse("https://example.test/public/offers/offer-1").unwrap(),
+            status: crate::offer::aggregate::Status::Pending,
+        };
+        let email_integration = IssuanceIntegrationEvent::try_from(email_event).expect("should map");
+        assert_eq!(
+            email_integration.event_type(),
+            "com.impierce.unicore.issuance.offer.email_sent"
+        );
+        assert_eq!(email_integration.subject().as_deref(), Some("offer-1"));
     }
 }

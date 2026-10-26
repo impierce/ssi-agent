@@ -38,7 +38,9 @@ event_publishers:
       headers:
         Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        types: [UnsignedCredentialCreated, CredentialSigned]
+        types:
+          - com.impierce.unicore.issuance.credential.created
+          - com.impierce.unicore.issuance.credential.signed
 
 display:
   - name: UniCore

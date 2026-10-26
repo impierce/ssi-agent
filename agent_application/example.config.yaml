@@ -46,7 +46,8 @@ event_publishers:
       - name: "email.commands"
         events:
           types:
-            - "com.impierce.unicore.issuance.credential.offered"
+            - "com.impierce.unicore.issuance.offer.tx_code_generated"
+            - "com.impierce.unicore.issuance.offer.email_sent"
 
 # These display parameters are interpreted by identity wallets.
 display:
