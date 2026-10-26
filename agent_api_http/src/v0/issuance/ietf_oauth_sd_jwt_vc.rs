@@ -3,21 +3,20 @@ use crate::{
     v0::{issuance::error::PublicError, openapi::PROTOCOL_TAG},
 };
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
+use agent_shared::config::config;
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use identity_credential::sd_jwt_vc::metadata::{
-    ClaimDisclosability, ClaimDisplay, ClaimMetadata, DisplayMetadata, TypeMetadata,
-};
+use identity_kit::sd_jwt_vc::{ClaimDisplay, ClaimMetadata, ClaimPath, DisplayMetadata, SdPolicy, TypeMetadata};
 use oid4vc_core::claim_path_pointer::ClaimPathPointer;
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay,
 };
 use std::sync::Arc;
 
-// OpenAPI representation of `identity_credential::sd_jwt_vc::metadata::TypeMetadata`.
+// OpenAPI representation of `identity_kit::sd_jwt_vc::TypeMetadata`.
 /// Type metadata of an SD-JWT VC credential type.
 ///
 /// See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
@@ -25,6 +24,9 @@ use std::sync::Arc;
 #[derive(utoipa::ToSchema)]
 #[schema(as = TypeMetadata)]
 pub(crate) struct TypeMetadataSchema {
+    /// The type described, the URL this metadata is retrieved from.
+    #[schema(format = Uri)]
+    vct: String,
     /// A human-readable name for the type.
     name: Option<String>,
     /// A human-readable description for the type.
@@ -35,14 +37,6 @@ pub(crate) struct TypeMetadataSchema {
     /// Integrity metadata for the extended type.
     #[serde(rename = "extends#integrity")]
     extends_integrity: Option<String>,
-    /// An embedded JSON Schema for the credential.
-    schema: Option<serde_json::Map<String, serde_json::Value>>,
-    /// A URI referencing a JSON Schema for the credential.
-    #[schema(format = Uri)]
-    schema_uri: Option<String>,
-    /// Integrity metadata for the referenced JSON Schema.
-    #[serde(rename = "schema_uri#integrity")]
-    schema_uri_integrity: Option<String>,
     #[serde(default)]
     display: Vec<TypeMetadataDisplaySchema>,
     #[serde(default)]
@@ -124,10 +118,10 @@ pub(crate) enum ClaimDisclosabilitySchema {
 #[axum_macros::debug_handler]
 pub(crate) async fn type_metadata(
     State(state): State<Arc<IssuanceState>>,
-    Path((credential_configuration_id, _version)): Path<(String, String)>,
+    Path((encoded_credential_configuration_id, version)): Path<(String, String)>,
 ) -> Result<Response, PublicError> {
     let credential_configuration_id = URL_SAFE_NO_PAD
-        .decode(credential_configuration_id)
+        .decode(&encoded_credential_configuration_id)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .ok_or(PublicError::NotFoundError)?;
@@ -162,15 +156,13 @@ pub(crate) async fn type_metadata(
 
     // TODO: Fill in more of these fields once `agent_library` supports it.
     // TODO: instead of contructing `TypeMetadata` here, we should store it as a View/Read Model and simply query it here.
-    let type_metadata = TypeMetadata {
-        name: Some(credential_configuration_id),
-        description: None,
-        extends: None,
-        extends_integrity: None,
-        schema: None,
-        display,
-        claims,
-    };
+    let vct = format!(
+        "{}vct/{encoded_credential_configuration_id}/{version}",
+        config().public_url
+    );
+    let mut type_metadata = TypeMetadata::new(vct).with_name(credential_configuration_id);
+    type_metadata.display = display;
+    type_metadata.claims = claims;
 
     Ok((axum::http::StatusCode::OK, axum::Json(type_metadata)).into_response())
 }
@@ -180,11 +172,10 @@ fn credential_configuration_display_to_display_metadata(
 ) -> Vec<DisplayMetadata> {
     supported_display
         .into_iter()
-        .map(|display| DisplayMetadata {
-            locale: display.locale.unwrap_or_default(),
-            name: display.name,
-            description: display.description,
-            rendering: None,
+        .map(|display| {
+            let mut display_metadata = DisplayMetadata::new(display.locale.unwrap_or_default(), display.name);
+            display_metadata.description = display.description;
+            display_metadata
         })
         .collect()
 }
@@ -193,25 +184,16 @@ fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec
     claim_descriptions
         .into_iter()
         .filter_map(|claim| {
-            let display = claim
+            let path: ClaimPath = serde_json::from_value(serde_json::json!(claim.path)).ok()?;
+
+            let mut claim_metadata = ClaimMetadata::new(path).with_sd(SdPolicy::Always);
+            claim_metadata.display = claim
                 .display
                 .into_iter()
-                .map(|display| ClaimDisplay {
-                    locale: display.locale.unwrap_or_default(),
-                    label: display.name,
-                    description: None,
-                })
+                .map(|display| ClaimDisplay::new(display.locale.unwrap_or_default(), display.name))
                 .collect();
 
-            serde_json::from_value(serde_json::json!(claim.path))
-                .ok()
-                .map(|path| ClaimMetadata {
-                    path,
-                    display,
-                    mandatory: None,
-                    sd: Some(ClaimDisclosability::Always),
-                    svg_id: None,
-                })
+            Some(claim_metadata)
         })
         .collect()
 }
@@ -277,12 +259,14 @@ mod tests {
     async fn type_metadata_is_derived_from_the_credential_configuration() {
         let (app, credential_configuration_id) = setup().await;
 
-        let (status, type_metadata) = get(&app, &URL_SAFE_NO_PAD.encode(&credential_configuration_id)).await;
+        let encoded_credential_configuration_id = URL_SAFE_NO_PAD.encode(&credential_configuration_id);
+        let (status, type_metadata) = get(&app, &encoded_credential_configuration_id).await;
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             type_metadata,
             serde_json::json!({
+                "vct": format!("{}vct/{encoded_credential_configuration_id}/1.0", config().public_url),
                 "name": credential_configuration_id,
                 "display": [{ "locale": "", "name": "Verifiable Credential" }],
                 "claims": [

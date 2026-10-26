@@ -64,7 +64,6 @@ identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
     "presentation",
-    "sd-jwt-vc",
 ] }
 identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
@@ -122,5 +121,6 @@ uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 
 [patch.crates-io]
-# We need this patch because it makes the `Hasher` trait `Send` and `Sync`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
+# We need this patch because it makes the `Hasher` trait `Send` and `Sync`, which `agent_verification` needs as long as
+# openid4vc uses the SD-JWT VC support of `identity_credential`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
 sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }
