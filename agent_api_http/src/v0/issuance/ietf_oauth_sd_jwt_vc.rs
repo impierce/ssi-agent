@@ -187,6 +187,7 @@ fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec
             let path: ClaimPath = serde_json::from_value(serde_json::json!(claim.path)).ok()?;
 
             let mut claim_metadata = ClaimMetadata::new(path).with_sd(SdPolicy::Always);
+            claim_metadata.mandatory = claim.mandatory.then_some(true);
             claim_metadata.display = claim
                 .display
                 .into_iter()
@@ -275,6 +276,23 @@ mod tests {
                     { "path": ["credentialSubject", "last_name"], "sd": "always" },
                 ]
             })
+        );
+    }
+
+    #[test]
+    fn mandatory_claims_are_marked_mandatory() {
+        let claim_descriptions = serde_json::from_value(serde_json::json!([
+            { "path": ["credentialSubject", "first_name"], "mandatory": true },
+            { "path": ["credentialSubject", "last_name"] },
+        ]))
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(claim_description_to_claims(claim_descriptions)).unwrap(),
+            serde_json::json!([
+                { "path": ["credentialSubject", "first_name"], "mandatory": true, "sd": "always" },
+                { "path": ["credentialSubject", "last_name"], "sd": "always" },
+            ])
         );
     }
 
