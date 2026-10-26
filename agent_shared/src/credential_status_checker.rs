@@ -1,7 +1,7 @@
 use anyhow::bail;
 use async_trait::async_trait;
 use flate2::read::GzDecoder;
-use identity_kit::sd_jwt_vc::{Status, StatusListToken};
+use identity_kit::status_list::{Status, StatusListToken};
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use oid4vc_core::{
     credential_status_verifier::CredentialStatusVerifier, verification_material_resolver::VerificationMaterialResolver,
@@ -199,7 +199,7 @@ mod tests {
     use super::*;
 
     use flate2::{write::GzEncoder, Compression};
-    use identity_kit::sd_jwt_vc::{StatusList, StatusType};
+    use identity_kit::status_list::{StatusList, StatusType};
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use oid4vc_core::verification_material_resolver::test_utils::TestVerificationMaterialResolver;
     use std::io::Write;

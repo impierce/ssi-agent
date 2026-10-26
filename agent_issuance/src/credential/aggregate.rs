@@ -13,7 +13,7 @@ use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
-use identity_kit::sd_jwt_vc::{StatusListToken, StatusType};
+use identity_kit::status_list::{StatusListToken, StatusType};
 use jsonwebtoken::Header;
 use oid4vc_core::{jwt, Sign as _, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};

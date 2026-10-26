@@ -2,7 +2,7 @@ use agent_shared::{
     config::{get_preferred_did_method, get_preferred_signing_algorithm},
     handlers::public_query_handler,
 };
-use identity_kit::sd_jwt_vc::StatusListToken;
+use identity_kit::status_list::StatusListToken;
 use jsonwebtoken::Header;
 use oid4vc_core::jwt::encode;
 
