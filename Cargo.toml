@@ -119,9 +119,6 @@ uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 
 [patch.crates-io]
-# We need this patch because it makes the `Hasher` trait `Send` and `Sync`, which `agent_verification` needs as long as
-# openid4vc uses the SD-JWT VC support of `identity_credential`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
-sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }
 # TODO: Remove once identity-kit 0.2.3 is released. This backport of impierce/identity-kit#130 makes the futures of
 # its credential validators `Send`, which openid4vc 0.2's `VpTokenValidator` needs in an aggregate's command handler.
 identity-kit = { git = "https://github.com/impierce/identity-kit", rev = "0087acd" }

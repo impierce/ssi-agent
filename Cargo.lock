@@ -14848,8 +14848,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "sd-jwt-payload"
-version = "0.5.1"
-source = "git+https://github.com/impierce/sd-jwt-payload?rev=f28789a#f28789abfc354012f2793aadaf49833da3545317"
