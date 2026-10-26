@@ -185,7 +185,7 @@ pub struct SyncConnectionRequest {
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200),
+        (status = 200, description = "Connection synced"),
         (status = 400, description = "Malformed JSON request body"),
     )
 )]
@@ -224,7 +224,7 @@ pub struct AcceptConnectionChangesRequest {
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
-        (status = 200),
+        (status = 200, description = "Pending changes accepted"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Connection not found"),
         (status = 422, description = "Request body does not match the expected schema"),
@@ -264,7 +264,7 @@ pub struct RemoveConnectionRequest {
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
-        (status = 200),
+        (status = 200, description = "Connection removed"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Connection not found"),
         (status = 422, description = "Request body does not match the expected schema"),

@@ -8,7 +8,7 @@ use crate::{
 };
 use agent_shared::config::{config, get_preferred_signing_algorithm};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use oid4vc_core::{authorization_request::ByReference, scope::Scope, verifier::SignatureVerifier};
+use oid4vc_core::{authorization_request::ByReference, scope::Scope};
 use oid4vc_core::{client_metadata::ClientMetadataResource, Subject as _};
 use oid4vp::token::vp_token_validator::VpTokenValidator;
 use oid4vp::{authorization_request::ClientId, token::vp_token_validator::DecodedVpToken};
@@ -223,11 +223,10 @@ impl Aggregate for AuthorizationRequest {
                             let client_id = &authorization_request.body.client_id;
 
                             let decoded_vp_token = VpTokenValidator::new(
-                                &SignatureVerifier,
-                                services.verifier.as_ref(),
-                                &services.credential_status_checker,
+                                services.verifier.clone(),
+                                services.credential_status_checker.clone(),
                             )
-                            .validate_vp_token(dcql_query, vp_token, client_id, Some(nonce))
+                            .validate_vp_token(dcql_query, vp_token, client_id, nonce)
                             .await
                             .map_err(|e| InvalidOID4VPAuthorizationResponse(e.into()))?;
 
@@ -306,8 +305,10 @@ pub mod tests {
     use chrono::DateTime;
     use chrono::{Duration, Utc};
     use cqrs_es::test::TestFramework;
-    use did_key::{generate, Ed25519KeyPair};
-    use identity_credential::{credential::Jwt, presentation::Presentation};
+    use identity_kit::did::Did;
+    use identity_kit::jose::{JwsAlgorithm, KeyType};
+    use identity_kit::keys::{InMemoryKeyStore, KeySpec, KeyStore as _};
+    use identity_kit::vc::{Jwt, Presentation};
     use jsonwebtoken::Algorithm;
     use jsonwebtoken::Header;
     use lazy_static::lazy_static;
@@ -473,9 +474,9 @@ pub mod tests {
                     "@context": ["https://www.w3.org/2018/credentials/v1"],
                     "type": ["VerifiableCredential", "PersonalInformation"],
                     "issuanceDate": issuance_date(),
-                    "issuer": "did:key:z6MkmYc7aJCBhejDpY9nYS5RMWniergAJBAzomtrqhqG2Ah5",
+                    "issuer": "did:key:z6MkqNsxFMKTNRzjbbWviGCN4rSrioEVjuMh95GcveM2WK6b",
                     "credentialSubject": {
-                        "id": "did:key:z6MkmDhE9TjaaME2ApzpWx7g2xZE3zivnEJdZT8avPUBZjuE",
+                        "id": "did:key:z6MkhqsL8AizMGXXy8yX4RpRKpdox61CtAN949pPi8eTes6K",
                         "givenName": "Ferris",
                         "familyName": "Crabman",
                         "email": "ferris.crabman@crabmail.com",
@@ -551,7 +552,9 @@ pub mod tests {
             .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
                 authorization_response,
             })
-            .then_expect_error_message("Invalid OID4VP Authorization Response: Invalid nonce: expected Some(\"nonce\"), found Some(\"mismatched-nonce\")");
+            .then_expect_error_message(
+                "Invalid OID4VP Authorization Response: Presentation validation error: presentation: nonce Some(\"mismatched-nonce\") is not \"nonce\"",
+            );
     }
 
     async fn authorization_response(
@@ -630,17 +633,21 @@ pub mod tests {
             .unwrap()
     }
 
+    /// A `did:key` subject over the Ed25519 key an in-memory key store generates from `seed`.
+    async fn key_subject(seed: [u8; 32]) -> KeySubject {
+        let store = InMemoryKeyStore::with_seed(seed);
+        let key = store
+            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA))
+            .await
+            .unwrap();
+        KeySubject::from_key_store(Arc::new(store), key, None).await.unwrap()
+    }
+
     async fn create_simple_vp_token(provider_did_method: &str, nonce: &str, audience: String) -> VpToken {
-        let issuer = Arc::new(KeySubject::from_keypair(
-            generate::<Ed25519KeyPair>(Some("test-issuer-key.................".as_bytes())),
-            None,
-        ));
+        let issuer = Arc::new(key_subject(*b"test-issuer-key.................").await);
         let issuer_did = issuer.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
-        let subject = Arc::new(KeySubject::from_keypair(
-            generate::<Ed25519KeyPair>(Some("test-subject-key................".as_bytes())),
-            None,
-        ));
+        let subject = Arc::new(key_subject(*b"test-subject-key................").await);
         let subject_did = subject.identifier(provider_did_method, Algorithm::EdDSA).await.unwrap();
 
         let issuance_date = issuance_date();
@@ -679,11 +686,9 @@ pub mod tests {
         .await
         .unwrap();
 
-        let verifiable_presentation_jwt =
-            Presentation::builder(subject_did.parse().unwrap(), identity_core::common::Object::new())
-                .credential(Jwt::from(vc_jwt))
-                .build()
-                .unwrap();
+        let verifiable_presentation_jwt = Presentation::new()
+            .with_holder(Did::parse(&subject_did).unwrap())
+            .with_credential(Jwt::new(vc_jwt).unwrap());
 
         let vp_jwt_claims = VerifiablePresentationJwt::builder()
             .iss(subject_did.clone())

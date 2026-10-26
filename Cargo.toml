@@ -36,15 +36,13 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2", features = [
-    "utoipa",
-] }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
+oid4vc-core = "0.2"
+oid4vc-manager = "0.2"
+oid4vci = { version = "0.2", features = ["utoipa"] }
+oid4vp = "0.2"
+siopv2 = "0.2"
 
-identity-kit = { version = "0.2.1", default-features = false, features = ["sd-jwt"] }
+identity-kit = { version = "0.2.2", default-features = false, features = ["did-jwk", "did-key", "did-web", "reqwest", "sd-jwt"] }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -81,7 +79,7 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
-jsonwebtoken = "9.3"
+jsonwebtoken = { version = "11.1", default-features = false, features = ["rust_crypto"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
 mongo-es = "0.4.1"
@@ -116,7 +114,7 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
-utoipa = { version = "5", features = ["axum_extras", "chrono", "url", "yaml"] }
+utoipa = { version = "6", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 

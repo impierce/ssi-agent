@@ -899,7 +899,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Pending changes accepted
         '400':
           description: Malformed JSON request body
         '404':
@@ -921,7 +921,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Connection removed
         '400':
           description: Malformed JSON request body
         '404':
@@ -943,7 +943,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Connection synced
         '400':
           description: Malformed JSON request body
   /v0/connections/{connection_id}:
@@ -1297,8 +1297,8 @@ paths:
         required: false
         schema:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
+          - type: 'null'
       responses:
         '200':
           description: Documents retrieved successfully
@@ -2388,7 +2388,7 @@ components:
       - development
     AuthorizationCode:
       type: object
-      description: 'Grant Type `authorization_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1'
+      description: 'Grant Type `authorization_code` as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1>'
       properties:
         authorization_server:
           type:
@@ -2412,7 +2412,7 @@ components:
       type: object
       description: |-
         Represents an object of the `authorization_details` field of the `AuthorizationRequest` object in the Authorization Code Flow as
-        and in the `TokenRequest` object. : https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details
+        and in the `TokenRequest` object. : <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details>
       required:
       - type
       - credential_configuration_id
@@ -2443,8 +2443,8 @@ components:
     AuthorizationRequest:
       type: object
       description: |-
-        The Authorization Request is used to request authorization as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint
-        In combination with this important paragraph: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei
+        The Authorization Request is used to request authorization as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint>
+        In combination with this important paragraph: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei>
         NOTE: this Authorization Request is not to be confused with the same-named request in OpenID for Verifiable Presentations.
       required:
       - response_type
@@ -2464,8 +2464,8 @@ components:
           - 'null'
         code_challenge_method:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CodeChallengeMethod'
+          - type: 'null'
         issuer_state:
           type:
           - string
@@ -2728,9 +2728,9 @@ components:
           description: One row per holder.
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
             description: Expiry applied to every credential; defaults to the template's credential expiration.
+          - type: 'null'
         templateId:
           type: string
           description: The published template every row is validated against and issued from.
@@ -2783,9 +2783,9 @@ components:
           description: Whether an email with the offer was requested for `recipientEmail`. Arrival is not tracked.
         error:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProblemSummary'
             description: Why the row was rejected or could not be created; absent on success.
+          - type: 'null'
         index:
           type: integer
           description: 0-based index of the row in the request array.
@@ -2855,8 +2855,7 @@ components:
           type: string
           default: ''
         display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
+          $ref: '#/components/schemas/CatalogDisplay'
           default:
             name: ''
             description: ''
@@ -3006,8 +3005,8 @@ components:
             type: string
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
         first_interacted_at:
           type:
           - string
@@ -3022,8 +3021,8 @@ components:
           format: date-time
         pending_changes:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/PendingChanges'
+          - type: 'null'
         url:
           type: string
           format: uri
@@ -3040,8 +3039,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/LogoProperties'
+          - type: 'null'
         name:
           type:
           - string
@@ -3063,15 +3062,13 @@ components:
       type: object
       properties:
         display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
+          $ref: '#/components/schemas/CatalogDisplay'
           default:
             name: ''
             description: ''
             icon: null
         visibility:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogVisibility'
+          $ref: '#/components/schemas/CatalogVisibility'
           default: Private
     CreateCredentialReissuanceRequest:
       type: object
@@ -3085,8 +3082,8 @@ components:
           type: string
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
+          - type: 'null'
         originalCredentialId:
           type: string
         reason:
@@ -3130,12 +3127,11 @@ components:
       properties:
         credentialExpiration:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Expiration'
+          - type: 'null'
           default: null
         dataModel:
-          oneOf:
-          - $ref: '#/components/schemas/DataModel'
+          $ref: '#/components/schemas/DataModel'
           default: w3c_vc_data_model_v2-0
         description:
           type:
@@ -3144,17 +3140,15 @@ components:
           default: null
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Display'
+          - type: 'null'
           default: null
         holderAuthorization:
-          oneOf:
-          - $ref: '#/components/schemas/HolderAuthorization'
+          $ref: '#/components/schemas/HolderAuthorization'
           default:
             pre_authorized: true
         holderType:
-          oneOf:
-          - $ref: '#/components/schemas/HolderType'
+          $ref: '#/components/schemas/HolderType'
           default: individual
         schema: {}
         schemaPropertiesAttributes:
@@ -3167,14 +3161,15 @@ components:
           propertyNames:
             type: string
         status:
-          oneOf:
+          allOf:
           - type: string
             enum:
             - draft
             - published
             - archived
             - deleted
-          default: draft
+          - type: object
+            default: draft
         tags:
           type:
           - array
@@ -3191,8 +3186,7 @@ components:
             type: string
           default: []
         visibility:
-          oneOf:
-          - $ref: '#/components/schemas/Visibility'
+          $ref: '#/components/schemas/Visibility'
           default: private
       additionalProperties: false
     CreatePublicOfferRequest:
@@ -3280,8 +3274,8 @@ components:
           $ref: '#/components/schemas/CredentialStatus'
         data:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Data'
+          - type: 'null'
         expires_at:
           type:
           - string
@@ -3334,8 +3328,8 @@ components:
           - 'null'
         background_image:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Image'
+          - type: 'null'
         description:
           type:
           - string
@@ -3346,8 +3340,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Logo'
+          - type: 'null'
         name:
           type: string
         text_color:
@@ -3362,8 +3356,8 @@ components:
         properties:
           credential_metadata:
             oneOf:
-            - type: 'null'
             - $ref: '#/components/schemas/CredentialMetadata'
+            - type: 'null'
           credential_signing_alg_values_supported:
             type: array
             items:
@@ -3385,10 +3379,10 @@ components:
             type:
             - string
             - 'null'
-      description: 'Credentials Supported object as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1'
+      description: 'Credentials Supported object as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1>'
     CredentialErrorResponse:
       type: string
-      description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+      description: Credential Error Response as defined in OpenID4VCI 1.0 - <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
       enum:
       - invalid_credential_request
       - unknown_credential_configuration
@@ -3484,7 +3478,7 @@ components:
       type: object
       description: |-
         Credential Issuer Metadata as described here:
-        https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html
+        <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html>
       required:
       - credential_issuer
       - credential_endpoint
@@ -3496,8 +3490,8 @@ components:
             format: uri
         batch_credential_issuance:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/BatchCredentialIssuance'
+          - type: 'null'
         credential_configurations_supported:
           type: object
           additionalProperties:
@@ -3516,8 +3510,8 @@ components:
           format: uri
         credential_response_encryption:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialResponseEncryption'
+          - type: 'null'
         deferred_credential_endpoint:
           type:
           - string
@@ -3560,7 +3554,7 @@ components:
             $ref: '#/components/schemas/CredentialConfigurationsSupportedDisplay'
     CredentialOfferParameters:
       type: object
-      description: 'Credential Offer Parameters as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters'
+      description: 'Credential Offer Parameters as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters>'
       required:
       - credential_issuer
       - credential_configuration_ids
@@ -3572,8 +3566,8 @@ components:
           format: uri
         grants:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Grants'
+          - type: 'null'
     CredentialRequest:
       allOf:
       - $ref: '#/components/schemas/CredentialIdentifierOrCredentialConfigurationId'
@@ -3581,13 +3575,13 @@ components:
         properties:
           proofs:
             oneOf:
-            - type: 'null'
             - $ref: '#/components/schemas/Proofs'
-      description: 'Credential Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request'
+            - type: 'null'
+      description: 'Credential Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request>'
     CredentialResponse:
       allOf:
       - $ref: '#/components/schemas/CredentialResponseType'
-      description: 'Credential Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response'
+      description: 'Credential Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response>'
     CredentialResponseEncryption:
       type: object
       description: Algorithms and content-encryption methods supported for encrypted Credential Responses.
@@ -3666,8 +3660,8 @@ components:
       properties:
         data:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Data'
+          - type: 'null'
         id:
           type: string
         received_offer_id:
@@ -3688,8 +3682,8 @@ components:
         credential: {}
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
+          - type: 'null'
         isSigned:
           type: boolean
         offerId:
@@ -3872,8 +3866,8 @@ components:
       properties:
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TemplateLogo'
+          - type: 'null'
         name:
           type: string
     Document:
@@ -3884,18 +3878,18 @@ components:
       properties:
         did_method:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
+          - type: 'null'
         document:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DidDocument'
+          - type: 'null'
         id:
           type: string
         iota_metadata:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/IotaMetadata'
+          - type: 'null'
         status:
           type: string
           enum:
@@ -4011,24 +4005,24 @@ components:
           - 'null'
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
         url:
           type:
           - string
           - 'null'
     Grants:
       type: object
-      description: 'Grants as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3'
+      description: 'Grants as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3>'
       properties:
         authorization_code:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/AuthorizationCode'
+          - type: 'null'
         urn:ietf:params:oauth:grant-type:pre-authorized_code:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/PreAuthorizedCode'
+          - type: 'null'
     HolderAuthorization:
       type: object
       required:
@@ -4038,8 +4032,8 @@ components:
           type: boolean
         tx_code_constraints:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+          - type: 'null'
     HolderCredentialsEndpointRequest:
       type: object
       required:
@@ -4197,9 +4191,9 @@ components:
           description: Whether an additional interaction is required or the authorization has been completed.
         type:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/InteractionType'
             description: The interaction type required by the Authorization Server.
+          - type: 'null'
     InteractiveAuthorizationStatus:
       type: string
       description: The response status from the Interactive Authorization Endpoint.
@@ -4591,7 +4585,7 @@ components:
           type: string
     NotificationErrorResponse:
       type: string
-      description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+      description: 'Notification Error Response as defined in OpenID4VCI 1.0: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response>'
       enum:
       - invalid_notification_request
       - invalid_notification_id
@@ -4604,7 +4598,7 @@ components:
       - credential_deleted
     NotificationRequest:
       type: object
-      description: 'Notification Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request'
+      description: 'Notification Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request>'
       required:
       - notification_id
       - event
@@ -4625,7 +4619,7 @@ components:
       properties:
         error:
           type: string
-          description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+          description: Credential Error Response as defined in OpenID4VCI 1.0 - <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
           enum:
           - invalid_credential_request
           - unknown_credential_configuration
@@ -4646,7 +4640,7 @@ components:
       properties:
         error:
           type: string
-          description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+          description: 'Notification Error Response as defined in OpenID4VCI 1.0: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response>'
           enum:
           - invalid_notification_request
           - invalid_notification_id
@@ -4662,7 +4656,7 @@ components:
       properties:
         error:
           type: string
-          description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+          description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
           enum:
           - invalid_request
           - invalid_client
@@ -4701,8 +4695,8 @@ components:
           - 'null'
         delivery_options:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DeliveryOptions'
+          - type: 'null'
         form_url_encoded_credential_offer:
           type:
           - string
@@ -4788,9 +4782,9 @@ components:
       properties:
         deliveryOptions:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DeliveryOptions'
             description: Optional delivery settings associated with the offer.
+          - type: 'null'
         offerId:
           type: string
           description: Unique identifier of the offer to create or retrieve.
@@ -4837,8 +4831,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProfileLogo'
+          - type: 'null'
     PendingChanges:
       type: object
       required:
@@ -4850,11 +4844,11 @@ components:
             type: string
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
     PreAuthorizedCode:
       type: object
-      description: 'Grant Type `pre-authorized_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1'
+      description: 'Grant Type `pre-authorized_code` as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1>'
       required:
       - pre-authorized_code
       properties:
@@ -4872,8 +4866,8 @@ components:
           type: string
         tx_code:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+          - type: 'null'
     PresentationView:
       type: object
       required:
@@ -4936,8 +4930,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProfileLogo'
+          - type: 'null'
         source:
           $ref: '#/components/schemas/Source'
     ProfileLogo:
@@ -4978,13 +4972,13 @@ components:
           type: boolean
         type:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/FormFieldType'
             description: |-
               Allows the caller to store additional type information not supported by standard JSON Schema keywords.
               This can be used by frontends to preserve field type information for visualizations.
               Purely a rendering hint that UniCore stores as given and never validates against the
               schema or the issued values.
+          - type: 'null'
     PublicOfferStatusDto:
       type: object
       required:
@@ -5165,12 +5159,12 @@ components:
             $ref: '#/components/schemas/LinkedVerifiablePresentation'
         resource:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ServiceResource'
+          - type: 'null'
         service:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DidService'
+          - type: 'null'
     Source:
       type: string
       enum:
@@ -5313,7 +5307,7 @@ components:
           type: string
     TokenErrorResponse:
       type: string
-      description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+      description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
       enum:
       - invalid_request
       - invalid_client
@@ -5373,10 +5367,10 @@ components:
             type:
             - string
             - 'null'
-      description: 'Token Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request'
+      description: 'Token Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request>'
     TokenResponse:
       type: object
-      description: 'Token Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response'
+      description: 'Token Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response>'
       required:
       - access_token
       - token_type
@@ -5416,11 +5410,11 @@ components:
           maxLength: 300
         input_mode:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - numeric
             - text
+          - type: 'null'
           default: numeric
         length:
           type:
@@ -5493,12 +5487,12 @@ components:
           $ref: '#/components/schemas/ClaimPathPointer'
         sd:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - always
             - allowed
             - never
+          - type: 'null'
           description: Whether the claim is selectively disclosable.
         svg_id:
           type:
@@ -5550,8 +5544,8 @@ components:
       properties:
         credentialExpiration:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Expiration'
+          - type: 'null'
           default: null
         description:
           type:
@@ -5560,13 +5554,13 @@ components:
           default: null
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Display'
+          - type: 'null'
           default: null
         holderAuthorization:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/HolderAuthorization'
+          - type: 'null'
           default: null
         id:
           type: string
@@ -5583,13 +5577,13 @@ components:
             type: string
         status:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - draft
             - published
             - archived
             - deleted
+          - type: 'null'
           default: null
         tags:
           type:
@@ -5612,8 +5606,8 @@ components:
           default: null
         visibility:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Visibility'
+          - type: 'null'
           default: null
       additionalProperties: false
     Validation:

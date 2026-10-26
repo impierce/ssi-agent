@@ -76,8 +76,8 @@ ignore = [
 
     # RUSTSEC-2026-0258: h2 0.3.27 — unbounded empty DATA frames (low severity DoS)
     # The vulnerable h2 instance is selected by reqwest 0.11.27 through hyper 0.14.32. Its
-    # workspace paths include did-web 0.2.2, iota-sdk 1.1.5, and the OpenID4VC crates. These are
-    # outbound clients, so a malicious or compromised remote HTTP/2 peer can trigger the issue.
+    # workspace paths are did-web 0.2.2 and iota-sdk 1.1.5. These are outbound clients, so a
+    # malicious or compromised remote HTTP/2 peer can trigger the issue.
     # Connection commands request CommandAuthorization::ACTOR_REQUIRED, which limits exposure when
     # enforced by the configured authorization checker but is not, by itself, a reason to consider
     # every outbound path trusted. The public Axum listener and direct reqwest 0.12 clients use the
