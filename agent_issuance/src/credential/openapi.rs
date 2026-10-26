@@ -1,10 +1,24 @@
-use utoipa::openapi::{schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, SchemaFormat, Type};
+use utoipa::openapi::{
+    schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, OneOfBuilder, Schema, SchemaFormat, Type,
+};
 
-pub fn status_type() -> Object {
-    ObjectBuilder::new()
-        .schema_type(SchemaType::Type(Type::String))
-        .enum_values(Some(["VALID", "INVALID", "SUSPENDED", "UNDEFINED"]))
-        .build()
+/// A status of the IETF OAuth Token Status List: the name of a registered status or the status value.
+pub fn status_type() -> Schema {
+    Schema::OneOf(
+        OneOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Type(Type::String))
+                    .enum_values(Some(["VALID", "INVALID", "SUSPENDED"])),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Type(Type::Integer))
+                    .minimum(Some(0))
+                    .maximum(Some(255)),
+            )
+            .build(),
+    )
 }
 
 pub(crate) fn holder_notifications() -> Array {

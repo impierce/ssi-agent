@@ -10,7 +10,6 @@ use agent_issuance::application::{
     template_issuance::{published_template, template_credential_expiry, validate_credential_against_template},
 };
 use agent_issuance::status_list::command::StatusListCommand;
-use agent_issuance::status_list::status_type::StatusType;
 use agent_issuance::{
     credential::{
         aggregate::{Credential, CredentialExpiry, CredentialStatus},
@@ -35,6 +34,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
+use identity_kit::sd_jwt_vc::StatusType;
 use oid4vci::{
     credential_format_profiles::CredentialFormats,
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
