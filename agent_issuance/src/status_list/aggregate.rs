@@ -73,7 +73,7 @@ impl Aggregate for StatusListAggregate {
                     }
                 };
                 status_list
-                    .set(index as u64, status.into())
+                    .set(index as u64, status)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
                 used_indices.push(index);
 
@@ -91,7 +91,7 @@ impl Aggregate for StatusListAggregate {
             UpdateIndex { index, status } => {
                 let mut status_list = self.list.clone();
                 status_list
-                    .set(index as u64, status.into())
+                    .set(index as u64, status)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
 
                 fill_status_list_with_random_values(&mut status_list, &self.used_indices)?;

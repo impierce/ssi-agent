@@ -3645,12 +3645,15 @@ components:
           type: integer
           minimum: 0
         status:
-          type: string
-          enum:
-          - VALID
-          - INVALID
-          - SUSPENDED
-          - UNDEFINED
+          oneOf:
+          - type: string
+            enum:
+            - VALID
+            - INVALID
+            - SUSPENDED
+          - type: integer
+            maximum: 255
+            minimum: 0
         status_list_url:
           type: string
     CredentialView:
@@ -4808,12 +4811,15 @@ components:
       - credentialStatus
       properties:
         credentialStatus:
-          type: string
-          enum:
-          - VALID
-          - INVALID
-          - SUSPENDED
-          - UNDEFINED
+          oneOf:
+          - type: string
+            enum:
+            - VALID
+            - INVALID
+            - SUSPENDED
+          - type: integer
+            maximum: 255
+            minimum: 0
     PatchProfileEndpointRequest:
       type: object
       properties:
