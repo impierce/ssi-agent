@@ -1,9 +1,9 @@
 use cqrs_es::DomainEvent;
-use identity_kit::sd_jwt_vc::StatusList;
+use identity_kit::status_list::StatusList;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
-use identity_kit::sd_jwt_vc::StatusType;
+use identity_kit::status_list::StatusType;
 
 #[derive(Clone, Debug, Deserialize, Display, PartialEq, Serialize)]
 pub enum StatusListEvent {

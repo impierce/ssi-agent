@@ -34,7 +34,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use identity_kit::sd_jwt_vc::StatusType;
+use identity_kit::status_list::StatusType;
 use oid4vci::{
     credential_format_profiles::CredentialFormats,
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -965,7 +965,7 @@ pub mod tests {
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use cqrs_es::AggregateError;
-    use identity_kit::sd_jwt_vc::StatusListToken;
+    use identity_kit::status_list::StatusListToken;
     use lazy_static::lazy_static;
     use serde_json::json;
     use shared_kernel::authorization::{
@@ -1383,7 +1383,7 @@ pub mod tests {
         let status_list_token = decode_status_list_token(&jwt_status_list_token, &decoding_key).unwrap();
         let status = status_list_token.status_list.get(TESTINDEX as u64);
 
-        assert_eq!(status, Some(identity_kit::sd_jwt_vc::StatusType::INVALID));
+        assert_eq!(status, Some(identity_kit::status_list::StatusType::INVALID));
     }
 
     #[tokio::test]

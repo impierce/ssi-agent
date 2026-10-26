@@ -4,7 +4,7 @@ use flate2::read::GzDecoder;
 use identity_kit::{
     did::DidUrl,
     resolver::{KeyReference, KeyResolver, KeyRole},
-    sd_jwt_vc::{Status, StatusListToken},
+    status_list::{Status, StatusListToken},
     vc::validation::{CredentialStatus, StatusCheck, StatusError},
 };
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
@@ -165,10 +165,10 @@ impl StatusCheck for CredentialStatusChecker {
         status: CredentialStatus<'_>,
         _now: chrono::DateTime<chrono::Utc>,
     ) -> Result<(), StatusError> {
-        let CredentialStatus::SdJwt(status) = status else {
+        let CredentialStatus::StatusClaim(status) = status else {
             return Err(StatusError::Unsupported(status.mechanism()));
         };
-        let status_claim = serde_json::to_value(status).map_err(|e| StatusError::Unavailable(e.to_string()))?;
+        let status_claim = serde_json::to_value(status).map_err(|e| StatusError::Invalid(e.to_string()))?;
 
         self.check_credential_status(status_claim)
             .await
@@ -224,7 +224,7 @@ mod tests {
     use identity_kit::{
         methods::key::DidKey,
         resolver::Resolver,
-        sd_jwt_vc::{StatusList, StatusType},
+        status_list::{StatusList, StatusType},
     };
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use std::io::Write;

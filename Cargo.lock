@@ -5068,7 +5068,7 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 [[package]]
 name = "identity-kit"
 version = "0.2.2"
-source = "git+https://github.com/impierce/identity-kit?rev=0087acd#0087acd88049a0c09a43e0c7d13d88a61c37b6b3"
+source = "git+https://github.com/impierce/identity-kit?rev=bef0de5#bef0de5f512770d1d44dbc5ddb70afcf6c54dee4"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -13154,6 +13154,7 @@ dependencies = [
  "futures-util",
  "http 1.4.2",
  "http-body 1.0.1",
+ "http-body-util",
  "pin-project-lite",
  "tokio",
  "tokio-util",

@@ -1,4 +1,4 @@
-use identity_kit::sd_jwt_vc::StatusListError as TokenStatusListError;
+use identity_kit::status_list::StatusListError as TokenStatusListError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

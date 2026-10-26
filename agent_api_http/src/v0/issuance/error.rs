@@ -484,7 +484,7 @@ pub mod tests {
     use crate::DOCUMENTATION_URL;
     use agent_library::json_schema_validation::JsonSchemaError;
     use axum::response::IntoResponse as _;
-    use identity_kit::sd_jwt_vc::StatusListError as TokenStatusListError;
+    use identity_kit::status_list::StatusListError as TokenStatusListError;
     use serde_json::{json, Value};
 
     const UNEXPECTED: Option<&str> = Some("unexpected#unexpected-error");

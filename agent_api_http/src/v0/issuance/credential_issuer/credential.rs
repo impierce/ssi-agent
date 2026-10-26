@@ -25,7 +25,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use identity_kit::sd_jwt_vc::StatusType;
+use identity_kit::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::CommandOperation;
 
-use identity_kit::sd_jwt_vc::StatusType;
+use identity_kit::status_list::StatusType;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StatusListCommand {
