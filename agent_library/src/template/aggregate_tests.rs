@@ -2864,3 +2864,104 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             holder_authorization: Authorization::default(),
         }])
 }
+
+#[rstest]
+#[serial_test::serial]
+async fn test_update_commands_skip_noop_changes(template_id: String) {
+    let created = TemplateEvent::TemplateCreated {
+        template_id: template_id.clone(),
+        source_template_id: None,
+        title: "Test".to_string(),
+        display: Box::new(Some(Display {
+            name: "Test".to_string(),
+            logo: None,
+        })),
+        data_model: DataModel::W3CVcDataModelV2_0,
+        holder_type: HolderType::Individual,
+        modified_at: test_utils::modified_at(),
+        tags: Some(vec!["tag1".to_string()]),
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: Expiration::default(),
+        description: Some("Desc".to_string()),
+        r#type: vec!["VerifiableCredential".to_string()],
+        schema: Box::new(None),
+        schema_properties_attributes: None,
+        holder_authorization: Authorization::default(),
+    };
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateTitle {
+            template_id: template_id.clone(),
+            title: "  Test  ".to_string(),
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateDisplay {
+            template_id: template_id.clone(),
+            display: Display {
+                name: "Test".to_string(),
+                logo: None,
+            },
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateTags {
+            template_id: template_id.clone(),
+            tags: vec![" tag1 ".to_string(), "tag1".to_string()],
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateStatus {
+            template_id: template_id.clone(),
+            status: Status::Draft,
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateVisibility {
+            template_id: template_id.clone(),
+            visibility: Visibility::Private,
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateDescription {
+            template_id: template_id.clone(),
+            description: " Desc ".to_string(),
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateType {
+            template_id: template_id.clone(),
+            r#type: vec!["VerifiableCredential".to_string()],
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created.clone()])
+        .when(TemplateCommand::UpdateCredentialExpiration {
+            template_id: template_id.clone(),
+            credential_expiration: Expiration::default(),
+        })
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![created])
+        .when(TemplateCommand::UpdateHolderAuthorization {
+            template_id,
+            holder_authorization: Authorization::default(),
+        })
+        .then_expect_events(vec![]);
+}

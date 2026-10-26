@@ -69,4 +69,15 @@ Content-Type: application/cloudevents+json
 | `com.impierce.unicore.connection.invitation.created` | `/services/connection` | Connection ID | Invitation created for peer connection. |
 | `com.impierce.unicore.connection.established` | `/services/connection` | Connection ID | Peer connection synced or accepted. |
 | `com.impierce.unicore.template.created` | `/services/template` | Template ID | Credential template created in library. |
-| `com.impierce.unicore.template.updated` | `/services/template` | Template ID | Credential template metadata or status updated. |
+| `com.impierce.unicore.template.deleted` | `/services/template` | Template ID | Credential template deleted from library. |
+| `com.impierce.unicore.template.title_updated` | `/services/template` | Template ID | Credential template title updated. |
+| `com.impierce.unicore.template.description_updated` | `/services/template` | Template ID | Credential template description updated. |
+| `com.impierce.unicore.template.display_updated` | `/services/template` | Template ID | Credential template display configuration updated. |
+| `com.impierce.unicore.template.tags_updated` | `/services/template` | Template ID | Credential template tags updated. |
+| `com.impierce.unicore.template.status_updated` | `/services/template` | Template ID | Credential template status updated. |
+| `com.impierce.unicore.template.visibility_updated` | `/services/template` | Template ID | Credential template visibility updated. |
+| `com.impierce.unicore.template.type_updated` | `/services/template` | Template ID | Credential template type values updated. |
+| `com.impierce.unicore.template.schema_updated` | `/services/template` | Template ID | Credential template JSON schema updated. |
+| `com.impierce.unicore.template.schema_properties_attributes_updated` | `/services/template` | Template ID | Credential template schema property attributes updated. |
+| `com.impierce.unicore.template.credential_expiration_updated` | `/services/template` | Template ID | Credential template expiration settings updated. |
+| `com.impierce.unicore.template.holder_authorization_updated` | `/services/template` | Template ID | Credential template holder authorization settings updated. |
