@@ -95,8 +95,6 @@ pub struct CreateNewTemplateRequestBody {
     pub holder_authorization: Authorization,
 }
 
-// utoipa 6 combines an inlined field with its default as `allOf: [<enum>, {type: object, default}]`, which no value
-// can satisfy, so the default goes on the enum schema itself.
 fn status_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
     let mut schema = <Status as utoipa::PartialSchema>::schema();
     if let utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(object)) = &mut schema {
