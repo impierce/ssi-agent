@@ -36,7 +36,6 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-# openid4vc's `build/utoipa-6` branch: 0fbeaf2 with utoipa 6. #446 replaces it with openid4vc 0.2.
 siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
 oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "099186c", features = [
     "utoipa",
