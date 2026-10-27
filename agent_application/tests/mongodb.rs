@@ -19,6 +19,9 @@ async fn application_state_survives_a_restart_on_mongodb() {
         .with_exposed_port(27017.tcp())
         .with_wait_for(WaitFor::message_on_stdout("Waiting for connections"))
         .with_cmd(["--replSet", "rs0"])
+        // MongoDB 8 refuses to start on Linux 6.19 and newer while TCMalloc uses per-CPU caches
+        // (https://jira.mongodb.org/browse/SERVER-121912). Letting glibc own rseq turns them off.
+        .with_env_var("GLIBC_TUNABLES", "glibc.pthread.rseq=1")
         .start()
         .await
         .unwrap();
