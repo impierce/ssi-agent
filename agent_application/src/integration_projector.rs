@@ -205,27 +205,14 @@ mod tests {
         )
     }
 
-    fn updated_http_publisher_readme(existing: &str) -> String {
-        const HEADER: &str = "### Available integration events\n";
-        let prefix = existing.split_once(HEADER).map_or(existing, |(before, _)| before);
-        let table = shared_kernel::render_integration_events_summary_table(&core_integration_event_docs());
-        format!("{prefix}{HEADER}\n{table}")
-    }
-
     #[test]
+    #[ignore = "writes tracked documentation files; run explicitly when updating integration events"]
     fn generate_integration_events_docs() {
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let docs_path = manifest_dir.join("../docs/integration-events.md");
         let latest_docs = generated_core_integration_events_markdown();
         if std::fs::read_to_string(&docs_path).ok().as_deref() != Some(latest_docs.as_str()) {
             std::fs::write(&docs_path, &latest_docs).unwrap();
-        }
-
-        let readme_path = manifest_dir.join("../agent_event_publisher_http/README.md");
-        let existing_readme = std::fs::read_to_string(&readme_path).unwrap();
-        let latest_readme = updated_http_publisher_readme(&existing_readme);
-        if existing_readme != latest_readme {
-            std::fs::write(&readme_path, &latest_readme).unwrap();
         }
     }
 
@@ -237,15 +224,7 @@ mod tests {
         assert_eq!(
             current_docs,
             generated_core_integration_events_markdown(),
-            "docs/integration-events.md is out of date. Run `cargo test generate_integration_events_docs`."
-        );
-
-        let readme_path = manifest_dir.join("../agent_event_publisher_http/README.md");
-        let current_readme = std::fs::read_to_string(&readme_path).unwrap();
-        assert_eq!(
-            current_readme,
-            updated_http_publisher_readme(&current_readme),
-            "agent_event_publisher_http/README.md is out of date. Run `cargo test generate_integration_events_docs`."
+            "docs/integration-events.md is out of date. Run `cargo test generate_integration_events_docs -- --ignored`."
         );
     }
 }

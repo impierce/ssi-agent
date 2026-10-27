@@ -11,11 +11,11 @@ pub struct UnmappedEvent;
 
 /// Integration events emitted by the Connection / Identity bounded context (`/services/connection`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "data")]
 #[integration_event(source = "/services/connection")]
 pub enum ConnectionIntegrationEvent {
     /// Invitation created for peer connection.
-    #[integration_event(rename = "com.impierce.unicore.connection.invitation.created")]
+    #[serde(rename = "com.impierce.unicore.connection.invitation.created")]
     InvitationCreated {
         /// Unique identifier of the connection record.
         #[integration_event(subject)]
@@ -25,7 +25,7 @@ pub enum ConnectionIntegrationEvent {
         url: Option<String>,
     },
     /// Peer connection synced or accepted.
-    #[integration_event(rename = "com.impierce.unicore.connection.established")]
+    #[serde(rename = "com.impierce.unicore.connection.established")]
     ConnectionEstablished {
         /// Unique identifier of the established connection record.
         #[integration_event(subject)]

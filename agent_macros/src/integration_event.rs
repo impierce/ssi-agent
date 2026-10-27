@@ -24,15 +24,15 @@ pub fn expand_integration_event(input: &DeriveInput) -> syn::Result<proc_macro2:
         let event_type = parse_variant_event_type(&variant.attrs, &variant.ident)?;
 
         let mut field_docs = Vec::new();
-        let mut subject_field: Option<(Ident, bool)> = None;
+        let mut subject_field: Option<(Ident, String, bool)> = None;
 
         match &variant.fields {
             Fields::Named(named) => {
                 for field in &named.named {
                     let field_ident = field.ident.clone().expect("named field has ident");
-                    let field_name_str = field_ident.to_string().trim_start_matches("r#").to_string();
+                    let field_name_str = parse_field_name(&field.attrs, &field_ident)?;
                     let field_doc = require_doc_comment(&field.attrs, &field_ident, "field")?;
-                    let (inner_ty, required) = unwrap_option_type(&field.ty);
+                    let (inner_ty, required) = unwrap_field_type(&field.ty);
                     let ty_str = format_type(inner_ty);
 
                     if has_subject_attr(&field.attrs)? {
@@ -42,7 +42,7 @@ pub fn expand_integration_event(input: &DeriveInput) -> syn::Result<proc_macro2:
                                 "Only one field per variant may be marked with `#[integration_event(subject)]`",
                             ));
                         }
-                        subject_field = Some((field_ident, required));
+                        subject_field = Some((field_ident, field_name_str.clone(), required));
                     }
 
                     field_docs.push(quote! {
@@ -68,8 +68,7 @@ pub fn expand_integration_event(input: &DeriveInput) -> syn::Result<proc_macro2:
             Self::#variant_ident { .. } => #event_type,
         });
 
-        let subject_field_doc = if let Some((ref subj_ident, required)) = subject_field {
-            let subj_str = subj_ident.to_string().trim_start_matches("r#").to_string();
+        let subject_field_doc = if let Some((ref subj_ident, ref subj_str, required)) = subject_field {
             if required {
                 subject_arms.push(quote! {
                     Self::#variant_ident { #subj_ident, .. } => ::std::option::Option::Some(::std::string::ToString::to_string(#subj_ident)),
@@ -200,14 +199,46 @@ fn parse_variant_event_type(attrs: &[Attribute], span_target: &impl ToTokens) ->
                     ))
                 }
             })?;
+        } else if event_type.is_none() && attr.path().is_ident("serde") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename") {
+                    let lit: Lit = meta.value()?.parse()?;
+                    if let Lit::Str(s) = lit {
+                        event_type = Some(s.value());
+                    }
+                } else if meta.input.peek(syn::Token![=]) {
+                    let _: Expr = meta.value()?.parse()?;
+                }
+                Ok(())
+            });
         }
     }
     event_type.ok_or_else(|| {
         Error::new_spanned(
             span_target,
-            "missing `#[integration_event(rename = \"com.impierce.unicore....\")]` on variant",
+            "missing `#[serde(rename = \"com.impierce.unicore....\")]` or `#[integration_event(rename = \"...\")]` on variant",
         )
     })
+}
+
+fn parse_field_name(attrs: &[Attribute], field_ident: &Ident) -> syn::Result<String> {
+    let mut renamed = None;
+    for attr in attrs {
+        if attr.path().is_ident("serde") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename") {
+                    let lit: Lit = meta.value()?.parse()?;
+                    if let Lit::Str(s) = lit {
+                        renamed = Some(s.value());
+                    }
+                } else if meta.input.peek(syn::Token![=]) {
+                    let _: Expr = meta.value()?.parse()?;
+                }
+                Ok(())
+            })?;
+        }
+    }
+    Ok(renamed.unwrap_or_else(|| field_ident.to_string().trim_start_matches("r#").to_string()))
 }
 
 fn has_subject_attr(attrs: &[Attribute]) -> syn::Result<bool> {
@@ -227,20 +258,36 @@ fn has_subject_attr(attrs: &[Attribute]) -> syn::Result<bool> {
     Ok(is_subject)
 }
 
-/// If `ty` is `Option<T>`, returns `(T, false)` (not required); otherwise `(ty, true)` (required).
-fn unwrap_option_type(ty: &Type) -> (&Type, bool) {
+/// Unwraps `Option<T>` (marking the field as optional) and transparent pointer wrappers (`Box<T>`).
+fn unwrap_field_type(ty: &Type) -> (&Type, bool) {
+    let ty = unwrap_box_type(ty);
+    if let Some(inner) = unwrap_generic_wrapper(ty, "Option") {
+        (unwrap_box_type(inner), false)
+    } else {
+        (ty, true)
+    }
+}
+
+fn unwrap_box_type(mut ty: &Type) -> &Type {
+    while let Some(inner) = unwrap_generic_wrapper(ty, "Box") {
+        ty = inner;
+    }
+    ty
+}
+
+fn unwrap_generic_wrapper<'a>(ty: &'a Type, wrapper_ident: &str) -> Option<&'a Type> {
     if let Type::Path(type_path) = ty {
         if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Option" {
+            if segment.ident == wrapper_ident {
                 if let PathArguments::AngleBracketed(args) = &segment.arguments {
                     if let Some(GenericArgument::Type(inner_ty)) = args.args.first() {
-                        return (inner_ty, false);
+                        return Some(inner_ty);
                     }
                 }
             }
         }
     }
-    (ty, true)
+    None
 }
 
 fn format_type(ty: &Type) -> String {

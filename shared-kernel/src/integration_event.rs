@@ -100,13 +100,13 @@ pub fn render_integration_events_markdown(title: &str, groups: &[IntegrationEven
     md.push_str(
         "<!-- This file is auto-generated from inline `///` doc comments on `#[derive(IntegrationEvent)]` enums. -->\n",
     );
-    md.push_str("<!-- Do not edit manually; run `cargo test generate_integration_events_docs` to regenerate. -->\n\n");
+    md.push_str(
+        "<!-- Do not edit manually; run `cargo test generate_integration_events_docs -- --ignored` to regenerate. -->\n\n",
+    );
     md.push_str(
         "All integration events are published as [CloudEvents v1.0](https://cloudevents.io/) JSON envelopes (`application/cloudevents+json`).\n\n",
     );
-    md.push_str("## Summary\n\n");
-    md.push_str(&render_integration_events_summary_table(groups));
-    md.push_str("\n## Payload Reference\n\n");
+    md.push_str("## Event Catalog\n\n");
     md.push_str(&render_integration_events_groups_markdown(groups));
 
     md
@@ -134,12 +134,9 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
     /// [`CloudEvent`] `source` URI for all variants of this integration event enum (e.g. `"/services/issuance"`).
     const SOURCE: &'static str;
 
-<<<<<<< HEAD
-=======
     /// Compile-time documentation metadata for this integration event group.
     const DOCS: IntegrationEventGroupDoc;
 
->>>>>>> ec8954f4 (feat: add IntegrationEvent derive macro and auto-generated docs)
     /// Reverse-DNS event type, e.g. `com.impierce.unicore.issuance.credential.offered`.
     fn event_type(&self) -> &'static str;
 
@@ -159,9 +156,18 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
     where
         Self: Sized,
     {
-        let data = serde_json::to_value(&self)?;
+        let serialized = serde_json::to_value(&self)?;
         let subject = self.subject();
         let event_type = self.event_type();
+        let data = match serialized {
+            serde_json::Value::Object(mut map)
+                if map.get("type").and_then(serde_json::Value::as_str) == Some(event_type)
+                    && (map.len() == 1 || (map.len() == 2 && map.contains_key("data"))) =>
+            {
+                map.remove("data").unwrap_or_else(|| serde_json::json!({}))
+            }
+            other => other,
+        };
         let mut ce = CloudEvent::new(event_type, Self::SOURCE)
             .with_data(data)
             .with_caller(caller_id, caller_type);
@@ -169,6 +175,28 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
             ce = ce.with_subject(s);
         }
         Ok(ce)
+    }
+
+    /// Deserializes a typed [`IntegrationEvent`] from a [`CloudEvent`] envelope.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`serde_json::Error`] if the [`CloudEvent`] `type` or `data` payload does not match `Self`.
+    fn from_cloud_event(event: &CloudEvent) -> Result<Self, serde_json::Error>
+    where
+        Self: DeserializeOwned,
+    {
+        serde_json::from_value(serde_json::json!({
+            "type": event.event_type,
+            "data": event.data.clone().unwrap_or(serde_json::Value::Null),
+        }))
+        .or_else(|err| match &event.data {
+            None => serde_json::from_value(serde_json::json!({ "type": event.event_type })),
+            Some(serde_json::Value::Object(map)) if map.is_empty() => {
+                serde_json::from_value(serde_json::json!({ "type": event.event_type })).or(Err(err))
+            }
+            _ => Err(err),
+        })
     }
 
     /// Projects this integration event into a CNCF [`CloudEvent`] v1.0 preserving the originating
@@ -299,21 +327,23 @@ where
 mod tests {
     use super::*;
     use crate::IntegrationEvent;
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
 
     /// Sample integration events for testing the derive macro.
-    #[derive(Debug, Clone, PartialEq, Serialize, IntegrationEvent)]
-    #[serde(untagged)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
+    #[serde(tag = "type", content = "data")]
     #[integration_event(source = "/services/sample")]
     enum SampleIntegrationEvent {
         /// Item created in sample service.
-        #[integration_event(rename = "com.impierce.unicore.sample.item.created")]
+        #[serde(rename = "com.impierce.unicore.sample.item.created")]
         ItemCreated {
             /// Unique identifier of the item.
             #[integration_event(subject)]
             item_id: String,
             /// Optional label of the item.
             label: Option<String>,
+            /// Boxed metadata to verify `Box<T>` unwrapping in docs.
+            metadata: Box<u64>,
         },
     }
 
@@ -322,10 +352,19 @@ mod tests {
         let event = SampleIntegrationEvent::ItemCreated {
             item_id: "item-1".to_string(),
             label: None,
+            metadata: Box::new(42),
         };
         assert_eq!(event.event_type(), "com.impierce.unicore.sample.item.created");
         assert_eq!(event.subject().as_deref(), Some("item-1"));
         assert_eq!(SampleIntegrationEvent::SOURCE, "/services/sample");
+
+        let ce = event.clone().into_cloud_event(None, None).unwrap();
+        assert_eq!(ce.event_type, "com.impierce.unicore.sample.item.created");
+        assert_eq!(ce.data.as_ref().unwrap()["item_id"], "item-1");
+        assert!(ce.data.as_ref().unwrap().get("type").is_none());
+
+        let parsed = SampleIntegrationEvent::from_cloud_event(&ce).unwrap();
+        assert_eq!(parsed, event);
 
         let docs = SampleIntegrationEvent::DOCS;
         assert_eq!(docs.name, "SampleIntegrationEvent");
@@ -338,15 +377,18 @@ mod tests {
         assert_eq!(docs.variants[0].variant_name, "ItemCreated");
         assert_eq!(docs.variants[0].event_type, "com.impierce.unicore.sample.item.created");
         assert_eq!(docs.variants[0].subject_field, Some("item_id"));
-        assert_eq!(docs.variants[0].fields.len(), 2);
+        assert_eq!(docs.variants[0].fields.len(), 3);
         assert!(docs.variants[0].fields[0].required);
         assert_eq!(docs.variants[0].fields[0].ty, "String");
         assert!(!docs.variants[0].fields[1].required);
         assert_eq!(docs.variants[0].fields[1].ty, "String");
+        assert!(docs.variants[0].fields[2].required);
+        assert_eq!(docs.variants[0].fields[2].ty, "u64");
 
         let md = render_integration_events_markdown("Test Events", &[docs]);
         assert!(md.contains("#### `com.impierce.unicore.sample.item.created`"));
         assert!(md.contains("| `item_id` | `String` | Yes | Unique identifier of the item. |"));
         assert!(md.contains("| `label` | `String` | No | Optional label of the item. |"));
+        assert!(md.contains("| `metadata` | `u64` | Yes | Boxed metadata to verify `Box<T>` unwrapping in docs. |"));
     }
 }

@@ -12,11 +12,11 @@ pub struct UnmappedEvent;
 
 /// Public integration events emitted by the core presentation verification bounded context.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "data")]
 #[integration_event(source = "/services/verification")]
 pub enum VerificationIntegrationEvent {
     /// OID4VP presentation exchange requested from holder.
-    #[integration_event(rename = "com.impierce.unicore.verification.presentation.requested")]
+    #[serde(rename = "com.impierce.unicore.verification.presentation.requested")]
     PresentationRequested {
         /// Unique identifier of the authorization request.
         #[integration_event(subject)]
@@ -26,7 +26,7 @@ pub enum VerificationIntegrationEvent {
         client_id: Option<String>,
     },
     /// Cryptographic presentation verified successfully.
-    #[integration_event(rename = "com.impierce.unicore.verification.presentation.verified")]
+    #[serde(rename = "com.impierce.unicore.verification.presentation.verified")]
     PresentationVerified {
         /// Unique identifier of the authorization request.
         #[integration_event(subject)]
@@ -41,7 +41,7 @@ pub enum VerificationIntegrationEvent {
         presentations: Option<DecodedVpToken>,
     },
     /// Presentation verification failed or rejected.
-    #[integration_event(rename = "com.impierce.unicore.verification.presentation.failed")]
+    #[serde(rename = "com.impierce.unicore.verification.presentation.failed")]
     PresentationFailed {
         /// Unique identifier of the authorization request.
         #[integration_event(subject)]

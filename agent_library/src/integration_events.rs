@@ -7,11 +7,11 @@ use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
 /// Public integration events emitted by the credential template library bounded context.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "data")]
 #[integration_event(source = "/services/template")]
 pub enum TemplateIntegrationEvent {
     /// Credential template created in library.
-    #[integration_event(rename = "com.impierce.unicore.template.created")]
+    #[serde(rename = "com.impierce.unicore.template.created")]
     TemplateCreated {
         /// Unique identifier of the created template.
         #[integration_event(subject)]
@@ -22,7 +22,7 @@ pub enum TemplateIntegrationEvent {
         data_model: String,
     },
     /// Credential template title updated.
-    #[integration_event(rename = "com.impierce.unicore.template.title_updated")]
+    #[serde(rename = "com.impierce.unicore.template.title_updated")]
     TitleUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
@@ -31,7 +31,7 @@ pub enum TemplateIntegrationEvent {
         title: String,
     },
     /// Credential template lifecycle status updated.
-    #[integration_event(rename = "com.impierce.unicore.template.status_updated")]
+    #[serde(rename = "com.impierce.unicore.template.status_updated")]
     StatusUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
@@ -40,7 +40,7 @@ pub enum TemplateIntegrationEvent {
         status: String,
     },
     /// Credential template visibility updated.
-    #[integration_event(rename = "com.impierce.unicore.template.visibility_updated")]
+    #[serde(rename = "com.impierce.unicore.template.visibility_updated")]
     VisibilityUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
@@ -49,63 +49,63 @@ pub enum TemplateIntegrationEvent {
         visibility: String,
     },
     /// Credential template display configuration updated.
-    #[integration_event(rename = "com.impierce.unicore.template.display_updated")]
+    #[serde(rename = "com.impierce.unicore.template.display_updated")]
     DisplayUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template tags updated.
-    #[integration_event(rename = "com.impierce.unicore.template.tags_updated")]
+    #[serde(rename = "com.impierce.unicore.template.tags_updated")]
     TagsUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template description updated.
-    #[integration_event(rename = "com.impierce.unicore.template.description_updated")]
+    #[serde(rename = "com.impierce.unicore.template.description_updated")]
     DescriptionUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template type values updated.
-    #[integration_event(rename = "com.impierce.unicore.template.type_updated")]
+    #[serde(rename = "com.impierce.unicore.template.type_updated")]
     TypeUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template JSON schema updated.
-    #[integration_event(rename = "com.impierce.unicore.template.schema_updated")]
+    #[serde(rename = "com.impierce.unicore.template.schema_updated")]
     SchemaUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template schema property attributes updated.
-    #[integration_event(rename = "com.impierce.unicore.template.schema_properties_attributes_updated")]
+    #[serde(rename = "com.impierce.unicore.template.schema_properties_attributes_updated")]
     SchemaPropertiesAttributesUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template expiration settings updated.
-    #[integration_event(rename = "com.impierce.unicore.template.credential_expiration_updated")]
+    #[serde(rename = "com.impierce.unicore.template.credential_expiration_updated")]
     CredentialExpirationUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template holder authorization settings updated.
-    #[integration_event(rename = "com.impierce.unicore.template.holder_authorization_updated")]
+    #[serde(rename = "com.impierce.unicore.template.holder_authorization_updated")]
     HolderAuthorizationUpdated {
         /// Unique identifier of the updated template.
         #[integration_event(subject)]
         template_id: String,
     },
     /// Credential template deleted from library.
-    #[integration_event(rename = "com.impierce.unicore.template.deleted")]
+    #[serde(rename = "com.impierce.unicore.template.deleted")]
     TemplateDeleted {
         /// Unique identifier of the deleted template.
         #[integration_event(subject)]

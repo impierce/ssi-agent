@@ -17,11 +17,11 @@ pub struct UnmappedEvent;
 
 /// Public integration events emitted by the credential issuance bounded context.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
-#[serde(untagged)]
+#[serde(tag = "type", content = "data")]
 #[integration_event(source = "/services/issuance")]
 pub enum IssuanceIntegrationEvent {
     /// Credential offer created and ready for holder interaction.
-    #[integration_event(rename = "com.impierce.unicore.issuance.credential.offered")]
+    #[serde(rename = "com.impierce.unicore.issuance.credential.offered")]
     CredentialOffered {
         /// Unique identifier of the credential offer.
         #[integration_event(subject)]
@@ -39,7 +39,7 @@ pub enum IssuanceIntegrationEvent {
         delivery_options: Option<DeliveryOptions>,
     },
     /// Transaction code generated for a credential offer.
-    #[integration_event(rename = "com.impierce.unicore.issuance.offer.tx_code_generated")]
+    #[serde(rename = "com.impierce.unicore.issuance.offer.tx_code_generated")]
     TxCodeGenerated {
         /// Unique identifier of the credential offer.
         #[integration_event(subject)]
@@ -51,7 +51,7 @@ pub enum IssuanceIntegrationEvent {
         delivery_options: Option<DeliveryOptions>,
     },
     /// Credential offer delivery via email requested.
-    #[integration_event(rename = "com.impierce.unicore.issuance.offer.email_sent")]
+    #[serde(rename = "com.impierce.unicore.issuance.offer.email_sent")]
     CredentialOfferEmailSent {
         /// Unique identifier of the credential offer.
         #[integration_event(subject)]
@@ -64,7 +64,7 @@ pub enum IssuanceIntegrationEvent {
         offer_link: Url,
     },
     /// Holder credential request verified against an offer.
-    #[integration_event(rename = "com.impierce.unicore.issuance.credential.request_verified")]
+    #[serde(rename = "com.impierce.unicore.issuance.credential.request_verified")]
     CredentialRequestVerified {
         /// Unique identifier of the credential offer being redeemed.
         #[integration_event(subject)]
@@ -74,7 +74,7 @@ pub enum IssuanceIntegrationEvent {
         subject_id: Option<String>,
     },
     /// Verifiable credential cryptographically signed and issued.
-    #[integration_event(rename = "com.impierce.unicore.issuance.credential.issued")]
+    #[serde(rename = "com.impierce.unicore.issuance.credential.issued")]
     CredentialIssued {
         /// Unique identifier of the issued credential.
         #[integration_event(subject)]
@@ -83,14 +83,14 @@ pub enum IssuanceIntegrationEvent {
         status: String,
     },
     /// Credential status updated or revoked on the status list.
-    #[integration_event(rename = "com.impierce.unicore.issuance.credential.revoked")]
+    #[serde(rename = "com.impierce.unicore.issuance.credential.revoked")]
     CredentialRevoked {
         /// Unique identifier of the revoked credential.
         #[integration_event(subject)]
         credential_id: String,
     },
     /// Credential reissued from an existing credential and linked to a new offer.
-    #[integration_event(rename = "com.impierce.unicore.issuance.credential.reissued")]
+    #[serde(rename = "com.impierce.unicore.issuance.credential.reissued")]
     CredentialReissued {
         /// Unique identifier of the reissuance record.
         #[integration_event(subject)]
@@ -346,9 +346,11 @@ mod tests {
             "com.impierce.unicore.issuance.offer.tx_code_generated"
         );
         assert_eq!(integration.subject().as_deref(), Some("offer-1"));
-        let json = serde_json::to_value(&integration).unwrap();
-        assert_eq!(json["tx_code"], "123456");
-        assert_eq!(json["delivery_options"]["recipient_email"], "holder@example.test");
+        let ce = integration.clone().into_cloud_event(None, None).unwrap();
+        let data = ce.data.as_ref().unwrap();
+        assert_eq!(data["tx_code"], "123456");
+        assert_eq!(data["delivery_options"]["recipient_email"], "holder@example.test");
+        assert_eq!(IssuanceIntegrationEvent::from_cloud_event(&ce).unwrap(), integration);
 
         let email_event = OfferEvent::CredentialOfferEmailSent {
             offer_id: "offer-1".to_string(),
