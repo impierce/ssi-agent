@@ -2,7 +2,7 @@ use crate::authorization_request::aggregate::AuthorizationRequest;
 use crate::authorization_request::event::AuthorizationRequestEvent;
 use cqrs_es::EventEnvelope;
 use oid4vp::token::vp_token_validator::DecodedVpToken;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
@@ -10,7 +10,7 @@ use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnmappedEvent;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum VerificationIntegrationEvent {
     PresentationRequested {

@@ -18,14 +18,15 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
+shared-kernel.workspace = true
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
+
+did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9" }
 
 anyhow.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 chrono.workspace = true
-did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9" }
-futures.workspace = true
 identity_credential.workspace = true
 opentelemetry.workspace = true
 opentelemetry-appender-tracing = "0.31"
@@ -38,7 +39,6 @@ opentelemetry_sdk = "0.31"
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
-shared-kernel.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

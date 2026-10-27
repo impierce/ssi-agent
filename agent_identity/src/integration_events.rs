@@ -1,7 +1,7 @@
 use crate::connection::aggregate::Connection;
 use crate::connection::event::ConnectionEvent;
 use cqrs_es::EventEnvelope;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
@@ -9,7 +9,7 @@ use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnmappedEvent;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ConnectionIntegrationEvent {
     InvitationCreated {
@@ -100,7 +100,7 @@ mod tests {
         };
         let projected = Connection::project_integration_event(&envelope).expect("should project");
         assert_eq!(projected.id, "connection:conn-1:1");
-        assert!(projected.time.is_some());
+        assert!(projected.time.is_none());
     }
 
     #[test]

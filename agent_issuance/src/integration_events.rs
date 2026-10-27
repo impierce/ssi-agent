@@ -5,7 +5,8 @@ use crate::offer::event::OfferEvent;
 use crate::reissuance::aggregate::Reissuance;
 use crate::reissuance::event::ReissuanceEvent;
 use cqrs_es::EventEnvelope;
-use serde::{Deserialize, Serialize};
+use oauth_tsl::status_list::StatusType;
+use serde::Serialize;
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 use url::Url;
@@ -14,7 +15,7 @@ use url::Url;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnmappedEvent;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum IssuanceIntegrationEvent {
     CredentialOffered {
@@ -99,6 +100,8 @@ impl TryFrom<OfferEvent> for IssuanceIntegrationEvent {
                 delivery_options,
                 ..
             } => {
+                // `OfferEvent::CredentialOfferCreated` carries `credential_configuration_ids`;
+                // actual `Credential` aggregate IDs are linked separately via `OfferEvent::CredentialsAdded`.
                 let credential_ids = match credential_offer {
                     oid4vci::credential_offer::CredentialOffer::CredentialOffer(payload) => {
                         payload.credential_configuration_ids.iter().cloned().collect()
@@ -164,9 +167,10 @@ impl TryFrom<CredentialEvent> for IssuanceIntegrationEvent {
                     status: status_str.to_string(),
                 })
             }
-            CredentialEvent::CredentialStatusUpdated { credential_id, .. } => {
-                Ok(Self::CredentialRevoked { credential_id })
-            }
+            CredentialEvent::CredentialStatusUpdated {
+                credential_id,
+                credential_status,
+            } if credential_status.status == StatusType::INVALID => Ok(Self::CredentialRevoked { credential_id }),
             _ => Err(UnmappedEvent),
         }
     }
@@ -245,11 +249,20 @@ mod tests {
 
     #[test]
     fn try_from_credential_revoked() {
-        let event = CredentialEvent::CredentialStatusUpdated {
+        let valid_event = CredentialEvent::CredentialStatusUpdated {
             credential_id: "cred-2".to_string(),
             credential_status: crate::credential::aggregate::CredentialStatus::default(),
         };
-        let integration = IssuanceIntegrationEvent::try_from(event).expect("should map");
+        assert_eq!(IssuanceIntegrationEvent::try_from(valid_event), Err(UnmappedEvent));
+
+        let revoked_event = CredentialEvent::CredentialStatusUpdated {
+            credential_id: "cred-2".to_string(),
+            credential_status: crate::credential::aggregate::CredentialStatus {
+                status: StatusType::INVALID,
+                ..Default::default()
+            },
+        };
+        let integration = IssuanceIntegrationEvent::try_from(revoked_event).expect("should map");
         assert_eq!(
             integration,
             IssuanceIntegrationEvent::CredentialRevoked {
@@ -272,6 +285,7 @@ mod tests {
             created_at: chrono::Utc::now(),
         };
         let mut metadata = HashMap::new();
+        metadata.insert("timestamp".to_string(), "2026-01-15T10:30:00Z".to_string());
         metadata.insert("callerid".to_string(), "actor-1".to_string());
         metadata.insert("callertype".to_string(), "user".to_string());
 

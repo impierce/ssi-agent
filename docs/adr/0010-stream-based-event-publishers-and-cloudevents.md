@@ -33,7 +33,7 @@ To support standardized event streaming with caller provenance metadata on `Clou
 ### Positive
 - **Boundary Decoupling**: Internal aggregate refactoring never breaks external integrations.
 - **Contract Stability**: External subscribers depend on a published, versioned integration schema.
-- **Data Minimization & Privacy**: PII and internal transient data are not broadcast over the integration bus.
+- **Data Minimization & Explicit Projection**: Internal transient aggregate state and raw cryptographic artifacts (such as signed credential JWTs or raw consent tokens) are omitted unless explicitly projected into the integration event contract for subscribed workflow consumers.
 - **Unified Delivery**: All delivery channels (SSE, Webhooks, NATS) consume the exact same `EventBusHandle` and CloudEvents contract.
 
 ### Negative / Breaking Changes

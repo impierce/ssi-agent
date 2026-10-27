@@ -60,14 +60,11 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
         let caller_type = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
         let mut ce = self.into_cloud_event(source, caller_id, caller_type)?;
         ce.id = format!("{}:{}:{}", A::TYPE, envelope.aggregate_id, envelope.sequence);
-        if let Some(occurred_at) = envelope
+        ce.time = envelope
             .metadata
             .get("timestamp")
             .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
-            .map(|datetime| datetime.with_timezone(&chrono::Utc))
-        {
-            ce.time = Some(occurred_at);
-        }
+            .map(|datetime| datetime.with_timezone(&chrono::Utc));
         Ok(ce)
     }
 }

@@ -225,7 +225,7 @@ impl MongoEventSource {
         document_to_cloud_event(document, &guard)
     }
 
-    /// Creates the `events` collection and the index backing `?sources=` queries, once per process.
+    /// Creates the `events` collection and the index backing `aggregate_type` catch-up queries, once per process.
     ///
     /// `mongo-es` indexes only `{aggregate_id, sequence}` and `{aggregate_id, current_snapshot}`,
     /// leaving the reader's `aggregate_type` filter with nothing to use.
@@ -248,7 +248,7 @@ impl MongoEventSource {
                         .await
                     {
                         tracing::warn!(
-                            "Failed to create the events index; queries filtering on `sources` remain unindexed: {error}"
+                            "Failed to create the events index; queries filtering on `aggregate_type` remain unindexed: {error}"
                         );
                     }
                 });
@@ -298,6 +298,8 @@ impl EventSource for MongoEventSource {
                 };
 
                 let position = bson::to_vec(&change.id).ok().map(Position);
+                // Unmapped internal domain events return `None` here; `position` advances on the next
+                // projected integration event (any unmapped events re-scanned on reconnect remain no-ops).
                 let cloud_event = source.convert_document(&document)?;
                 Some(Ok(SourceEvent::new(cloud_event, position)))
             }
@@ -336,6 +338,16 @@ impl EventHistoryReader for MongoEventSource {
         let mut target_object_id: Option<mongodb::bson::oid::ObjectId> = None;
 
         let mut base_query = doc! {};
+        let registered_aggregate_types: Vec<&str> = {
+            let guard = match self.projectors.read() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            guard.iter().map(EventProjector::aggregate_type).collect()
+        };
+        if !registered_aggregate_types.is_empty() {
+            base_query.insert("aggregate_type", doc! { "$in": registered_aggregate_types });
+        }
         if let Some(ref target_subject) = filter.subject {
             base_query.insert("aggregate_id", target_subject);
         }

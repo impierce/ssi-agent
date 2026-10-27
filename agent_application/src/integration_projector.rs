@@ -51,6 +51,7 @@ mod tests {
             subject_id: Some("did:example:holder".to_string()),
         };
         let mut metadata = HashMap::new();
+        metadata.insert("timestamp".to_string(), "2026-01-15T10:30:00Z".to_string());
         metadata.insert("callerid".to_string(), "user-1".to_string());
         metadata.insert("callertype".to_string(), "user".to_string());
 

@@ -1,11 +1,11 @@
 use crate::template::aggregate::Template;
 use crate::template::event::{DataModel, Status, TemplateEvent, Visibility};
 use cqrs_es::EventEnvelope;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum TemplateIntegrationEvent {
     TemplateCreated {
@@ -202,7 +202,7 @@ mod tests {
         let projected = Template::project_integration_event(&envelope).expect("should project");
         assert_eq!(projected.id, "template:tmpl-1:2");
         assert_eq!(projected.event_type, "com.impierce.unicore.template.title_updated");
-        assert!(projected.time.is_some());
+        assert!(projected.time.is_none());
     }
 
     #[test]
