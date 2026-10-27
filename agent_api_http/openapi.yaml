@@ -375,7 +375,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Pending changes accepted
         '400':
           description: Malformed JSON request body
         '404':
@@ -397,7 +397,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Connection removed
         '400':
           description: Malformed JSON request body
         '404':
@@ -419,7 +419,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Connection synced
         '400':
           description: Malformed JSON request body
   /v0/connections/{connection_id}:
@@ -773,8 +773,8 @@ paths:
         required: false
         schema:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
+          - type: 'null'
       responses:
         '200':
           description: Documents retrieved successfully
@@ -1898,9 +1898,9 @@ components:
           description: One row per holder.
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
             description: Expiry applied to every credential; defaults to the template's credential expiration.
+          - type: 'null'
         templateId:
           type: string
           description: The published template every row is validated against and issued from.
@@ -1953,9 +1953,9 @@ components:
           description: Whether an email with the offer was requested for `recipientEmail`. Arrival is not tracked.
         error:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProblemSummary'
             description: Why the row was rejected or could not be created; absent on success.
+          - type: 'null'
         index:
           type: integer
           description: 0-based index of the row in the request array.
@@ -2021,8 +2021,7 @@ components:
           type: string
           default: ''
         display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
+          $ref: '#/components/schemas/CatalogDisplay'
           default:
             name: ''
             description: ''
@@ -2113,8 +2112,8 @@ components:
             type: string
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
         first_interacted_at:
           type:
           - string
@@ -2129,8 +2128,8 @@ components:
           format: date-time
         pending_changes:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/PendingChanges'
+          - type: 'null'
         url:
           type: string
           format: uri
@@ -2147,8 +2146,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/LogoProperties'
+          - type: 'null'
         name:
           type:
           - string
@@ -2157,15 +2156,13 @@ components:
       type: object
       properties:
         display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
+          $ref: '#/components/schemas/CatalogDisplay'
           default:
             name: ''
             description: ''
             icon: null
         visibility:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogVisibility'
+          $ref: '#/components/schemas/CatalogVisibility'
           default: Private
     CreateCredentialReissuanceRequest:
       type: object
@@ -2179,8 +2176,8 @@ components:
           type: string
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
+          - type: 'null'
         originalCredentialId:
           type: string
         reason:
@@ -2224,12 +2221,11 @@ components:
       properties:
         credentialExpiration:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Expiration'
+          - type: 'null'
           default: null
         dataModel:
-          oneOf:
-          - $ref: '#/components/schemas/DataModel'
+          $ref: '#/components/schemas/DataModel'
           default: w3c_vc_data_model_v2-0
         description:
           type:
@@ -2238,17 +2234,15 @@ components:
           default: null
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Display'
+          - type: 'null'
           default: null
         holderAuthorization:
-          oneOf:
-          - $ref: '#/components/schemas/HolderAuthorization'
+          $ref: '#/components/schemas/HolderAuthorization'
           default:
             pre_authorized: true
         holderType:
-          oneOf:
-          - $ref: '#/components/schemas/HolderType'
+          $ref: '#/components/schemas/HolderType'
           default: individual
         schema: {}
         schemaPropertiesAttributes:
@@ -2261,14 +2255,13 @@ components:
           propertyNames:
             type: string
         status:
-          oneOf:
-          - type: string
-            enum:
-            - draft
-            - published
-            - archived
-            - deleted
+          type: string
           default: draft
+          enum:
+          - draft
+          - published
+          - archived
+          - deleted
         tags:
           type:
           - array
@@ -2285,8 +2278,7 @@ components:
             type: string
           default: []
         visibility:
-          oneOf:
-          - $ref: '#/components/schemas/Visibility'
+          $ref: '#/components/schemas/Visibility'
           default: private
       additionalProperties: false
     CreatePublicOfferRequest:
@@ -2374,8 +2366,8 @@ components:
           $ref: '#/components/schemas/CredentialStatus'
         data:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Data'
+          - type: 'null'
         expires_at:
           type:
           - string
@@ -2446,8 +2438,8 @@ components:
       properties:
         data:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Data'
+          - type: 'null'
         id:
           type: string
         received_offer_id:
@@ -2468,8 +2460,8 @@ components:
         credential: {}
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
+          - type: 'null'
         isSigned:
           type: boolean
         offerId:
@@ -2645,8 +2637,8 @@ components:
       properties:
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TemplateLogo'
+          - type: 'null'
         name:
           type: string
     Document:
@@ -2657,18 +2649,18 @@ components:
       properties:
         did_method:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
+          - type: 'null'
         document:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DidDocument'
+          - type: 'null'
         id:
           type: string
         iota_metadata:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/IotaMetadata'
+          - type: 'null'
         status:
           type: string
           enum:
@@ -2784,8 +2776,8 @@ components:
           - 'null'
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
         url:
           type:
           - string
@@ -2799,8 +2791,8 @@ components:
           type: boolean
         tx_code_constraints:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+          - type: 'null'
     HolderCredentialsEndpointRequest:
       type: object
       required:
@@ -3148,8 +3140,8 @@ components:
           - 'null'
         delivery_options:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DeliveryOptions'
+          - type: 'null'
         form_url_encoded_credential_offer:
           type:
           - string
@@ -3235,9 +3227,9 @@ components:
       properties:
         deliveryOptions:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DeliveryOptions'
             description: Optional delivery settings associated with the offer.
+          - type: 'null'
         offerId:
           type: string
           description: Unique identifier of the offer to create or retrieve.
@@ -3282,8 +3274,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProfileLogo'
+          - type: 'null'
     PendingChanges:
       type: object
       required:
@@ -3295,8 +3287,8 @@ components:
             type: string
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
     PresentationView:
       type: object
       required:
@@ -3359,8 +3351,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProfileLogo'
+          - type: 'null'
         source:
           $ref: '#/components/schemas/Source'
     ProfileLogo:
@@ -3391,13 +3383,13 @@ components:
           type: boolean
         type:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/FormFieldType'
             description: |-
               Allows the caller to store additional type information not supported by standard JSON Schema keywords.
               This can be used by frontends to preserve field type information for visualizations.
               Purely a rendering hint that UniCore stores as given and never validates against the
               schema or the issued values.
+          - type: 'null'
     PublicOfferStatusDto:
       type: object
       required:
@@ -3566,12 +3558,12 @@ components:
             $ref: '#/components/schemas/LinkedVerifiablePresentation'
         resource:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ServiceResource'
+          - type: 'null'
         service:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DidService'
+          - type: 'null'
     Source:
       type: string
       enum:
@@ -3723,11 +3715,11 @@ components:
           maxLength: 300
         input_mode:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - numeric
             - text
+          - type: 'null'
           default: numeric
         length:
           type:
@@ -3744,8 +3736,8 @@ components:
       properties:
         credentialExpiration:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Expiration'
+          - type: 'null'
           default: null
         description:
           type:
@@ -3754,13 +3746,13 @@ components:
           default: null
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Display'
+          - type: 'null'
           default: null
         holderAuthorization:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/HolderAuthorization'
+          - type: 'null'
           default: null
         id:
           type: string
@@ -3777,13 +3769,13 @@ components:
             type: string
         status:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - draft
             - published
             - archived
             - deleted
+          - type: 'null'
           default: null
         tags:
           type:
@@ -3806,8 +3798,8 @@ components:
           default: null
         visibility:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Visibility'
+          - type: 'null'
           default: null
       additionalProperties: false
     Validation:
