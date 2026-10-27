@@ -2255,15 +2255,13 @@ components:
           propertyNames:
             type: string
         status:
-          allOf:
-          - type: string
-            enum:
-            - draft
-            - published
-            - archived
-            - deleted
-          - type: object
-            default: draft
+          type: string
+          default: draft
+          enum:
+          - draft
+          - published
+          - archived
+          - deleted
         tags:
           type:
           - array
