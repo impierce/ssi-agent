@@ -44,7 +44,7 @@ oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 
-identity-kit = { version = "0.3", default-features = false, features = ["status-list"] }
+identity-kit = { version = "0.3", default-features = false, features = ["did-jwk", "did-key", "status-list"] }
 
 shared-kernel = { path = "shared-kernel" }
 

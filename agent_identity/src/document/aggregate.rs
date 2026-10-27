@@ -16,6 +16,7 @@ use identity_iota::{
     iota::IotaDocument,
     verification::{MethodScope, MethodType, VerificationMethod},
 };
+use identity_kit::methods::{jwk::DidJwk, key::DidKey};
 use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
 use iota_sdk::{IotaClient, IotaClientBuilder};
@@ -25,8 +26,6 @@ use product_common::network_name::NetworkName;
 use product_common::transaction::TransactionBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use ssi_dids::DIDMethod;
-use ssi_dids::Source;
 use std::{collections::BTreeMap, sync::Arc};
 use tracing::{debug, info, warn};
 use url::Url;
@@ -256,14 +255,14 @@ impl Aggregate for Document {
                             .map_err(|err| MissingKeyError(err.to_string()))?;
 
                         // Generate a DID from the public key.
-                        let controller = serde_json::from_value::<ssi_jwk::JWK>(json!(public_key_jwk))
+                        let controller = serde_json::from_value::<identity_kit::jose::Jwk>(json!(public_key_jwk))
                             .ok()
                             .and_then(|jwk| match did_method {
-                                SupportedDidMethod::Jwk => did_jwk_extern::DIDJWK.generate(&Source::Key(&jwk)),
-                                SupportedDidMethod::Key => did_key_extern::DIDKey.generate(&Source::Key(&jwk)),
+                                SupportedDidMethod::Jwk => DidJwk::did(&jwk).ok(),
+                                SupportedDidMethod::Key => DidKey::did(&jwk).ok(),
                                 _ => None,
                             })
-                            .and_then(|did| did.parse().ok())
+                            .and_then(|did| did.as_str().parse().ok())
                             .ok_or(GenerateDidError(key_id))?;
 
                         CoreDocument::builder(Default::default())
@@ -912,6 +911,50 @@ pub mod document_tests {
                 with_fixed_algorithm: None,
                 iota_metadata: None,
             }])
+    }
+
+    #[rstest]
+    #[case::did_key_eddsa(
+        SupportedDidMethod::Key,
+        Algorithm::EdDSA,
+        "did:key:z6MkgE84NCMpMeAx9jK9cf5W4G8gcZ9xuwJvG1e7wNk8KCgt"
+    )]
+    #[case::did_key_es256(
+        SupportedDidMethod::Key,
+        Algorithm::ES256,
+        "did:key:zDnaeRwT4g6AZCHzxvNL7DLjqTaT88am4XR6TUGrKr6DXj6Tz"
+    )]
+    #[case::did_jwk_eddsa(
+        SupportedDidMethod::Jwk,
+        Algorithm::EdDSA,
+        "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ"
+    )]
+    #[case::did_jwk_es256(
+        SupportedDidMethod::Jwk,
+        Algorithm::ES256,
+        "did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoib09ZMmRNVlU3R0s1YWwxcTdFQXh1b1lsb3hNUWx2NVpOWk9hdGlVWFFIZyIsImt0eSI6IkVDIiwieCI6IkZtazEzZ08yU0dMYnVYZUwyNHFKUEhDTm5jbkk2bEJ1NlpRTDJFVlp2NEUiLCJ5IjoiZnoyS3ZNaHVmelVwTWVMOS1LMnJlOWZ3QTNtemcxYnBmYmNlSVFTdWloWSJ9"
+    )]
+    #[serial_test::serial]
+    async fn test_create_document_derives_the_did_from_the_issuer_key(
+        document_id: String,
+        #[case] did_method: SupportedDidMethod,
+        #[case] algorithm: Algorithm,
+        #[case] expected_did: &str,
+    ) {
+        let events = DocumentTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(DocumentCommand::CreateDocument {
+                document_id,
+                did_method,
+                with_fixed_algorithm: Some(algorithm),
+            })
+            .inspect_result()
+            .unwrap();
+
+        let [DocumentEvent::DocumentCreated { document, .. }] = events.as_slice() else {
+            panic!("unexpected events: {events:?}");
+        };
+        assert_eq!(document.id().as_str(), expected_did);
     }
 
     #[rstest]
