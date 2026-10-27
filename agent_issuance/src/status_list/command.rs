@@ -1,6 +1,7 @@
-use oauth_tsl::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::CommandOperation;
+
+use identity_kit::status_list::StatusType;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StatusListCommand {

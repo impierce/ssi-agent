@@ -13,9 +13,8 @@ use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Timestamp;
 use identity_core::convert::FromJson;
 use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
+use identity_kit::status_list::{StatusListToken, StatusType};
 use jsonwebtoken::Header;
-use oauth_tsl::status_list::StatusType;
-use oauth_tsl::tokens::status_list_token::StatusListTyp;
 use oid4vc_core::{jwt, Sign as _, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{self, VcSdJwt, VcSdJwtParameters};
@@ -71,12 +70,22 @@ mod never_as_str {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CredentialStatus {
     pub index: usize,
     #[schema(schema_with = status_type)]
     pub status: StatusType,
     pub status_list_url: String,
+}
+
+impl Default for CredentialStatus {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            status: StatusType::VALID,
+            status_list_url: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -581,7 +590,7 @@ fn build_signed_w3c_credential_data(
     credential_data.insert_if_none(
         &["credentialStatus"],
         json!({
-            "type": StatusListTyp::Jwt.to_string(),
+            "type": StatusListToken::TYP,
             "id": status_list_url.to_string(),
             "uri": status_list_url.to_string(),
             "idx": status_index,

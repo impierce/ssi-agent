@@ -301,8 +301,9 @@ paths:
       - Protocol
       summary: Get a status list token
       description: |-
-        Returns a gzip-encoded Status List Token, as defined by
+        Returns a Status List Token, as defined by
         [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+        The response is gzip-encoded if the request's `Accept-Encoding` allows it.
       operationId: token_status_list
       parameters:
       - name: path
@@ -318,7 +319,7 @@ paths:
             Content-Encoding:
               schema:
                 type: string
-              description: Always `gzip`
+              description: '`gzip` if the request''s `Accept-Encoding` allows it'
           content:
             application/statuslist+jwt:
               schema:
@@ -1215,7 +1216,7 @@ paths:
         '404':
           description: Credential not found
         '422':
-          description: Request body does not match the expected schema
+          description: Request body does not match the expected schema, or the status list can't hold the status
   /v0/delete-catalog:
     post:
       tags:
@@ -3642,12 +3643,15 @@ components:
           type: integer
           minimum: 0
         status:
-          type: string
-          enum:
-          - VALID
-          - INVALID
-          - SUSPENDED
-          - UNDEFINED
+          oneOf:
+          - type: string
+            enum:
+            - VALID
+            - INVALID
+            - SUSPENDED
+          - type: integer
+            maximum: 3
+            minimum: 0
         status_list_url:
           type: string
     CredentialView:
@@ -4805,12 +4809,15 @@ components:
       - credentialStatus
       properties:
         credentialStatus:
-          type: string
-          enum:
-          - VALID
-          - INVALID
-          - SUSPENDED
-          - UNDEFINED
+          oneOf:
+          - type: string
+            enum:
+            - VALID
+            - INVALID
+            - SUSPENDED
+          - type: integer
+            maximum: 3
+            minimum: 0
     PatchProfileEndpointRequest:
       type: object
       properties:
