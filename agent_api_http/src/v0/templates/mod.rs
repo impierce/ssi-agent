@@ -84,7 +84,7 @@ pub struct CreateNewTemplateRequestBody {
     pub data_model: DataModel,
     pub holder_type: HolderType,
     pub tags: Option<Vec<String>>,
-    #[schema(inline)]
+    #[schema(schema_with = status_schema)]
     pub status: Status,
     pub visibility: Visibility,
     pub credential_expiration: Option<Expiration>,
@@ -93,6 +93,16 @@ pub struct CreateNewTemplateRequestBody {
     pub schema: Option<serde_json::Value>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     pub holder_authorization: Authorization,
+}
+
+// utoipa 6 combines an inlined field with its default as `allOf: [<enum>, {type: object, default}]`, which no value
+// can satisfy, so the default goes on the enum schema itself.
+fn status_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    let mut schema = <Status as utoipa::PartialSchema>::schema();
+    if let utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(object)) = &mut schema {
+        object.default = serde_json::to_value(Status::default()).ok();
+    }
+    schema
 }
 
 /// Create a new template
@@ -862,6 +872,21 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(body["title"], "Source Template Not Found");
+    }
+
+    #[test]
+    fn create_template_status_schema_is_a_string_enum_with_a_default() {
+        let schema = <CreateNewTemplateRequestBody as utoipa::PartialSchema>::schema();
+        let schema = serde_json::to_value(schema).unwrap();
+
+        assert_eq!(
+            schema["properties"]["status"],
+            json!({
+                "type": "string",
+                "enum": ["draft", "published", "archived", "deleted"],
+                "default": "draft"
+            })
+        );
     }
 
     #[tokio::test]
