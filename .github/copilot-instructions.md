@@ -148,7 +148,6 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 siopv2, oid4vci, oid4vc-core, oid4vc-manager, oid4vp → https://github.com/impierce/openid4vc (rev 0a5090e)
 identity_* crates → https://github.com/iotaledger/identity (v1.9.6-beta.1)
 iota-sdk → https://github.com/iotaledger/iota (specific rev)
-oauth_tsl → https://github.com/impierce/oauth-token-status-list (rev 0aa0228)
 sd-jwt (patched) → https://github.com/impierce/sd-jwt-payload (rev f28789a, Hasher trait Send+Sync fix)
 ```
 

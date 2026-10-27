@@ -1,10 +1,9 @@
+use agent_secret_manager::signer::SubjectSigner;
 use agent_shared::{
     config::{get_preferred_did_method, get_preferred_signing_algorithm},
     handlers::public_query_handler,
 };
 use identity_kit::status_list::StatusListToken;
-use jsonwebtoken::Header;
-use oid4vc_core::jwt::encode;
 
 use crate::{credential::aggregate::get_status_list_url, state::IssuanceState, status_list::error::StatusListError};
 
@@ -30,14 +29,19 @@ impl TokenStatusListService {
 
         let status_list_token = StatusListToken::new(sub_url.to_string(), chrono::Utc::now(), status_list.list);
 
-        let header = Header {
-            typ: Some(StatusListToken::TYP.to_string()),
-            ..Header::new(get_preferred_signing_algorithm())
-        };
-        let default_did_method = get_preferred_did_method().to_string();
+        let signer = SubjectSigner::new(
+            state.subject.clone(),
+            get_preferred_did_method().to_string(),
+            get_preferred_signing_algorithm(),
+        )
+        .await
+        .ok_or(StatusListError::JwtEncodeError)?;
 
-        encode(state.subject.clone(), header, status_list_token, &default_did_method)
+        let status_list_jwt = status_list_token
+            .sign(&signer)
             .await
-            .map_err(|_| StatusListError::JwtEncodeError)
+            .map_err(|_| StatusListError::JwtEncodeError)?;
+
+        Ok(status_list_jwt.as_str().to_owned())
     }
 }

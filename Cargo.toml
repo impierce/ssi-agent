@@ -44,7 +44,7 @@ oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
 oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
 oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
 
-identity-kit = { version = "0.3", default-features = false, features = ["did-jwk", "did-key", "status-list"] }
+identity-kit = { version = "0.3", default-features = false, features = ["did-jwk", "did-key", "sd-jwt"] }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -64,7 +64,6 @@ identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
     "presentation",
-    "sd-jwt-vc",
 ] }
 identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
@@ -99,9 +98,6 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ] }
 rstest = "0.22"
-sd-jwt = { package = "sd-jwt-payload", version = "0.5", default-features = false, features = [
-    "sha",
-] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
@@ -125,5 +121,6 @@ uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
 
 [patch.crates-io]
-# We need this patch because it makes the `Hasher` trait `Send` and `Sync`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
+# We need this patch because it makes the `Hasher` trait `Send` and `Sync`, which `agent_verification` needs as long as
+# openid4vc uses the SD-JWT VC support of `identity_credential`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
 sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }
