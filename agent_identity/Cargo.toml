@@ -74,4 +74,4 @@ wiremock.workspace = true
 
 [features]
 test_utils = ["dep:futures", "dep:rstest"]
-allow-localhost = []
+allow-localhost = ["agent_secret_manager/allow-localhost"]
