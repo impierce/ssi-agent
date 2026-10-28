@@ -9,6 +9,7 @@
 //! - [`view_repository`] — Dyn-compatible view repository wrappers and factory trait.
 //! - [`service_registry`] — Type-keyed service registry and channel-based service handles.
 
+// Allows `#[derive(IntegrationEvent)]` (which expands to `::shared_kernel::...` paths) to be used within this crate.
 extern crate self as shared_kernel;
 
 pub mod application_service;

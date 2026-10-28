@@ -346,11 +346,14 @@ mod tests {
             "com.impierce.unicore.issuance.offer.tx_code_generated"
         );
         assert_eq!(integration.subject().as_deref(), Some("offer-1"));
-        let ce = integration.clone().into_cloud_event(None, None).unwrap();
-        let data = ce.data.as_ref().unwrap();
+        let cloud_event = integration.clone().into_cloud_event(None, None).unwrap();
+        let data = cloud_event.data.as_ref().unwrap();
         assert_eq!(data["tx_code"], "123456");
         assert_eq!(data["delivery_options"]["recipient_email"], "holder@example.test");
-        assert_eq!(IssuanceIntegrationEvent::from_cloud_event(&ce).unwrap(), integration);
+        assert_eq!(
+            IssuanceIntegrationEvent::from_cloud_event(&cloud_event).unwrap(),
+            integration
+        );
 
         let email_event = OfferEvent::CredentialOfferEmailSent {
             offer_id: "offer-1".to_string(),

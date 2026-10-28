@@ -724,11 +724,14 @@ mod tests {
             }
         };
 
-        let ce = document_to_cloud_event(&doc, PROJECTORS).expect("Should project to CloudEvent");
-        assert_eq!(ce.id, "template:tpl-123:1");
-        assert_eq!(ce.source, "/services/template");
-        assert_eq!(ce.event_type, "com.impierce.unicore.template.created");
-        assert_eq!(ce.time.unwrap().to_rfc3339(), "2026-09-21T07:50:45.686998501+00:00");
+        let cloud_event = document_to_cloud_event(&doc, PROJECTORS).expect("Should project to CloudEvent");
+        assert_eq!(cloud_event.id, "template:tpl-123:1");
+        assert_eq!(cloud_event.source, "/services/template");
+        assert_eq!(cloud_event.event_type, "com.impierce.unicore.template.created");
+        assert_eq!(
+            cloud_event.time.unwrap().to_rfc3339(),
+            "2026-09-21T07:50:45.686998501+00:00"
+        );
     }
 
     #[test]
@@ -750,9 +753,9 @@ mod tests {
             }
         };
 
-        let ce = document_to_cloud_event(&doc, PROJECTORS).expect("Should project to CloudEvent");
-        assert_eq!(ce.extension.callerid.as_deref(), Some("alice@example.test"));
-        assert_eq!(ce.extension.callertype.as_deref(), Some("user"));
+        let cloud_event = document_to_cloud_event(&doc, PROJECTORS).expect("Should project to CloudEvent");
+        assert_eq!(cloud_event.extension.callerid.as_deref(), Some("alice@example.test"));
+        assert_eq!(cloud_event.extension.callertype.as_deref(), Some("user"));
     }
 
     #[test]

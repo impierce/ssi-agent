@@ -168,13 +168,13 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
             }
             other => other,
         };
-        let mut ce = CloudEvent::new(event_type, Self::SOURCE)
+        let mut cloud_event = CloudEvent::new(event_type, Self::SOURCE)
             .with_data(data)
             .with_caller(caller_id, caller_type);
         if let Some(s) = subject {
-            ce = ce.with_subject(s);
+            cloud_event = cloud_event.with_subject(s);
         }
-        Ok(ce)
+        Ok(cloud_event)
     }
 
     /// Deserializes a typed [`IntegrationEvent`] from a [`CloudEvent`] envelope.
@@ -215,14 +215,14 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
     {
         let caller_id = envelope.metadata.get("callerid").filter(|s| !s.is_empty()).cloned();
         let caller_type = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
-        let mut ce = self.into_cloud_event(caller_id, caller_type)?;
-        ce.id = format!("{}:{}:{}", A::TYPE, envelope.aggregate_id, envelope.sequence);
-        ce.time = envelope
+        let mut cloud_event = self.into_cloud_event(caller_id, caller_type)?;
+        cloud_event.id = format!("{}:{}:{}", A::TYPE, envelope.aggregate_id, envelope.sequence);
+        cloud_event.time = envelope
             .metadata
             .get("timestamp")
             .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
             .map(|datetime| datetime.with_timezone(&chrono::Utc));
-        Ok(ce)
+        Ok(cloud_event)
     }
 }
 
@@ -358,12 +358,12 @@ mod tests {
         assert_eq!(event.subject().as_deref(), Some("item-1"));
         assert_eq!(SampleIntegrationEvent::SOURCE, "/services/sample");
 
-        let ce = event.clone().into_cloud_event(None, None).unwrap();
-        assert_eq!(ce.event_type, "com.impierce.unicore.sample.item.created");
-        assert_eq!(ce.data.as_ref().unwrap()["item_id"], "item-1");
-        assert!(ce.data.as_ref().unwrap().get("type").is_none());
+        let cloud_event = event.clone().into_cloud_event(None, None).unwrap();
+        assert_eq!(cloud_event.event_type, "com.impierce.unicore.sample.item.created");
+        assert_eq!(cloud_event.data.as_ref().unwrap()["item_id"], "item-1");
+        assert!(cloud_event.data.as_ref().unwrap().get("type").is_none());
 
-        let parsed = SampleIntegrationEvent::from_cloud_event(&ce).unwrap();
+        let parsed = SampleIntegrationEvent::from_cloud_event(&cloud_event).unwrap();
         assert_eq!(parsed, event);
 
         let docs = SampleIntegrationEvent::DOCS;
