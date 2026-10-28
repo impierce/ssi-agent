@@ -9,6 +9,9 @@ use std::collections::HashMap;
 /// integration events establish a stable contract for external consumers,
 /// webhook subscribers, and cross-system streaming.
 pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
+    /// [`CloudEvent`] `source` URI for all variants of this integration event enum (e.g. `"/services/issuance"`).
+    const SOURCE: &'static str;
+
     /// Reverse-DNS event type, e.g. `com.impierce.unicore.issuance.credential.offered`.
     fn event_type(&self) -> &'static str;
 
@@ -73,6 +76,9 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
 ///
 /// Aggregates that only emit private internal domain events do not implement this trait.
 pub trait ProjectIntegrationEvent: Aggregate {
+    /// The public [`IntegrationEvent`] enum that this aggregate's domain events project into.
+    type IntegrationEvent: IntegrationEvent;
+
     /// Projects a domain [`EventEnvelope`] for this aggregate into a public [`CloudEvent`],
     /// returning `None` if the domain event has no public integration event mapping.
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent>;
@@ -84,6 +90,7 @@ pub trait ProjectIntegrationEvent: Aggregate {
 #[derive(Clone, Copy)]
 pub struct EventProjector {
     aggregate_type: &'static str,
+    source: &'static str,
     project: fn(&str, usize, serde_json::Value, HashMap<String, String>) -> Option<CloudEvent>,
 }
 
@@ -96,6 +103,7 @@ impl EventProjector {
     {
         Self {
             aggregate_type: A::TYPE,
+            source: <A::IntegrationEvent as IntegrationEvent>::SOURCE,
             project: project_stored_event::<A>,
         }
     }
@@ -103,6 +111,11 @@ impl EventProjector {
     #[must_use]
     pub const fn aggregate_type(&self) -> &'static str {
         self.aggregate_type
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> &'static str {
+        self.source
     }
 
     #[must_use]

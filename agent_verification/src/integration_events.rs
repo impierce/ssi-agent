@@ -34,6 +34,8 @@ pub enum VerificationIntegrationEvent {
 }
 
 impl IntegrationEvent for VerificationIntegrationEvent {
+    const SOURCE: &'static str = "/services/verification";
+
     fn event_type(&self) -> &'static str {
         match self {
             Self::PresentationRequested { .. } => "com.impierce.unicore.verification.presentation.requested",
@@ -102,6 +104,8 @@ impl TryFrom<(&AuthorizationRequestEvent, &str)> for VerificationIntegrationEven
 }
 
 impl ProjectIntegrationEvent for AuthorizationRequest {
+    type IntegrationEvent = VerificationIntegrationEvent;
+
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         VerificationIntegrationEvent::try_from((&envelope.payload, envelope.aggregate_id.as_str()))
             .ok()?

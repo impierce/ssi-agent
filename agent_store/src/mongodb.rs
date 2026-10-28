@@ -316,6 +316,16 @@ impl EventSource for MongoEventSource {
 /// highly selective filter degrades into a full scan.
 const MAX_DOCUMENTS_EXAMINED: usize = 10_000;
 
+/// Narrows the registered [`EventProjector`]s to the `aggregate_type` values whose integration
+/// event `source` matches `filter.sources`.
+fn matching_aggregate_types(projectors: &[EventProjector], filter: &EventFilter) -> Vec<&'static str> {
+    projectors
+        .iter()
+        .filter(|projector| filter.matches_source(projector.source()))
+        .map(EventProjector::aggregate_type)
+        .collect()
+}
+
 #[async_trait]
 impl EventHistoryReader for MongoEventSource {
     async fn history_ascending(
@@ -338,14 +348,14 @@ impl EventHistoryReader for MongoEventSource {
         let mut target_object_id: Option<mongodb::bson::oid::ObjectId> = None;
 
         let mut base_query = doc! {};
-        let registered_aggregate_types: Vec<&str> = {
+        let (has_projectors, registered_aggregate_types): (bool, Vec<&str>) = {
             let guard = match self.projectors.read() {
                 Ok(guard) => guard,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            guard.iter().map(EventProjector::aggregate_type).collect()
+            (!guard.is_empty(), matching_aggregate_types(&guard, filter))
         };
-        if !registered_aggregate_types.is_empty() {
+        if has_projectors {
             base_query.insert("aggregate_type", doc! { "$in": registered_aggregate_types });
         }
         if let Some(ref target_subject) = filter.subject {
@@ -610,6 +620,8 @@ mod tests {
     }
 
     impl IntegrationEvent for TestIntegrationEvent {
+        const SOURCE: &'static str = "/services/template";
+
         fn event_type(&self) -> &'static str {
             "com.impierce.unicore.template.created"
         }
@@ -620,6 +632,8 @@ mod tests {
     }
 
     impl ProjectIntegrationEvent for TestAggregate {
+        type IntegrationEvent = TestIntegrationEvent;
+
         fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
             match &envelope.payload {
                 TestEvent::Created { id } => TestIntegrationEvent { id: id.clone() }
@@ -630,7 +644,56 @@ mod tests {
         }
     }
 
-    const PROJECTORS: &[EventProjector] = &[EventProjector::for_aggregate::<TestAggregate>()];
+    #[derive(Default, Deserialize, Serialize)]
+    struct OfferTestAggregate;
+
+    impl Aggregate for OfferTestAggregate {
+        const TYPE: &'static str = "offer";
+
+        type Command = Infallible;
+        type Event = TestEvent;
+        type Error = TestError;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            command: Self::Command,
+            _service: &Self::Services,
+            _sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            match command {}
+        }
+
+        fn apply(&mut self, _event: Self::Event) {}
+    }
+
+    #[derive(Serialize)]
+    struct OfferTestIntegrationEvent;
+
+    impl IntegrationEvent for OfferTestIntegrationEvent {
+        const SOURCE: &'static str = "/services/issuance";
+
+        fn event_type(&self) -> &'static str {
+            "com.impierce.unicore.issuance.credential.offered"
+        }
+
+        fn subject(&self) -> Option<String> {
+            None
+        }
+    }
+
+    impl ProjectIntegrationEvent for OfferTestAggregate {
+        type IntegrationEvent = OfferTestIntegrationEvent;
+
+        fn project_integration_event(_envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+            None
+        }
+    }
+
+    const PROJECTORS: &[EventProjector] = &[
+        EventProjector::for_aggregate::<TestAggregate>(),
+        EventProjector::for_aggregate::<OfferTestAggregate>(),
+    ];
 
     #[test]
     fn test_document_to_cloud_event_with_timestamp() {
@@ -692,5 +755,35 @@ mod tests {
         };
 
         assert!(document_to_cloud_event(&doc, PROJECTORS).is_none());
+    }
+
+    #[test]
+    fn test_matching_aggregate_types_narrows_by_filter_sources() {
+        let unfiltered = EventFilter::default();
+        assert_eq!(
+            matching_aggregate_types(PROJECTORS, &unfiltered),
+            vec!["template", "offer"]
+        );
+
+        let template_by_uri = EventFilter {
+            sources: vec!["/services/template".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(matching_aggregate_types(PROJECTORS, &template_by_uri), vec!["template"]);
+
+        let issuance_by_short_name = EventFilter {
+            sources: vec!["issuance".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(
+            matching_aggregate_types(PROJECTORS, &issuance_by_short_name),
+            vec!["offer"]
+        );
+
+        let unknown_source = EventFilter {
+            sources: vec!["/services/unknown".to_string()],
+            ..Default::default()
+        };
+        assert!(matching_aggregate_types(PROJECTORS, &unknown_source).is_empty());
     }
 }

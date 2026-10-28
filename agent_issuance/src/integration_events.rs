@@ -61,6 +61,8 @@ pub enum IssuanceIntegrationEvent {
 }
 
 impl IntegrationEvent for IssuanceIntegrationEvent {
+    const SOURCE: &'static str = "/services/issuance";
+
     fn event_type(&self) -> &'static str {
         match self {
             Self::CredentialOffered { .. } => "com.impierce.unicore.issuance.credential.offered",
@@ -198,6 +200,8 @@ impl TryFrom<ReissuanceEvent> for IssuanceIntegrationEvent {
 }
 
 impl ProjectIntegrationEvent for Offer {
+    type IntegrationEvent = IssuanceIntegrationEvent;
+
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         IssuanceIntegrationEvent::try_from(envelope.payload.clone())
             .ok()?
@@ -207,6 +211,8 @@ impl ProjectIntegrationEvent for Offer {
 }
 
 impl ProjectIntegrationEvent for Credential {
+    type IntegrationEvent = IssuanceIntegrationEvent;
+
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         IssuanceIntegrationEvent::try_from(envelope.payload.clone())
             .ok()?
@@ -216,6 +222,8 @@ impl ProjectIntegrationEvent for Credential {
 }
 
 impl ProjectIntegrationEvent for Reissuance {
+    type IntegrationEvent = IssuanceIntegrationEvent;
+
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         IssuanceIntegrationEvent::try_from(envelope.payload.clone())
             .ok()?

@@ -125,39 +125,46 @@ pub struct EventFilter {
 }
 
 impl EventFilter {
+    /// Returns `true` if `event_type` matches this filter's `event_types` criterion
+    /// (or if `self.event_types` is empty).
     #[must_use]
-    pub fn matches(&self, event: &CloudEvent) -> bool {
-        if !self.event_types.is_empty()
-            && !self.event_types.iter().any(|pattern| {
-                if pattern == "*" || pattern.eq_ignore_ascii_case(&event.event_type) {
+    pub fn matches_event_type(&self, event_type: &str) -> bool {
+        self.event_types.is_empty()
+            || self.event_types.iter().any(|pattern| {
+                if pattern == "*" || pattern.eq_ignore_ascii_case(event_type) {
                     return true;
                 }
                 if let Some(prefix) = pattern.strip_suffix('*') {
-                    if event
-                        .event_type
+                    if event_type
                         .to_ascii_lowercase()
                         .starts_with(&prefix.to_ascii_lowercase())
                     {
                         return true;
                     }
                 }
-                let event_suffix = event
-                    .event_type
-                    .strip_prefix("com.impierce.unicore.")
-                    .unwrap_or(&event.event_type);
+                let event_suffix = event_type.strip_prefix("com.impierce.unicore.").unwrap_or(event_type);
                 event_suffix.eq_ignore_ascii_case(pattern)
             })
-        {
+    }
+
+    /// Returns `true` if `source` matches this filter's `sources` criterion
+    /// (or if `self.sources` is empty).
+    #[must_use]
+    pub fn matches_source(&self, source: &str) -> bool {
+        self.sources.is_empty()
+            || self.sources.iter().any(|source_pattern| {
+                let pattern_norm = source_pattern.trim_start_matches("/services/").trim_matches('/');
+                let event_source_norm = source.trim_start_matches("/services/").trim_matches('/');
+                source_pattern.eq_ignore_ascii_case(source) || pattern_norm.eq_ignore_ascii_case(event_source_norm)
+            })
+    }
+
+    #[must_use]
+    pub fn matches(&self, event: &CloudEvent) -> bool {
+        if !self.matches_event_type(&event.event_type) {
             return false;
         }
-        if !self.sources.is_empty()
-            && !self.sources.iter().any(|source_pattern| {
-                let pattern_norm = source_pattern.trim_start_matches("/services/").trim_matches('/');
-                let event_source_norm = event.source.trim_start_matches("/services/").trim_matches('/');
-                source_pattern.eq_ignore_ascii_case(&event.source)
-                    || pattern_norm.eq_ignore_ascii_case(event_source_norm)
-            })
-        {
+        if !self.matches_source(&event.source) {
             return false;
         }
         if let Some(ref target_subject) = self.subject {
@@ -990,6 +997,8 @@ mod tests {
     }
 
     impl crate::integration_event::IntegrationEvent for MockEvent {
+        const SOURCE: &'static str = "/services/mock";
+
         fn event_type(&self) -> &'static str {
             "com.impierce.unicore.mock.created"
         }
@@ -1000,6 +1009,8 @@ mod tests {
     }
 
     impl ProjectIntegrationEvent for MockAggregate {
+        type IntegrationEvent = MockEvent;
+
         fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
             use crate::integration_event::IntegrationEvent as _;
             envelope

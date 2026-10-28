@@ -23,6 +23,8 @@ pub enum ConnectionIntegrationEvent {
 }
 
 impl IntegrationEvent for ConnectionIntegrationEvent {
+    const SOURCE: &'static str = "/services/connection";
+
     fn event_type(&self) -> &'static str {
         match self {
             Self::InvitationCreated { .. } => "com.impierce.unicore.connection.invitation.created",
@@ -58,6 +60,8 @@ impl TryFrom<ConnectionEvent> for ConnectionIntegrationEvent {
 }
 
 impl ProjectIntegrationEvent for Connection {
+    type IntegrationEvent = ConnectionIntegrationEvent;
+
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         ConnectionIntegrationEvent::try_from(envelope.payload.clone())
             .ok()?

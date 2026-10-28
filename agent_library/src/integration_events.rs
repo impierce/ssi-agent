@@ -55,6 +55,8 @@ pub enum TemplateIntegrationEvent {
 }
 
 impl IntegrationEvent for TemplateIntegrationEvent {
+    const SOURCE: &'static str = "/services/template";
+
     fn event_type(&self) -> &'static str {
         match self {
             Self::TemplateCreated { .. } => "com.impierce.unicore.template.created",
@@ -165,6 +167,8 @@ impl From<TemplateEvent> for TemplateIntegrationEvent {
 }
 
 impl ProjectIntegrationEvent for Template {
+    type IntegrationEvent = TemplateIntegrationEvent;
+
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         TemplateIntegrationEvent::from(envelope.payload.clone())
             .into_projected_cloud_event(envelope, "/services/template")
