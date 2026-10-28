@@ -5,6 +5,7 @@ use super::{
 };
 use crate::dns::CnameCheck;
 use crate::{
+    convert::convert,
     document::command::DocumentCommand,
     services::{document_can_link, linked_dids_by_origin},
     state::{
@@ -13,7 +14,6 @@ use crate::{
     },
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
-use identity_did::DID as _;
 use identity_iota::credential::Jwt;
 use serde::Serialize;
 use shared_kernel::authorization::{
@@ -72,8 +72,10 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
             verification_methods, ..
         } => {
             *verification_methods = linkable_documents()
-                .flat_map(|document| document.methods(None).into_iter().cloned())
-                .collect();
+                .flat_map(|document| document.methods(None))
+                .map(convert)
+                .collect::<Result<_, _>>()
+                .map_err(anyhow::Error::from)?;
         }
         ServiceCommand::AddLinkedVerifiablePresentations {
             presentation_ids,
@@ -90,7 +92,10 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
                     signed_presentations.insert(presentation_id.clone(), presentation);
                 }
             }
-            *documents = linkable_documents().cloned().collect();
+            *documents = linkable_documents()
+                .map(convert)
+                .collect::<Result<_, _>>()
+                .map_err(anyhow::Error::from)?;
         }
         _ => {}
     }
@@ -109,41 +114,44 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
     let documents = query_all_documents(state, |_| true).await?;
     for service in services.services.values() {
         for document in documents.values() {
-            let Some(core_document) = &document.document else {
+            let Some(did_document) = &document.document else {
                 continue;
             };
             if !document.did_method.is_some_and(|method| method.supports_update()) {
                 continue;
             }
-            let current = core_document.resolve_service(service.service_id.as_str());
-            let desired = if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
-                let presentations = service
-                    .presentations
-                    .iter()
-                    .filter(|presentation| presentation.holder == core_document.id().as_str())
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if service.is_active()
-                    && document_can_link(document, state.services.iota_sponsoring_enabled)
-                    && !presentations.is_empty()
-                {
-                    Some(linked_verifiable_presentation_service(
-                        &service.service_id,
-                        core_document.id().as_str(),
-                        &presentations,
-                    )?)
+            let service_url = did_document.id.join(&format!("#{}", service.service_id))?;
+            let current = did_document.service(&service_url);
+            let desired: Option<identity_kit::did::Service> =
+                if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
+                    let presentations = service
+                        .presentations
+                        .iter()
+                        .filter(|presentation| presentation.holder == did_document.id.as_str())
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if service.is_active()
+                        && document_can_link(document, state.services.iota_sponsoring_enabled)
+                        && !presentations.is_empty()
+                    {
+                        Some(convert(&linked_verifiable_presentation_service(
+                            &service.service_id,
+                            did_document.id.as_str(),
+                            &presentations,
+                        )?)?)
+                    } else {
+                        None
+                    }
+                } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
+                    let mut entry: identity_kit::did::Service =
+                        convert(service.service.as_ref().expect("active service has an entry"))?;
+                    entry.id = service_url;
+                    Some(entry)
+                } else if service.is_active() {
+                    continue;
                 } else {
                     None
-                }
-            } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
-                let mut entry = service.service.clone().expect("active service has an entry");
-                entry.set_id(core_document.id().to_url().join(format!("#{}", service.service_id))?)?;
-                Some(entry)
-            } else if service.is_active() {
-                continue;
-            } else {
-                None
-            };
+                };
             let command = match desired {
                 Some(entry) if current != Some(&entry) => DocumentCommand::AddService {
                     service_id: service.service_id.clone(),

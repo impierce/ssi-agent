@@ -1,20 +1,19 @@
 use super::{command::DocumentCommand, error::DocumentError, event::DocumentEvent};
-use crate::document::openapi::{algorithm, DidDocument};
+use crate::convert::convert;
+use crate::document::openapi::algorithm;
 use crate::services::IdentityServices;
 use agent_secret_manager::subject::StorageKey;
 use agent_shared::config::{config, get_all_enabled_signing_algorithms_supported};
 use agent_shared::config::{config_mut, SupportedDidMethod};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_did::{CoreDID, DIDUrl, DID as _};
 use identity_document::document::CoreDocument;
 use identity_iota::iota::rebased::client::{get_object_id_from_did, IdentityClient, PublishDidDocument};
 use identity_iota::iota::rebased::migration::{ControllerToken, Identity, OnChainIdentity};
+use identity_iota::iota::IotaDocument;
 use identity_iota::iota::{rebased, IotaDID};
 use identity_iota::storage::{Storage, StorageSigner};
-use identity_iota::verification::MethodRelationship;
-use identity_iota::{
-    iota::IotaDocument,
-    verification::{MethodScope, MethodType, VerificationMethod},
+use identity_kit::did::{
+    Context, Did, DidDocument, MethodType, VerificationMaterial, VerificationMethod, VerificationRelationship,
 };
 use identity_kit::methods::{jwk::DidJwk, key::DidKey};
 use identity_storage::{JwkStorage, KeyIdStorage};
@@ -25,8 +24,7 @@ use product_common::gas_station::GasStationOptions;
 use product_common::network_name::NetworkName;
 use product_common::transaction::TransactionBuilder;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 use url::Url;
 
@@ -62,8 +60,7 @@ pub enum Status {
 pub struct Document {
     #[serde(rename = "id")]
     pub document_id: String,
-    #[schema(value_type = Option<DidDocument>)]
-    pub document: Option<CoreDocument>,
+    pub document: Option<DidDocument>,
     pub did_method: Option<SupportedDidMethod>,
     // Applicable only for DID documents whose methods mandate a fixed verification algorithm,
     // such as `did:key` and `did:jwk`.
@@ -167,12 +164,17 @@ impl Aggregate for Document {
                         iota_metadata.balance = balance as u64;
                         iota_metadata.is_funded = balance > MIN_GAS_BUDGET as u128;
 
-                        let document = self.document.clone().map(IotaDocument::from).unwrap_or_else(|| {
-                            info!("Creating a new document for DID method `{did_method}`");
+                        let document = self
+                            .document
+                            .as_ref()
+                            .map(to_iota_document)
+                            .transpose()?
+                            .unwrap_or_else(|| {
+                                info!("Creating a new document for DID method `{did_method}`");
 
-                            // Create a new 'blank' DID Document.
-                            IotaDocument::new(&network_name)
-                        });
+                                // Create a new 'blank' DID Document.
+                                IotaDocument::new(&network_name)
+                            });
 
                         let document = if config().iota_sponsoring_service_url.is_none() {
                             info!("Testing whether a DID Document can be published...");
@@ -227,16 +229,14 @@ impl Aggregate for Document {
 
                         info!("DID Document created: {document:#?}");
 
-                        document.into()
+                        from_iota_document(document)?
                     }
                     SupportedDidMethod::Web => {
                         let controller = super::web::did_web(&services.public_url)?;
 
                         // Patch the generated DID document since it's not according to spec.
-                        let properties = get_properties(MethodType::JSON_WEB_KEY_2020);
-
-                        CoreDocument::builder(properties)
-                            .id(controller)
+                        DidDocument::builder(controller)
+                            .context(get_context(&MethodType::JSON_WEB_KEY_2020))
                             .build()
                             .map_err(ProduceDocumentError)?
                     }
@@ -255,20 +255,14 @@ impl Aggregate for Document {
                             .map_err(|err| MissingKeyError(err.to_string()))?;
 
                         // Generate a DID from the public key.
-                        let controller = serde_json::from_value::<identity_kit::jose::Jwk>(json!(public_key_jwk))
-                            .ok()
-                            .and_then(|jwk| match did_method {
-                                SupportedDidMethod::Jwk => DidJwk::did(&jwk).ok(),
-                                SupportedDidMethod::Key => DidKey::did(&jwk).ok(),
-                                _ => None,
-                            })
-                            .and_then(|did| did.as_str().parse().ok())
-                            .ok_or(GenerateDidError(key_id))?;
+                        let controller = match did_method {
+                            SupportedDidMethod::Jwk => DidJwk::did(&public_key_jwk).ok(),
+                            SupportedDidMethod::Key => DidKey::did(&public_key_jwk).ok(),
+                            _ => None,
+                        }
+                        .ok_or(GenerateDidError(key_id))?;
 
-                        CoreDocument::builder(Default::default())
-                            .id(controller)
-                            .build()
-                            .map_err(ProduceDocumentError)?
+                        DidDocument::new(controller)
                     }
                 };
 
@@ -293,16 +287,19 @@ impl Aggregate for Document {
                 public_key_jwks: _,
             } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
-                let did = document.id().clone();
+                let did = document.id.clone();
 
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
                 let subject = &services.subject;
 
                 // Remove all existing verification methods from the document.
-                let methods = document.methods(None).into_iter().cloned().collect::<Vec<_>>();
-                for method in methods {
-                    document.remove_method(method.id());
+                let method_ids = document
+                    .methods(None)
+                    .map(|method| method.id.clone())
+                    .collect::<Vec<_>>();
+                for method_id in method_ids {
+                    document.remove_verification_method(&method_id);
                 }
 
                 // Insert the new verification methods based on the signing algorithms.
@@ -323,48 +320,20 @@ impl Aggregate for Document {
                         .await
                         .map_err(|err| MissingKeyError(err.to_string()))?;
 
-                    let verification_method = VerificationMethod::new_from_jwk(
-                        did.clone(),
-                        public_key_jwk,
-                        (did_method == SupportedDidMethod::Key)
-                            .then_some(did.method_id())
-                            .or(did_method.fragment()),
-                    )
-                    .map_err(|err| VerificationMethodBuilderError(err.to_string()))?;
+                    let verification_method = verification_method(&did, did_method, &public_key_jwk)?;
 
                     subject
                         .insert_verification_method_id(
                             StorageKey::new(did_method, signing_algorithm),
-                            verification_method.id().clone(),
+                            verification_method.id.clone(),
                         )
                         .await
                         .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
-                    document
-                        .insert_method(verification_method.clone(), MethodScope::VerificationMethod) // TODO: adjust KID insertion elsewhere
-                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
-
                     // Attach all possible relationships to the verification method.
-                    document.attach_method_relationship(
-                        verification_method.id().clone(),
-                        MethodRelationship::Authentication,
-                    )?;
-                    document.attach_method_relationship(
-                        verification_method.id().clone(),
-                        MethodRelationship::AssertionMethod,
-                    )?;
-                    document.attach_method_relationship(
-                        verification_method.id().clone(),
-                        MethodRelationship::KeyAgreement,
-                    )?;
-                    document.attach_method_relationship(
-                        verification_method.id().clone(),
-                        MethodRelationship::CapabilityDelegation,
-                    )?;
-                    document.attach_method_relationship(
-                        verification_method.id().clone(),
-                        MethodRelationship::CapabilityInvocation,
-                    )?;
+                    document
+                        .insert_verification_method(verification_method, VerificationRelationship::ALL.iter().copied()) // TODO: adjust KID insertion elsewhere
+                        .map_err(|err| VerificationMethodInsertionError(err.to_string()))?;
 
                     events.push(PublicKeyUpdated {
                         document_id: self.document_id.clone(),
@@ -383,18 +352,15 @@ impl Aggregate for Document {
                         "Only did:web supports overwriting the deployment identity".into(),
                     ));
                 }
-                let document = self.document.clone().ok_or(MissingDocumentError)?;
-                let previous = document.id().clone();
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                let previous = document.id.clone();
                 if previous != previous_did {
                     return Err(InvalidDidError(format!(
                         "Overwrite authorization for {previous_did} does not match the current DID {previous}"
                     )));
                 }
                 let replacement = super::web::did_web(&public_url)?;
-                let remap = |did: CoreDID| -> Result<CoreDID, DocumentError> {
-                    Ok(if did == previous { replacement.clone() } else { did })
-                };
-                let document = document.try_map(remap, remap, remap, remap, ProduceDocumentError)?;
+                document.map_dids(|did| if did == previous { replacement.clone() } else { did });
                 Ok(vec![DocumentDidWebOverwritten {
                     document_id: self.document_id.clone(),
                     previous_did: previous,
@@ -411,17 +377,15 @@ impl Aggregate for Document {
             } => {
                 let document_id = self.document_id.clone();
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
-                let subject_did = document.id();
 
                 // Set the service ID.
-                format!("{subject_did}#{service_id}")
-                    .parse::<DIDUrl>()
-                    .ok()
-                    .and_then(|service_id| service.set_id(service_id).ok())
-                    .ok_or_else(|| InvalidDidError(service_id.to_string()))?;
+                service.id = document
+                    .id
+                    .join(&format!("#{service_id}"))
+                    .map_err(|_| InvalidDidError(service_id.to_string()))?;
 
                 // Overwrite the service if it already exists.
-                document.remove_service(service.id());
+                document.remove_service(&service.id);
                 document
                     .insert_service(*service)
                     .map_err(|err| AddServiceError(err.to_string()))?;
@@ -431,9 +395,8 @@ impl Aggregate for Document {
             RemoveService { service_id } => {
                 let mut document = self.document.clone().ok_or(MissingDocumentError)?;
                 let id = document
-                    .id()
-                    .to_url()
-                    .join(format!("#{service_id}"))
+                    .id
+                    .join(&format!("#{service_id}"))
                     .map_err(|err| InvalidDidError(err.to_string()))?;
                 if document.remove_service(&id).is_none() {
                     return Ok(());
@@ -444,7 +407,7 @@ impl Aggregate for Document {
                 }])
             }
             PublishDocument => {
-                let mut document: IotaDocument = self.document.clone().ok_or(MissingDocumentError)?.into();
+                let mut document = to_iota_document(self.document.as_ref().ok_or(MissingDocumentError)?)?;
 
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
 
@@ -514,10 +477,12 @@ impl Aggregate for Document {
                     let did = self
                         .document
                         .as_ref()
-                        .map(|document| IotaDocument::from(document.to_owned()).id().to_owned())
+                        .map(to_iota_document)
+                        .transpose()?
+                        .map(|document| document.id().to_owned())
                         .unwrap_or_else(|| IotaDID::placeholder(&network_name));
 
-                    let document = CoreDocument::from(IotaDocument::new_with_id(did));
+                    let document = from_iota_document(IotaDocument::new_with_id(did))?;
 
                     Ok(vec![DocumentDeleted {
                         document_id: self.document_id.clone(),
@@ -616,7 +581,7 @@ impl Aggregate for Document {
 
                     Ok(vec![DocumentPublished {
                         document_id: self.document_id.clone(),
-                        document: CoreDocument::from(document),
+                        document: from_iota_document(document)?,
                         iota_metadata: Some(iota_metadata),
                     }])
                 }
@@ -861,24 +826,51 @@ pub async fn get_iota_client(api_endpoint: &str) -> Result<IotaClient, DocumentE
     Ok(iota_client)
 }
 
+fn to_iota_document(document: &DidDocument) -> Result<IotaDocument, DocumentError> {
+    convert::<CoreDocument>(document)
+        .map(IotaDocument::from)
+        .map_err(|err| DocumentError::GenericError(err.to_string()))
+}
+
+fn from_iota_document(document: IotaDocument) -> Result<DidDocument, DocumentError> {
+    convert(&CoreDocument::from(document)).map_err(|err| DocumentError::GenericError(err.to_string()))
+}
+
+/// A `JsonWebKey2020` verification method for `public_key_jwk`. Its fragment is the method-specific identifier for
+/// `did:key`, the fragment `did_method` mandates, if any, or else the key's `kid`.
+fn verification_method(
+    did: &Did,
+    did_method: SupportedDidMethod,
+    public_key_jwk: &identity_kit::jose::Jwk,
+) -> Result<VerificationMethod, DocumentError> {
+    let fragment = (did_method == SupportedDidMethod::Key)
+        .then_some(did.method_specific_id())
+        .or(did_method.fragment())
+        .or(public_key_jwk.kid())
+        .ok_or_else(|| {
+            DocumentError::VerificationMethodBuilderError("an explicit fragment or JWK kid is required".into())
+        })?;
+    let id = did
+        .join(&format!("#{fragment}"))
+        .map_err(|err| DocumentError::VerificationMethodBuilderError(err.to_string()))?;
+
+    Ok(VerificationMethod::new(
+        id,
+        MethodType::JSON_WEB_KEY_2020,
+        did.clone(),
+        VerificationMaterial::jwk(public_key_jwk),
+    ))
+}
+
 // TODO: Can we remove this? It does not seem to be required: https://w3c-ccg.github.io/did-method-web/#key-material-and-document-handling
-pub fn get_properties(method_type: MethodType) -> BTreeMap<String, serde_json::Value> {
-    let mut properties = BTreeMap::new();
-    properties.insert(
-        "@context".to_string(),
-        match method_type.as_str() {
-            "Ed25519VerificationKey2018" => json!([
-                "https://www.w3.org/ns/did/v1",
-                "https://w3id.org/security/suites/ed25519-2018/v1"
-            ]),
-            "JsonWebKey2020" => json!([
-                "https://www.w3.org/ns/did/v1",
-                "https://w3id.org/security/suites/jws-2020/v1"
-            ]),
-            _ => unimplemented!("Unsupported method type"),
-        },
-    );
-    properties
+pub fn get_context(method_type: &MethodType) -> Context {
+    match method_type.as_str() {
+        "Ed25519VerificationKey2018" => {
+            Context::uris([Context::DID_V1, "https://w3id.org/security/suites/ed25519-2018/v1"])
+        }
+        "JsonWebKey2020" => Context::uris([Context::DID_V1, "https://w3id.org/security/suites/jws-2020/v1"]),
+        _ => unimplemented!("Unsupported method type"),
+    }
 }
 
 #[cfg(test)]
@@ -888,14 +880,14 @@ pub mod document_tests {
     use super::test_utils::*;
     use super::*;
     use cqrs_es::test::TestFramework;
-    use identity_document::service::Service;
+    use identity_kit::did::Service;
     use rstest::rstest;
 
     type DocumentTestFramework = TestFramework<Document>;
 
     #[rstest]
     #[serial_test::serial]
-    async fn test_create_document(document_id: String, did_method: SupportedDidMethod, document: CoreDocument) {
+    async fn test_create_document(document_id: String, did_method: SupportedDidMethod, document: DidDocument) {
         DocumentTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
             .when(DocumentCommand::CreateDocument {
@@ -954,7 +946,7 @@ pub mod document_tests {
         let [DocumentEvent::DocumentCreated { document, .. }] = events.as_slice() else {
             panic!("unexpected events: {events:?}");
         };
-        assert_eq!(document.id().as_str(), expected_did);
+        assert_eq!(document.id.as_str(), expected_did);
     }
 
     #[rstest]
@@ -962,9 +954,9 @@ pub mod document_tests {
     async fn test_set_public_key_jwks(
         document_id: String,
         did_method: SupportedDidMethod,
-        document: CoreDocument,
-        document_with_single_verification_method: CoreDocument,
-        document_with_multiple_verification_methods: CoreDocument,
+        document: DidDocument,
+        document_with_single_verification_method: DidDocument,
+        document_with_multiple_verification_methods: DidDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![DocumentEvent::DocumentCreated {
@@ -995,10 +987,10 @@ pub mod document_tests {
     async fn test_add_service(
         document_id: String,
         did_method: SupportedDidMethod,
-        document: CoreDocument,
+        document: DidDocument,
         linked_domains_service: Service,
-        document_with_multiple_verification_methods: CoreDocument,
-        document_with_linked_domains_service: CoreDocument,
+        document_with_multiple_verification_methods: DidDocument,
+        document_with_linked_domains_service: DidDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![
@@ -1030,9 +1022,9 @@ pub mod document_tests {
     async fn test_set_status(
         document_id: String,
         did_method: SupportedDidMethod,
-        document: CoreDocument,
-        document_with_multiple_verification_methods: CoreDocument,
-        document_with_linked_domains_service: CoreDocument,
+        document: DidDocument,
+        document_with_multiple_verification_methods: DidDocument,
+        document_with_linked_domains_service: DidDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![
@@ -1064,10 +1056,46 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    async fn did_web_documents_keep_their_context(document_id: String) {
+        let events = DocumentTestFramework::with(IdentityServices::default())
+            .given_no_previous_events()
+            .when(DocumentCommand::CreateDocument {
+                document_id,
+                did_method: SupportedDidMethod::Web,
+                with_fixed_algorithm: None,
+            })
+            .inspect_result()
+            .unwrap();
+
+        let [DocumentEvent::DocumentCreated { document, .. }] = events.as_slice() else {
+            panic!("unexpected events: {events:?}");
+        };
+        assert_eq!(
+            serde_json::to_value(document).unwrap()["@context"],
+            serde_json::json!([
+                "https://www.w3.org/ns/did/v1",
+                "https://w3id.org/security/suites/jws-2020/v1"
+            ])
+        );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    fn documents_round_trip_through_core_documents(document_with_linked_domains_service: DidDocument) {
+        let core_document: CoreDocument = convert(&document_with_linked_domains_service).unwrap();
+
+        assert_eq!(
+            convert::<DidDocument>(&core_document).unwrap(),
+            document_with_linked_domains_service
+        );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
     async fn overwrite_rejects_an_authorization_for_another_did(
         document_id: String,
         did_method: SupportedDidMethod,
-        document: CoreDocument,
+        document: DidDocument,
     ) {
         DocumentTestFramework::with(IdentityServices::default())
             .given(vec![DocumentEvent::DocumentCreated {
@@ -1091,17 +1119,13 @@ pub mod document_tests {
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
-    use super::get_properties;
+    use super::get_context;
     use crate::state::LINKED_DOMAINS_SERVICE_ID;
     use agent_shared::config::{config, SupportedDidMethod};
-    use identity_core::convert::FromJson;
-    use identity_did::CoreDID;
-    use identity_document::{
-        document::CoreDocument,
-        service::{Service, ServiceEndpoint},
+    use identity_kit::did::{
+        Did, DidDocument, MethodType, Service, VerificationMaterial, VerificationMethod, VerificationRelationship,
     };
-    use identity_iota::verification::{jwk::Jwk, MethodRelationship};
-    use identity_iota::verification::{MethodData, MethodScope, MethodType, VerificationMethod};
+    use identity_kit::jose::Jwk;
     use rstest::*;
     use serde_json::json;
 
@@ -1115,28 +1139,28 @@ pub mod test_utils {
         SupportedDidMethod::Web
     }
 
-    #[fixture]
-    pub fn document() -> CoreDocument {
-        let controller: CoreDID = "did:web:my-domain.example.org".parse().unwrap();
+    fn controller() -> Did {
+        "did:web:my-domain.example.org".parse().unwrap()
+    }
 
-        CoreDocument::builder(get_properties(MethodType::JSON_WEB_KEY_2020))
-            .id(controller.clone())
+    #[fixture]
+    pub fn document() -> DidDocument {
+        DidDocument::builder(controller())
+            .context(get_context(&MethodType::JSON_WEB_KEY_2020))
             .build()
             .unwrap()
     }
 
     #[fixture]
     pub fn es256_verification_method() -> VerificationMethod {
-        VerificationMethod::builder(Default::default())
-            .id(
-                "did:web:my-domain.example.org#oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg"
-                    .parse()
-                    .unwrap(),
-            )
-            .controller("did:web:my-domain.example.org".parse().unwrap())
-            .type_(MethodType::JSON_WEB_KEY_2020)
-            .data(MethodData::PublicKeyJwk(
-                Jwk::from_json_value(json!({
+        VerificationMethod::new(
+            "did:web:my-domain.example.org#oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg"
+                .parse()
+                .unwrap(),
+            MethodType::JSON_WEB_KEY_2020,
+            controller(),
+            VerificationMaterial::jwk(
+                &serde_json::from_value::<Jwk>(json!({
                     "kty": "EC",
                     "alg": "ES256",
                     "kid": "oOY2dMVU7GK5al1q7EAxuoYloxMQlv5ZNZOatiUXQHg",
@@ -1145,23 +1169,20 @@ pub mod test_utils {
                     "y": "fz2KvMhufzUpMeL9-K2re9fwA3mzg1bpfbceIQSuihY"
                 }))
                 .unwrap(),
-            ))
-            .build()
-            .unwrap()
+            ),
+        )
     }
 
     #[fixture]
     pub fn eddsa_verification_method() -> VerificationMethod {
-        VerificationMethod::builder(Default::default())
-            .id(
-                "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
-                    .parse()
-                    .unwrap(),
-            )
-            .controller("did:web:my-domain.example.org".parse().unwrap())
-            .type_(MethodType::JSON_WEB_KEY_2020)
-            .data(MethodData::PublicKeyJwk(
-                Jwk::from_json_value(json!({
+        VerificationMethod::new(
+            "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
+                .parse()
+                .unwrap(),
+            MethodType::JSON_WEB_KEY_2020,
+            controller(),
+            VerificationMaterial::jwk(
+                &serde_json::from_value::<Jwk>(json!({
                     "kty": "OKP",
                     "alg": "EdDSA",
                     "kid": "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0",
@@ -1169,9 +1190,8 @@ pub mod test_utils {
                     "x": "GlnK9ePs802XxAglROQzoGurm9Qpv0IFPEbdMCILN_U"
                 }))
                 .unwrap(),
-            ))
-            .build()
-            .unwrap()
+            ),
+        )
     }
 
     #[fixture]
@@ -1184,30 +1204,12 @@ pub mod test_utils {
 
     #[fixture]
     pub fn document_with_single_verification_method(
-        mut document: CoreDocument,
+        mut document: DidDocument,
         es256_verification_method: VerificationMethod,
-    ) -> CoreDocument {
-        let verification_method_id = es256_verification_method.id().clone();
-
-        document
-            .insert_method(es256_verification_method, MethodScope::VerificationMethod)
-            .unwrap();
-
+    ) -> DidDocument {
         // Attach all possible relationships to the verification method.
         document
-            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::Authentication)
-            .unwrap();
-        document
-            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::AssertionMethod)
-            .unwrap();
-        document
-            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::KeyAgreement)
-            .unwrap();
-        document
-            .attach_method_relationship(verification_method_id.clone(), MethodRelationship::CapabilityDelegation)
-            .unwrap();
-        document
-            .attach_method_relationship(verification_method_id, MethodRelationship::CapabilityInvocation)
+            .insert_verification_method(es256_verification_method, VerificationRelationship::ALL.iter().copied())
             .unwrap();
 
         document
@@ -1215,30 +1217,12 @@ pub mod test_utils {
 
     #[fixture]
     pub fn document_with_multiple_verification_methods(
-        mut document: CoreDocument,
+        mut document: DidDocument,
         both_verification_methods: Vec<VerificationMethod>,
-    ) -> CoreDocument {
+    ) -> DidDocument {
         for verification_method in both_verification_methods {
-            let verification_method_id = verification_method.id().clone();
-
             document
-                .insert_method(verification_method, MethodScope::VerificationMethod)
-                .unwrap();
-
-            document
-                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::Authentication)
-                .unwrap();
-            document
-                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::AssertionMethod)
-                .unwrap();
-            document
-                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::KeyAgreement)
-                .unwrap();
-            document
-                .attach_method_relationship(verification_method_id.clone(), MethodRelationship::CapabilityDelegation)
-                .unwrap();
-            document
-                .attach_method_relationship(verification_method_id, MethodRelationship::CapabilityInvocation)
+                .insert_verification_method(verification_method, VerificationRelationship::ALL.iter().copied())
                 .unwrap();
         }
 
@@ -1247,26 +1231,22 @@ pub mod test_utils {
 
     #[fixture]
     pub fn linked_domains_service() -> Service {
-        Service::builder(Default::default())
-            .id(format!("did:web:my-domain.example.org#{LINKED_DOMAINS_SERVICE_ID}")
-                .parse()
-                .unwrap())
-            .type_("LinkedDomains")
-            .service_endpoint(
-                ServiceEndpoint::from_json_value(json!({
-                    "origins": [config().public_url.origin().ascii_serialization()],
-                }))
-                .unwrap(),
-            )
-            .build()
-            .unwrap()
+        serde_json::from_value(json!({
+            "id": format!("did:web:my-domain.example.org#{LINKED_DOMAINS_SERVICE_ID}"),
+            "type": "LinkedDomains",
+            // An origin as UniCore writes it: a URL with an empty path.
+            "serviceEndpoint": {
+                "origins": [format!("{}/", config().public_url.origin().ascii_serialization())],
+            },
+        }))
+        .unwrap()
     }
 
     #[fixture]
     pub fn document_with_linked_domains_service(
-        mut document_with_multiple_verification_methods: CoreDocument,
+        mut document_with_multiple_verification_methods: DidDocument,
         linked_domains_service: Service,
-    ) -> CoreDocument {
+    ) -> DidDocument {
         document_with_multiple_verification_methods
             .insert_service(linked_domains_service)
             .unwrap();

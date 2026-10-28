@@ -1,8 +1,7 @@
 use super::aggregate::Status;
 use agent_shared::config::SupportedDidMethod;
-use identity_did::CoreDID;
-use identity_document::service::Service as DocumentService;
-use identity_iota::verification::jwk::Jwk;
+use identity_kit::did::{Did, Service as DocumentService};
+use identity_kit::jose::Jwk;
 use jsonwebtoken::Algorithm;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
@@ -16,7 +15,7 @@ pub enum DocumentCommand {
         with_fixed_algorithm: Option<Algorithm>,
     },
     OverwritePreviousDidWeb {
-        previous_did: CoreDID,
+        previous_did: Did,
         public_url: url::Url,
     },
     UpdateDocumentStatus {

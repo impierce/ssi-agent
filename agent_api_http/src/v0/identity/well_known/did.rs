@@ -1,7 +1,4 @@
-use agent_identity::{
-    document::{aggregate::Status, openapi::DidDocument},
-    state::IdentityState,
-};
+use agent_identity::{document::aggregate::Status, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
 use axum::{
     extract::State,
@@ -25,7 +22,7 @@ use crate::v0::openapi::PROTOCOL_TAG;
     operation_id = "well_known_did_json",
     tags = ["DID", PROTOCOL_TAG],
     responses(
-        (status = 200, description = "DID document", body = DidDocument),
+        (status = 200, description = "DID document", body = identity_kit::did::DidDocument),
         (status = 404, description = "No enabled `did:web` DID document exists"),
     )
 )]

@@ -6,7 +6,6 @@ use crate::extractors::RequestActor;
 use crate::handlers::caller;
 use crate::v0::identity::well_known::did_configuration::DomainLinkageConfigurationSchema;
 use agent_identity::{
-    document::openapi::DidService,
     queries,
     service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
     state::IdentityState,
@@ -27,7 +26,7 @@ use url::Url;
 struct ServiceResponse {
     #[serde(rename = "id")]
     service_id: String,
-    #[schema(value_type = Option<DidService>)]
+    #[schema(value_type = Option<identity_kit::did::Service>)]
     service: Option<DocumentService>,
     presentations: Vec<LinkedVerifiablePresentation>,
     #[schema(value_type = Option<ServiceResourceSchema>)]
@@ -1079,7 +1078,7 @@ mod tests {
             .await;
         let documents: Vec<Document> =
             serde_json::from_slice(&fixture.request("GET", "/unicore/v0/documents", None).await.1).unwrap();
-        assert!(documents[0].document.as_ref().unwrap().service().is_empty());
+        assert!(documents[0].document.as_ref().unwrap().service.is_empty());
         fixture.link_own_origin(400).await;
     }
 
