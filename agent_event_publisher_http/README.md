@@ -54,6 +54,7 @@ Content-Type: application/cloudevents+json
 }
 ```
 
+<!-- TODO: Autogenerate this section from the IntegrationEvent definitions. -->
 ### Available integration events
 
 | Event Type | Source | Subject | Description |

@@ -35,13 +35,13 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
         let data = serde_json::to_value(&self)?;
         let subject = self.subject();
         let event_type = self.event_type();
-        let mut ce = CloudEvent::new(event_type, source)
+        let mut cloud_event = CloudEvent::new(event_type, source)
             .with_data(data)
             .with_caller(caller_id, caller_type);
         if let Some(s) = subject {
-            ce = ce.with_subject(s);
+            cloud_event = cloud_event.with_subject(s);
         }
-        Ok(ce)
+        Ok(cloud_event)
     }
 
     /// Projects this integration event into a CNCF [`CloudEvent`] v1.0 preserving the originating
@@ -61,14 +61,14 @@ pub trait IntegrationEvent: Serialize + Send + Sync + 'static {
     {
         let caller_id = envelope.metadata.get("callerid").filter(|s| !s.is_empty()).cloned();
         let caller_type = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
-        let mut ce = self.into_cloud_event(source, caller_id, caller_type)?;
-        ce.id = format!("{}:{}:{}", A::TYPE, envelope.aggregate_id, envelope.sequence);
-        ce.time = envelope
+        let mut cloud_event = self.into_cloud_event(source, caller_id, caller_type)?;
+        cloud_event.id = format!("{}:{}:{}", A::TYPE, envelope.aggregate_id, envelope.sequence);
+        cloud_event.time = envelope
             .metadata
             .get("timestamp")
             .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
             .map(|datetime| datetime.with_timezone(&chrono::Utc));
-        Ok(ce)
+        Ok(cloud_event)
     }
 }
 

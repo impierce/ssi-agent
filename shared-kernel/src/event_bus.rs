@@ -649,12 +649,12 @@ mod tests {
         payload: serde_json::Value,
         occurred_at: Option<DateTime<Utc>>,
     ) -> CloudEvent {
-        let mut ce = CloudEvent::new(event_type, format!("/services/{aggregate_type}"))
+        let mut cloud_event = CloudEvent::new(event_type, format!("/services/{aggregate_type}"))
             .with_id(format!("{aggregate_type}:{aggregate_id}:{sequence}"))
             .with_subject(aggregate_id)
             .with_data(payload);
-        ce.time = occurred_at.or_else(|| Some(Utc::now()));
-        ce
+        cloud_event.time = occurred_at.or_else(|| Some(Utc::now()));
+        cloud_event
     }
 
     #[test]
