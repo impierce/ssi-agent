@@ -27,6 +27,8 @@ pub struct KmsState {
     pub command: CommandHandlers,
     pub query: Queries,
     pub adapters: Arc<KeyProviderAdapters>,
+    /// Whether development-only providers, such as the in-memory provider, may be used.
+    pub development_providers_allowed: bool,
 }
 
 #[derive(Clone)]
@@ -63,16 +65,20 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
         },
         query: Queries { key_providers },
         adapters: Arc::new(adapters),
+        development_providers_allowed,
     }
 }
 
 /// Returns every key provider this instance is connected to, by type, in the order they were added.
 ///
+/// A development-only provider added while running with the `development` profile is left out when running with
+/// another profile on the same event store.
+///
 /// # Errors
 ///
 /// Fails when the caller isn't authorized or the providers can't be loaded.
 pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyProvidersView, QueryHandlerError> {
-    Ok(query_handler(
+    let mut view = query_handler(
         state.authorization_checker.clone(),
         caller,
         KeyProviders::ID,
@@ -80,7 +86,12 @@ pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyPr
         &state.query.key_providers,
     )
     .await?
-    .unwrap_or_default())
+    .unwrap_or_default();
+    if !state.development_providers_allowed {
+        view.providers
+            .retain(|provider_type, _| !provider_type.is_development_only());
+    }
+    Ok(view)
 }
 
 #[derive(Debug, Error)]
@@ -197,6 +208,17 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn leaves_out_a_development_provider_outside_the_development_profile() {
+        let mut state = state().await;
+        add(&state, KeyProviderType::InMemory).await;
+        state.development_providers_allowed = false;
+
+        let providers = get_key_providers(&state, Caller::Internal).await.unwrap();
+
+        assert!(providers.providers.is_empty());
     }
 
     #[tokio::test]
