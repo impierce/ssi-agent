@@ -61,7 +61,7 @@ command/authorization tracking. That is a separate, legitimate namespace unrelat
 
 - Sort dependencies alphabetically by name, with the following exceptions:
   - Internal dependencies (using `path = "..."`) should be listed before external dependencies, followed by a blank line.
-  - Every dependency from `https://github.com/impierce` should be listed before other dependencies, separated by a blank line.
+  - Every impierce crate (from a repository under `https://github.com/impierce`, whether it is pulled from GitHub or crates.io) should be listed before other dependencies, separated by a blank line.
 
 ### Commands
 
