@@ -48,6 +48,7 @@ identity-kit = { version = "0.3", default-features = false, features = [
     "did-web",
     "reqwest",
     "sd-jwt",
+    "utoipa",
 ] }
 
 shared-kernel = { path = "shared-kernel" }

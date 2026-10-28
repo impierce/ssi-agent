@@ -428,7 +428,7 @@ pub async fn initialize_documents(
             document
                 .document
                 .as_ref()
-                .map(|persisted| (document.document_id.clone(), persisted.id().clone()))
+                .map(|persisted| (document.document_id.clone(), persisted.id.clone()))
         })
         .collect();
     let mut did_web_overwritten = false;
@@ -454,7 +454,7 @@ pub async fn initialize_documents(
                      set `overwrite_previous_did_web` to the persisted DID"
                 )
             })?;
-            let authorized_did = previous_did.parse::<identity_did::CoreDID>().map_err(|error| {
+            let authorized_did = previous_did.parse::<identity_kit::did::Did>().map_err(|error| {
                 anyhow::anyhow!("Invalid `overwrite_previous_did_web` value '{previous_did}': {error}")
             })?;
             if drifted_documents
@@ -582,15 +582,15 @@ pub async fn initialize_documents(
         .await?
         .values()
     {
-        if let (Some(did_method), Some(core_document)) = (document.did_method, &document.document) {
-            for method in core_document.methods(None) {
-                if let Some(algorithm) = method.data().public_key_jwk().and_then(|jwk| jwk.alg()) {
+        if let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) {
+            for method in did_document.methods(None) {
+                if let Some(algorithm) = method.public_key_jwk().and_then(|jwk| jwk.alg()) {
                     state
                         .services
                         .subject
                         .insert_verification_method_id(
                             agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
-                            method.id().clone(),
+                            method.id.clone(),
                         )
                         .await?;
                 }

@@ -25,7 +25,7 @@ use tokio::sync::Mutex;
 #[derive(Debug)]
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
-    pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
+    pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
     /// Resolves the DID methods `key_resolver` doesn't.
@@ -70,23 +70,20 @@ impl Subject {
         }
     }
 
-    pub async fn get_public_key(
-        &self,
-        key_id: KeyId,
-        algorithm: &Algorithm,
-    ) -> anyhow::Result<identity_iota::verification::jwk::Jwk> {
-        match algorithm {
+    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
+        let public_key_jwk = match algorithm {
             Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
             Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
             _ => anyhow::bail!("Unsupported algorithm"),
-        }
-        .map_err(Into::into)
+        }?;
+
+        Ok(serde_json::from_value(serde_json::to_value(public_key_jwk)?)?)
     }
 
     pub async fn insert_verification_method_id(
         &self,
         key: StorageKey,
-        verification_method_id: DIDUrl,
+        verification_method_id: DidUrl,
     ) -> anyhow::Result<()> {
         self.verification_method_ids
             .lock()
@@ -95,7 +92,7 @@ impl Subject {
         Ok(())
     }
 
-    pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
+    pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DidUrl> {
         self.verification_method_ids.lock().await.get(&key).cloned()
     }
 
@@ -267,7 +264,7 @@ impl oid4vc_core::Subject for Subject {
         self.get_verification_method_id(StorageKey::new(method, algorithm))
             .await
             .as_ref()
-            .map(DIDUrl::did)
+            .map(DidUrl::did)
             .map(ToString::to_string)
             .ok_or_else(|| anyhow!("Failed to get verification method ID"))
     }

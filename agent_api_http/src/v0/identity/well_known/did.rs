@@ -1,7 +1,4 @@
-use agent_identity::{
-    document::{aggregate::Status, openapi::DidDocument},
-    state::IdentityState,
-};
+use agent_identity::{document::aggregate::Status, state::IdentityState};
 use agent_shared::config::SupportedDidMethod;
 use axum::{
     extract::State,
@@ -10,6 +7,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use identity_kit::did::DidDocument;
 use std::sync::Arc;
 
 use crate::handlers::public_query_handler;

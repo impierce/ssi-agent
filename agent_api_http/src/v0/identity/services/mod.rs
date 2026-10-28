@@ -6,7 +6,6 @@ use crate::extractors::RequestActor;
 use crate::handlers::caller;
 use crate::v0::identity::well_known::did_configuration::DomainLinkageConfigurationSchema;
 use agent_identity::{
-    document::openapi::DidService,
     queries,
     service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
     state::IdentityState,
@@ -19,6 +18,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use identity_document::service::Service as DocumentService;
+use identity_kit::did::Service as DidService;
 use serde::Serialize;
 use std::sync::Arc;
 use url::Url;
@@ -1079,7 +1079,7 @@ mod tests {
             .await;
         let documents: Vec<Document> =
             serde_json::from_slice(&fixture.request("GET", "/unicore/v0/documents", None).await.1).unwrap();
-        assert!(documents[0].document.as_ref().unwrap().service().is_empty());
+        assert!(documents[0].document.as_ref().unwrap().service.is_empty());
         fixture.link_own_origin(400).await;
     }
 
