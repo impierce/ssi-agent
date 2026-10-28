@@ -18,6 +18,29 @@ pub struct ProviderKey {
     /// The provider's full resource name for the key, where it has one (an ARN for AWS KMS).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_name: Option<String>,
+    /// Whether the provider currently allows the key to be used.
+    pub state: ProviderKeyState,
+}
+
+/// The keys in a provider that this instance may use.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct ProviderKeys {
+    pub keys: Vec<ProviderKey>,
+    /// How many more keys exist in the provider that this instance's credentials may not use. When this is above
+    /// zero and `keys` is empty, the credentials may lack a permission rather than the provider being empty.
+    pub hidden_keys: usize,
+}
+
+/// Whether a key can be used, as reported by its provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderKeyState {
+    Enabled,
+    Disabled,
+    /// Scheduled for deletion; the provider still holds it until the waiting period ends.
+    PendingDeletion,
+    /// Any other state in which the key can't be used, such as still being created or imported.
+    Unavailable,
 }
 
 /// A connection to an external key provider. Key operations will be added later.
@@ -27,7 +50,7 @@ pub trait KeyProviderAdapter: Send + Sync {
     async fn test_connection(&self) -> Result<(), ConnectionError>;
 
     /// Lists the keys that exist in the provider and that the configured credentials can see.
-    async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError>;
+    async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError>;
 }
 
 /// The adapter for each provider type this instance can use.
@@ -42,7 +65,7 @@ impl KeyProviderAdapter for InMemoryKeyProvider {
         Ok(())
     }
 
-    async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError> {
-        Ok(Vec::new())
+    async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
+        Ok(ProviderKeys::default())
     }
 }

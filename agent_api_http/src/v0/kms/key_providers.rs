@@ -1,7 +1,7 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use crate::extractors::RequestActor;
 use crate::handlers::{caller, command_handler};
-use agent_kms::adapter::ProviderKey;
+use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
     command::KeyProviderCommand,
@@ -201,7 +201,7 @@ pub(crate) async fn test_key_provider_connection(
     tags = ["Key Management"],
     params(("provider_type" = KeyProviderType, Path, description = "The type of the added key provider")),
     responses(
-        (status = 200, description = "The keys in the provider", body = [ProviderKey]),
+        (status = 200, description = "The keys this instance may use, and how many more it may not", body = ProviderKeys),
         (status = 404, description = "No provider of this type has been added"),
         (status = 502, description = "The provider could not be reached"),
     )

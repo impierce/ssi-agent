@@ -1,4 +1,4 @@
-use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKey};
+use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
 use crate::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
     command::{ListKeyProviderKeys, TestKeyProviderConnection},
@@ -138,7 +138,7 @@ pub async fn list_key_provider_keys(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Result<Vec<ProviderKey>, ConnectionError>, TestConnectionError> {
+) -> Result<Result<ProviderKeys, ConnectionError>, TestConnectionError> {
     let adapter = added_provider_adapter(state, caller, provider_type, &ListKeyProviderKeys).await?;
     Ok(adapter.list_keys().await)
 }
@@ -184,7 +184,7 @@ mod tests {
             Err(ConnectionError("connection refused".to_string()))
         }
 
-        async fn list_keys(&self) -> Result<Vec<crate::adapter::ProviderKey>, ConnectionError> {
+        async fn list_keys(&self) -> Result<crate::adapter::ProviderKeys, ConnectionError> {
             Err(ConnectionError("connection refused".to_string()))
         }
     }

@@ -7444,8 +7444,10 @@ dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-kms",
+ "futures",
  "serde_json",
  "tokio",
+ "tracing",
  "wiremock",
 ]
 

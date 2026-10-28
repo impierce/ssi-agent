@@ -3,22 +3,27 @@
 //! Credentials and region are resolved through the standard AWS chain: environment variables, shared config files,
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
-use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey};
+use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys};
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
 use aws_sdk_kms::{
     config::{retry::RetryConfig, Builder as KmsConfigBuilder},
     error::{ProvideErrorMetadata, SdkError},
+    types::KeyState,
     Client,
 };
+use futures::{stream, StreamExt as _, TryStreamExt as _};
 use std::time::Duration;
 use tokio::sync::OnceCell;
+use tracing::debug;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
 /// Upper bound for one whole request, including resolving the ambient AWS configuration and credentials on first
 /// use, which the SDK's own timeouts don't cover.
 const REQUEST_DEADLINE: Duration = Duration::from_secs(30);
+/// How many keys are described at the same time when listing keys.
+const DESCRIBE_CONCURRENCY: usize = 8;
 
 pub struct AwsKmsAmbientKeyProvider {
     client: OnceCell<Client>,
@@ -111,32 +116,91 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
         .await
     }
 
-    /// Lists every key the credentials can see, following AWS's pagination.
-    async fn list_keys(&self) -> Result<Vec<ProviderKey>, ConnectionError> {
+    /// Lists the keys these credentials may use.
+    ///
+    /// `kms:ListKeys` can't be limited in IAM and returns every key in the AWS account, including other tenants'
+    /// keys when an account is shared. Each key is therefore described as well, and keys whose `kms:DescribeKey` is
+    /// denied are left out and counted, so the IAM policy of the deployment decides which keys it sees. Keys
+    /// deleted in the meantime are left out without being counted. Any other failure fails the whole listing rather
+    /// than hiding keys.
+    async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
         self.within_deadline(async {
             let client = self.client().await;
-            let mut keys = Vec::new();
-            let mut marker = None;
-            loop {
-                let page = client
-                    .list_keys()
-                    .set_marker(marker)
-                    .send()
-                    .await
-                    .map_err(|error| ConnectionError(describe(&error)))?;
-                keys.extend(page.keys().iter().filter_map(|key| {
-                    Some(ProviderKey {
-                        id: key.key_id()?.to_string(),
-                        resource_name: key.key_arn().map(str::to_string),
-                    })
-                }));
-                match page.next_marker() {
-                    Some(next) if page.truncated() => marker = Some(next.to_string()),
-                    _ => return Ok(keys),
+            let ids = list_key_ids(client).await?;
+            let listed = ids.len();
+
+            let described: Vec<Described> = stream::iter(ids)
+                .map(|id| describe_key(client, id))
+                .buffered(DESCRIBE_CONCURRENCY)
+                .try_collect()
+                .await?;
+
+            let mut listing = ProviderKeys::default();
+            for key in described {
+                match key {
+                    Described::Visible(key) => listing.keys.push(key),
+                    Described::Hidden => listing.hidden_keys += 1,
+                    Described::Gone => {}
                 }
             }
+
+            debug!(
+                listed,
+                visible = listing.keys.len(),
+                hidden = listing.hidden_keys,
+                "Listed AWS KMS keys"
+            );
+            Ok(listing)
         })
         .await
+    }
+}
+
+/// Lists the IDs of every key in the account, following AWS's pagination.
+async fn list_key_ids(client: &Client) -> Result<Vec<String>, ConnectionError> {
+    let mut ids = Vec::new();
+    let mut marker = None;
+    loop {
+        let page = client
+            .list_keys()
+            .set_marker(marker)
+            .send()
+            .await
+            .map_err(|error| ConnectionError(describe(&error)))?;
+        ids.extend(page.keys().iter().filter_map(|key| key.key_id().map(str::to_string)));
+        match page.next_marker() {
+            Some(next) if page.truncated() => marker = Some(next.to_string()),
+            _ => return Ok(ids),
+        }
+    }
+}
+
+/// What describing one listed key showed.
+enum Described {
+    Visible(ProviderKey),
+    /// These credentials may not describe the key.
+    Hidden,
+    /// The key was deleted after it was listed.
+    Gone,
+}
+
+async fn describe_key(client: &Client, id: String) -> Result<Described, ConnectionError> {
+    match client.describe_key().key_id(&id).send().await {
+        Ok(output) => Ok(output.key_metadata().map_or(Described::Gone, |metadata| {
+            Described::Visible(ProviderKey {
+                id: metadata.key_id().to_string(),
+                resource_name: metadata.arn().map(str::to_string),
+                state: match metadata.key_state() {
+                    Some(KeyState::Enabled) => ProviderKeyState::Enabled,
+                    Some(KeyState::Disabled) => ProviderKeyState::Disabled,
+                    Some(KeyState::PendingDeletion) => ProviderKeyState::PendingDeletion,
+                    _ => ProviderKeyState::Unavailable,
+                },
+            })
+        })),
+        Err(error) if error.code() == Some("AccessDeniedException") => Ok(Described::Hidden),
+        Err(error) if error.code() == Some("NotFoundException") => Ok(Described::Gone),
+        Err(error) => Err(ConnectionError(describe(&error))),
     }
 }
 
@@ -186,6 +250,38 @@ mod tests {
         Mock::given(method("POST")).and(header("x-amz-target", "TrentService.ListKeys"))
     }
 
+    fn describe_key(id: &str) -> MockBuilder {
+        Mock::given(method("POST"))
+            .and(header("x-amz-target", "TrentService.DescribeKey"))
+            .and(body_partial_json(json!({ "KeyId": id })))
+    }
+
+    fn arn(id: &str) -> String {
+        format!("arn:aws:kms:eu-central-1:123456789012:key/{id}")
+    }
+
+    fn described(id: &str, state: &str) -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_json(json!({
+            "KeyMetadata": { "KeyId": id, "Arn": arn(id), "KeyState": state }
+        }))
+    }
+
+    fn aws_error(code: &str) -> ResponseTemplate {
+        ResponseTemplate::new(400)
+            .insert_header("x-amzn-ErrorType", code)
+            .set_body_json(json!({ "__type": code, "message": format!("{code} for this key") }))
+    }
+
+    async fn account_with_keys(ids: &[&str]) -> MockServer {
+        let server = MockServer::start().await;
+        let keys: Vec<_> = ids.iter().map(|id| json!({ "KeyId": id, "KeyArn": arn(id) })).collect();
+        list_keys()
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "Keys": keys, "Truncated": false })))
+            .mount(&server)
+            .await;
+        server
+    }
+
     #[tokio::test]
     async fn is_reachable_when_keys_can_be_listed() {
         let server = MockServer::start().await;
@@ -228,29 +324,120 @@ mod tests {
         list_keys()
             .and(body_partial_json(json!({ "Marker": "page-2" })))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "Keys": [{ "KeyId": "key-2", "KeyArn": "arn:aws:kms:eu-central-1:123456789012:key/key-2" }],
+                "Keys": [{ "KeyId": "key-2", "KeyArn": arn("key-2") }],
                 "Truncated": false
             })))
             .mount(&server)
             .await;
         list_keys()
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "Keys": [{ "KeyId": "key-1", "KeyArn": "arn:aws:kms:eu-central-1:123456789012:key/key-1" }],
+                "Keys": [{ "KeyId": "key-1", "KeyArn": arn("key-1") }],
                 "Truncated": true,
                 "NextMarker": "page-2"
             })))
             .mount(&server)
             .await;
+        for id in ["key-1", "key-2"] {
+            describe_key(id)
+                .respond_with(described(id, "Enabled"))
+                .mount(&server)
+                .await;
+        }
 
         let ids: Vec<_> = provider(&server.uri())
             .list_keys()
             .await
             .unwrap()
+            .keys
             .into_iter()
             .map(|key| key.id)
             .collect();
 
         assert_eq!(ids, ["key-1", "key-2"]);
+    }
+
+    #[tokio::test]
+    async fn leaves_out_keys_these_credentials_may_not_describe() {
+        let server = account_with_keys(&["mine", "other-tenant", "deleted"]).await;
+        describe_key("mine")
+            .respond_with(described("mine", "Enabled"))
+            .mount(&server)
+            .await;
+        describe_key("other-tenant")
+            .respond_with(aws_error("AccessDeniedException"))
+            .mount(&server)
+            .await;
+        describe_key("deleted")
+            .respond_with(aws_error("NotFoundException"))
+            .mount(&server)
+            .await;
+
+        let listing = provider(&server.uri()).list_keys().await.unwrap();
+
+        assert_eq!(
+            listing,
+            ProviderKeys {
+                keys: vec![ProviderKey {
+                    id: "mine".to_string(),
+                    resource_name: Some(arn("mine")),
+                    state: ProviderKeyState::Enabled,
+                }],
+                hidden_keys: 1,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn fails_the_listing_instead_of_hiding_a_key_on_other_errors() {
+        let server = account_with_keys(&["mine", "broken"]).await;
+        describe_key("mine")
+            .respond_with(described("mine", "Enabled"))
+            .mount(&server)
+            .await;
+        describe_key("broken")
+            .respond_with(aws_error("InvalidArnException"))
+            .mount(&server)
+            .await;
+
+        let error = provider(&server.uri()).list_keys().await.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "InvalidArnException: InvalidArnException for this key"
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_whether_each_key_can_be_used() {
+        let states = [
+            ("enabled", "Enabled", ProviderKeyState::Enabled),
+            ("disabled", "Disabled", ProviderKeyState::Disabled),
+            ("deleting", "PendingDeletion", ProviderKeyState::PendingDeletion),
+            ("creating", "Creating", ProviderKeyState::Unavailable),
+        ];
+        let ids: Vec<_> = states.iter().map(|(id, _, _)| *id).collect();
+        let server = account_with_keys(&ids).await;
+        for (id, aws_state, _) in states {
+            describe_key(id)
+                .respond_with(described(id, aws_state))
+                .mount(&server)
+                .await;
+        }
+
+        let reported: Vec<_> = provider(&server.uri())
+            .list_keys()
+            .await
+            .unwrap()
+            .keys
+            .into_iter()
+            .map(|key| (key.id, key.state))
+            .collect();
+
+        let expected: Vec<_> = states
+            .iter()
+            .map(|(id, _, state)| ((*id).to_string(), *state))
+            .collect();
+        assert_eq!(reported, expected);
     }
 
     #[tokio::test]

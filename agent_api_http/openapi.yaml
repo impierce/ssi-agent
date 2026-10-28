@@ -1045,13 +1045,11 @@ paths:
           $ref: '#/components/schemas/KeyProviderType'
       responses:
         '200':
-          description: The keys in the provider
+          description: The keys this instance may use, and how many more it may not
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProviderKey'
+                $ref: '#/components/schemas/ProviderKeys'
         '404':
           description: No provider of this type has been added
         '502':
@@ -3605,6 +3603,7 @@ components:
       description: A key that exists in a key provider, as reported by the provider.
       required:
       - id
+      - state
       properties:
         id:
           type: string
@@ -3614,6 +3613,34 @@ components:
           - string
           - 'null'
           description: The provider's full resource name for the key, where it has one (an ARN for AWS KMS).
+        state:
+          $ref: '#/components/schemas/ProviderKeyState'
+          description: Whether the provider currently allows the key to be used.
+    ProviderKeyState:
+      type: string
+      description: Whether a key can be used, as reported by its provider.
+      enum:
+      - enabled
+      - disabled
+      - pending_deletion
+      - unavailable
+    ProviderKeys:
+      type: object
+      description: The keys in a provider that this instance may use.
+      required:
+      - keys
+      - hidden_keys
+      properties:
+        hidden_keys:
+          type: integer
+          description: |-
+            How many more keys exist in the provider that this instance's credentials may not use. When this is above
+            zero and `keys` is empty, the credentials may lack a permission rather than the provider being empty.
+          minimum: 0
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderKey'
     PublicOfferStatusDto:
       type: object
       required:

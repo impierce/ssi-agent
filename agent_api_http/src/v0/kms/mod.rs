@@ -54,7 +54,7 @@ mod tests {
             Err(ConnectionError("no credentials".to_string()))
         }
 
-        async fn list_keys(&self) -> Result<Vec<agent_kms::adapter::ProviderKey>, ConnectionError> {
+        async fn list_keys(&self) -> Result<agent_kms::adapter::ProviderKeys, ConnectionError> {
             Err(ConnectionError("no credentials".to_string()))
         }
     }
@@ -210,7 +210,10 @@ mod tests {
         }
 
         let (status, body) = send(&app, "GET", "/v0/get-key-provider-keys/in_memory", None).await;
-        assert_eq!((status, body), (StatusCode::OK, json!([])));
+        assert_eq!(
+            (status, body),
+            (StatusCode::OK, json!({ "keys": [], "hidden_keys": 0 }))
+        );
 
         let (status, body) = send(&app, "GET", "/v0/get-key-provider-keys/aws_kms_ambient", None).await;
         assert_eq!(status, StatusCode::BAD_GATEWAY);
