@@ -5,8 +5,11 @@ use identity_core::common::Url;
 use identity_kit::{did::Did, vc::Credential};
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::sync::Arc;
 use tracing::{debug, info};
+use utoipa::openapi::{RefOr, Schema};
+use utoipa::{PartialSchema, ToSchema};
 
 use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
 
@@ -56,14 +59,33 @@ pub struct LinkedCredentialValidation {
     /// The credential. Decoded from the JWT *without* verifying its signature when
     /// `result.valid` is `false`, and `None` when it could not be decoded at all.
     #[serde(skip_serializing_if = "Option::is_none")]
-    // Inlined, because the issuance aggregate's `Credential` already takes the component name.
-    #[schema(schema_with = <Credential as utoipa::PartialSchema>::schema)]
+    #[schema(value_type = Option<W3cCredential>)]
     pub credential: Option<Credential>,
     /// The raw credential JWT exactly as it appeared in the presentation.
     pub jwt: String,
     /// Cryptographic and semantic validity against the credential's declared issuer DID. A valid
     /// result does not establish that the issuer is trusted or associated with a known domain.
     pub result: ValidationResult,
+}
+
+/// The schema of IdentityKit's [`Credential`], renamed because the issuance aggregate's `Credential`
+/// already takes its component name.
+struct W3cCredential;
+
+impl PartialSchema for W3cCredential {
+    fn schema() -> RefOr<Schema> {
+        Credential::schema()
+    }
+}
+
+impl ToSchema for W3cCredential {
+    fn name() -> Cow<'static, str> {
+        Cow::Borrowed("W3cCredential")
+    }
+
+    fn schemas(schemas: &mut Vec<(String, RefOr<Schema>)>) {
+        Credential::schemas(schemas)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]

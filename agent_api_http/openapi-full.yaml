@@ -4354,293 +4354,12 @@ components:
       - result
       properties:
         credential:
-          type: object
-          description: A verifiable credential of the VC Data Model 1.1 (§4), as the `vc` claim of a JWT carries it once `iss`, `jti`, `nbf`, `exp` and `sub` are mapped back.
-          required:
-          - '@context'
-          - type
-          - issuer
-          - issuanceDate
-          - credentialSubject
-          properties:
-            '@context':
-              oneOf:
-              - type: string
-                description: The base context alone.
-                enum:
-                - https://www.w3.org/2018/credentials/v1
-              - type: array
-                items: {}
-                prefixItems:
-                - type: string
-                  description: The base context.
-                  enum:
-                  - https://www.w3.org/2018/credentials/v1
-                description: The base context first, then further contexts.
-                minItems: 1
-              description: The JSON-LD context, carried as data (VCDM 1.1 §4.1); it begins with `https://www.w3.org/2018/credentials/v1`.
-            credentialSchema:
-              oneOf:
-              - type: object
-                description: A data schema.
-                required:
-                - type
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                    description: The identifier.
-                  type:
-                    oneOf:
-                    - type: string
-                      description: A type.
-                    - type: array
-                      items:
-                        type: string
-                        description: A type.
-                      minItems: 1
-                    description: The types.
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  description: A data schema.
-                  required:
-                  - type
-                  properties:
-                    id:
-                      type: string
-                      format: uri
-                      description: The identifier.
-                    type:
-                      oneOf:
-                      - type: string
-                        description: A type.
-                      - type: array
-                        items:
-                          type: string
-                          description: A type.
-                        minItems: 1
-                      description: The types.
-                  additionalProperties: true
-              description: Data schemas (VCDM 1.1 §5.4).
-            credentialStatus:
-              type: object
-              description: Where to learn whether the credential is revoked or suspended (VCDM 1.1 §4.9).
-              required:
-              - type
-              properties:
-                id:
-                  type: string
-                  format: uri
-                  description: The identifier.
-                type:
-                  oneOf:
-                  - type: string
-                    description: A type.
-                  - type: array
-                    items:
-                      type: string
-                      description: A type.
-                    minItems: 1
-                  description: The types.
-              additionalProperties: true
-            credentialSubject:
-              oneOf:
-              - type: object
-                description: A subject and the claims about it.
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                    description: The identifier of the subject.
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  description: A subject and the claims about it.
-                  properties:
-                    id:
-                      type: string
-                      format: uri
-                      description: The identifier of the subject.
-                  additionalProperties: true
-                minItems: 1
-              description: The subjects and the claims about them (VCDM 1.1 §4.4).
-            evidence:
-              oneOf:
-              - type: object
-                description: Evidence.
-                required:
-                - type
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                    description: The identifier.
-                  type:
-                    oneOf:
-                    - type: string
-                      description: A type.
-                    - type: array
-                      items:
-                        type: string
-                        description: A type.
-                      minItems: 1
-                    description: The types.
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  description: Evidence.
-                  required:
-                  - type
-                  properties:
-                    id:
-                      type: string
-                      format: uri
-                      description: The identifier.
-                    type:
-                      oneOf:
-                      - type: string
-                        description: A type.
-                      - type: array
-                        items:
-                          type: string
-                          description: A type.
-                        minItems: 1
-                      description: The types.
-                  additionalProperties: true
-              description: Evidence (VCDM 1.1 §5.8).
-            expirationDate:
-              type: string
-              format: date-time
-              description: When the credential ceases to be valid (VCDM 1.1 §4.8).
-            id:
-              type: string
-              format: uri
-              description: The identifier of the credential (VCDM 1.1 §4.2).
-            issuanceDate:
-              type: string
-              format: date-time
-              description: When the credential becomes valid (VCDM 1.1 §4.6).
-            issuer:
-              oneOf:
-              - type: string
-                format: uri
-                description: The identifier.
-              - type: object
-                description: The identifier with further properties.
-                required:
-                - id
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                    description: The identifier.
-                additionalProperties: true
-              description: The issuer (VCDM 1.1 §4.5).
-            refreshService:
-              oneOf:
-              - type: object
-                description: A refresh service.
-                required:
-                - type
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                    description: The identifier.
-                  type:
-                    oneOf:
-                    - type: string
-                      description: A type.
-                    - type: array
-                      items:
-                        type: string
-                        description: A type.
-                      minItems: 1
-                    description: The types.
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  description: A refresh service.
-                  required:
-                  - type
-                  properties:
-                    id:
-                      type: string
-                      format: uri
-                      description: The identifier.
-                    type:
-                      oneOf:
-                      - type: string
-                        description: A type.
-                      - type: array
-                        items:
-                          type: string
-                          description: A type.
-                        minItems: 1
-                      description: The types.
-                  additionalProperties: true
-              description: Refresh services (VCDM 1.1 §5.6).
-            termsOfUse:
-              oneOf:
-              - type: object
-                description: Terms of use.
-                required:
-                - type
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                    description: The identifier.
-                  type:
-                    oneOf:
-                    - type: string
-                      description: A type.
-                    - type: array
-                      items:
-                        type: string
-                        description: A type.
-                      minItems: 1
-                    description: The types.
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  description: Terms of use.
-                  required:
-                  - type
-                  properties:
-                    id:
-                      type: string
-                      format: uri
-                      description: The identifier.
-                    type:
-                      oneOf:
-                      - type: string
-                        description: A type.
-                      - type: array
-                        items:
-                          type: string
-                          description: A type.
-                        minItems: 1
-                      description: The types.
-                  additionalProperties: true
-              description: Terms of use (VCDM 1.1 §5.7).
-            type:
-              oneOf:
-              - type: string
-                description: A type.
-              - type: array
-                items:
-                  type: string
-                  description: A type.
-                minItems: 1
-              description: The types (VCDM 1.1 §4.3), including `VerifiableCredential`.
-          additionalProperties: true
+          oneOf:
+          - $ref: '#/components/schemas/W3cCredential'
+            description: |-
+              The credential. Decoded from the JWT *without* verifying its signature when
+              `result.valid` is `false`, and `None` when it could not be decoded at all.
+          - type: 'null'
         jwt:
           type: string
           description: The raw credential JWT exactly as it appeared in the presentation.
@@ -5990,6 +5709,294 @@ components:
         vp_token:
           type: string
           description: JSON-encoded object that maps each DCQL credential query ID to a non-empty array of presentations.
+    W3cCredential:
+      type: object
+      description: A verifiable credential of the VC Data Model 1.1 (§4), as the `vc` claim of a JWT carries it once `iss`, `jti`, `nbf`, `exp` and `sub` are mapped back.
+      required:
+      - '@context'
+      - type
+      - issuer
+      - issuanceDate
+      - credentialSubject
+      properties:
+        '@context':
+          oneOf:
+          - type: string
+            description: The base context alone.
+            enum:
+            - https://www.w3.org/2018/credentials/v1
+          - type: array
+            items: {}
+            prefixItems:
+            - type: string
+              description: The base context.
+              enum:
+              - https://www.w3.org/2018/credentials/v1
+            description: The base context first, then further contexts.
+            minItems: 1
+          description: The JSON-LD context, carried as data (VCDM 1.1 §4.1); it begins with `https://www.w3.org/2018/credentials/v1`.
+        credentialSchema:
+          oneOf:
+          - type: object
+            description: A data schema.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A data schema.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Data schemas (VCDM 1.1 §5.4).
+        credentialStatus:
+          type: object
+          description: Where to learn whether the credential is revoked or suspended (VCDM 1.1 §4.9).
+          required:
+          - type
+          properties:
+            id:
+              type: string
+              format: uri
+              description: The identifier.
+            type:
+              oneOf:
+              - type: string
+                description: A type.
+              - type: array
+                items:
+                  type: string
+                  description: A type.
+                minItems: 1
+              description: The types.
+          additionalProperties: true
+        credentialSubject:
+          oneOf:
+          - type: object
+            description: A subject and the claims about it.
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier of the subject.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A subject and the claims about it.
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier of the subject.
+              additionalProperties: true
+            minItems: 1
+          description: The subjects and the claims about them (VCDM 1.1 §4.4).
+        evidence:
+          oneOf:
+          - type: object
+            description: Evidence.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: Evidence.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Evidence (VCDM 1.1 §5.8).
+        expirationDate:
+          type: string
+          format: date-time
+          description: When the credential ceases to be valid (VCDM 1.1 §4.8).
+        id:
+          type: string
+          format: uri
+          description: The identifier of the credential (VCDM 1.1 §4.2).
+        issuanceDate:
+          type: string
+          format: date-time
+          description: When the credential becomes valid (VCDM 1.1 §4.6).
+        issuer:
+          oneOf:
+          - type: string
+            format: uri
+            description: The identifier.
+          - type: object
+            description: The identifier with further properties.
+            required:
+            - id
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+            additionalProperties: true
+          description: The issuer (VCDM 1.1 §4.5).
+        refreshService:
+          oneOf:
+          - type: object
+            description: A refresh service.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A refresh service.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Refresh services (VCDM 1.1 §5.6).
+        termsOfUse:
+          oneOf:
+          - type: object
+            description: Terms of use.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: Terms of use.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Terms of use (VCDM 1.1 §5.7).
+        type:
+          oneOf:
+          - type: string
+            description: A type.
+          - type: array
+            items:
+              type: string
+              description: A type.
+            minItems: 1
+          description: The types (VCDM 1.1 §4.3), including `VerifiableCredential`.
+      additionalProperties: true
   securitySchemes:
     access_token:
       type: http
