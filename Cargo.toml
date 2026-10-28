@@ -36,14 +36,13 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-oid4vc-core = "0.2"
-oid4vc-manager = "0.2"
-oid4vci = { version = "0.2", features = ["utoipa"] }
-oid4vp = "0.2"
-siopv2 = "0.2"
+oid4vc-core = "0.3"
+oid4vc-manager = "0.3"
+oid4vci = { version = "0.3", features = ["utoipa"] }
+oid4vp = "0.3"
+siopv2 = "0.3"
 
-# TODO: Use the identity-kit 0.3 release once openid4vc is released on it (see `[patch.crates-io]`).
-identity-kit = { git = "https://github.com/impierce/identity-kit", rev = "bef0de5", default-features = false, features = [
+identity-kit = { version = "0.3", default-features = false, features = [
     "did-jwk",
     "did-key",
     "did-web",
@@ -124,9 +123,3 @@ url = "2.5"
 utoipa = { version = "6", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
-
-[patch.crates-io]
-# TODO: Remove once openid4vc is released on identity-kit 0.3. openid4vc 0.2 depends on identity-kit 0.2 from crates.io;
-# this gives it the same IdentityKit revision as the workspace, which makes the futures of its credential validators
-# `Send` (impierce/identity-kit#130), as openid4vc 0.2's `VpTokenValidator` needs in an aggregate's command handler.
-identity-kit = { git = "https://github.com/impierce/identity-kit", rev = "bef0de5" }
