@@ -13,7 +13,8 @@ use aws_sdk_kms::{
     Client,
 };
 use futures::{stream, StreamExt as _, TryStreamExt as _};
-use std::time::Duration;
+use identity_kit::jose::JwsAlgorithm;
+use std::{collections::HashMap, sync::RwLock, time::Duration};
 use tokio::sync::OnceCell;
 use tracing::debug;
 
@@ -25,9 +26,19 @@ const REQUEST_DEADLINE: Duration = Duration::from_secs(30);
 /// How many keys are described at the same time when listing keys.
 const DESCRIBE_CONCURRENCY: usize = 8;
 
+mod key_store;
+pub use key_store::AwsKmsError;
+
+#[cfg(test)]
+mod fake_kms;
+
 pub struct AwsKmsAmbientKeyProvider {
     client: OnceCell<Client>,
     deadline: Duration,
+    /// The algorithm of every key looked up so far, by key id. A key's spec never changes in AWS KMS.
+    algorithms: RwLock<HashMap<String, JwsAlgorithm>>,
+    /// Tags given to every key this provider generates, for example to scope IAM policies to a tenant.
+    key_tags: Vec<(String, String)>,
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -35,18 +46,30 @@ impl AwsKmsAmbientKeyProvider {
     /// credentials as long as this provider isn't used.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_cell(OnceCell::new())
+    }
+
+    fn with_cell(client: OnceCell<Client>) -> Self {
         Self {
-            client: OnceCell::new(),
+            client,
             deadline: REQUEST_DEADLINE,
+            algorithms: RwLock::default(),
+            key_tags: Vec::new(),
         }
     }
 
     /// Creates the provider with a preconfigured client, e.g. one pointing at a test endpoint.
     #[must_use]
     pub fn with_client(client: Client) -> Self {
+        Self::with_cell(OnceCell::new_with(Some(client)))
+    }
+
+    /// Tags every key this provider generates with `tags`, as key and value.
+    #[must_use]
+    pub fn with_key_tags(self, tags: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
-            client: OnceCell::new_with(Some(client)),
-            deadline: REQUEST_DEADLINE,
+            key_tags: tags.into_iter().collect(),
+            ..self
         }
     }
 
