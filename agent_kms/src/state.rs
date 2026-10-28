@@ -169,29 +169,16 @@ async fn added_provider_adapter<C: CommandOperation>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapter::test_utils::UnreachableKeyProvider;
     use crate::key_provider::command::KeyProviderCommand;
     use agent_shared::handlers::command_handler;
     use agent_store::in_memory::InMemory;
-    use async_trait::async_trait;
-
-    struct Unreachable;
-
-    #[async_trait]
-    impl KeyProviderAdapter for Unreachable {
-        async fn test_connection(&self) -> Result<(), ConnectionError> {
-            Err(ConnectionError("connection refused".to_string()))
-        }
-
-        async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
-            Err(ConnectionError("connection refused".to_string()))
-        }
-    }
 
     /// Only AWS has an adapter, so an added in-memory provider is unsupported.
     async fn state() -> KmsState {
         let adapters: KeyProviderAdapters = [(
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(Unreachable) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(UnreachableKeyProvider) as Arc<dyn KeyProviderAdapter>,
         )]
         .into();
         kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await

@@ -32,11 +32,11 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
 #[cfg(test)]
 mod tests {
     use crate::{app_with_base_path, ApiState};
-    use agent_kms::adapter::{ConnectionError, InMemoryKeyProvider, KeyProviderAdapter, KeyProviderAdapters};
+    use agent_kms::adapter::InMemoryKeyStore;
+    use agent_kms::adapter::{test_utils::UnreachableKeyProvider, KeyProviderAdapter, KeyProviderAdapters};
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use agent_kms::kms_state;
     use agent_store::in_memory::InMemory;
-    use async_trait::async_trait;
     use axum::{body::Body, Router};
     use http::{Request, StatusCode};
     use http_body_util::BodyExt;
@@ -46,26 +46,13 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    struct Unreachable;
-
-    #[async_trait]
-    impl KeyProviderAdapter for Unreachable {
-        async fn test_connection(&self) -> Result<(), ConnectionError> {
-            Err(ConnectionError("no credentials".to_string()))
-        }
-
-        async fn list_keys(&self) -> Result<agent_kms::adapter::ProviderKeys, ConnectionError> {
-            Err(ConnectionError("no credentials".to_string()))
-        }
-    }
-
     async fn app_with_kms() -> Router {
         let adapters: KeyProviderAdapters = [
             (
                 KeyProviderType::InMemory,
-                Arc::new(InMemoryKeyProvider) as Arc<dyn KeyProviderAdapter>,
+                Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
             ),
-            (KeyProviderType::AwsKmsAmbient, Arc::new(Unreachable)),
+            (KeyProviderType::AwsKmsAmbient, Arc::new(UnreachableKeyProvider)),
         ]
         .into();
         let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await;
@@ -176,7 +163,7 @@ mod tests {
             response,
             (
                 StatusCode::OK,
-                json!({ "reachable": false, "message": "no credentials" })
+                json!({ "reachable": false, "message": "connection refused" })
             )
         );
     }
@@ -190,7 +177,7 @@ mod tests {
 
         assert_eq!(
             (status, &body["detail"]),
-            (StatusCode::BAD_GATEWAY, &json!("no credentials"))
+            (StatusCode::BAD_GATEWAY, &json!("connection refused"))
         );
     }
 }

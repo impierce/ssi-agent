@@ -14,7 +14,7 @@ use agent_issuance::{
     application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
 use agent_kms::{
-    adapter::{InMemoryKeyProvider, KeyProviderAdapter, KeyProviderAdapters},
+    adapter::{InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters},
     key_provider::aggregate::KeyProviderType,
     kms_state, KmsState,
 };
@@ -368,7 +368,7 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
     let adapters: KeyProviderAdapters = [
         (
             KeyProviderType::InMemory,
-            Arc::new(InMemoryKeyProvider) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
         ),
         (
             KeyProviderType::AwsKmsAmbient,

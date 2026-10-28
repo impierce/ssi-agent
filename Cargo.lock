@@ -398,6 +398,7 @@ dependencies = [
  "agent_store",
  "async-trait",
  "cqrs-es",
+ "identity-kit",
  "indexmap 2.14.0",
  "serde",
  "shared-kernel",
