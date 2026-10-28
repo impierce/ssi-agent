@@ -48,9 +48,18 @@ impl fmt::Debug for Subject {
 }
 
 /// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
-/// HTTP client.
+/// HTTP client. With the `allow-localhost` feature, that client may also fetch them from the local network over plain
+/// `http`, like the agent's other outbound requests; see
+/// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
 fn key_resolver() -> identity_kit::resolver::Resolver {
-    let client = ReqwestClient::new().expect("Failed to initialize the HTTP client for `did:web`");
+    #[cfg(not(feature = "allow-localhost"))]
+    let client = ReqwestClient::new();
+    #[cfg(feature = "allow-localhost")]
+    let client = ReqwestClient::builder()
+        .dangerous_allow_loopback()
+        .dangerous_allow_private_network()
+        .build();
+    let client = client.expect("Failed to initialize the HTTP client for `did:web`");
 
     identity_kit::resolver::Resolver::builder()
         .with(DidKey::new())
@@ -344,5 +353,68 @@ mod tests {
         // Verify the signature
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+
+    /// The public key of the `did:web` document [`serve_did_web`] serves.
+    fn did_web_public_key() -> serde_json::Value {
+        serde_json::json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        })
+    }
+
+    /// Serves a `did:web` document on `localhost` and returns the DID URL of its verification method.
+    async fn serve_did_web() -> (wiremock::MockServer, String) {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, MockServer, ResponseTemplate,
+        };
+
+        let server = MockServer::start().await;
+        let did = format!("did:web:localhost%3A{}", server.address().port());
+        let did_url = format!("{did}#key-0");
+        let document = serde_json::json!({
+            "id": did,
+            "verificationMethod": [{
+                "id": did_url,
+                "type": "JsonWebKey2020",
+                "controller": did,
+                "publicKeyJwk": did_web_public_key()
+            }],
+            "assertionMethod": [did_url]
+        });
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(document))
+            .mount(&server)
+            .await;
+
+        (server, did_url)
+    }
+
+    #[cfg(not(feature = "allow-localhost"))]
+    #[tokio::test]
+    async fn does_not_resolve_did_web_on_the_local_network() {
+        let subject = Subject::test_subject().await;
+        let (server, did_url) = serve_did_web().await;
+
+        assert!(subject.resolve_public_key(&did_url).await.is_err());
+        assert_eq!(server.received_requests().await.unwrap().len(), 0);
+    }
+
+    #[cfg(feature = "allow-localhost")]
+    mod allow_localhost_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn resolves_did_web_on_the_local_network() {
+            let subject = Subject::test_subject().await;
+            let (_server, did_url) = serve_did_web().await;
+
+            let public_key = subject.resolve_public_key(&did_url).await.unwrap();
+
+            assert_eq!(serde_json::json!(public_key), did_web_public_key());
+        }
     }
 }
