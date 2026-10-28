@@ -108,7 +108,7 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 | File                                    | Purpose                                                                                                        |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `Cargo.toml`                            | Workspace definition, workspace dependencies, Clippy pedantic lints, patch.crates-io (sd-jwt hasher trait fix) |
+| `Cargo.toml`                            | Workspace definition, workspace dependencies, Clippy pedantic lints                                            |
 | `rustfmt.toml`                          | max_width = 120                                                                                                |
 | `deny.toml`                             | Dependency graph and license checks                                                                            |
 | `.releaserc.yaml`                       | Semantic-release config (squash-merge PRs, conventional commits)                                               |
@@ -145,10 +145,8 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 ### External Dependencies (Git Pinned)
 
 ```
-siopv2, oid4vci, oid4vc-core, oid4vc-manager, oid4vp → https://github.com/impierce/openid4vc (rev 0a5090e)
 identity_* crates → https://github.com/iotaledger/identity (v1.9.6-beta.1)
 iota-sdk → https://github.com/iotaledger/iota (specific rev)
-sd-jwt (patched) → https://github.com/impierce/sd-jwt-payload (rev f28789a, Hasher trait Send+Sync fix)
 ```
 
 ### Configuration & Environment
