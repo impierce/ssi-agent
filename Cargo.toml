@@ -46,6 +46,7 @@ identity-kit = { version = "0.3", default-features = false, features = [
     "did-jwk",
     "did-key",
     "did-web",
+    "domain-linkage",
     "reqwest",
     "sd-jwt",
     "utoipa",

@@ -4,7 +4,7 @@ use super::event::ConnectionEvent;
 use crate::connection::aggregate::{Connection, ConnectionDisplayProperties, PendingChanges, Validation};
 use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
-use identity_did::DIDUrl;
+use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
 use shared_kernel::view_repository::SoftDeletable;
 
@@ -17,7 +17,7 @@ pub struct ConnectionView {
     #[schema(value_type = url::Url)]
     pub url: String,
     #[schema(value_type = Vec<String>)]
-    pub dids: Vec<DIDUrl>,
+    pub dids: Vec<Did>,
     pub validations: Vec<Validation>,
     pub display: Option<ConnectionDisplayProperties>,
     pub pending_changes: Option<PendingChanges>,

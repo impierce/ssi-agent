@@ -55,12 +55,21 @@ fn key_resolver() -> identity_kit::resolver::Resolver {
     #[cfg(not(feature = "allow-localhost"))]
     let client = ReqwestClient::new();
     #[cfg(feature = "allow-localhost")]
-    let client = ReqwestClient::builder()
+    let client = local_network_client();
+
+    resolver_with(client.expect("Failed to initialize the HTTP client for `did:web`"))
+}
+
+/// IdentityKit's HTTP client, which may also reach the local network over plain `http`.
+#[cfg(any(feature = "allow-localhost", feature = "test_utils"))]
+fn local_network_client() -> Result<ReqwestClient, identity_kit::methods::web::HttpError> {
+    ReqwestClient::builder()
         .dangerous_allow_loopback()
         .dangerous_allow_private_network()
-        .build();
-    let client = client.expect("Failed to initialize the HTTP client for `did:web`");
+        .build()
+}
 
+fn resolver_with(client: ReqwestClient) -> identity_kit::resolver::Resolver {
     identity_kit::resolver::Resolver::builder()
         .with(DidKey::new())
         .with(DidJwk)
@@ -103,6 +112,13 @@ impl Subject {
             key_resolver: key_resolver(),
             resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
+    }
+
+    /// IdentityKit's signer with the configured issuer key for `algorithm`.
+    pub async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+        let (key, alg) = issuer_key(algorithm)?;
+
+        Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)
     }
 
     pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
@@ -202,6 +218,16 @@ mod default_subject {
             "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ#0";
     }
 
+    impl Subject {
+        /// This subject, resolving `did:web` documents on the local network over plain `http` as well, for tests
+        /// that serve them from mock servers.
+        pub fn with_local_network_resolver(mut self) -> Self {
+            self.key_resolver =
+                resolver_with(local_network_client().expect("Failed to initialize the HTTP client for `did:web`"));
+            self
+        }
+    }
+
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
     impl Subject {
         pub async fn test_subject() -> Self {
@@ -262,10 +288,7 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let (key, alg) = issuer_key(algorithm)?;
-        let signer = KeySigner::new(Arc::clone(&self.key_store), key, alg).await?;
-
-        Ok(signer.sign(message.as_bytes()).await?)
+        Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
