@@ -1,3 +1,4 @@
+use crate::key_store::{issuer_keys, StrongholdKeyStore};
 use crate::stronghold_storage;
 use agent_shared::config::{config, SupportedDidMethod};
 use anyhow::anyhow;
@@ -6,30 +7,44 @@ use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use did_manager_iota::consumer::NodeUrls;
 use identity_iota::did::DIDUrl;
-use identity_iota::storage::{JwkStorage, KeyId};
+use identity_iota::storage::KeyId;
 use identity_iota::{did::DID, document::DIDUrlQuery};
 use identity_kit::{
     did::{DidUrl, VerificationRelationship},
-    jose::Jwk,
+    jose::{Jwk, JwsAlgorithm, Signer as _},
+    keys::{KeySigner, KeyStore},
     methods::{jwk::DidJwk, key::DidKey, web::DidWeb, web::ReqwestClient},
     resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Responsible for signing and verifying data.
-#[derive(Debug)]
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
+    /// Holds the configured issuer keys.
+    pub key_store: Arc<dyn KeyStore>,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
     /// Resolves the DID methods `key_resolver` doesn't.
     pub resolver: Resolver,
+}
+
+impl fmt::Debug for Subject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Subject")
+            .field("stronghold_storage", &self.stronghold_storage)
+            .field("verification_method_ids", &self.verification_method_ids)
+            .field("key_resolver", &self.key_resolver)
+            .field("resolver", &self.resolver)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
@@ -42,6 +57,16 @@ fn key_resolver() -> identity_kit::resolver::Resolver {
         .with(DidJwk)
         .with(DidWeb::new(client))
         .build()
+}
+
+/// The configured issuer key that signs with `algorithm`.
+fn issuer_key(algorithm: Algorithm) -> anyhow::Result<(identity_kit::keys::KeyId, JwsAlgorithm)> {
+    let alg = JwsAlgorithm::try_from(algorithm)?;
+
+    issuer_keys()
+        .into_iter()
+        .find(|(_, key_alg)| *key_alg == alg)
+        .ok_or_else(|| anyhow!("No issuer key signs with {alg}"))
 }
 
 impl Subject {
@@ -63,6 +88,7 @@ impl Subject {
         let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
 
         Self {
+            key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
             key_resolver: key_resolver(),
@@ -70,14 +96,11 @@ impl Subject {
         }
     }
 
-    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
-        let public_key_jwk = match algorithm {
-            Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
-            Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
-            _ => anyhow::bail!("Unsupported algorithm"),
-        }?;
-
-        Ok(serde_json::from_value(serde_json::to_value(public_key_jwk)?)?)
+    pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
+        Ok(self
+            .key_store
+            .public_jwk(&identity_kit::keys::KeyId::new(key_id.as_str()))
+            .await?)
     }
 
     pub async fn insert_verification_method_id(
@@ -195,6 +218,7 @@ mod default_subject {
             ])));
 
             Self {
+                key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
                 stronghold_storage,
                 verification_method_ids,
                 key_resolver: key_resolver(),
@@ -229,25 +253,10 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let stronghold_storage = &self.stronghold_storage;
-        let (key_id, public_key) = match algorithm {
-            Algorithm::ES256 => {
-                let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
-                let public_key = stronghold_storage.get_es256_public_key(&es256_key_id).await?;
-                (es256_key_id, public_key)
-            }
-            Algorithm::EdDSA => {
-                let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-                let public_key = stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
-                (ed25519_key_id, public_key)
-            }
-            _ => return Err(anyhow!("Unsupported algorithm")),
-        };
+        let (key, alg) = issuer_key(algorithm)?;
+        let signer = KeySigner::new(Arc::clone(&self.key_store), key, alg).await?;
 
-        stronghold_storage
-            .sign(&key_id, message.as_bytes(), &public_key)
-            .await
-            .map_err(Into::into)
+        Ok(signer.sign(message.as_bytes()).await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {

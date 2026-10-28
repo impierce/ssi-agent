@@ -250,7 +250,7 @@ impl Aggregate for Document {
 
                         // Retrieve the public key from Stronghold.
                         let public_key_jwk = subject
-                            .get_public_key(key_id.clone(), &algorithm)
+                            .get_public_key(key_id.clone())
                             .await
                             .map_err(|err| MissingKeyError(err.to_string()))?;
 
@@ -316,7 +316,7 @@ impl Aggregate for Document {
                     };
 
                     let public_key_jwk = subject
-                        .get_public_key(key_id, &signing_algorithm)
+                        .get_public_key(key_id)
                         .await
                         .map_err(|err| MissingKeyError(err.to_string()))?;
 
