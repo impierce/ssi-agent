@@ -8,7 +8,11 @@ use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use did_manager_iota::consumer::NodeUrls;
 use identity_iota::did::DIDUrl;
 use identity_iota::storage::KeyId;
-use identity_iota::{did::DID, document::DIDUrlQuery};
+use identity_iota::{
+    did::DID,
+    document::DIDUrlQuery,
+    verification::{MethodRelationship, MethodScope},
+};
 use identity_kit::{
     did::{Did, DidDocument, DidUrl, VerificationRelationship},
     jose::{Jwk, JwsAlgorithm, Signer as _},
@@ -75,6 +79,17 @@ fn resolver_with(client: ReqwestClient) -> identity_kit::resolver::Resolver {
         .with(DidJwk)
         .with(DidWeb::new(client))
         .build()
+}
+
+/// The scope of the `identity_*` crates for `relationship`.
+fn method_scope(relationship: VerificationRelationship) -> MethodScope {
+    MethodScope::VerificationRelationship(match relationship {
+        VerificationRelationship::Authentication => MethodRelationship::Authentication,
+        VerificationRelationship::AssertionMethod => MethodRelationship::AssertionMethod,
+        VerificationRelationship::KeyAgreement => MethodRelationship::KeyAgreement,
+        VerificationRelationship::CapabilityInvocation => MethodRelationship::CapabilityInvocation,
+        VerificationRelationship::CapabilityDelegation => MethodRelationship::CapabilityDelegation,
+    })
 }
 
 /// The configured issuer key that signs with `algorithm`.
@@ -196,7 +211,7 @@ impl Subject {
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
 
         let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .resolve_method(DIDUrlQuery::from(&did_url), relationship.map(method_scope))
             .ok_or(anyhow!(
                 "Failed to resolve verification method for DID URL: `{did_url}`"
             ))?;
