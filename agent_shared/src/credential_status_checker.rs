@@ -346,6 +346,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_status_check_rejects_an_invalid_status_claim() {
+        let mock_server = MockServer::start().await;
+        let uri = format!("{}/status_list", mock_server.uri());
+        let jwt = sign(&status_list_token(&uri, chrono::Utc::now()));
+        Mock::given(method("GET"))
+            .and(path("/status_list"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Content-Encoding", "gzip")
+                    .set_body_raw(gzip(jwt.as_bytes()), StatusListToken::MEDIA_TYPE),
+            )
+            .mount(&mock_server)
+            .await;
+        let status = |idx| serde_json::from_value::<Status>(status_claim(&uri, idx)).unwrap();
+
+        let result = checker()
+            .check(
+                CredentialStatus::StatusClaim(&status(INVALID_INDEX)),
+                chrono::Utc::now(),
+            )
+            .await;
+
+        assert!(matches!(result, Err(StatusError::Invalid(_))), "{result:?}");
+
+        let result = checker()
+            .check(CredentialStatus::StatusClaim(&status(2)), chrono::Utc::now())
+            .await;
+
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
     async fn test_status_list_token_for_another_uri_is_not_used() {
         let jwt = sign(&status_list_token(
             "https://example.org/other_status_list",
