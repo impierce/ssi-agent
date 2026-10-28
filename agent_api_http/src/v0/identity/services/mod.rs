@@ -18,6 +18,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use identity_document::service::Service as DocumentService;
+use identity_kit::did::Service as DidService;
 use serde::Serialize;
 use std::sync::Arc;
 use url::Url;
@@ -26,7 +27,7 @@ use url::Url;
 struct ServiceResponse {
     #[serde(rename = "id")]
     service_id: String,
-    #[schema(value_type = Option<identity_kit::did::Service>)]
+    #[schema(value_type = Option<DidService>)]
     service: Option<DocumentService>,
     presentations: Vec<LinkedVerifiablePresentation>,
     #[schema(value_type = Option<ServiceResourceSchema>)]
