@@ -20,20 +20,17 @@ did_manager_iota = { git = "https://github.com/impierce/did-manager", tag = "v1.
 
 anyhow.workspace = true
 async-trait.workspace = true
-base64.workspace = true
 futures.workspace = true
 identity-kit.workspace = true
-identity_did.workspace = true
 identity_document.workspace = true
 identity_iota.workspace = true
 identity_jose.workspace = true
 iota-sdk.workspace = true
 iota-sdk-legacy.workspace = true
 iota_stronghold = { version = "2.1" }
-jsonwebtoken = "9.3"
+jsonwebtoken.workspace = true
 log = "0.4"
 oid4vc-core.workspace = true
-p256 = { version = "0.13", features = ["jwk"] }
 rustls = { version = "0.23", default-features = false, features = [
     "logging",
     "std",
@@ -48,6 +45,7 @@ url.workspace = true
 agent_secret_manager = { path = ".", features = ["test_utils"] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
+base64.workspace = true
 futures.workspace = true
 lazy_static.workspace = true
 ring = "0.17.8"

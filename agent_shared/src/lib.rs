@@ -11,9 +11,7 @@ pub mod signed_credential_format;
 pub mod url_utils;
 
 pub use ::config::ConfigError;
-use identity_core::convert::{FromJson as _, ToJson as _};
 use identity_iota::verification::jws::JwsAlgorithm;
-use jsonwebtoken::{jwk::Jwk as JsonWebTokenJwk, DecodingKey};
 use rand::Rng;
 pub use url_utils::UrlAppendHelpers;
 
@@ -47,14 +45,7 @@ pub fn from_jsonwebtoken_algorithm_to_jwsalgorithm(algorithm: &jsonwebtoken::Alg
         jsonwebtoken::Algorithm::PS384 => JwsAlgorithm::PS384,
         jsonwebtoken::Algorithm::PS512 => JwsAlgorithm::PS512,
         jsonwebtoken::Algorithm::EdDSA => JwsAlgorithm::EdDSA,
+        // `Algorithm` is `non_exhaustive`; all variants of jsonwebtoken 11 are listed above.
+        _ => unreachable!("unknown algorithm {algorithm:?}"),
     }
-}
-
-/// Convert the `IotaIdentityJwk` first into a `JsonWebTokenJwk` and then into a `DecodingKey`.
-pub fn convert_iota_jwk_to_decoding_key(public_key: &identity_jose::jwk::Jwk) -> Option<DecodingKey> {
-    public_key
-        .to_json()
-        .ok()
-        .and_then(|public_key| JsonWebTokenJwk::from_json(&public_key).ok())
-        .and_then(|jwk| DecodingKey::from_jwk(&jwk).ok())
 }

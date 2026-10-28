@@ -1,5 +1,5 @@
 use crate::state::IssuanceState;
-use agent_shared::{config::config, convert_iota_jwk_to_decoding_key};
+use agent_shared::config::config;
 use jsonwebtoken::{decode, Validation};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -52,8 +52,9 @@ impl AccessTokenValidationService {
             .await
             .map_err(|_err| AccessTokenValidationError::KidResolutionError)?;
 
-        let decoding_key =
-            convert_iota_jwk_to_decoding_key(&public_key_jwk).ok_or(AccessTokenValidationError::KidResolutionError)?;
+        let decoding_key = public_key_jwk
+            .to_decoding_key()
+            .map_err(|_err| AccessTokenValidationError::KidResolutionError)?;
 
         let public_url = config().public_url.to_string();
 

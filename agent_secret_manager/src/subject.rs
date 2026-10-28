@@ -2,18 +2,19 @@ use crate::stronghold_storage;
 use agent_shared::config::{config, SupportedDidMethod};
 use anyhow::anyhow;
 use async_trait::async_trait;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use did_manager_iota::consumer::NodeUrls;
-use identity_did::CoreDID;
 use identity_iota::did::DIDUrl;
-use identity_iota::document::CoreDocument;
 use identity_iota::storage::{JwkStorage, KeyId};
-use identity_iota::verification::jwk::Jwk;
-use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
+use identity_iota::{did::DID, document::DIDUrlQuery};
+use identity_kit::{
+    did::{DidUrl, VerificationRelationship},
+    jose::Jwk,
+    methods::{jwk::DidJwk, key::DidKey, web::DidWeb, web::ReqwestClient},
+    resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
+};
 use jsonwebtoken::Algorithm;
-use oid4vc_core::verification_material_resolver::VerificationMaterialResolver;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -25,7 +26,22 @@ use tokio::sync::Mutex;
 pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
+    /// Resolves `did:key`, `did:jwk` and `did:web`.
+    pub key_resolver: identity_kit::resolver::Resolver,
+    /// Resolves the DID methods `key_resolver` doesn't.
     pub resolver: Resolver,
+}
+
+/// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
+/// HTTP client.
+fn key_resolver() -> identity_kit::resolver::Resolver {
+    let client = ReqwestClient::new().expect("Failed to initialize the HTTP client for `did:web`");
+
+    identity_kit::resolver::Resolver::builder()
+        .with(DidKey::new())
+        .with(DidJwk)
+        .with(DidWeb::new(client))
+        .build()
 }
 
 impl Subject {
@@ -49,11 +65,16 @@ impl Subject {
         Self {
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+            key_resolver: key_resolver(),
             resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
     }
 
-    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
+    pub async fn get_public_key(
+        &self,
+        key_id: KeyId,
+        algorithm: &Algorithm,
+    ) -> anyhow::Result<identity_iota::verification::jwk::Jwk> {
         match algorithm {
             Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
             Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
@@ -80,8 +101,27 @@ impl Subject {
 
     /// Resolves the public key for a given DID URL.
     pub async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
-        let did_url =
-            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+        let did_url = DidUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+
+        self.resolve_verification_method_key(&did_url, None).await
+    }
+
+    /// Resolves the public key of the verification method `did_url`, which must be usable for `relationship` when one
+    /// is given.
+    async fn resolve_verification_method_key(
+        &self,
+        did_url: &DidUrl,
+        relationship: Option<VerificationRelationship>,
+    ) -> anyhow::Result<Jwk> {
+        if self.key_resolver.supports(did_url.did().method()) {
+            return self
+                .key_resolver
+                .resolve_public_key(did_url, relationship)
+                .await
+                .map_err(|err| anyhow!("Failed to resolve public key for DID URL: `{did_url}`, error: {err}"));
+        }
+
+        let did_url = DIDUrl::parse(did_url.as_ref()).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
         let document = self
             .resolver
@@ -95,22 +135,25 @@ impl Subject {
                 "Failed to resolve verification method for DID URL: `{did_url}`"
             ))?;
 
-        verification_method
+        let public_key_jwk = verification_method
             .data()
             .public_key_jwk()
-            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
-            .cloned()
+            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))?;
+
+        Ok(serde_json::from_value(serde_json::to_value(public_key_jwk)?)?)
     }
 }
 
 #[async_trait]
-impl VerificationMaterialResolver for Subject {
-    async fn resolve_did_document(&self, did: &CoreDID) -> Result<CoreDocument, Box<dyn std::error::Error>> {
-        self.resolver.resolve(did.as_str()).await.map_err(|e| e.into())
-    }
+impl KeyResolver for Subject {
+    async fn resolve_key(&self, key: &KeyReference, role: KeyRole) -> Result<Jwk, KeyResolutionError> {
+        let KeyReference::DidUrl(did_url) = key else {
+            return Err(KeyResolutionError::unsupported(key));
+        };
 
-    async fn resolve_public_key(&self, kid: &str) -> Result<Jwk, Box<dyn std::error::Error>> {
-        Subject::resolve_public_key(self, kid).await.map_err(|e| e.into())
+        self.resolve_verification_method_key(did_url, Some(role.relationship()))
+            .await
+            .map_err(KeyResolutionError::msg)
     }
 }
 
@@ -157,6 +200,7 @@ mod default_subject {
             Self {
                 stronghold_storage,
                 verification_method_ids,
+                key_resolver: key_resolver(),
                 resolver: Resolver::new(),
             }
         }
@@ -166,47 +210,13 @@ mod default_subject {
 #[async_trait]
 impl Verify for Subject {
     async fn public_key(&self, did_url: &str) -> anyhow::Result<Vec<u8>> {
-        let did_url =
-            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+        let public_key_jwk = self.resolve_public_key(did_url).await?;
 
-        let document = self
-            .resolver
-            .resolve(did_url.did().as_str())
-            .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
-
-        let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), None)
-            .ok_or(anyhow!(
-                "Failed to resolve verification method for DID URL: `{did_url}`"
-            ))?;
-
-        // Try decode from `MethodData` directly, else use public JWK params.
-        verification_method.data().try_decode().or_else(|_| {
-            verification_method
-                .data()
-                .public_key_jwk()
-                .and_then(|public_key_jwk| match public_key_jwk.params() {
-                    JwkParams::Okp(okp_params) => URL_SAFE_NO_PAD.decode(&okp_params.x).ok(),
-                    JwkParams::Ec(ec_params) => {
-                        let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).ok()?;
-                        let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).ok()?;
-
-                        let encoded_point = p256::EncodedPoint::from_affine_coordinates(
-                            p256::FieldBytes::from_slice(&x_bytes),
-                            p256::FieldBytes::from_slice(&y_bytes),
-                            false, // false for uncompressed point
-                        );
-
-                        let verifying_key = p256::ecdsa::VerifyingKey::from_encoded_point(&encoded_point)
-                            .expect("Failed to create verifying key from encoded point");
-
-                        Some(verifying_key.to_encoded_point(false).as_bytes().to_vec())
-                    }
-                    _ => None,
-                })
-                .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
-        })
+        match public_key_jwk.kty() {
+            "OKP" => Ok(public_key_jwk.ed25519_public_bytes()?.to_vec()),
+            "EC" => Ok(public_key_jwk.p256_public_bytes()?.to_vec()),
+            kty => Err(anyhow!("Unsupported key type `{kty}` for DID URL: `{did_url}`")),
+        }
     }
 }
 
@@ -279,6 +289,7 @@ impl StorageKey {
 mod tests {
     use super::*;
     use agent_shared::config::{default_issuer_eddsa_key_id, default_issuer_es256_key_id, SecretManagerConfig};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";

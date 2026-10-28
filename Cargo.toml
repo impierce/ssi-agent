@@ -36,15 +36,19 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "099186c", features = [
-    "utoipa",
-] }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "099186c" }
+oid4vc-core = "0.3"
+oid4vc-manager = "0.3"
+oid4vci = { version = "0.3", features = ["utoipa"] }
+oid4vp = "0.3"
+siopv2 = "0.3"
 
-identity-kit = { version = "0.3", default-features = false, features = ["did-jwk", "did-key", "sd-jwt"] }
+identity-kit = { version = "0.3", default-features = false, features = [
+    "did-jwk",
+    "did-key",
+    "did-web",
+    "reqwest",
+    "sd-jwt",
+] }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -81,7 +85,7 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
-jsonwebtoken = "9.3"
+jsonwebtoken = { version = "11.1", default-features = false, features = ["rust_crypto"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
 mongo-es = "0.4.1"
@@ -119,8 +123,3 @@ url = "2.5"
 utoipa = { version = "6", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
-
-[patch.crates-io]
-# We need this patch because it makes the `Hasher` trait `Send` and `Sync`, which `agent_verification` needs as long as
-# openid4vc uses the SD-JWT VC support of `identity_credential`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
-sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }

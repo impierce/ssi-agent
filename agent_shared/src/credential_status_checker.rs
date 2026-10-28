@@ -1,17 +1,17 @@
 use anyhow::bail;
 use async_trait::async_trait;
 use flate2::read::GzDecoder;
-use identity_kit::status_list::{Status, StatusListToken};
-use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
-use oid4vc_core::{
-    credential_status_verifier::CredentialStatusVerifier, verification_material_resolver::VerificationMaterialResolver,
+use identity_kit::{
+    did::DidUrl,
+    resolver::{KeyReference, KeyResolver, KeyRole},
+    status_list::{Status, StatusListToken},
+    vc::validation::{CredentialStatus, StatusCheck, StatusError},
 };
+use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use reqwest::{header, redirect::Policy, Client};
 use std::{io::Read, sync::Arc, time::Duration};
 use thiserror::Error;
 use tracing::{info, warn};
-
-use crate::convert_iota_jwk_to_decoding_key;
 
 /// The largest status list token, compressed or not, the checker reads. The status list URI comes from the credential,
 /// so its server decides how much it sends. This is the body limit of IdentityKit's `ReqwestClient`.
@@ -30,14 +30,17 @@ pub enum CredentialStatusCheckerError {
 }
 
 pub struct CredentialStatusChecker {
-    pub verification_material_resolver: Arc<dyn VerificationMaterialResolver>,
+    /// Resolves the key that signed a status list token.
+    pub key_resolver: Arc<dyn KeyResolver>,
 }
 
-#[async_trait]
-impl CredentialStatusVerifier for CredentialStatusChecker {
+impl CredentialStatusChecker {
     // TODO: in the future it would be nice to have a flag every time it's called or only in the config to choose between strict validation also failing on operational errors or lenient validation as is currently.
     /// This function is basically a wrapper around `verify_status_claim` which allows us to differentiate between operational errors (unable to fetch or decode the status list token) and actual validation failures (credential status is invalid).
-    async fn check_credential_status(&self, status_claim: serde_json::Value) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn check_credential_status(
+        &self,
+        status_claim: serde_json::Value,
+    ) -> Result<(), CredentialStatusCheckerError> {
         match self.verify_status_claim(status_claim).await {
             Ok(_) => Ok(()),
             // Unable to verify status is not a validation failure, so it's logged as a warning and the validation is skipped.
@@ -46,12 +49,10 @@ impl CredentialStatusVerifier for CredentialStatusChecker {
                 Ok(())
             }
             // Actual validation failures propagate as errors
-            Err(e) => Err(Box::new(e)),
+            Err(e) => Err(e),
         }
     }
-}
 
-impl CredentialStatusChecker {
     /// Internal helper which does the following steps, as per the OAuth Token Status List specification:
     /// 1. Tries to parse the `status` claim from the credential
     /// 2. Fetch the status list token JWT
@@ -122,16 +123,17 @@ impl CredentialStatusChecker {
                     "No KID found".to_string(),
                 ))?;
 
-            // TODO: Resolving the public key stays in ssi-agent, perhaps via a trait from the OAuth TSL library
+            let kid = DidUrl::parse(&kid)
+                .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
             let public_key_jwk = self
-                .verification_material_resolver
-                .resolve_public_key(&kid)
+                .key_resolver
+                .resolve_key(&KeyReference::DidUrl(kid), KeyRole::Issuer)
                 .await
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            let decoding_key = convert_iota_jwk_to_decoding_key(&public_key_jwk).ok_or(
-                CredentialStatusCheckerError::FailedToGetCredentialStatus("Failed to create decoding key".to_string()),
-            )?;
+            let decoding_key = public_key_jwk
+                .to_decoding_key()
+                .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
             // TODO: move this logic to IdentityKit.
             let status_list_token = decode_status_list_token(&status_list_jwt, &decoding_key)
@@ -151,6 +153,26 @@ impl CredentialStatusChecker {
             warn!("Unable to parse `status` claim as per the OAuth Token Status List specification, skipping credential status check");
             Ok(())
         }
+    }
+}
+
+/// Checks the `status` claims of the credentials in a presentation, with the same lenient handling as
+/// [`CredentialStatusChecker::check_credential_status`].
+#[async_trait]
+impl StatusCheck for CredentialStatusChecker {
+    async fn check(
+        &self,
+        status: CredentialStatus<'_>,
+        _now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), StatusError> {
+        let CredentialStatus::StatusClaim(status) = status else {
+            return Err(StatusError::Unsupported(status.mechanism()));
+        };
+        let status_claim = serde_json::to_value(status).map_err(|e| StatusError::Invalid(e.to_string()))?;
+
+        self.check_credential_status(status_claim)
+            .await
+            .map_err(|e| StatusError::Invalid(e.to_string()))
     }
 }
 
@@ -199,17 +221,19 @@ mod tests {
     use super::*;
 
     use flate2::{write::GzEncoder, Compression};
-    use identity_kit::status_list::{StatusList, StatusType};
+    use identity_kit::{
+        methods::key::DidKey,
+        resolver::Resolver,
+        status_list::{StatusList, StatusType},
+    };
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-    use oid4vc_core::verification_material_resolver::test_utils::TestVerificationMaterialResolver;
     use std::io::Write;
     use wiremock::{
         matchers::{method, path},
         Mock, MockServer, ResponseTemplate,
     };
 
-    /// The `did:key` of the Ed25519 key of RFC 8032, section 7.1, test 1, which `TestVerificationMaterialResolver`
-    /// resolves.
+    /// The `did:key` of the Ed25519 key of RFC 8032, section 7.1, test 1.
     const TEST_DID: &str = "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw";
 
     /// The PKCS #8 encoding of that key's secret.
@@ -230,7 +254,7 @@ mod tests {
 
     fn checker() -> CredentialStatusChecker {
         CredentialStatusChecker {
-            verification_material_resolver: Arc::new(TestVerificationMaterialResolver),
+            key_resolver: Arc::new(Resolver::builder().with(DidKey::new()).build()),
         }
     }
 

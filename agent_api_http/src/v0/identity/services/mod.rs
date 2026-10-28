@@ -115,6 +115,7 @@ pub(crate) async fn service(
 
 #[cfg(test)]
 mod tests {
+    use agent_identity::signature_verifier::SignatureVerifier;
     use agent_identity::{
         dns::CnameResolver,
         document::aggregate::Document,
@@ -142,7 +143,7 @@ mod tests {
     };
     use identity_document::document::CoreDocument;
     use jsonwebtoken::{Algorithm, Header};
-    use oid4vc_core::{verifier::SignatureVerifier, Sign as _, Subject as _};
+    use oid4vc_core::{Sign as _, Subject as _};
     use serde_json::{json, Value};
     use shared_kernel::authorization::{
         Actor, ActorExtractor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,

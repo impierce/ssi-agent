@@ -2388,7 +2388,7 @@ components:
       - development
     AuthorizationCode:
       type: object
-      description: 'Grant Type `authorization_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1'
+      description: 'Grant Type `authorization_code` as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1>'
       properties:
         authorization_server:
           type:
@@ -2412,7 +2412,7 @@ components:
       type: object
       description: |-
         Represents an object of the `authorization_details` field of the `AuthorizationRequest` object in the Authorization Code Flow as
-        and in the `TokenRequest` object. : https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details
+        and in the `TokenRequest` object. : <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details>
       required:
       - type
       - credential_configuration_id
@@ -2443,8 +2443,8 @@ components:
     AuthorizationRequest:
       type: object
       description: |-
-        The Authorization Request is used to request authorization as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint
-        In combination with this important paragraph: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei
+        The Authorization Request is used to request authorization as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint>
+        In combination with this important paragraph: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei>
         NOTE: this Authorization Request is not to be confused with the same-named request in OpenID for Verifiable Presentations.
       required:
       - response_type
@@ -3377,10 +3377,10 @@ components:
             type:
             - string
             - 'null'
-      description: 'Credentials Supported object as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1'
+      description: 'Credentials Supported object as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1>'
     CredentialErrorResponse:
       type: string
-      description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+      description: Credential Error Response as defined in OpenID4VCI 1.0 - <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
       enum:
       - invalid_credential_request
       - unknown_credential_configuration
@@ -3476,7 +3476,7 @@ components:
       type: object
       description: |-
         Credential Issuer Metadata as described here:
-        https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html
+        <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html>
       required:
       - credential_issuer
       - credential_endpoint
@@ -3552,7 +3552,7 @@ components:
             $ref: '#/components/schemas/CredentialConfigurationsSupportedDisplay'
     CredentialOfferParameters:
       type: object
-      description: 'Credential Offer Parameters as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters'
+      description: 'Credential Offer Parameters as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters>'
       required:
       - credential_issuer
       - credential_configuration_ids
@@ -3575,11 +3575,11 @@ components:
             oneOf:
             - $ref: '#/components/schemas/Proofs'
             - type: 'null'
-      description: 'Credential Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request'
+      description: 'Credential Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request>'
     CredentialResponse:
       allOf:
       - $ref: '#/components/schemas/CredentialResponseType'
-      description: 'Credential Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response'
+      description: 'Credential Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response>'
     CredentialResponseEncryption:
       type: object
       description: Algorithms and content-encryption methods supported for encrypted Credential Responses.
@@ -4014,7 +4014,7 @@ components:
           - 'null'
     Grants:
       type: object
-      description: 'Grants as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3'
+      description: 'Grants as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3>'
       properties:
         authorization_code:
           oneOf:
@@ -4586,7 +4586,7 @@ components:
           type: string
     NotificationErrorResponse:
       type: string
-      description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+      description: 'Notification Error Response as defined in OpenID4VCI 1.0: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response>'
       enum:
       - invalid_notification_request
       - invalid_notification_id
@@ -4599,7 +4599,7 @@ components:
       - credential_deleted
     NotificationRequest:
       type: object
-      description: 'Notification Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request'
+      description: 'Notification Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request>'
       required:
       - notification_id
       - event
@@ -4620,7 +4620,7 @@ components:
       properties:
         error:
           type: string
-          description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+          description: Credential Error Response as defined in OpenID4VCI 1.0 - <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
           enum:
           - invalid_credential_request
           - unknown_credential_configuration
@@ -4641,7 +4641,7 @@ components:
       properties:
         error:
           type: string
-          description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+          description: 'Notification Error Response as defined in OpenID4VCI 1.0: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response>'
           enum:
           - invalid_notification_request
           - invalid_notification_id
@@ -4657,7 +4657,7 @@ components:
       properties:
         error:
           type: string
-          description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+          description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
           enum:
           - invalid_request
           - invalid_client
@@ -4852,7 +4852,7 @@ components:
           - type: 'null'
     PreAuthorizedCode:
       type: object
-      description: 'Grant Type `pre-authorized_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1'
+      description: 'Grant Type `pre-authorized_code` as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1>'
       required:
       - pre-authorized_code
       properties:
@@ -5311,7 +5311,7 @@ components:
           type: string
     TokenErrorResponse:
       type: string
-      description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+      description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
       enum:
       - invalid_request
       - invalid_client
@@ -5371,10 +5371,10 @@ components:
             type:
             - string
             - 'null'
-      description: 'Token Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request'
+      description: 'Token Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request>'
     TokenResponse:
       type: object
-      description: 'Token Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response'
+      description: 'Token Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response>'
       required:
       - access_token
       - token_type
