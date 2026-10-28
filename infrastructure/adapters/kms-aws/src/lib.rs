@@ -35,7 +35,8 @@ mod fake_kms;
 pub struct AwsKmsAmbientKeyProvider {
     client: OnceCell<Client>,
     deadline: Duration,
-    /// The algorithm of every key looked up so far, by key id. A key's spec never changes in AWS KMS.
+    /// The algorithm of every key looked up so far by key ID or key ARN, which always name the same key. A key's spec
+    /// never changes in AWS KMS.
     algorithms: RwLock<HashMap<String, JwsAlgorithm>>,
     /// Tags given to every key this provider generates, for example to scope IAM policies to a tenant.
     key_tags: Vec<(String, String)>,

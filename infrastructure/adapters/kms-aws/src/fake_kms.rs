@@ -12,8 +12,9 @@ use ed25519_dalek::{pkcs8::EncodePublicKey as _, Signer as _};
 use p256::ecdsa::signature::hazmat::PrehashSigner as _;
 use serde_json::{json, Value};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 use wiremock::{matchers::method, Mock, MockServer, Request, Respond, ResponseTemplate};
 
@@ -63,7 +64,8 @@ struct State {
     keys: BTreeMap<String, FakeKey>,
     aliases: BTreeMap<String, String>,
     created: u8,
-    refuse_aliases: bool,
+    refused: BTreeSet<&'static str>,
+    delayed: BTreeMap<&'static str, Duration>,
 }
 
 impl State {
@@ -141,9 +143,26 @@ impl FakeKms {
         state.keys.get_mut(&id).unwrap().state = key_state;
     }
 
-    /// Makes every `CreateAlias` fail.
-    pub fn refuse_aliases(&self) {
-        self.state.lock().unwrap().refuse_aliases = true;
+    /// Makes every request for `operation`, such as `CreateAlias`, fail.
+    pub fn refuse(&self, operation: &'static str) {
+        self.state.lock().unwrap().refused.insert(operation);
+    }
+
+    /// Answers requests for `operation` again.
+    pub fn allow(&self, operation: &'static str) {
+        self.state.lock().unwrap().refused.remove(operation);
+    }
+
+    /// Answers every request for `operation` only after `delay`.
+    pub fn delay(&self, operation: &'static str, delay: Duration) {
+        self.state.lock().unwrap().delayed.insert(operation, delay);
+    }
+
+    /// Points `alias` at the key `id` names, as retargeting an alias in AWS KMS does.
+    pub fn point_alias(&self, alias: &str, id: &str) {
+        let mut state = self.state.lock().unwrap();
+        let target = state.resolve(id).unwrap();
+        state.aliases.insert(alias.to_string(), target);
     }
 
     /// The state of every key, in the order they were created.
@@ -166,17 +185,36 @@ fn blob(value: &Value, field: &str) -> Vec<u8> {
         .unwrap_or_default()
 }
 
+fn operation(request: &Request) -> String {
+    request
+        .headers
+        .get("x-amz-target")
+        .and_then(|target| target.to_str().ok())
+        .and_then(|target| target.strip_prefix("TrentService."))
+        .unwrap_or_default()
+        .to_string()
+}
+
 impl Respond for Responder {
     fn respond(&self, request: &Request) -> ResponseTemplate {
-        let operation = request
-            .headers
-            .get("x-amz-target")
-            .and_then(|target| target.to_str().ok())
-            .and_then(|target| target.strip_prefix("TrentService."))
-            .unwrap_or_default()
-            .to_string();
+        let operation = operation(request);
+        let delay = self.0.lock().unwrap().delayed.get(operation.as_str()).copied();
+        let response = self.answer(&operation, request);
+        match delay {
+            Some(delay) => response.set_delay(delay),
+            None => response,
+        }
+    }
+}
+
+impl Responder {
+    fn answer(&self, operation: &str, request: &Request) -> ResponseTemplate {
         let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
         let mut state = self.0.lock().unwrap();
+
+        if state.refused.contains(operation) {
+            return error("LimitExceededException");
+        }
 
         if operation == "CreateKey" {
             state.created += 1;
@@ -198,9 +236,6 @@ impl Respond for Responder {
 
         if operation == "CreateAlias" {
             let alias = body["AliasName"].as_str().unwrap_or_default().to_string();
-            if state.refuse_aliases {
-                return error("LimitExceededException");
-            }
             if state.aliases.contains_key(&alias) {
                 return error("AlreadyExistsException");
             }
@@ -221,7 +256,7 @@ impl Respond for Responder {
         let Some(id) = state.resolve(body["KeyId"].as_str().unwrap_or_default()) else {
             return error("NotFoundException");
         };
-        match (operation.as_str(), state.keys[&id].state) {
+        match (operation, state.keys[&id].state) {
             ("DescribeKey", _) => {
                 ResponseTemplate::new(200).set_body_json(json!({ "KeyMetadata": state.metadata(&id) }))
             }
