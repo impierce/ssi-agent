@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent, openapi::credential};
+use super::{command::ConnectionCommand, error::ConnectionError, event::ConnectionEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct Connection {
@@ -56,7 +56,8 @@ pub struct LinkedCredentialValidation {
     /// The credential. Decoded from the JWT *without* verifying its signature when
     /// `result.valid` is `false`, and `None` when it could not be decoded at all.
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(schema_with = credential)]
+    // Inlined, because the issuance aggregate's `Credential` already takes the component name.
+    #[schema(schema_with = <Credential as utoipa::PartialSchema>::schema)]
     pub credential: Option<Credential>,
     /// The raw credential JWT exactly as it appeared in the presentation.
     pub jwt: String,
