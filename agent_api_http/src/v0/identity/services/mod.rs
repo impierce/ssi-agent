@@ -4,7 +4,6 @@ pub mod linked_vp;
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
 use crate::handlers::caller;
-use crate::v0::identity::well_known::did_configuration::DomainLinkageConfigurationSchema;
 use agent_identity::{
     queries,
     service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
@@ -17,7 +16,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use identity_kit::did::Service as DidService;
+use identity_kit::{did::Service as DidService, domain_linkage::DomainLinkageConfiguration};
 use serde::Serialize;
 use std::sync::Arc;
 use url::Url;
@@ -43,7 +42,7 @@ struct ServiceResponse {
 #[derive(utoipa::ToSchema)]
 #[schema(as = ServiceResource)]
 enum ServiceResourceSchema {
-    LinkedDomains(DomainLinkageConfigurationSchema),
+    LinkedDomains(DomainLinkageConfiguration),
 }
 
 impl From<Service> for ServiceResponse {
