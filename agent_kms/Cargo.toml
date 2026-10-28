@@ -19,6 +19,7 @@ strum.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 utoipa.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 agent_store = { path = "../agent_store" }
