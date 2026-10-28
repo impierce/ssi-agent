@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod key_providers;
+pub mod keys;
 pub mod openapi;
 
 use crate::API_VERSION;
@@ -13,6 +14,7 @@ use axum::{
 use key_providers::{
     add_key_provider, get_all_key_providers, get_key_provider_keys, remove_key_provider, test_key_provider_connection,
 };
+use keys::{create_key, get_all_keys};
 use std::sync::Arc;
 
 pub fn router(kms_state: Arc<KmsState>) -> Router {
@@ -21,6 +23,8 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
             API_VERSION,
             Router::new()
                 .route("/add-key-provider", post(add_key_provider))
+                .route("/create-key", post(create_key))
+                .route("/get-all-keys", get(get_all_keys))
                 .route("/get-all-key-providers", get(get_all_key_providers))
                 .route("/get-key-provider-keys/{provider_type}", get(get_key_provider_keys))
                 .route("/remove-key-provider", post(remove_key_provider))
@@ -103,6 +107,8 @@ mod tests {
             ("POST", "/v0/remove-key-provider"),
             ("POST", "/v0/test-key-provider-connection"),
             ("GET", "/v0/get-key-provider-keys/aws_kms_ambient"),
+            ("POST", "/v0/create-key"),
+            ("GET", "/v0/get-all-keys"),
         ] {
             assert_eq!(send(&app, method, uri, None).await.0, StatusCode::NOT_FOUND, "{uri}");
         }
@@ -179,5 +185,37 @@ mod tests {
             (status, &body["detail"]),
             (StatusCode::BAD_GATEWAY, &json!("connection refused"))
         );
+    }
+
+    async fn create_in_memory_key(app: &Router) -> (StatusCode, Value) {
+        add(app, "in_memory").await;
+        let body = json!({ "providerType": "in_memory", "algorithm": "EdDSA" });
+        send(app, "POST", "/v0/create-key", Some(body)).await
+    }
+
+    #[tokio::test]
+    async fn creating_a_key_answers_with_its_reference() {
+        let app = app_with_kms().await;
+
+        let (status, body) = create_in_memory_key(&app).await;
+
+        let fields: Vec<_> = body.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(
+            (status, fields),
+            (
+                StatusCode::CREATED,
+                vec!["id", "provider_type", "provider_key_id", "algorithm", "public_key"]
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn lists_created_keys() {
+        let app = app_with_kms().await;
+        let (_, created) = create_in_memory_key(&app).await;
+
+        let response = send(&app, "GET", "/v0/get-all-keys", None).await;
+
+        assert_eq!(response, (StatusCode::OK, json!([created])));
     }
 }
