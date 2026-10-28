@@ -834,6 +834,8 @@ impl AlgorithmExt for jsonwebtoken::Algorithm {
             jsonwebtoken::Algorithm::PS384 => "PS384",
             jsonwebtoken::Algorithm::PS512 => "PS512",
             jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+            // `Algorithm` is `non_exhaustive`; all variants of jsonwebtoken 11 are listed above.
+            _ => unreachable!("unknown algorithm {self:?}"),
         }
     }
 }

@@ -2,7 +2,7 @@
 use agent_shared::config::TESTINDEX;
 use agent_shared::config::{BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use oauth_tsl::status_list::{Bits, StatusList};
+use identity_kit::status_list::{StatusList, StatusType};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -10,11 +10,21 @@ use crate::{
     services::IssuanceServices,
     status_list::{command::StatusListCommand, error::StatusListError, event::StatusListEvent},
 };
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StatusListAggregate {
     pub id: String,
     pub list: StatusList,
     pub used_indices: Vec<usize>,
+}
+
+impl Default for StatusListAggregate {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            list: StatusList::new(BITS_PER_STATUS, 0).expect("`BITS_PER_STATUS` is 1, 2, 4 or 8"),
+            used_indices: vec![],
+        }
+    }
 }
 
 impl Aggregate for StatusListAggregate {
@@ -37,11 +47,8 @@ impl Aggregate for StatusListAggregate {
         let events: Vec<Self::Event> = match command {
             CreateStatusList { id } => Ok(vec![StatusListCreated {
                 id,
-                status_list: StatusList {
-                    status_size: Bits::Two, // must be equal to BITS_PER_STATUS
-                    status_list: vec![0; STATUS_LIST_BYTES_AMOUNT],
-                    aggregation_uri: None,
-                },
+                status_list: StatusList::from_bytes(BITS_PER_STATUS, vec![0; STATUS_LIST_BYTES_AMOUNT])
+                    .map_err(StatusListError::StatusListEncodingError)?,
                 used_indices: vec![],
             }]),
             _ if self.id.is_empty() => return Err(StatusListError::AggregateNotFound),
@@ -66,7 +73,7 @@ impl Aggregate for StatusListAggregate {
                     }
                 };
                 status_list
-                    .set_status(index, status as u8)
+                    .set(index as u64, status)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
                 used_indices.push(index);
 
@@ -84,7 +91,7 @@ impl Aggregate for StatusListAggregate {
             UpdateIndex { index, status } => {
                 let mut status_list = self.list.clone();
                 status_list
-                    .set_status(index, status as u8)
+                    .set(index as u64, status)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
 
                 fill_status_list_with_random_values(&mut status_list, &self.used_indices)?;
@@ -160,7 +167,7 @@ fn fill_status_list_with_random_values(
             let mut rng = rand::rng();
             // the range is 0..2 because BITS_PER_STATUS is set to 2, meaning 4 options, but we only have 3 options defined (VALID, UNVALID, SUSPENDED)
             status_list
-                .set_status(i, rng.random_range(0..2))
+                .set(i as u64, StatusType(rng.random_range(0..2)))
                 .map_err(StatusListError::StatusListEncodingError)?;
         }
     }

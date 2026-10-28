@@ -9,7 +9,7 @@ pub enum DocumentError {
     #[error("Error while handling document command: {0}")]
     GenericError(String),
     #[error("Error while producing DID document: {0}")]
-    ProduceDocumentError(#[from] identity_document::error::Error),
+    ProduceDocumentError(#[from] identity_kit::did::DocumentError),
     #[error("Missing document")]
     MissingDocumentError,
     #[error("Missing did_method")]

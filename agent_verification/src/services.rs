@@ -14,7 +14,7 @@ use std::{collections::HashMap, str::FromStr, sync::Arc};
 pub struct VerificationServices {
     pub verifier: Arc<Subject>,
     pub relying_party: RelyingPartyManager,
-    pub credential_status_checker: CredentialStatusChecker,
+    pub credential_status_checker: Arc<CredentialStatusChecker>,
     pub siopv2_client_metadata: ClientMetadataResource<siopv2::authorization_request::ClientMetadataParameters>,
     pub oid4vp_client_metadata: ClientMetadataResource<oid4vp::authorization_request::ClientMetadataParameters>,
 }
@@ -72,9 +72,9 @@ impl Service for VerificationServices {
             .unwrap(),
             siopv2_client_metadata,
             oid4vp_client_metadata,
-            credential_status_checker: CredentialStatusChecker {
-                verification_material_resolver: verifier.clone(),
-            },
+            credential_status_checker: Arc::new(CredentialStatusChecker {
+                key_resolver: verifier.clone(),
+            }),
         }
     }
 }

@@ -7,7 +7,9 @@ use identity_iota::{
 use iota_sdk_legacy::client::secret::stronghold::StrongholdSecretManager;
 use log::info;
 
+pub mod key_store;
 pub mod service;
+pub mod signer;
 pub mod subject;
 
 pub async fn stronghold_storage() -> StrongholdExtStorage {

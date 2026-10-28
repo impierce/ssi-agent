@@ -24,7 +24,7 @@ use agent_issuance::{
 };
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::Template;
-use agent_shared::config::Authorization;
+use agent_shared::config::{Authorization, BITS_PER_STATUS};
 use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
 use axum::Extension;
 use axum::{
@@ -34,7 +34,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::header;
-use oauth_tsl::status_list::StatusType;
+use identity_kit::status_list::StatusType;
 use oid4vci::{
     credential_format_profiles::CredentialFormats,
     credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
@@ -862,7 +862,7 @@ pub struct PatchCredentialEndpointRequest {
         (status = 204, description = "Credential status updated successfully"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
-        (status = 422, description = "Request body does not match the expected schema"),
+        (status = 422, description = "Request body does not match the expected schema, or the status list can't hold the status"),
     )
 )]
 pub async fn patch_credential(
@@ -873,6 +873,15 @@ pub async fn patch_credential(
         credential_status: status,
     }): Json<PatchCredentialEndpointRequest>,
 ) -> Result<Response, ApiError> {
+    let max_status = (1u16 << BITS_PER_STATUS) - 1;
+    if u16::from(status.0) > max_status {
+        return Err(ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+            .title("Unsupported Credential Status")
+            .type_url(type_url("issuance#unsupported-credential-status"))
+            .message(format!("The status list holds statuses from 0 to {max_status}."))
+            .finish());
+    }
+
     if let Some(credential) = query_handler(
         state.authorization_checker.clone(),
         actor.clone(),
@@ -947,6 +956,7 @@ pub mod tests {
     use agent_secret_manager::subject::Subject;
     use agent_shared::application_state::{Command, CommandHandler};
     use agent_shared::config::TESTINDEX;
+    use agent_shared::credential_status_checker::{decode_status_list_token, decompress_gzip};
     use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
@@ -955,9 +965,8 @@ pub mod tests {
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use cqrs_es::AggregateError;
+    use identity_kit::status_list::StatusListToken;
     use lazy_static::lazy_static;
-    use oauth_tsl::relying_party::check_status_in_status_list_token_jwt;
-    use oauth_tsl::relying_party::{decompress_gzip, StatusListTokenResponseType};
     use serde_json::json;
     use shared_kernel::authorization::{
         AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
@@ -1346,7 +1355,8 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
+                    .header(http::header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                    .header(http::header::ACCEPT_ENCODING, "gzip")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1370,9 +1380,10 @@ pub mod tests {
             }
         };
 
-        let status = check_status_in_status_list_token_jwt(&jwt_status_list_token, TESTINDEX, decoding_key).unwrap();
+        let status_list_token = decode_status_list_token(&jwt_status_list_token, &decoding_key).unwrap();
+        let status = status_list_token.status_list.get(TESTINDEX as u64);
 
-        assert_eq!(status, StatusType::INVALID as u8);
+        assert_eq!(status, Some(identity_kit::status_list::StatusType::INVALID));
     }
 
     #[tokio::test]
@@ -1388,6 +1399,41 @@ pub mod tests {
 
         let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state, &template_id).await;
         patch_credential(&mut app, credential_endpoint).await;
+    }
+
+    #[tokio::test]
+    async fn test_patch_credential_rejects_statuses_the_status_list_cant_hold() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let credential_endpoint = create_test_signed_credential(&mut app, &issuance_state, &template_id).await;
+
+        for (credential_status, expected_status) in [
+            (json!(4), StatusCode::UNPROCESSABLE_ENTITY),
+            (json!(3), StatusCode::NO_CONTENT),
+        ] {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::PATCH)
+                        .uri(&credential_endpoint)
+                        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                        .body(Body::from(
+                            serde_json::to_vec(&json!({ "credentialStatus": credential_status })).unwrap(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), expected_status, "{credential_status}");
+        }
     }
 
     #[tokio::test]

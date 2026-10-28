@@ -583,13 +583,19 @@ pub mod service_tests {
         linked_domains_resource, linked_domains_service, linked_domains_service_entry, linked_domains_service_id,
         linked_verifiable_presentation_service_id,
     };
-    use crate::document::aggregate::test_utils::both_verification_methods;
+    use crate::convert::convert;
     use agent_shared::config::set_config;
     use cqrs_es::test::TestFramework;
     use identity_iota::verification::VerificationMethod;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
     type ServiceTestFramework = TestFramework<Service>;
+
+    /// The verification methods of the document fixtures, as the service commands take them.
+    #[fixture]
+    fn both_verification_methods() -> Vec<VerificationMethod> {
+        convert(&crate::document::aggregate::test_utils::both_verification_methods::default()).unwrap()
+    }
 
     fn web_did_method() {
         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);

@@ -5,18 +5,17 @@ use crate::credential::event::CredentialEvent;
 use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
+use agent_secret_manager::signer::SubjectSigner;
 use agent_secret_manager::subject::Subject;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::common::Timestamp;
-use identity_core::convert::FromJson;
-use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
+use identity_kit::jose::{JwsHeader, Signer as _};
+use identity_kit::sd_jwt_vc::{Confirmation, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims};
+use identity_kit::status_list::{StatusListRef, StatusListToken, StatusType};
 use jsonwebtoken::Header;
-use oauth_tsl::status_list::StatusType;
-use oauth_tsl::tokens::status_list_token::StatusListTyp;
-use oid4vc_core::{jwt, Sign as _, Subject as _};
+use oid4vc_core::{jwt, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{self, VcSdJwt, VcSdJwtParameters};
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
@@ -26,7 +25,6 @@ use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::notification_request::NotificationRequest;
 use oid4vci::VerifiableCredentialJwt;
-use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -71,12 +69,22 @@ mod never_as_str {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CredentialStatus {
     pub index: usize,
     #[schema(schema_with = status_type)]
     pub status: StatusType,
     pub status_list_url: String,
+}
+
+impl Default for CredentialStatus {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            status: StatusType::VALID,
+            status_list_url: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -267,10 +275,10 @@ impl Aggregate for Credential {
                 // Status claim as per the IETF OAuth Token Status List specification.
                 let status_list_url = get_status_list_url(status_list_id)?;
 
-                let status_claim = sd_jwt_vc::Status(StatusMechanism::StatusList(StatusListRef {
-                    idx: index,
-                    uri: status_list_url.clone(),
-                }));
+                let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
+                    status_list_url.to_string(),
+                    index as u64,
+                ));
 
                 // Use the credential root `id` as `jti`. DC SD-JWTs have no root `id`, so derive the same
                 // `urn:uuid:` identifier that W3C credentials receive during unsigned credential creation.
@@ -361,7 +369,7 @@ impl Aggregate for Credential {
                             credential_data,
                             jti,
                             iss,
-                            iat,
+                            DateTime::from_timestamp(iat.to_unix(), 0).ok_or(InvalidCredentialDataError)?,
                             status_claim,
                             self.expires_at,
                             holder_kid,
@@ -378,30 +386,21 @@ impl Aggregate for Credential {
                             status_list_url.to_string(),
                         )?;
 
-                        // Get the kid for the header of the VcSdJwt
-                        let issuer = &services.issuer;
-                        let algorithm = get_preferred_signing_algorithm();
-                        let kid = issuer
-                            .key_id(&get_preferred_did_method().to_string(), algorithm)
-                            .await
-                            .ok_or(KeyIdError)?;
+                        let signer = sd_jwt_signer(&services.issuer).await?;
 
-                        let mut builder = SdJwtBuilder::new(&credential_data)
-                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
-                            .header("typ", "vc+sd-jwt")
-                            .header("kid", kid)
-                            .insert_claim("status", status_claim)
-                            .and_then(|builder| builder.insert_claim("jti", jti.to_string()))
-                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?;
+                        let mut claims = credential_data.as_object().cloned().ok_or(BuildCredentialError(
+                            "Failed to convert credential data to JSON object".to_string(),
+                        ))?;
+                        claims.insert("status".to_string(), json!(status_claim));
+                        claims.insert("jti".to_string(), json!(jti));
+                        claims.insert("iss".to_string(), json!(iss));
 
                         // This sets the `cnf` claim
                         if let Some(holder_kid) = holder_kid.clone() {
-                            builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+                            claims.insert("cnf".to_string(), json!(Confirmation::kid(holder_kid)));
                         }
 
-                        builder = builder
-                            .insert_claim("iss", iss)
-                            .map_err(|_| BuildCredentialError("Failed to insert 'iss' claim".to_string()))?;
+                        let mut builder = SdJwtBuilder::new(claims);
 
                         // By default set all custom claims to concealable.
                         // TODO: This only makes the credentialSubject properties concealable. Further research needed to see which properties should be conceleable, also depending on what Credential Data Model.
@@ -416,18 +415,14 @@ impl Aggregate for Credential {
                             .collect::<Vec<String>>();
 
                         for path in paths {
-                            builder = builder
-                                .make_concealable(&format!("/credentialSubject/{}", path))
-                                .map_err(|e| {
-                                    BuildCredentialError(format!(
-                                        "Failed to make claim at path `/credentialSubject/{}` concealable: {}",
-                                        path, e
-                                    ))
-                                })?;
+                            builder = builder.conceal(["credentialSubject", path.as_str()]);
                         }
 
+                        let mut header = JwsHeader::new(signer.alg()).with_typ(SdJwtCredentialV2::TYP);
+                        header.kid = signer.kid().map(str::to_owned);
+
                         let vc_sd_jwt_credential = builder
-                            .finish(&**issuer, algorithm.as_str())
+                            .sign(&header, &signer)
                             .await
                             .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
@@ -581,7 +576,7 @@ fn build_signed_w3c_credential_data(
     credential_data.insert_if_none(
         &["credentialStatus"],
         json!({
-            "type": StatusListTyp::Jwt.to_string(),
+            "type": StatusListToken::TYP,
             "id": status_list_url.to_string(),
             "uri": status_list_url.to_string(),
             "idx": status_index,
@@ -910,6 +905,17 @@ fn build_unsigned_w3c_credential_data(
     ))
 }
 
+/// The signer of SD-JWT credentials: the issuer's key for the preferred DID method and signing algorithm.
+async fn sd_jwt_signer(issuer: &Arc<Subject>) -> Result<SubjectSigner, CredentialError> {
+    SubjectSigner::new(
+        issuer.clone(),
+        get_preferred_did_method().to_string(),
+        get_preferred_signing_algorithm(),
+    )
+    .await
+    .ok_or(KeyIdError)
+}
+
 /// Signs an IETF Digital Credentials SD-JWT (DC SD-JWT) credential.
 #[allow(clippy::too_many_arguments)]
 async fn sign_dc_sd_jwt(
@@ -917,59 +923,41 @@ async fn sign_dc_sd_jwt(
     credential_data: serde_json::Value,
     jti: Url,
     iss: identity_core::common::Url,
-    iat: Timestamp,
-    status_claim: identity_credential::sd_jwt_vc::Status,
+    iat: DateTime<Utc>,
+    status_claim: identity_kit::status_list::Status,
     expires_at: Option<DateTime<Utc>>,
     holder_kid: Option<String>,
 ) -> Result<serde_json::Value, CredentialError> {
-    // Get the kid for the header of the DcSdJwt
-    let algorithm = get_preferred_signing_algorithm();
-    let kid = issuer
-        .key_id(&get_preferred_did_method().to_string(), algorithm)
-        .await
-        .ok_or(KeyIdError)?;
+    let signer = sd_jwt_signer(issuer).await?;
 
-    // Inject `jti` into a payload copy before building, as `SdJwtVcBuilder` lacks a `jti()` method
-    // and `credential_data` must stay immutable & non-concealable.
-    let mut credential_data_with_jti = credential_data.clone();
-    credential_data_with_jti
-        .insert_at_path(&["jti"], serde_json::Value::String(jti.to_string()))
-        .ok_or(BuildCredentialError("Failed to set jti claim".to_string()))?;
+    let claims: SdJwtVcClaims = serde_json::from_value(credential_data)
+        .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
 
-    let mut builder = SdJwtVcBuilder::new(&credential_data_with_jti)
-        .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
-        .header("typ", "dc+sd-jwt")
-        .header("kid", kid);
+    // By default set all custom claims to concealable.
+    let paths = claims.claims.keys().cloned().collect::<Vec<String>>();
 
-    // Set the JWT claims
-    builder = builder.iss(iss);
-    builder = builder.iat(iat);
-    builder = builder.nbf(iat);
-    builder = builder.status(status_claim);
+    let mut builder = SdJwtVcBuilder::from_claims(claims)
+        .with_jti(jti)
+        .with_issuer(iss.to_string())
+        .with_issued_at(iat)
+        .with_not_before(iat)
+        .with_status(status_claim);
 
-    if let Some(expiration_date) = expires_at {
-        builder = builder.exp(Timestamp::parse(&expiration_date.to_rfc3339()).expect("Could not parse issuance_date"));
+    if let Some(expires_at) = expires_at {
+        builder = builder.with_expires_at(expires_at);
     }
 
     // This sets the `cnf` claim
     if let Some(holder_kid) = holder_kid {
-        builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+        builder = builder.with_confirmation(Confirmation::kid(holder_kid));
     }
 
-    // By default set all custom claims to concealable.
-    let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
-        .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
-
-    let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
-
     for path in paths {
-        builder = builder.make_concealable(&format!("/{}", path)).map_err(|e| {
-            BuildCredentialError(format!("Failed to make claim at path `/{}` concealable: {}", path, e))
-        })?;
+        builder = builder.conceal([path.as_str()]);
     }
 
     let sd_jwt_credential = builder
-        .finish(&**issuer, algorithm.as_str())
+        .sign(&signer)
         .await
         .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
@@ -1012,8 +1000,8 @@ pub mod credential_tests {
     use agent_shared::config::TESTINDEX;
     use jsonwebtoken::Algorithm;
 
-    use identity_core::common::{Timestamp, Url};
-    use identity_credential::sd_jwt_vc::SdJwtVc;
+    use identity_core::common::Url;
+    use identity_kit::sd_jwt_vc::SdJwtVc;
     use rstest::rstest;
     use serde_json::json;
 
@@ -1224,11 +1212,25 @@ pub mod credential_tests {
         assert_eq!(credential_status.index, TESTINDEX);
 
         let mut parts = signed_credential.as_str().unwrap().split('~');
-        let mut jwt = parts.next().unwrap().split('.');
+        let issuer_signed_jwt = parts.next().unwrap();
+        let mut jwt = issuer_signed_jwt.split('.');
         let header = decode_segment(jwt.next().unwrap());
         let payload = decode_segment(jwt.next().unwrap());
         assert_eq!(header["typ"], typ);
-        assert!(header["kid"].is_string());
+
+        // The issuer-signed JWT verifies with the key its `kid` names.
+        let public_key = agent_secret_manager::subject::Subject::test_subject()
+            .await
+            .resolve_public_key(header["kid"].as_str().unwrap())
+            .await
+            .unwrap();
+        let decoding_key =
+            jsonwebtoken::DecodingKey::from_jwk(&serde_json::from_value(json!(public_key)).unwrap()).unwrap();
+        let mut validation = jsonwebtoken::Validation::new(serde_json::from_value(header["alg"].clone()).unwrap());
+        validation.required_spec_claims = Default::default();
+        validation.validate_exp = false;
+        jsonwebtoken::decode::<serde_json::Value>(issuer_signed_jwt, &decoding_key, &validation).unwrap();
+
         assert!(payload["iss"].is_string());
         assert_eq!(payload["jti"], format!("urn:uuid:{credential_id}"));
         assert_eq!(payload["status"]["status_list"]["idx"], TESTINDEX);
@@ -1326,9 +1328,10 @@ pub mod credential_tests {
         }
     }
 
-    // Ensures the `jti` claim is present and un-concealed in the signed DC SD-JWT.
+    // Ensures the registered claims are set and not concealed in the signed DC SD-JWT: `SdJwtVc::parse` rejects a
+    // registered claim that comes from a disclosure.
     #[tokio::test]
-    async fn test_sign_dc_sd_jwt_jti_not_concealed() {
+    async fn test_sign_dc_sd_jwt_registered_claims_not_concealed() {
         let issuer = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
         let credential_data = serde_json::json!({
             "vct": "http://localhost:3033/vct/U0QtSldU/0",
@@ -1337,8 +1340,13 @@ pub mod credential_tests {
         });
         let jti = url::Url::parse("urn:uuid:123e4567-e89b-12d3-a456-426614174000").unwrap();
         let iss = Url::parse("https://example.com/issuer").unwrap();
-        let iat = Timestamp::now_utc();
-        let status_claim = identity_credential::sd_jwt_vc::Status(StatusMechanism::Custom(serde_json::json!({})));
+        let iat = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let expires_at = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
+            "https://example.com/status-lists/0",
+            TESTINDEX as u64,
+        ));
+        let holder_kid = "did:example:holder#key-1".to_string();
 
         let result = sign_dc_sd_jwt(
             &issuer,
@@ -1346,17 +1354,28 @@ pub mod credential_tests {
             jti.clone(),
             iss,
             iat,
-            status_claim,
-            None,
-            None,
+            status_claim.clone(),
+            Some(expires_at),
+            Some(holder_kid.clone()),
         )
         .await
         .unwrap();
 
-        let sd_jwt_str = result.as_str().expect("Expected JSON string output");
-        let parsed_vc = SdJwtVc::parse(sd_jwt_str).expect("Failed to parse string into SdJwtVc");
+        let credential = SdJwtVc::parse(result.as_str().expect("Expected JSON string output"))
+            .expect("Failed to parse string into SdJwtVc");
+        let claims = credential.claims();
 
-        assert_eq!(parsed_vc.claims()["jti"], json!(jti.to_string()));
+        assert_eq!(credential.header().typ.as_deref(), Some("dc+sd-jwt"));
+        assert!(credential.header().kid.is_some());
+        assert_eq!(claims.jti.as_deref(), Some(jti.as_str()));
+        assert_eq!(claims.iss.as_deref(), Some("https://example.com/issuer"));
+        assert_eq!(claims.iat, Some(1_700_000_000));
+        assert_eq!(claims.nbf, Some(1_700_000_000));
+        assert_eq!(claims.exp, Some(1_800_000_000));
+        assert_eq!(claims.cnf, Some(Confirmation::kid(holder_kid)));
+        assert_eq!(claims.status, Some(status_claim));
+        assert_eq!(claims.claims["first_name"], "Ferris");
+        assert_eq!(claims.claims["last_name"], "Rustacean");
     }
 }
 
@@ -1396,9 +1415,9 @@ pub mod test_utils {
         CREDENTIAL_ID.to_string()
     }
 
-    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWxvZ28ucG5nIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.jCS4N963nNaXz0C-_cEfC_Nfaam6apAFhMCxgafHoOruoZXVQYyXVUXs6qii3tgnktZUQWcSuXXccIFy4jphCw";
-    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvZXh0ZW5zaW9ucy5qc29uIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwibG9nb191cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJjcmVkZW50aWFsU3ViamVjdCI6eyJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifSwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319fQ.7P_MfG49CYmmIM63i63i90uEr1XR9qoTh-1OgKGdW34rYmjfCeGTMwOweG_XrP1GMiR_CEm_eLDeG9V9HgsdCA";
-    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIkV1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sIm5hbWUiOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImNyZWRlbnRpYWxQcm9maWxlcyI6e30sImRpc3BsYXlQYXJhbWV0ZXIiOnsidGl0bGUiOnsiZW4iOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwifSwicHJpbWFyeUxhbmd1YWdlIjp7fSwibGFuZ3VhZ2UiOnt9LCJpbmRpdmlkdWFsRGlzcGxheSI6eyJsYW5ndWFnZSI6e30sImRpc3BsYXlEZXRhaWwiOnsicGFnZSI6MSwiaW1hZ2UiOnsiY29udGVudCI6IltQTEFDRUhPTERFUl0iLCJjb250ZW50RW5jb2RpbmciOnt9LCJjb250ZW50VHlwZSI6e319fX19LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9ldWRpdy5vcmcvY3JlZGVudGlhbHMvc2NoZW1hcy9FdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsVjNfMy5qc29uIiwidHlwZSI6Ikpzb25TY2hlbWEifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6IkNyZWRlbnRpYWxTdGF0dXMiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfSwiaXNzdWVkIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.a0HBjHyJATMTACRxLfJOjU5_pHQpjpCV_k67_HIKX1gpYSs6VRCmk2nw07uXnWcHD1JL-Fu3brdAMAYzwZ2gBA";
+    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWxvZ28ucG5nIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.smOr1FnJ-W-oxcWP_v4It4MCpDvdOo6b8inXO4jEWhkmAjew9tfmW40T-rhyPB228c0djHylT3UQ4Q0YBcSIAQ";
+    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvZXh0ZW5zaW9ucy5qc29uIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwibG9nb191cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJjcmVkZW50aWFsU3ViamVjdCI6eyJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifSwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19fQ.Ok_SnmCAoY3AoKZjF1odM4_HnbTlYWD-Z5EMRqRwI-GjJKMrohDaZqJgXOsOvxtXfPHoJGUm1nUKhRX5seKnDw";
+    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIkV1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sIm5hbWUiOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImNyZWRlbnRpYWxQcm9maWxlcyI6e30sImRpc3BsYXlQYXJhbWV0ZXIiOnsidGl0bGUiOnsiZW4iOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwifSwicHJpbWFyeUxhbmd1YWdlIjp7fSwibGFuZ3VhZ2UiOnt9LCJpbmRpdmlkdWFsRGlzcGxheSI6eyJsYW5ndWFnZSI6e30sImRpc3BsYXlEZXRhaWwiOnsicGFnZSI6MSwiaW1hZ2UiOnsiY29udGVudCI6IltQTEFDRUhPTERFUl0iLCJjb250ZW50RW5jb2RpbmciOnt9LCJjb250ZW50VHlwZSI6e319fX19LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9ldWRpdy5vcmcvY3JlZGVudGlhbHMvc2NoZW1hcy9FdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsVjNfMy5qc29uIiwidHlwZSI6Ikpzb25TY2hlbWEifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6IkNyZWRlbnRpYWxTdGF0dXMiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfSwiaXNzdWVkIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.9fTT-VqaKelZTmAt9EFBO86OMhdD2VSxtXdcR59kTvP9GpQFhSXZABgEhqxZh9dQPbd-5kKxTaGZHDBc11oLAw";
 
     lazy_static! {
         pub static ref JWT_VC_JSON_OBv3_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
