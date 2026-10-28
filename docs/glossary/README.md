@@ -13,6 +13,7 @@ Contains:
 - **Core Identity Concepts**: DID, Credential, Holder, Issuer, Verifier, Wallet, Claim, Proof, Signature
 - **OpenID4 Protocols**: OpenID4VCI, OpenID4VP, SIOP v2, Credential Offer, Pre-authorized Code, Challenge
 - **Credential Lifecycle**: Issuance Flow, Presentation Flow, Verification, Selective Disclosure, Credential Status
+- **Terms to Avoid**: Oid, real names in examples
 
 ### Using the Ubiquitous Language
 

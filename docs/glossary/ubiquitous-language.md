@@ -172,6 +172,24 @@ Issuers set up a template once and reuse it for every instance of that credentia
 
 ---
 
+## Terms to Avoid
+
+### Oid
+
+An abbreviation of OpenID that only exists because some names were already taken, such as the published crates `oid4vci` and `oid4vp`. Spell out OpenID everywhere else, in prose as in names: OpenID4VCI, OpenID4VP, OpenID Federation, `OpenId…` in type names. "Oid" appears only where someone else fixed the name, such as those crates and the types they export.
+
+OIDC, the established abbreviation of OpenID Connect, is not affected.
+
+**Instead**: OpenID
+
+### Real names in examples
+
+Examples, test data and documentation use made-up names: organisations such as "Example Federation" or "Example Member", and domains under `example.com`, `example.org` or `example.net` (reserved for this by RFC 2606). They never name real organisations, deployments, people or their URLs, even when a real case prompted the example.
+
+**Instead**: neutral, made-up names and reserved example domains
+
+---
+
 ## See Also
 
 - [API Documentation](https://beta.docs.impierce.com/unicore/) - OpenAPI specification for UniCore
@@ -179,4 +197,4 @@ Issuers set up a template once and reuse it for every instance of that credentia
 
 ---
 
-**Last updated**: 2026-06-17
+**Last updated**: 2026-10-28
