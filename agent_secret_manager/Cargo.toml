@@ -54,5 +54,5 @@ rstest.workspace = true
 wiremock.workspace = true
 
 [features]
-test_utils = []
+test_utils = ["identity-kit/local-network"]
 allow-localhost = ["identity-kit/local-network"]

@@ -3858,23 +3858,28 @@ components:
           - EdDSA
     DomainLinkageConfiguration:
       type: object
-      description: |-
-        A DID Configuration resource that links a domain to DIDs.
-
-        See the [DID Configuration Resource](https://identity.foundation/.well-known/resources/did-configuration/#did-configuration-resource).
+      description: 'A DID configuration resource (Well Known DID Configuration §3.1): the context and the domain linkage credentials, one per linked DID.'
       required:
       - '@context'
       - linked_dids
       properties:
         '@context':
           type: string
-          example: https://identity.foundation/.well-known/did-configuration/v1
+          description: The DID configuration context.
+          enum:
+          - https://identity.foundation/.well-known/did-configuration/v1
         linked_dids:
           type: array
           items:
-            type: string
-          description: Domain Linkage Credentials in the JSON Web Token Proof Format.
-          minItems: 1
+            oneOf:
+            - type: string
+              description: 'A domain linkage credential in the JSON Web Token proof format: a compact JWS.'
+            - type: object
+              description: A domain linkage credential in the Linked Data Proof format.
+              additionalProperties: true
+            description: A domain linkage credential.
+          description: The domain linkage credentials.
+      additionalProperties: false
     DomainLinkageValidation:
       type: object
       required:

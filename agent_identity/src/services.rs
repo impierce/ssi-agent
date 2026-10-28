@@ -8,8 +8,7 @@ use crate::service::error::ServiceError;
 use crate::signature_verifier::SignatureVerifier;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
-use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
-use identity_did::{CoreDID, DIDUrl, DID};
+use identity_did::{CoreDID, DID};
 use identity_iota::{
     core::{FromJson, Object, ToJson},
     credential::{
@@ -18,6 +17,12 @@ use identity_iota::{
         JwtPresentationValidatorUtils, StatusCheck,
     },
     document::CoreDocument,
+};
+use identity_kit::{
+    did::Did,
+    domain_linkage::{DomainLinkageConfiguration, DomainLinkageValidator},
+    jose::DefaultVerifier,
+    vc::validation::CredentialValidationOptions,
 };
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
@@ -50,7 +55,7 @@ pub enum DidConfigurationError {
 /// linkage verification.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkedDid {
-    pub did: DIDUrl,
+    pub did: Did,
     pub domain_linkage_valid: bool,
     pub domain_linkage_error: Option<String>,
 }
@@ -73,7 +78,7 @@ impl LinkedVerifiablePresentationSource for NoLinkedVerifiablePresentations {
 
 impl LinkedDid {
     /// A DID whose domain linkage could not be established.
-    pub fn unverified(did: DIDUrl, error: impl Into<String>) -> Self {
+    pub fn unverified(did: Did, error: impl Into<String>) -> Self {
         Self {
             did,
             domain_linkage_valid: false,
@@ -143,7 +148,7 @@ pub(crate) fn validate_linked_verifiable_presentation(
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
     pub public_url: Url,
-    pub linkage_clock: Arc<dyn Fn() -> identity_core::common::Timestamp + Send + Sync>,
+    pub linkage_clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
     /// Resolves a linked domain's `CNAME` chain when verifying that it points at this deployment.
     pub cname_resolver: Arc<dyn CnameResolver>,
     pub client: Client,
@@ -160,7 +165,7 @@ impl IdentityServices {
         Self {
             subject,
             public_url,
-            linkage_clock: Arc::new(identity_core::common::Timestamp::now_utc),
+            linkage_clock: Arc::new(Utc::now),
             cname_resolver: crate::dns::system_resolver(),
             client: Client::new(),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
@@ -175,7 +180,7 @@ impl IdentityServices {
     where
         Self: Sized,
     {
-        let subject = futures::executor::block_on(async { Subject::new().await });
+        let subject = futures::executor::block_on(async { Subject::new().await }).with_local_network_resolver();
 
         // Tests drive outbound identity resources from mock servers on `127.0.0.1`, which the
         // production policy rejects.
@@ -230,38 +235,26 @@ impl IdentityServices {
             return Ok(vec![]);
         }
 
-        let validator = JwtDomainLinkageValidator::with_signature_verifier(SignatureVerifier);
-        let url = identity_iota::core::Url::from(url.clone());
+        // The subject resolves the key of each DID, including the DID methods IdentityKit doesn't.
+        let validator = DomainLinkageValidator::new(Arc::clone(&self.subject), DefaultVerifier);
+        let options = CredentialValidationOptions::new();
         let mut results = Vec::with_capacity(linked_dids.len());
 
         // Linkage is tracked per DID rather than aggregated into a single boolean: a single failing
         // DID must not make the other linked DIDs of the same domain indistinguishable from it.
         for did in linked_dids {
-            let result = match self.subject.resolver.resolve(did.did().as_str()).await {
-                Ok(document) => {
-                    match validator.validate_linkage(
-                        &document,
-                        &config,
-                        &url,
-                        &JwtCredentialValidationOptions::default(),
-                    ) {
-                        Ok(()) => {
-                            info!("Domain linkage verified for DID: {did}");
-                            LinkedDid {
-                                did,
-                                domain_linkage_valid: true,
-                                domain_linkage_error: None,
-                            }
-                        }
-                        Err(error) => {
-                            info!("Domain linkage verification failed for DID {did}: {error}");
-                            LinkedDid::unverified(did, format!("Domain linkage verification failed: {error}"))
-                        }
+            let result = match validator.validate_linkage(&config, &did, url, &options).await {
+                Ok(_) => {
+                    info!("Domain linkage verified for DID: {did}");
+                    LinkedDid {
+                        did,
+                        domain_linkage_valid: true,
+                        domain_linkage_error: None,
                     }
                 }
                 Err(error) => {
-                    info!("Failed to resolve DID {did}: {error}");
-                    LinkedDid::unverified(did, format!("Failed to resolve DID: {error}"))
+                    info!("Domain linkage verification failed for DID {did}: {error}");
+                    LinkedDid::unverified(did, format!("Domain linkage verification failed: {error}"))
                 }
             };
             results.push(result);
@@ -279,7 +272,7 @@ impl IdentityServices {
         // never trusted to direct outbound requests — see `resolve_outbound_url`.
         for linked_did in linked_dids {
             let did = &linked_did.did;
-            let document = match self.subject.resolver.resolve(did.did().as_str()).await {
+            let document = match self.subject.resolver.resolve(did.as_str()).await {
                 Ok(document) => document,
                 Err(error) => {
                     warn!("Failed to resolve DID {did} for linked VP validation: {error}");
@@ -497,23 +490,20 @@ impl IdentityServices {
         let response = read_limited_response(response, DID_CONFIGURATION_RESPONSE_LIMIT, "DID configuration")
             .await
             .map_err(|error| DidConfigurationError::Unavailable(error.to_string()))?;
-        let mut response: serde_json::Value =
-            serde_json::from_slice(&response).map_err(|error| DidConfigurationError::Unavailable(error.to_string()))?;
-
-        // Remove all non-string values from `linked_dids` (JSON-LD)
-        if let serde_json::Value::Object(ref mut root) = response {
-            if let Some(serde_json::Value::Array(ref mut linked_dids)) = root.get_mut("linked_dids") {
-                linked_dids.retain(|did| matches!(did, serde_json::Value::String(_)));
-                info!("Removed non-string values from `linked_dids`");
-            }
-        }
-        // Deserialize to `DomainLinkageConfiguration`
-        let config = DomainLinkageConfiguration::from_json_value(response).map_err(|_| {
+        // Linked Data Proof entries are carried along and not validated.
+        let config: DomainLinkageConfiguration = serde_json::from_slice(&response).map_err(|error| {
             DidConfigurationError::Unavailable(
-                "failed to deserialize DomainLinkageConfiguration from JSON".to_string(),
+                format!("failed to deserialize DomainLinkageConfiguration from JSON: {error}"),
                 // TODO: Add more detailed error info.
             )
         })?;
+        // A configuration without entries is malformed rather than one that links no DIDs, so a sync keeps the DIDs
+        // it knows.
+        if config.linked_dids.is_empty() {
+            return Err(DidConfigurationError::Unavailable(
+                "the DID configuration contains no linked DIDs".to_string(),
+            ));
+        }
         Ok(config)
     }
 }
@@ -596,10 +586,10 @@ fn unverified_credential(credential_jwt: &Jwt) -> Option<Credential> {
 ///
 /// Deduplicated: a configuration linking one DID to several origins carries one credential per
 /// origin, and every caller here is interested in the distinct DIDs rather than in the credentials.
-pub(crate) fn extract_linked_dids(config: &DomainLinkageConfiguration) -> Vec<DIDUrl> {
-    let mut dids: Vec<DIDUrl> = Vec::new();
-    for did in config.linked_dids().iter().filter_map(linked_did_subject) {
-        if !dids.iter().any(|seen| seen.did() == did.did()) {
+pub(crate) fn extract_linked_dids(config: &DomainLinkageConfiguration) -> Vec<Did> {
+    let mut dids: Vec<Did> = Vec::new();
+    for did in config.jwts().filter_map(|(_, jwt)| linked_did_subject(jwt)) {
+        if !dids.contains(&did) {
             dids.push(did);
         }
     }
@@ -610,37 +600,23 @@ pub(crate) fn extract_linked_dids(config: &DomainLinkageConfiguration) -> Vec<DI
 ///
 /// Each Domain Linkage Credential claims exactly one origin, so this is what says which DIDs UniCore
 /// published *for a given origin* — the unit a verifier of that origin actually checks.
-pub(crate) fn linked_dids_by_origin(config: &DomainLinkageConfiguration) -> HashMap<Url, BTreeSet<DIDUrl>> {
-    let mut by_origin: HashMap<Url, BTreeSet<DIDUrl>> = HashMap::new();
-    for jwt in config.linked_dids() {
-        let Some(did) = linked_did_subject(jwt) else { continue };
-        let Some(origin) = credential_origin(jwt) else { continue };
-        by_origin.entry(origin).or_default().insert(did);
+pub(crate) fn linked_dids_by_origin(config: &DomainLinkageConfiguration) -> HashMap<Url, BTreeSet<Did>> {
+    let mut by_origin: HashMap<Url, BTreeSet<Did>> = HashMap::new();
+    for (_, linkage) in config.entries() {
+        let Ok(linkage) = linkage else { continue };
+        let Ok(origin) = linkage.origin.parse() else { continue };
+        by_origin.entry(origin).or_default().insert(linkage.did);
     }
     by_origin
 }
 
 /// The subject DID a linked-DID JWT names, read **without verifying its signature**.
-fn linked_did_subject(jwt: &Jwt) -> Option<DIDUrl> {
-    let jwt_value = jwt.to_json_value().ok()?;
-    let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
+fn linked_did_subject(jwt: &identity_kit::vc::Jwt) -> Option<Did> {
+    let claims = get_unverified_jwt_claims(&serde_json::json!(jwt.as_str())).ok()?;
     claims
         .get("sub")
         .or_else(|| claims.get("iss"))
         .and_then(|value| value.as_str())?
-        .parse()
-        .ok()
-}
-
-/// The origin a linked-DID JWT claims, read **without verifying its signature**.
-fn credential_origin(jwt: &Jwt) -> Option<Url> {
-    let jwt_value = jwt.to_json_value().ok()?;
-    let claims = get_unverified_jwt_claims(&jwt_value).ok()?;
-    claims
-        .get("vc")?
-        .get("credentialSubject")?
-        .get("origin")?
-        .as_str()?
         .parse()
         .ok()
 }
@@ -1297,7 +1273,7 @@ mod tests {
         let dids = services.fetch_linked_dids(&issuer_url).await.unwrap();
 
         assert_eq!(dids.len(), 1);
-        assert_eq!(dids[0].did.did().as_str(), TEST_DID);
+        assert_eq!(dids[0].did.as_str(), TEST_DID);
 
         // Validation will fail because the origin in the JWT is "identity.foundation" and we are fetching the did from the mockserver.
         assert!(!dids[0].domain_linkage_valid);

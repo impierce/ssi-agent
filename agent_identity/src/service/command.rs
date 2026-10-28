@@ -1,5 +1,6 @@
 use crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID;
-use identity_iota::{credential::Jwt, document::CoreDocument, verification::VerificationMethod};
+use identity_iota::{credential::Jwt, document::CoreDocument};
+use identity_kit::did::VerificationMethod;
 use shared_kernel::authorization::CommandOperation;
 use std::collections::HashMap;
 use url::Url;

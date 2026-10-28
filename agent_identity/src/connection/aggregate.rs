@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_core::common::Url;
 use identity_credential::credential::Credential;
-use identity_did::DIDUrl;
+use identity_kit::did::Did;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -17,7 +17,7 @@ pub struct Connection {
     pub connection_id: String,
     pub url: Option<Url>,
     #[schema(value_type = Vec<String>)]
-    pub dids: Vec<DIDUrl>,
+    pub dids: Vec<Did>,
     pub display: Option<ConnectionDisplayProperties>,
     pub first_interacted_at: Option<DateTime<Utc>>,
     pub last_interacted_at: Option<DateTime<Utc>>,
@@ -85,7 +85,7 @@ pub struct ValidationResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct PendingChanges {
     #[schema(value_type = Vec<String>)]
-    pub dids: Option<Vec<DIDUrl>>,
+    pub dids: Option<Vec<Did>>,
     // TODO: Should all changes to the display be notified to a user? Or only changes to the name
     pub display: Option<ConnectionDisplayProperties>,
 }
@@ -129,7 +129,7 @@ impl Aggregate for Connection {
                 let linked_dids = services.fetch_linked_dids(&url).await;
                 let now = services.now();
                 let (linked_dids, mut validations) = domain_linkage_validations(&url, linked_dids, now);
-                let dids: Vec<DIDUrl> = linked_dids.iter().map(|linked| linked.did.clone()).collect();
+                let dids: Vec<Did> = linked_dids.iter().map(|linked| linked.did.clone()).collect();
 
                 validations.extend(
                     services
@@ -164,7 +164,7 @@ impl Aggregate for Connection {
                 let keep_stored_dids = matches!(linked_dids, Err(DidConfigurationError::Unavailable(_)));
                 let now = services.now();
                 let (linked_dids, mut validations) = domain_linkage_validations(domain_ref, linked_dids, now);
-                let new_dids: Vec<DIDUrl> = if keep_stored_dids {
+                let new_dids: Vec<Did> = if keep_stored_dids {
                     self.dids.clone()
                 } else {
                     linked_dids.iter().map(|linked| linked.did.clone()).collect()
@@ -371,7 +371,12 @@ pub mod document_tests {
     const TEST_DID: &str = "did:key:z6MkoTHsgNNrby8JzCNQ1iRLyW5QQ6R8Xuu6AA8igGrMVPUM";
     /// `LINKED_DID_JWT` attests the origin `identity.foundation`, which never matches the mock
     /// server the tests point at, so domain linkage always fails with this message.
-    const EXPECTED_LINKAGE_ERROR: &str = "Domain linkage verification failed: one or more validations failed";
+    fn expected_linkage_error(domain: &Url) -> String {
+        format!(
+            "Domain linkage verification failed: no domain linkage credential validated: 0: origin \"https://identity.foundation\" is not \"{}\"",
+            domain.origin().ascii_serialization()
+        )
+    }
 
     // TODO: Test domain_linkage_validation properly. Currently we exclude these, hence the default to false.
     #[test]
@@ -413,6 +418,7 @@ pub mod document_tests {
 
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
         let mock_issuer: Url = mock_server.uri().parse().unwrap();
+        let linkage_error = expected_linkage_error(&mock_issuer);
         let services = IdentityServices::default();
 
         ConnectionTestFramework::with(services)
@@ -438,7 +444,7 @@ pub mod document_tests {
                     domain: mock_issuer,
                     result: ValidationResult {
                         valid: false,
-                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
+                        error: Some(linkage_error.clone()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -486,6 +492,7 @@ pub mod document_tests {
 
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
         let mock_issuer: Url = mock_server.uri().parse().unwrap();
+        let linkage_error = expected_linkage_error(&mock_issuer);
         let services = IdentityServices::default();
 
         ConnectionTestFramework::with(services)
@@ -506,7 +513,7 @@ pub mod document_tests {
                     domain: mock_issuer.clone(),
                     result: ValidationResult {
                         valid: false,
-                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
+                        error: Some(linkage_error.clone()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -523,7 +530,7 @@ pub mod document_tests {
                     domain: mock_issuer,
                     result: ValidationResult {
                         valid: false,
-                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
+                        error: Some(linkage_error.clone()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -710,6 +717,7 @@ pub mod document_tests {
         let services = IdentityServices::default();
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
         let mock_issuer: Url = "https://example.com".parse().unwrap();
+        let linkage_error = expected_linkage_error(&mock_issuer);
 
         ConnectionTestFramework::with(services)
             .given(vec![ConnectionEvent::ConnectionSynced {
@@ -719,7 +727,7 @@ pub mod document_tests {
                     domain: mock_issuer,
                     result: ValidationResult {
                         valid: false,
-                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
+                        error: Some(linkage_error.clone()),
                         last_validated_at: mock_time,
                     },
                 })],
@@ -760,6 +768,7 @@ pub mod document_tests {
         let services = IdentityServices::default();
         let mock_time = "2026-03-04T12:00:00Z".parse::<DateTime<Utc>>().unwrap();
         let mock_issuer: Url = "https://example.com".parse().unwrap();
+        let linkage_error = expected_linkage_error(&mock_issuer);
 
         ConnectionTestFramework::with(services)
             .given(vec![ConnectionEvent::ConnectionAdded {
@@ -779,7 +788,7 @@ pub mod document_tests {
                     domain: mock_issuer.clone(),
                     result: ValidationResult {
                         valid: false,
-                        error: Some(EXPECTED_LINKAGE_ERROR.to_string()),
+                        error: Some(linkage_error.clone()),
                         last_validated_at: mock_time,
                     },
                 })],

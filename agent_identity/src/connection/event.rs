@@ -2,7 +2,7 @@ use crate::connection::aggregate::{ConnectionDisplayProperties, PendingChanges, 
 use chrono::{DateTime, Utc};
 use cqrs_es::DomainEvent;
 use identity_core::common::Url;
-use identity_did::DIDUrl;
+use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
@@ -12,7 +12,7 @@ pub enum ConnectionEvent {
         connection_id: String,
         display: Option<ConnectionDisplayProperties>,
         url: Url,
-        dids: Vec<DIDUrl>,
+        dids: Vec<Did>,
         first_interacted_at: Option<DateTime<Utc>>,
         last_interacted_at: Option<DateTime<Utc>>,
         validations: Vec<Validation>,
@@ -29,7 +29,7 @@ pub enum ConnectionEvent {
     ConnectionChangesAccepted {
         connection_id: String,
         display: Option<ConnectionDisplayProperties>,
-        dids: Vec<DIDUrl>,
+        dids: Vec<Did>,
         last_interacted_at: Option<DateTime<Utc>>,
         pending_changes: Option<PendingChanges>,
     },
