@@ -8,10 +8,12 @@ use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepo
 use mongodb::bson::{self, doc, Document};
 use mongodb::options::FindOptions;
 use shared_kernel::event_bus::{
-    build_cloud_event, CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource, EventSourceStream,
-    HistoryAscendingResult, Position, SourceEvent, SubscribePosition,
+    CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource, EventSourceStream, HistoryAscendingResult,
+    Position, SourceEvent, SubscribePosition,
 };
+use shared_kernel::integration_event::EventProjector;
 use shared_kernel::view_repository::DynViewRepository;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
@@ -159,44 +161,35 @@ impl CqrsComponentBuilder for MongoDB {
     }
 }
 
-/// Converts a raw MongoDB BSON document from the `events` collection into a standard [`CloudEvent`].
-pub fn document_to_cloud_event(document: &bson::Document) -> Option<CloudEvent> {
+/// Projects a raw MongoDB BSON document from the `events` collection into a [`CloudEvent`]
+/// using the registered [`EventProjector`]s.
+///
+/// Returns `None` if the document's `aggregate_type` has no registered integration event projector,
+/// if the domain event variant does not map to a public integration event, or if the BSON document
+/// is malformed.
+#[must_use]
+pub fn document_to_cloud_event(document: &bson::Document, projectors: &[EventProjector]) -> Option<CloudEvent> {
     let aggregate_type = document.get_str("aggregate_type").ok()?;
+    let projector = projectors.iter().find(|p| p.aggregate_type() == aggregate_type)?;
     let aggregate_id = document.get_str("aggregate_id").ok()?;
-    let sequence = document.get_i64("sequence").ok()? as usize;
-    let event_type = document.get_str("event_type").ok()?;
+    let sequence = usize::try_from(document.get_i64("sequence").ok()?).ok()?;
     let payload_bson = document.get("payload")?;
     let payload: serde_json::Value = bson::from_bson(payload_bson.clone()).ok()?;
-    let metadata_doc = document.get_document("metadata").ok();
+    let metadata: HashMap<String, String> = document
+        .get_document("metadata")
+        .ok()
+        .and_then(|doc| bson::from_bson(bson::Bson::Document(doc.clone())).ok())
+        .unwrap_or_default();
 
-    let occurred_at = metadata_doc
-        .as_ref()
-        .and_then(|metadata| metadata.get_str("timestamp").ok())
-        .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
-        .map(|parsed_datetime| parsed_datetime.with_timezone(&chrono::Utc));
-
-    let caller_type = metadata_doc
-        .as_ref()
-        .and_then(|metadata| metadata.get_str("callertype").ok())
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string);
-    let caller_id = metadata_doc
-        .as_ref()
-        .and_then(|metadata| metadata.get_str("callerid").ok())
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string);
-
-    let event = build_cloud_event(aggregate_type, aggregate_id, sequence, event_type, payload, occurred_at)
-        .with_caller(caller_id, caller_type);
-
-    Some(event)
+    projector.project(aggregate_id, sequence, payload, metadata)
 }
 
-/// An [`EventSource`] implementation for MongoDB using change streams.
+/// An [`EventSource`] and [`EventHistoryReader`] implementation for MongoDB using change streams.
 #[derive(Clone)]
 pub struct MongoEventSource {
     client: Client,
     initialized: Arc<tokio::sync::OnceCell<()>>,
+    projectors: Arc<std::sync::RwLock<Vec<EventProjector>>>,
 }
 
 impl MongoEventSource {
@@ -204,10 +197,35 @@ impl MongoEventSource {
         Self {
             client,
             initialized: Arc::new(tokio::sync::OnceCell::new()),
+            projectors: Arc::new(std::sync::RwLock::new(Vec::new())),
         }
     }
 
-    /// Creates the `events` collection and the index backing `?sources=` queries, once per process.
+    /// Configures the initial set of [`EventProjector`]s applied to stored [`cqrs_es::EventEnvelope`]s.
+    #[must_use]
+    pub fn with_projectors(self, projectors: &[EventProjector]) -> Self {
+        self.register_projectors(projectors);
+        self
+    }
+
+    /// Registers additional [`EventProjector`]s (e.g., from extension bounded contexts).
+    pub fn register_projectors(&self, projectors: &[EventProjector]) {
+        let mut guard = match self.projectors.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        guard.extend_from_slice(projectors);
+    }
+
+    fn convert_document(&self, document: &bson::Document) -> Option<CloudEvent> {
+        let guard = match self.projectors.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        document_to_cloud_event(document, &guard)
+    }
+
+    /// Creates the `events` collection and the index backing `aggregate_type` catch-up queries, once per process.
     ///
     /// `mongo-es` indexes only `{aggregate_id, sequence}` and `{aggregate_id, current_snapshot}`,
     /// leaving the reader's `aggregate_type` filter with nothing to use.
@@ -230,7 +248,7 @@ impl MongoEventSource {
                         .await
                     {
                         tracing::warn!(
-                            "Failed to create the events index; queries filtering on `sources` remain unindexed: {error}"
+                            "Failed to create the events index; queries filtering on `aggregate_type` remain unindexed: {error}"
                         );
                     }
                 });
@@ -271,7 +289,8 @@ impl EventSource for MongoEventSource {
             .await
             .map_err(|error| EventBusError::Source(error.to_string()))?;
 
-        let stream = change_stream.filter_map(|change_result| match change_result {
+        let source = self.clone();
+        let stream = change_stream.filter_map(move |change_result| match change_result {
             Ok(change) => {
                 let Some(document) = change.full_document else {
                     tracing::warn!("Change stream event missing full_document");
@@ -279,14 +298,10 @@ impl EventSource for MongoEventSource {
                 };
 
                 let position = bson::to_vec(&change.id).ok().map(Position);
-
-                match document_to_cloud_event(&document) {
-                    Some(cloud_event) => Some(Ok(SourceEvent::new(cloud_event, position))),
-                    None => {
-                        tracing::warn!("Failed to convert change stream document to CloudEvent");
-                        None
-                    }
-                }
+                // Unmapped internal domain events return `None` here; `position` advances on the next
+                // projected integration event (any unmapped events re-scanned on reconnect remain no-ops).
+                let cloud_event = source.convert_document(&document)?;
+                Some(Ok(SourceEvent::new(cloud_event, position)))
             }
             Err(error) => Some(Err(EventBusError::Source(error.to_string()))),
         });
@@ -300,6 +315,16 @@ impl EventSource for MongoEventSource {
 /// `event_types`, `since` and `until` are applied in Rust after reading, so without this cap a
 /// highly selective filter degrades into a full scan.
 const MAX_DOCUMENTS_EXAMINED: usize = 10_000;
+
+/// Narrows the registered [`EventProjector`]s to the `aggregate_type` values whose integration
+/// event `source` matches `filter.sources`.
+fn matching_aggregate_types(projectors: &[EventProjector], filter: &EventFilter) -> Vec<&'static str> {
+    projectors
+        .iter()
+        .filter(|projector| filter.matches_source(projector.source()))
+        .map(EventProjector::aggregate_type)
+        .collect()
+}
 
 #[async_trait]
 impl EventHistoryReader for MongoEventSource {
@@ -323,19 +348,16 @@ impl EventHistoryReader for MongoEventSource {
         let mut target_object_id: Option<mongodb::bson::oid::ObjectId> = None;
 
         let mut base_query = doc! {};
-        if !filter.sources.is_empty() {
-            let aggregate_types: Vec<String> = filter
-                .sources
-                .iter()
-                .map(|source| source.trim_start_matches("/services/").trim_matches('/').to_lowercase())
-                .collect();
-            if aggregate_types.len() == 1 {
-                base_query.insert("aggregate_type", &aggregate_types[0]);
-            } else if let Ok(bson_array) = bson::to_bson(&aggregate_types) {
-                base_query.insert("aggregate_type", doc! { "$in": bson_array });
-            }
+        let (has_projectors, registered_aggregate_types): (bool, Vec<&str>) = {
+            let guard = match self.projectors.read() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            (!guard.is_empty(), matching_aggregate_types(&guard, filter))
+        };
+        if has_projectors {
+            base_query.insert("aggregate_type", doc! { "$in": registered_aggregate_types });
         }
-
         if let Some(ref target_subject) = filter.subject {
             base_query.insert("aggregate_id", target_subject);
         }
@@ -378,20 +400,12 @@ impl EventHistoryReader for MongoEventSource {
             });
         }
 
-        // A database-level limit caps documents *examined*, not matches *found*, so the caller's
-        // limit is only safe to push down when `base_query` expresses the whole filter.
-        let filter_fully_pushed = filter.event_types.is_empty() && filter.since.is_none() && filter.until.is_none();
-
         if let Some(target_id) = target_object_id {
             // Case A: Resume from target_id: scan index in ascending order for matching documents created after target_id.
             let mut query = base_query;
             query.insert("_id", doc! { "$gt": target_id });
 
-            // One past the requested limit distinguishes "exactly `limit` matched" from "more".
-            let scan_limit = match limit {
-                Some(max_limit) if filter_fully_pushed => max_limit.saturating_add(1).min(MAX_DOCUMENTS_EXAMINED),
-                _ => MAX_DOCUMENTS_EXAMINED,
-            };
+            let scan_limit = MAX_DOCUMENTS_EXAMINED;
             let find_options = FindOptions::builder()
                 .sort(doc! { "_id": 1 })
                 .limit(scan_limit as i64)
@@ -426,7 +440,7 @@ impl EventHistoryReader for MongoEventSource {
                     last_examined_id = Some(format!("{aggregate_type}:{aggregate_id}:{sequence}"));
                 }
 
-                if let Some(cloud_event) = document_to_cloud_event(&document) {
+                if let Some(cloud_event) = self.convert_document(&document) {
                     if filter.matches(&cloud_event) {
                         events.push(cloud_event);
                         if let Some(max_limit) = limit {
@@ -457,11 +471,7 @@ impl EventHistoryReader for MongoEventSource {
         } else if let Some(max_limit) = limit {
             // Case B: No last_event_id, but a limit is requested. Fetch the latest matching documents using descending sort,
             // then reverse the resulting vector so the consumer receives them in ascending (chronological) order.
-            let scan_limit = if filter_fully_pushed {
-                max_limit.min(MAX_DOCUMENTS_EXAMINED)
-            } else {
-                MAX_DOCUMENTS_EXAMINED
-            };
+            let scan_limit = MAX_DOCUMENTS_EXAMINED;
             let find_options = FindOptions::builder()
                 .sort(doc! { "_id": -1 })
                 .limit(scan_limit as i64)
@@ -483,7 +493,7 @@ impl EventHistoryReader for MongoEventSource {
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| EventBusError::Source(error.to_string()))?;
-                if let Some(cloud_event) = document_to_cloud_event(&document) {
+                if let Some(cloud_event) = self.convert_document(&document) {
                     if filter.matches(&cloud_event) {
                         events.push(cloud_event);
                         if events.len() >= max_limit {
@@ -522,7 +532,7 @@ impl EventHistoryReader for MongoEventSource {
                 let document = cursor
                     .deserialize_current()
                     .map_err(|error| EventBusError::Source(error.to_string()))?;
-                if let Some(cloud_event) = document_to_cloud_event(&document) {
+                if let Some(cloud_event) = self.convert_document(&document) {
                     if filter.matches(&cloud_event) {
                         events.push(cloud_event);
                     }
@@ -546,17 +556,155 @@ impl EventHistoryReader for MongoEventSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cqrs_es::{event_sink::EventSink, DomainEvent, EventEnvelope};
+    use serde::{Deserialize, Serialize};
+    use shared_kernel::integration_event::{IntegrationEvent, ProjectIntegrationEvent};
+    use std::{convert::Infallible, error::Error, fmt};
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    enum TestEvent {
+        Created { id: String },
+        InternalOnly,
+    }
+
+    impl DomainEvent for TestEvent {
+        fn event_type(&self) -> String {
+            match self {
+                Self::Created { .. } => "Created".to_string(),
+                Self::InternalOnly => "InternalOnly".to_string(),
+            }
+        }
+
+        fn event_version(&self) -> String {
+            "1".to_string()
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestError;
+
+    impl fmt::Display for TestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "test error")
+        }
+    }
+
+    impl Error for TestError {}
+
+    #[derive(Default, Deserialize, Serialize)]
+    struct TestAggregate;
+
+    impl Aggregate for TestAggregate {
+        const TYPE: &'static str = "template";
+
+        type Command = Infallible;
+        type Event = TestEvent;
+        type Error = TestError;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            command: Self::Command,
+            _service: &Self::Services,
+            _sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            match command {}
+        }
+
+        fn apply(&mut self, _event: Self::Event) {}
+    }
+
+    #[derive(Serialize)]
+    struct TestIntegrationEvent {
+        id: String,
+    }
+
+    impl IntegrationEvent for TestIntegrationEvent {
+        const SOURCE: &'static str = "/services/template";
+
+        fn event_type(&self) -> &'static str {
+            "com.impierce.unicore.template.created"
+        }
+
+        fn subject(&self) -> Option<String> {
+            Some(self.id.clone())
+        }
+    }
+
+    impl ProjectIntegrationEvent for TestAggregate {
+        type IntegrationEvent = TestIntegrationEvent;
+
+        fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+            match &envelope.payload {
+                TestEvent::Created { id } => TestIntegrationEvent { id: id.clone() }
+                    .into_projected_cloud_event(envelope, "/services/template")
+                    .ok(),
+                TestEvent::InternalOnly => None,
+            }
+        }
+    }
+
+    #[derive(Default, Deserialize, Serialize)]
+    struct OfferTestAggregate;
+
+    impl Aggregate for OfferTestAggregate {
+        const TYPE: &'static str = "offer";
+
+        type Command = Infallible;
+        type Event = TestEvent;
+        type Error = TestError;
+        type Services = ();
+
+        async fn handle(
+            &mut self,
+            command: Self::Command,
+            _service: &Self::Services,
+            _sink: &EventSink<Self>,
+        ) -> Result<(), Self::Error> {
+            match command {}
+        }
+
+        fn apply(&mut self, _event: Self::Event) {}
+    }
+
+    #[derive(Serialize)]
+    struct OfferTestIntegrationEvent;
+
+    impl IntegrationEvent for OfferTestIntegrationEvent {
+        const SOURCE: &'static str = "/services/issuance";
+
+        fn event_type(&self) -> &'static str {
+            "com.impierce.unicore.issuance.credential.offered"
+        }
+
+        fn subject(&self) -> Option<String> {
+            None
+        }
+    }
+
+    impl ProjectIntegrationEvent for OfferTestAggregate {
+        type IntegrationEvent = OfferTestIntegrationEvent;
+
+        fn project_integration_event(_envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+            None
+        }
+    }
+
+    const PROJECTORS: &[EventProjector] = &[
+        EventProjector::for_aggregate::<TestAggregate>(),
+        EventProjector::for_aggregate::<OfferTestAggregate>(),
+    ];
 
     #[test]
     fn test_document_to_cloud_event_with_timestamp() {
         let doc = doc! {
-            "aggregate_type": "client",
-            "aggregate_id": "unime",
+            "aggregate_type": "template",
+            "aggregate_id": "tpl-123",
             "sequence": 1i64,
-            "event_type": "ClientRegistered",
+            "event_type": "Created",
             "payload": {
-                "ClientRegistered": {
-                    "client_id": "unime"
+                "Created": {
+                    "id": "tpl-123"
                 }
             },
             "metadata": {
@@ -564,10 +712,10 @@ mod tests {
             }
         };
 
-        let cloud_event = document_to_cloud_event(&doc).expect("Should convert to CloudEvent");
-        assert_eq!(cloud_event.id, "client:unime:1");
-        assert_eq!(cloud_event.source, "/services/client");
-        assert_eq!(cloud_event.event_type, "com.impierce.unicore.client-registered");
+        let cloud_event = document_to_cloud_event(&doc, PROJECTORS).expect("Should project to CloudEvent");
+        assert_eq!(cloud_event.id, "template:tpl-123:1");
+        assert_eq!(cloud_event.source, "/services/template");
+        assert_eq!(cloud_event.event_type, "com.impierce.unicore.template.created");
         assert_eq!(
             cloud_event.time.unwrap().to_rfc3339(),
             "2026-09-21T07:50:45.686998501+00:00"
@@ -580,9 +728,11 @@ mod tests {
             "aggregate_type": "template",
             "aggregate_id": "tpl-123",
             "sequence": 1i64,
-            "event_type": "TemplateCreated",
+            "event_type": "Created",
             "payload": {
-                "TemplateCreated": {}
+                "Created": {
+                    "id": "tpl-123"
+                }
             },
             "metadata": {
                 "timestamp": "2026-09-21T07:50:45.686998501Z",
@@ -591,40 +741,52 @@ mod tests {
             }
         };
 
-        let cloud_event = document_to_cloud_event(&doc).expect("Should convert to CloudEvent");
+        let cloud_event = document_to_cloud_event(&doc, PROJECTORS).expect("Should project to CloudEvent");
         assert_eq!(cloud_event.extension.callerid.as_deref(), Some("alice@example.test"));
         assert_eq!(cloud_event.extension.callertype.as_deref(), Some("user"));
     }
 
     #[test]
-    fn test_document_to_cloud_event_with_did_id() {
+    fn test_document_to_cloud_event_skips_unmapped_events() {
         let doc = doc! {
-            "aggregate_type": "document",
-            "aggregate_id": "did:key:zDnaek2KMsYPpaxWo3c49AqqCVDSJTFra9Mj9FpfuYSKKBaQs",
-            "sequence": 6i64,
-            "event_type": "PublicKeyUpdated",
-            "payload": {
-                "PublicKeyUpdated": {}
-            },
-            "metadata": {
-                "timestamp": "2026-09-21T12:39:09.732083608Z"
-            }
+            "aggregate_type": "template",
+            "aggregate_id": "tpl-123",
+            "sequence": 2i64,
+            "event_type": "InternalOnly",
+            "payload": "InternalOnly",
+            "metadata": {}
         };
 
-        let cloud_event = document_to_cloud_event(&doc).expect("Should convert to CloudEvent");
+        assert!(document_to_cloud_event(&doc, PROJECTORS).is_none());
+    }
+
+    #[test]
+    fn test_matching_aggregate_types_narrows_by_filter_sources() {
+        let unfiltered = EventFilter::default();
         assert_eq!(
-            cloud_event.id,
-            "document:did:key:zDnaek2KMsYPpaxWo3c49AqqCVDSJTFra9Mj9FpfuYSKKBaQs:6"
+            matching_aggregate_types(PROJECTORS, &unfiltered),
+            vec!["template", "offer"]
         );
 
-        // Verify split logic matches correctly
-        let (aggregate_type, rest) = cloud_event.id.split_once(':').unwrap();
-        let (aggregate_id, sequence_str) = rest.rsplit_once(':').unwrap();
-        assert_eq!(aggregate_type, "document");
+        let template_by_uri = EventFilter {
+            sources: vec!["/services/template".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(matching_aggregate_types(PROJECTORS, &template_by_uri), vec!["template"]);
+
+        let issuance_by_short_name = EventFilter {
+            sources: vec!["issuance".to_string()],
+            ..Default::default()
+        };
         assert_eq!(
-            aggregate_id,
-            "did:key:zDnaek2KMsYPpaxWo3c49AqqCVDSJTFra9Mj9FpfuYSKKBaQs"
+            matching_aggregate_types(PROJECTORS, &issuance_by_short_name),
+            vec!["offer"]
         );
-        assert_eq!(sequence_str, "6");
+
+        let unknown_source = EventFilter {
+            sources: vec!["/services/unknown".to_string()],
+            ..Default::default()
+        };
+        assert!(matching_aggregate_types(PROJECTORS, &unknown_source).is_empty());
     }
 }

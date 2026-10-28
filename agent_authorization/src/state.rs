@@ -153,17 +153,14 @@ async fn initialize_clients(state: &AuthorizationState) -> anyhow::Result<()> {
 pub async fn authorization_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     services: Arc<AuthorizationServices>,
-    event_bus: &EventBusHandle,
+    _event_bus: &EventBusHandle,
     oauth2_authorization_request_domain_services: OAuth2AuthorizationRequestDomainServices,
 ) -> AuthorizationState {
     let (authorization_code_command_handler, authorization_code, _all_authorization_codes) = builder
-        .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>(
-            (),
-            vec![event_bus.query()],
-        )
+        .commands_and_queries::<AuthorizationCodeView, AuthorizationCode, AllAuthorizationCodesView>((), vec![])
         .await;
     let (client_command_handler, client, _all_clients) = builder
-        .commands_and_queries::<ClientView, Client, AllClientsView>((), vec![event_bus.query()])
+        .commands_and_queries::<ClientView, Client, AllClientsView>((), vec![])
         .await;
     let (
         oauth2_authorization_request_command_handler,
@@ -173,10 +170,10 @@ pub async fn authorization_state<CCB: CqrsComponentBuilder>(
         OAuth2AuthorizationRequestView,
         OAuth2AuthorizationRequest,
         AllOAuth2AuthorizationRequestsView,
-    >(oauth2_authorization_request_domain_services, vec![event_bus.query()])
+    >(oauth2_authorization_request_domain_services, vec![])
     .await;
     let (token_command_handler, access_token, _all_access_tokens) = builder
-        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), vec![event_bus.query()])
+        .commands_and_queries::<AccessTokenView, AccessToken, AllAccessTokensView>((), vec![])
         .await;
 
     AuthorizationState {

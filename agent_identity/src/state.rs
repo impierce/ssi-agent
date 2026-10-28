@@ -714,13 +714,13 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
         )
         .await;
     let (document_command_handler, document, all_documents) = builder
-        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), vec![event_bus.query()])
+        .commands_and_queries::<Document, Document, AllDocumentsView>(services.clone(), vec![])
         .await;
     let (profile_command_handler, profile, _all_profiles) = builder
-        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![event_bus.query()])
+        .commands_and_queries::<Profile, Profile, Profile>(services.clone(), vec![])
         .await;
     let (service_command_handler, service, all_services) = builder
-        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), vec![event_bus.query()])
+        .commands_and_queries::<Service, Service, AllServicesView>(services.clone(), vec![])
         .await;
 
     IdentityState {

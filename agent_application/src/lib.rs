@@ -43,9 +43,13 @@ use agent_identity::identity_state;
 use agent_issuance::issuance_state;
 use agent_library::library_state;
 use agent_verification::verification_state;
+pub mod integration_projector;
+pub use integration_projector::{core_event_projectors, EventProjector};
 
 pub struct ApplicationState {
     pub api: ApiState,
+    pub event_bus: shared_kernel::event_bus::EventBusHandle,
+    mongo_event_source: Option<agent_store::MongoEventSource>,
     pub event_verification: EventVerification,
     readiness: ReadinessState,
 }
@@ -68,6 +72,17 @@ impl LinkedVerifiablePresentationSource for HolderPresentations {
 }
 
 impl ApplicationState {
+    #[must_use]
+    pub fn event_bus(&self) -> shared_kernel::event_bus::EventBusHandle {
+        self.event_bus.clone()
+    }
+
+    pub fn register_event_projectors(&self, projectors: &[EventProjector]) {
+        if let Some(source) = &self.mongo_event_source {
+            source.register_projectors(projectors);
+        }
+    }
+
     pub async fn verify_persisted_events(&self) {
         verify_persisted_events(self.event_verification.verify_events().await, &self.readiness);
     }
@@ -140,6 +155,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
 
     let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+    let mut mongo_event_source = None;
 
     if let Some(publisher) = HttpEventPublisher::from_config(&event_bus) {
         publisher.spawn();
@@ -209,11 +225,13 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
-                let mongo_source = agent_store::MongoEventSource::new(builder.client.clone());
+                let mongo_source =
+                    agent_store::MongoEventSource::new(builder.client.clone()).with_projectors(core_event_projectors());
                 // 1. Stream live database writes from MongoDB Change Stream into the local EventBus.
                 event_bus.attach_source(mongo_source.clone());
                 // 2. Register MongoDB as the persistent history reader for complete historical catch-up queries.
-                event_bus.set_history_reader(Arc::new(mongo_source));
+                event_bus.set_history_reader(Arc::new(mongo_source.clone()));
+                mongo_event_source = Some(mongo_source);
 
                 let issuance_state = Arc::new(issuance_state(&builder, issuance_services, &event_bus).await);
 
@@ -333,8 +351,12 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             issuance_state: Some(issuance_state),
             holder_state: Some(holder_state),
             verification_state: Some(verification_state),
-            events_state: Some(Arc::new(agent_api_http::v0::events::EventsState::from(event_bus))),
+            events_state: Some(Arc::new(agent_api_http::v0::events::EventsState::from(
+                event_bus.clone(),
+            ))),
         },
+        event_bus,
+        mongo_event_source,
         event_verification,
         readiness,
     })
@@ -353,6 +375,8 @@ where
 {
     let ApplicationState {
         api,
+        event_bus: _,
+        mongo_event_source: _,
         event_verification: _,
         readiness,
     } = application_state;

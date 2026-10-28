@@ -79,14 +79,17 @@ pub fn router(state: Arc<EventsState>) -> Router {
         .layer(axum::middleware::from_fn(crate::reject_null_byte_uri))
 }
 
-/// Stream domain events as CloudEvents via SSE with Catch-Up.
+/// Stream integration events as CloudEvents via SSE.
+///
+/// Streams CloudEvents v1.0 carrying Published Language integration events (`com.impierce.unicore.*`)
+/// and caller provenance extensions (`callerid`, `callertype`).
 ///
 /// # Note on delivery guarantee
 ///
 /// This is a **live feed, not a source of truth.** Catch-up is bounded, and a reconnecting subscriber could
 /// miss events. Gaps are signalled where detectable (`lagged`, `truncated`), not prevented.
 ///
-/// This endpoint is suitable for a UI activity feed. Projections, syncs and audit consumers must reconcile against
+/// This endpoint is suitable for a UI activity feed and external subscribers. Projections, syncs and audit consumers must reconcile against
 /// the REST endpoints. Full detail in `problem-details/events`.
 #[utoipa::path(
     get,
@@ -277,22 +280,18 @@ mod tests {
     #[tokio::test]
     async fn test_events_sse_route() {
         let bus_handle = EventBusHandle::new(16);
-        let cred_event = shared_kernel::event_bus::build_cloud_event(
-            "credential",
-            "cred-1",
-            1,
-            "CredentialSigned",
-            serde_json::json!({"id": "cred-1"}),
-            None,
-        );
-        let other_event = shared_kernel::event_bus::build_cloud_event(
-            "other",
-            "other-1",
-            1,
-            "OtherCreated",
-            serde_json::json!({"id": "other-1"}),
-            None,
-        );
+        let cred_event = shared_kernel::event_bus::CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        )
+        .with_id("credential:cred-1:1")
+        .with_subject("cred-1")
+        .with_data(serde_json::json!({"id": "cred-1"}));
+        let other_event =
+            shared_kernel::event_bus::CloudEvent::new("com.impierce.unicore.other.created", "/services/other")
+                .with_id("other:other-1:1")
+                .with_subject("other-1")
+                .with_data(serde_json::json!({"id": "other-1"}));
         bus_handle.publish(cred_event.clone());
         bus_handle.publish(other_event.clone());
 
@@ -329,22 +328,20 @@ mod tests {
     #[tokio::test]
     async fn test_events_sse_catchup_route() {
         let bus_handle = EventBusHandle::new(16);
-        let event1 = shared_kernel::event_bus::build_cloud_event(
-            "credential",
-            "cred-1",
-            1,
-            "CredentialSigned",
-            serde_json::json!({}),
-            None,
-        );
-        let event2 = shared_kernel::event_bus::build_cloud_event(
-            "credential",
-            "cred-1",
-            2,
-            "CredentialRevoked",
-            serde_json::json!({}),
-            None,
-        );
+        let event1 = shared_kernel::event_bus::CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        )
+        .with_id("credential:cred-1:1")
+        .with_subject("cred-1")
+        .with_data(serde_json::json!({}));
+        let event2 = shared_kernel::event_bus::CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.revoked",
+            "/services/credential",
+        )
+        .with_id("credential:cred-1:2")
+        .with_subject("cred-1")
+        .with_data(serde_json::json!({}));
         bus_handle.publish(event1.clone());
         bus_handle.publish(event2.clone());
 
@@ -383,14 +380,14 @@ mod tests {
         let bus_handle = EventBusHandle::new(16);
         let now = Utc::now();
 
-        let event = shared_kernel::event_bus::build_cloud_event(
-            "credential",
-            "cred-1",
-            1,
-            "CredentialSigned",
-            serde_json::json!({}),
-            Some(now),
-        );
+        let event = shared_kernel::event_bus::CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        )
+        .with_id("credential:cred-1:1")
+        .with_subject("cred-1")
+        .with_time(now)
+        .with_data(serde_json::json!({}));
         bus_handle.publish(event.clone());
 
         let app = router(Arc::new(bus_handle.clone().into()));
@@ -430,14 +427,13 @@ mod tests {
     #[tokio::test]
     async fn test_events_sse_deduplication_between_catchup_and_live() {
         let bus_handle = EventBusHandle::new(16);
-        let event1 = shared_kernel::event_bus::build_cloud_event(
-            "credential",
-            "cred-1",
-            1,
-            "CredentialSigned",
-            serde_json::json!({}),
-            None,
-        );
+        let event1 = shared_kernel::event_bus::CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        )
+        .with_id("credential:cred-1:1")
+        .with_subject("cred-1")
+        .with_data(serde_json::json!({}));
         bus_handle.publish(event1.clone());
 
         let app = router(Arc::new(bus_handle.clone().into()));
@@ -449,14 +445,13 @@ mod tests {
         let response = tower::ServiceExt::oneshot(app, req).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
 
-        let event2 = shared_kernel::event_bus::build_cloud_event(
-            "credential",
-            "cred-1",
-            2,
-            "CredentialRevoked",
-            serde_json::json!({}),
-            None,
-        );
+        let event2 = shared_kernel::event_bus::CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.revoked",
+            "/services/credential",
+        )
+        .with_id("credential:cred-1:2")
+        .with_subject("cred-1")
+        .with_data(serde_json::json!({}));
         bus_handle.publish(event2.clone());
 
         let mut body = response.into_body();

@@ -27,7 +27,7 @@ fn nats_config(enabled: bool, nats_url: &str) -> EventPublisherNats {
         subjects: vec![NatsSubject {
             name: SUBJECT.to_string(),
             events: Events {
-                types: vec!["TxCodeGenerated".to_string()],
+                types: vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
             },
         }],
     }
@@ -72,22 +72,25 @@ async fn configured_offer_events_are_published_as_cloud_events() {
 
     // An event that is not configured is not published
     let unconfigured_event = CloudEvent::new(
-        "com.impierce.unicore.form-url-encoded-credential-offer-created",
+        "com.impierce.unicore.issuance.credential.issued",
         "https://impierce.com/offer",
     )
     .with_subject("offer-1");
     event_bus.publish(unconfigured_event);
 
     // The configured event is published
-    let configured_event = CloudEvent::new("com.impierce.unicore.tx-code-generated", "https://impierce.com/offer")
-        .with_subject("offer-1")
-        .with_data(serde_json::json!({
-            "offer_id": "offer-1",
-            "tx_code": "12345",
-            "delivery_options": {
-                "recipient_email": "holder@example.test"
-            }
-        }));
+    let configured_event = CloudEvent::new(
+        "com.impierce.unicore.issuance.offer.tx_code_generated",
+        "https://impierce.com/offer",
+    )
+    .with_subject("offer-1")
+    .with_data(serde_json::json!({
+        "offer_id": "offer-1",
+        "tx_code": "12345",
+        "delivery_options": {
+            "recipient_email": "holder@example.test"
+        }
+    }));
     let expected_event_id = configured_event.id.clone();
     event_bus.publish(configured_event);
 
@@ -96,7 +99,10 @@ async fn configured_offer_events_are_published_as_cloud_events() {
         .expect("no event was published within 10 seconds")
         .unwrap();
     let cloud_event: Value = serde_json::from_slice(&message.payload).unwrap();
-    assert_eq!(cloud_event["type"], "com.impierce.unicore.tx-code-generated");
+    assert_eq!(
+        cloud_event["type"],
+        "com.impierce.unicore.issuance.offer.tx_code_generated"
+    );
     assert_eq!(cloud_event["id"], expected_event_id);
     assert_eq!(cloud_event["data"]["tx_code"], "12345");
 

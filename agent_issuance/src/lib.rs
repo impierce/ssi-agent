@@ -12,7 +12,9 @@ pub mod status_list;
 pub mod utils;
 
 pub mod application;
+pub mod integration_events;
 pub mod services;
 pub mod state;
 
+pub use integration_events::IssuanceIntegrationEvent;
 pub use state::issuance_state;

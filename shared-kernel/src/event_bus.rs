@@ -1,16 +1,14 @@
-//! In-process and distributed event bus infrastructure using the CNCF `CloudEvents` v1.0 standard.
+//! In-process and distributed integration event bus infrastructure.
 //!
 //! This module provides:
-//! - Standardized [`CloudEvent`] schema for event streaming and decoupling across services.
-//! - [`EventFilter`] for filtering events by source, type, subject, and time ranges.
-//! - [`EventBusHandle`] providing an in-process broadcast channel alongside a bounded ring-buffer for fast replay.
-//! - [`EventSource`] and [`EventHistoryReader`] SPI traits allowing external persistent backends (such as `MongoDB` Change Streams) to feed live events and fulfill complete historical catch-up queries.
-//! - Automatic bridging of `cqrs-es` domain events to `CloudEvent`s via [`Query<A>`] dispatch.
+//! - Standardized CNCF [`CloudEvent`] v1.0 schema and [`EventBusHandle`] for external integration event streaming.
+//! - [`EventFilter`] for filtering integration events by source, type, subject, and time ranges.
+//! - [`EventSource`] and [`EventHistoryReader`] SPI traits allowing persistent backends (such as `MongoDB` Change Streams) to feed live events and fulfill complete historical catch-up queries.
 
+use crate::integration_event::ProjectIntegrationEvent;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use convert_case::{Case, Casing};
-use cqrs_es::{Aggregate, DomainEvent, EventEnvelope, Query};
+use cqrs_es::{EventEnvelope, Query};
 use futures::stream::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -45,7 +43,7 @@ pub struct CloudEvent {
     pub source: String,
     pub specversion: String,
     #[serde(rename = "type")]
-    #[schema(example = "com.impierce.unicore.offer-created")]
+    #[schema(example = "com.impierce.unicore.issuance.credential.offered")]
     pub event_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub datacontenttype: Option<String>,
@@ -79,6 +77,18 @@ impl CloudEvent {
     }
 
     #[must_use]
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_time(mut self, time: DateTime<Utc>) -> Self {
+        self.time = Some(time);
+        self
+    }
+
+    #[must_use]
     pub fn with_data(mut self, data: serde_json::Value) -> Self {
         self.data = Some(data);
         self
@@ -104,45 +114,6 @@ impl CloudEvent {
     }
 }
 
-/// Helper function to construct a reverse-DNS standard CNCF `CloudEvent` v1.0.
-#[must_use]
-pub fn build_cloud_event(
-    aggregate_type: &str,
-    aggregate_id: &str,
-    sequence: usize,
-    event_type: &str,
-    payload: serde_json::Value,
-    occurred_at: Option<DateTime<Utc>>,
-) -> CloudEvent {
-    let cloud_type = format!("com.impierce.unicore.{}", cloud_event_type_suffix(event_type));
-    let source = format!("/services/{}", aggregate_type.to_lowercase());
-    let id = format!("{aggregate_type}:{aggregate_id}:{sequence}");
-
-    // TODO: Manually unwrapping enum variant tags from payloads until enum serialization is refactored (e.g., via adjacent tagging).
-    let data = payload.get(event_type).cloned().unwrap_or(payload);
-
-    CloudEvent {
-        id,
-        source,
-        specversion: "1.0".to_string(),
-        event_type: cloud_type,
-        datacontenttype: Some("application/json".to_string()),
-        dataschema: None,
-        subject: Some(aggregate_id.to_string()),
-        time: occurred_at.or_else(|| Some(Utc::now())),
-        data: Some(data),
-        extension: Extension::default(),
-    }
-}
-
-fn cloud_event_type_suffix(event_type: &str) -> String {
-    if event_type.eq_ignore_ascii_case("OID4VPAuthorizationResponseVerified") {
-        "oid4vp-authorization-response-verified".to_string()
-    } else {
-        event_type.to_case(Case::Kebab)
-    }
-}
-
 /// Criteria for filtering events on the event bus.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventFilter {
@@ -154,31 +125,46 @@ pub struct EventFilter {
 }
 
 impl EventFilter {
+    /// Returns `true` if `event_type` matches this filter's `event_types` criterion
+    /// (or if `self.event_types` is empty).
     #[must_use]
-    pub fn matches(&self, event: &CloudEvent) -> bool {
-        if !self.event_types.is_empty()
-            && !self.event_types.iter().any(|pattern| {
-                if pattern.eq_ignore_ascii_case(&event.event_type) {
+    pub fn matches_event_type(&self, event_type: &str) -> bool {
+        self.event_types.is_empty()
+            || self.event_types.iter().any(|pattern| {
+                if pattern == "*" || pattern.eq_ignore_ascii_case(event_type) {
                     return true;
                 }
-                let event_suffix = event
-                    .event_type
-                    .strip_prefix("com.impierce.unicore.")
-                    .unwrap_or(&event.event_type);
-                let pattern_kebab = cloud_event_type_suffix(pattern);
-                event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)
+                if let Some(prefix) = pattern.strip_suffix('*') {
+                    if event_type
+                        .to_ascii_lowercase()
+                        .starts_with(&prefix.to_ascii_lowercase())
+                    {
+                        return true;
+                    }
+                }
+                let event_suffix = event_type.strip_prefix("com.impierce.unicore.").unwrap_or(event_type);
+                event_suffix.eq_ignore_ascii_case(pattern)
             })
-        {
+    }
+
+    /// Returns `true` if `source` matches this filter's `sources` criterion
+    /// (or if `self.sources` is empty).
+    #[must_use]
+    pub fn matches_source(&self, source: &str) -> bool {
+        self.sources.is_empty()
+            || self.sources.iter().any(|source_pattern| {
+                let pattern_norm = source_pattern.trim_start_matches("/services/").trim_matches('/');
+                let event_source_norm = source.trim_start_matches("/services/").trim_matches('/');
+                source_pattern.eq_ignore_ascii_case(source) || pattern_norm.eq_ignore_ascii_case(event_source_norm)
+            })
+    }
+
+    #[must_use]
+    pub fn matches(&self, event: &CloudEvent) -> bool {
+        if !self.matches_event_type(&event.event_type) {
             return false;
         }
-        if !self.sources.is_empty()
-            && !self.sources.iter().any(|source_pattern| {
-                let pattern_norm = source_pattern.trim_start_matches("/services/").trim_matches('/');
-                let event_source_norm = event.source.trim_start_matches("/services/").trim_matches('/');
-                source_pattern.eq_ignore_ascii_case(&event.source)
-                    || pattern_norm.eq_ignore_ascii_case(event_source_norm)
-            })
-        {
+        if !self.matches_source(&event.source) {
             return false;
         }
         if let Some(ref target_subject) = self.subject {
@@ -245,12 +231,12 @@ impl SourceEvent {
 pub type BusEventStream = Pin<Box<dyn Stream<Item = Result<CloudEvent, EventBusError>> + Send>>;
 pub type EventSourceStream = Pin<Box<dyn Stream<Item = Result<SourceEvent, EventBusError>> + Send>>;
 
-/// Port for subscribing to the internal event bus.
+/// Port for subscribing to the integration event bus.
 pub trait EventBus: Send + Sync {
     fn subscribe(&self, filter: EventFilter) -> BusEventStream;
 }
 
-/// SPI for event source adapters (e.g., `MongoDB` Change Streams).
+/// SPI for integration event source adapters (e.g., `MongoDB` Change Streams).
 #[async_trait]
 pub trait EventSource: Send + Sync + 'static {
     async fn open(&self, from: SubscribePosition) -> Result<EventSourceStream, EventBusError>;
@@ -602,12 +588,11 @@ impl EventBusHandle {
         })
     }
 
-    /// Converts this `EventBusHandle` into a boxed `Query<A>` publisher for a specific aggregate `A`.
+    /// Converts this `EventBusHandle` into a boxed `Query<A>` integration event publisher for a specific aggregate `A`.
     #[must_use]
     pub fn query<A>(&self) -> Box<dyn Query<A>>
     where
-        A: Aggregate,
-        A::Event: serde::Serialize + DomainEvent,
+        A: ProjectIntegrationEvent,
     {
         Box::new(self.clone())
     }
@@ -640,43 +625,14 @@ impl EventBus for EventBusHandle {
 #[async_trait]
 impl<A> Query<A> for EventBusHandle
 where
-    A: Aggregate,
-    A::Event: serde::Serialize + DomainEvent,
+    A: ProjectIntegrationEvent,
 {
-    /// Bridges cqrs-es domain events to `CloudEvents` on the bus when aggregates persist changes.
-    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
+    /// Projects cqrs-es [`EventEnvelope<A>`]s into public [`CloudEvent`]s and publishes them onto the event bus.
+    async fn dispatch(&self, _aggregate_id: &str, events: &[EventEnvelope<A>]) {
         for envelope in events {
-            let payload = match serde_json::to_value(&envelope.payload) {
-                Ok(val) => val,
-                Err(err) => {
-                    tracing::error!("Failed to serialize event payload for EventBus: {:?}", err);
-                    continue;
-                }
-            };
-
-            // Extract the original timestamp recorded in the envelope's metadata (set during command handling)
-            // so CloudEvent.time accurately reflects when the domain event occurred rather than when it was dispatched.
-            let occurred_at = envelope
-                .metadata
-                .get("timestamp")
-                .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
-                .map(|datetime| datetime.with_timezone(&chrono::Utc))
-                .or_else(|| Some(chrono::Utc::now()));
-
-            let callerid = envelope.metadata.get("callerid").filter(|s| !s.is_empty()).cloned();
-            let callertype = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
-
-            let cloud_event = build_cloud_event(
-                A::TYPE,
-                aggregate_id,
-                envelope.sequence,
-                &envelope.payload.event_type(),
-                payload,
-                occurred_at,
-            )
-            .with_caller(callerid, callertype);
-
-            self.publish(cloud_event);
+            if let Some(cloud_event) = A::project_integration_event(envelope) {
+                self.publish(cloud_event);
+            }
         }
     }
 }
@@ -685,133 +641,83 @@ where
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_build_cloud_event() {
-        let event = build_cloud_event(
-            "offer",
-            "123",
-            4,
-            "OfferCreated",
-            serde_json::json!({"id": "123"}),
-            Some(Utc::now()),
-        );
-        assert_eq!(event.id, "offer:123:4");
-        assert_eq!(event.source, "/services/offer");
-        assert_eq!(event.event_type, "com.impierce.unicore.offer-created");
-    }
-
-    #[test]
-    fn oid4vp_authorization_response_event_uses_canonical_type() {
-        let event = build_cloud_event(
-            "authorization_request",
-            "ar-1",
-            3,
-            "OID4VPAuthorizationResponseVerified",
-            serde_json::json!({"OID4VPAuthorizationResponseVerified": {"state": "state-1"}}),
-            None,
-        );
-
-        assert_eq!(
-            event.event_type,
-            "com.impierce.unicore.oid4vp-authorization-response-verified"
-        );
-        assert_eq!(event.data, Some(serde_json::json!({"state": "state-1"})));
-
-        for pattern in [
-            "OID4VPAuthorizationResponseVerified",
-            "oid4vpauthorizationresponseverified",
-            "oid4vp-authorization-response-verified",
-            "com.impierce.unicore.oid4vp-authorization-response-verified",
-        ] {
-            let filter = EventFilter {
-                event_types: vec![pattern.to_string()],
-                ..Default::default()
-            };
-            assert!(filter.matches(&event), "Event filter must match `{pattern}`");
-        }
-    }
-
-    #[test]
-    fn test_build_cloud_event_unwraps_tagged_variant() {
-        let tagged_payload = serde_json::json!({
-            "TemplateCreated": {
-                "template_id": "tpl-1",
-                "title": "Test Title"
-            }
-        });
-        let event = build_cloud_event(
-            "Template",
-            "tpl-1",
-            1,
-            "TemplateCreated",
-            tagged_payload,
-            Some(Utc::now()),
-        );
-
-        assert_eq!(
-            event.data,
-            Some(serde_json::json!({
-                "template_id": "tpl-1",
-                "title": "Test Title"
-            }))
-        );
+    fn sample_cloud_event(
+        aggregate_type: &str,
+        aggregate_id: &str,
+        sequence: usize,
+        event_type: &str,
+        payload: serde_json::Value,
+        occurred_at: Option<DateTime<Utc>>,
+    ) -> CloudEvent {
+        let mut cloud_event = CloudEvent::new(event_type, format!("/services/{aggregate_type}"))
+            .with_id(format!("{aggregate_type}:{aggregate_id}:{sequence}"))
+            .with_subject(aggregate_id)
+            .with_data(payload);
+        cloud_event.time = occurred_at.or_else(|| Some(Utc::now()));
+        cloud_event
     }
 
     #[test]
     fn test_event_filter() {
-        let event = build_cloud_event(
-            "credential",
+        let event = sample_cloud_event(
+            "issuance",
             "cred-1",
             1,
-            "CredentialSigned",
+            "com.impierce.unicore.issuance.credential.issued",
             serde_json::json!({}),
             Some(Utc::now()),
         );
 
         // Exact URI match
         let f1 = EventFilter {
-            sources: vec!["/services/credential".to_string()],
+            sources: vec!["/services/issuance".to_string()],
             ..Default::default()
         };
         assert!(f1.matches(&event));
 
-        // Bare aggregate name without /services/ prefix
+        // Bare service name without /services/ prefix
         let f2 = EventFilter {
-            sources: vec!["credential".to_string()],
+            sources: vec!["issuance".to_string()],
             ..Default::default()
         };
         assert!(f2.matches(&event));
 
         // Non-matching source
         let f3 = EventFilter {
-            sources: vec!["/services/offer".to_string()],
+            sources: vec!["/services/verification".to_string()],
             ..Default::default()
         };
         assert!(!f3.matches(&event));
 
-        // Substring non-match: "cred" should not match "/services/credential"
+        // Substring non-match: "iss" should not match "/services/issuance"
         let f4 = EventFilter {
-            sources: vec!["cred".to_string()],
+            sources: vec!["iss".to_string()],
             ..Default::default()
         };
         assert!(!f4.matches(&event));
 
-        // Type filter matching domain event name and kebab-case suffix
+        // Type filter matching full type, prefix wildcard, and suffix after com.impierce.unicore.
         let f5 = EventFilter {
-            event_types: vec!["CredentialSigned".to_string()],
+            event_types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
             ..Default::default()
         };
         assert!(f5.matches(&event));
 
         let f6 = EventFilter {
-            event_types: vec!["credential-signed".to_string()],
+            event_types: vec!["com.impierce.unicore.issuance.*".to_string()],
             ..Default::default()
         };
         assert!(f6.matches(&event));
 
+        let f6_suffix = EventFilter {
+            event_types: vec!["issuance.credential.issued".to_string()],
+            ..Default::default()
+        };
+        assert!(f6_suffix.matches(&event));
+
         // Partial non-suffix match should not match
         let f7 = EventFilter {
-            event_types: vec!["Signed".to_string()],
+            event_types: vec!["issued".to_string()],
             ..Default::default()
         };
         assert!(!f7.matches(&event));
@@ -831,11 +737,11 @@ mod tests {
         let handle = EventBusHandle::new(16);
         let mut stream = handle.subscribe(EventFilter::default());
 
-        let event = build_cloud_event(
-            "offer",
+        let event = sample_cloud_event(
+            "issuance",
             "abc",
             1,
-            "OfferCreated",
+            "com.impierce.unicore.issuance.credential.offered",
             serde_json::json!({"id": "abc"}),
             Some(Utc::now()),
         );
@@ -851,11 +757,11 @@ mod tests {
         let handle = EventBusHandle::new(16);
         let mut stream = handle.subscribe(EventFilter::default());
 
-        let event = build_cloud_event(
-            "offer",
+        let event = sample_cloud_event(
+            "issuance",
             "abc",
             1,
-            "OfferCreated",
+            "com.impierce.unicore.issuance.credential.offered",
             serde_json::json!({"id": "abc"}),
             Some(Utc::now()),
         );
@@ -880,23 +786,22 @@ mod tests {
     async fn test_history_ascending_filter_with_limit() {
         let handle = EventBusHandle::new(16);
 
-        // Publish an offer event, followed by several other events
-        let target_event = build_cloud_event(
+        let target_event = sample_cloud_event(
             "target",
             "1",
             1,
-            "TargetCreated",
+            "com.impierce.unicore.target.created",
             serde_json::json!({}),
             Some(Utc::now()),
         );
         handle.publish(target_event.clone());
 
         for index in 2..=10 {
-            let filler = build_cloud_event(
+            let filler = sample_cloud_event(
                 "filler",
                 &index.to_string(),
                 1,
-                "FillerCreated",
+                "com.impierce.unicore.filler.created",
                 serde_json::json!({}),
                 Some(Utc::now()),
             );
@@ -955,13 +860,15 @@ mod tests {
                 let attempt = self.attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 if attempt == 0 {
                     assert_eq!(from, SubscribePosition::Live);
-                    let event = build_cloud_event("test", "1", 1, "Created", serde_json::json!({}), None);
+                    let event =
+                        CloudEvent::new("com.impierce.unicore.test.created", "/services/test").with_id("test:1:1");
                     let source_event = SourceEvent::new(event, Some(Position(vec![42])));
                     let stream = futures::stream::iter(vec![Ok(source_event)]);
                     Ok(Box::pin(stream))
                 } else {
                     assert_eq!(from, SubscribePosition::From(Position(vec![42])));
-                    let event = build_cloud_event("test", "1", 2, "Updated", serde_json::json!({}), None);
+                    let event =
+                        CloudEvent::new("com.impierce.unicore.test.updated", "/services/test").with_id("test:1:2");
                     let source_event = SourceEvent::new(event, Some(Position(vec![43])));
                     let stream = futures::stream::iter(vec![Ok(source_event)]);
                     Ok(Box::pin(stream))
@@ -1008,14 +915,16 @@ mod tests {
                 let call_idx = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 match from {
                     SubscribePosition::Live if call_idx == 0 => {
-                        let event = build_cloud_event("test", "1", 1, "Init", serde_json::json!({}), None);
+                        let event =
+                            CloudEvent::new("com.impierce.unicore.test.init", "/services/test").with_id("test:1:1");
                         let source_event = SourceEvent::new(event, Some(Position(vec![99])));
                         Ok(Box::pin(futures::stream::iter(vec![Ok(source_event)])))
                     }
                     SubscribePosition::From(_) => Err(EventBusError::Source("ChangeStreamHistoryLost".to_string())),
                     SubscribePosition::Live => {
                         self.recovered.store(true, std::sync::atomic::Ordering::SeqCst);
-                        let event = build_cloud_event("test", "1", 2, "Recovered", serde_json::json!({}), None);
+                        let event = CloudEvent::new("com.impierce.unicore.test.recovered", "/services/test")
+                            .with_id("test:1:2");
                         Ok(Box::pin(futures::stream::iter(vec![Ok(SourceEvent::new(event, None))])))
                     }
                 }
@@ -1060,7 +969,7 @@ mod tests {
         Created,
     }
 
-    impl DomainEvent for MockEvent {
+    impl cqrs_es::DomainEvent for MockEvent {
         fn event_type(&self) -> String {
             "Created".to_string()
         }
@@ -1069,7 +978,7 @@ mod tests {
         }
     }
 
-    impl Aggregate for MockAggregate {
+    impl cqrs_es::Aggregate for MockAggregate {
         const TYPE: &'static str = "Mock";
         type Command = ();
         type Event = MockEvent;
@@ -1085,6 +994,31 @@ mod tests {
             Ok(())
         }
         fn apply(&mut self, _: Self::Event) {}
+    }
+
+    impl crate::integration_event::IntegrationEvent for MockEvent {
+        const SOURCE: &'static str = "/services/mock";
+
+        fn event_type(&self) -> &'static str {
+            "com.impierce.unicore.mock.created"
+        }
+
+        fn subject(&self) -> Option<String> {
+            None
+        }
+    }
+
+    impl ProjectIntegrationEvent for MockAggregate {
+        type IntegrationEvent = MockEvent;
+
+        fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
+            use crate::integration_event::IntegrationEvent as _;
+            envelope
+                .payload
+                .clone()
+                .into_projected_cloud_event(envelope, "/services/mock")
+                .ok()
+        }
     }
 
     #[tokio::test]
@@ -1169,11 +1103,11 @@ mod tests {
     async fn history_ascending_reports_truncation_when_resume_hits_the_limit() {
         let handle = EventBusHandle::new(16);
         for sequence in 1..=5 {
-            handle.publish(build_cloud_event(
+            handle.publish(sample_cloud_event(
                 "credential",
                 "cred-1",
                 sequence,
-                "CredentialSigned",
+                "com.impierce.unicore.issuance.credential.issued",
                 serde_json::json!({}),
                 None,
             ));
@@ -1211,11 +1145,11 @@ mod tests {
     async fn history_ascending_does_not_report_truncation_for_the_latest_events() {
         let handle = EventBusHandle::new(16);
         for sequence in 1..=5 {
-            handle.publish(build_cloud_event(
+            handle.publish(sample_cloud_event(
                 "credential",
                 "cred-1",
                 sequence,
-                "CredentialSigned",
+                "com.impierce.unicore.issuance.credential.issued",
                 serde_json::json!({}),
                 None,
             ));
@@ -1268,11 +1202,11 @@ mod tests {
     async fn publish_suppresses_duplicates_beyond_the_history_ring_buffer() {
         let handle = EventBusHandle::new(4096);
 
-        let replayed = build_cloud_event(
+        let replayed = sample_cloud_event(
             "credential",
             "cred-0",
             1,
-            "CredentialSigned",
+            "com.impierce.unicore.issuance.credential.issued",
             serde_json::json!({}),
             None,
         );
@@ -1280,11 +1214,11 @@ mod tests {
 
         // Fill well past the 500-event history ring-buffer.
         for sequence in 1..=600 {
-            handle.publish(build_cloud_event(
+            handle.publish(sample_cloud_event(
                 "credential",
                 "cred-filler",
                 sequence,
-                "CredentialSigned",
+                "com.impierce.unicore.issuance.credential.issued",
                 serde_json::json!({}),
                 None,
             ));
@@ -1295,11 +1229,11 @@ mod tests {
         // Replayed by the change stream: long gone from the ring-buffer, still inside the window.
         handle.publish(replayed.clone());
 
-        let follow_up = build_cloud_event(
+        let follow_up = sample_cloud_event(
             "credential",
             "cred-1",
             1,
-            "CredentialSigned",
+            "com.impierce.unicore.issuance.credential.issued",
             serde_json::json!({}),
             None,
         );
@@ -1316,11 +1250,11 @@ mod tests {
     async fn history_ascending_treats_a_zero_limit_as_live_only() {
         let handle = EventBusHandle::new(16);
         for sequence in 1..=5 {
-            handle.publish(build_cloud_event(
+            handle.publish(sample_cloud_event(
                 "credential",
                 "cred-1",
                 sequence,
-                "CredentialSigned",
+                "com.impierce.unicore.issuance.credential.issued",
                 serde_json::json!({}),
                 None,
             ));
