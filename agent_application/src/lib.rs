@@ -55,14 +55,13 @@ struct HolderPresentations(Arc<HolderState>);
 
 #[async_trait::async_trait]
 impl LinkedVerifiablePresentationSource for HolderPresentations {
-    async fn signed_presentation(
-        &self,
-        presentation_id: &str,
-    ) -> anyhow::Result<Option<identity_credential::credential::Jwt>> {
+    async fn signed_presentation(&self, presentation_id: &str) -> anyhow::Result<Option<identity_kit::vc::Jwt>> {
         Ok(
             agent_shared::handlers::public_query_handler(presentation_id, &self.0.query.presentation)
                 .await?
-                .and_then(|Presentation { signed, .. }| signed),
+                .and_then(|Presentation { signed, .. }| signed)
+                .map(|signed| signed.as_str().parse())
+                .transpose()?,
         )
     }
 }

@@ -1,6 +1,8 @@
 use crate::state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID;
-use identity_iota::{credential::Jwt, document::CoreDocument};
-use identity_kit::did::VerificationMethod;
+use identity_kit::{
+    did::{DidDocument, VerificationMethod},
+    vc::Jwt,
+};
 use shared_kernel::authorization::CommandOperation;
 use std::collections::HashMap;
 use url::Url;
@@ -31,7 +33,7 @@ pub enum ServiceCommand {
         /// Filled in by the lifecycle: the signed presentations found for `presentation_ids`.
         signed_presentations: HashMap<String, Jwt>,
         /// Filled in by the lifecycle: the documents that may publish services.
-        linkable_documents: Vec<CoreDocument>,
+        linkable_documents: Vec<DidDocument>,
     },
     /// Stops publishing the given presentations. Removing an unpublished presentation is a no-op;
     /// removing the last published presentation deletes the service.
