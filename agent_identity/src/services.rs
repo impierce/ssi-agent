@@ -5,6 +5,7 @@ use crate::connection::{
 use crate::dns::CnameResolver;
 use crate::document::aggregate::{Document, Status};
 use crate::service::error::ServiceError;
+use crate::signature_verifier::SignatureVerifier;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
 use identity_credential::domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator};
@@ -19,7 +20,6 @@ use identity_iota::{
     document::CoreDocument,
 };
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
-use oid4vc_core::verifier::SignatureVerifier;
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use reqwest::{redirect, Client, StatusCode};
 use std::collections::{BTreeSet, HashMap};
@@ -1547,13 +1547,7 @@ mod tests {
         let vulnerable_hyper = locked_package(lockfile, "hyper", "0.14.32");
         assert!(vulnerable_hyper.contains("\"h2 0.3.27\""));
 
-        for (name, version) in [
-            ("did-web", "0.2.2"),
-            ("iota-sdk", "1.1.5"),
-            ("oid4vc-manager", "0.1.0"),
-            ("oid4vci", "0.1.0"),
-            ("oid4vp", "0.1.0"),
-        ] {
+        for (name, version) in [("did-web", "0.2.2"), ("iota-sdk", "1.1.5")] {
             assert!(
                 locked_package(lockfile, name, version).contains("\"reqwest 0.11.27\""),
                 "expected {name} {version} to select reqwest 0.11.27"

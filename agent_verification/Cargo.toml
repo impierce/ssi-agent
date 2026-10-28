@@ -39,9 +39,7 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_verification = { path = ".", features = ["test_utils"] }
 
 async-std.workspace = true
-did-key = "0.2"
-identity_core.workspace = true
-identity_credential.workspace = true
+identity-kit = { workspace = true, features = ["in-memory"] }
 lazy_static.workspace = true
 oid4vci.workspace = true
 rstest.workspace = true

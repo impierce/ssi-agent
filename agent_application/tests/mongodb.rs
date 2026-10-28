@@ -14,8 +14,8 @@ use testcontainers_modules::testcontainers::{
 
 #[tokio::test]
 async fn application_state_survives_a_restart_on_mongodb() {
-    // `testcontainers_modules::mongo::Mongo::repl_set` waits for log messages that MongoDB 8 no longer emits.
-    let container = GenericImage::new("mongo", "8")
+    // `testcontainers_modules::mongo::Mongo::repl_set` waits for log messages that MongoDB 8 and newer no longer emit.
+    let container = GenericImage::new("mongo", "9")
         .with_exposed_port(27017.tcp())
         .with_wait_for(WaitFor::message_on_stdout("Waiting for connections"))
         .with_cmd(["--replSet", "rs0"])

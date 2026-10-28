@@ -5,7 +5,6 @@ use crate::services::HolderServices;
 use agent_shared::credential_status_checker::CredentialStatusChecker;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_credential::credential::Jwt;
-use oid4vc_core::credential_status_verifier::CredentialStatusVerifier;
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -58,7 +57,7 @@ impl Aggregate for Credential {
 
                 if let Some(status_claim) = raw.get("status") {
                     let credential_status_checker = CredentialStatusChecker {
-                        verification_material_resolver: services.holder.clone(),
+                        key_resolver: services.holder.clone(),
                     };
 
                     credential_status_checker

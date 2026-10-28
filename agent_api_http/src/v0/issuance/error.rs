@@ -147,7 +147,6 @@ impl IntoApiErrorExt for StatusListError {
         match self {
             AggregateNotFound => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             FailedToSetIndex(_, _) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            GzipCompressionError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             JwtEncodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListEncodingError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
@@ -429,7 +428,6 @@ impl IntoPublicError for StatusListError {
         match self {
             AggregateNotFound => PublicError::InternalServerError,
             FailedToSetIndex(_, _) => PublicError::InternalServerError,
-            GzipCompressionError => PublicError::InternalServerError,
             JwtEncodeError => PublicError::InternalServerError,
             StatusListEncodingError(_) => PublicError::InternalServerError,
             StatusListNotFound(_) => PublicError::NotFoundError,
@@ -486,7 +484,7 @@ pub mod tests {
     use crate::DOCUMENTATION_URL;
     use agent_library::json_schema_validation::JsonSchemaError;
     use axum::response::IntoResponse as _;
-    use oauth_tsl::error::OAuthTSLError;
+    use identity_kit::status_list::StatusListError as TokenStatusListError;
     use serde_json::{json, Value};
 
     const UNEXPECTED: Option<&str> = Some("unexpected#unexpected-error");
@@ -604,9 +602,8 @@ pub mod tests {
             [
                 StatusListError::AggregateNotFound,
                 StatusListError::FailedToSetIndex(0, "error".to_string()),
-                StatusListError::GzipCompressionError,
                 StatusListError::JwtEncodeError,
-                StatusListError::StatusListEncodingError(OAuthTSLError::InvalidContentType),
+                StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
                 StatusListError::StatusListNotFound("0".to_string()),
                 StatusListError::StatusListQueryError,
                 StatusListError::StatusListUrlParsingError,
@@ -755,14 +752,9 @@ pub mod tests {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),
-            (
-                StatusListError::GzipCompressionError,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                None,
-            ),
             (StatusListError::JwtEncodeError, StatusCode::INTERNAL_SERVER_ERROR, None),
             (
-                StatusListError::StatusListEncodingError(OAuthTSLError::InvalidContentType),
+                StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),

@@ -36,13 +36,20 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-siopv2 = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
-oid4vci = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2", features = [
+oid4vc-core = "0.3"
+oid4vc-manager = "0.3"
+oid4vci = { version = "0.3", features = ["utoipa"] }
+oid4vp = "0.3"
+siopv2 = "0.3"
+
+identity-kit = { version = "0.3", default-features = false, features = [
+    "did-jwk",
+    "did-key",
+    "did-web",
+    "reqwest",
+    "sd-jwt",
     "utoipa",
 ] }
-oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
-oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
-oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 
 shared-kernel = { path = "shared-kernel" }
 
@@ -54,6 +61,7 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.5.0"
 derivative = "2.2"
+flate2 = "1.1"
 futures = "0.3"
 hickory-resolver = "0.26"
 mockall = "0.14"
@@ -61,7 +69,6 @@ identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-
 identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
     "domain-linkage",
     "presentation",
-    "sd-jwt-vc",
 ] }
 identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
@@ -79,11 +86,10 @@ iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = fa
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
-jsonwebtoken = "9.3"
+jsonwebtoken = { version = "11.1", default-features = false, features = ["rust_crypto"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
 mongo-es = "0.4.1"
-oauth_tsl = { git = "https://github.com/impierce/oauth-token-status-list", rev = "0aa0228" }
 once_cell = { version = "1.19" }
 opentelemetry = "0.31"
 product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.16", package = "product_common", features = [
@@ -97,9 +103,6 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ] }
 rstest = "0.22"
-sd-jwt = { package = "sd-jwt-payload", version = "0.5", default-features = false, features = [
-    "sha",
-] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0" }
 serde_json_path_to_error = { version = "0.1" }
@@ -113,15 +116,11 @@ thiserror = "1.0"
 tokio = { version = "1.46", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tower = { version = "0.4" }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["compression-gzip", "cors", "trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }
 url = "2.5"
-utoipa = { version = "5", features = ["axum_extras", "chrono", "url", "yaml"] }
+utoipa = { version = "6", features = ["axum_extras", "chrono", "url", "yaml"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 wiremock = "0.6"
-
-[patch.crates-io]
-# We need this patch because it makes the `Hasher` trait `Send` and `Sync`. See: https://github.com/iotaledger/sd-jwt-payload/compare/main...impierce:sd-jwt-payload:fix/hasher-send-sync
-sd-jwt = { git = "https://github.com/impierce/sd-jwt-payload", rev = "f28789a", package = "sd-jwt-payload" }

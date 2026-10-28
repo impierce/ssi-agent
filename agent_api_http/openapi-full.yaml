@@ -301,8 +301,9 @@ paths:
       - Protocol
       summary: Get a status list token
       description: |-
-        Returns a gzip-encoded Status List Token, as defined by
+        Returns a Status List Token, as defined by
         [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+        The response is gzip-encoded if the request's `Accept-Encoding` allows it.
       operationId: token_status_list
       parameters:
       - name: path
@@ -318,7 +319,7 @@ paths:
             Content-Encoding:
               schema:
                 type: string
-              description: Always `gzip`
+              description: '`gzip` if the request''s `Accept-Encoding` allows it'
           content:
             application/statuslist+jwt:
               schema:
@@ -898,7 +899,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Pending changes accepted
         '400':
           description: Malformed JSON request body
         '404':
@@ -920,7 +921,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Connection removed
         '400':
           description: Malformed JSON request body
         '404':
@@ -942,7 +943,7 @@ paths:
         required: true
       responses:
         '200':
-          description: ''
+          description: Connection synced
         '400':
           description: Malformed JSON request body
   /v0/connections/{connection_id}:
@@ -1215,7 +1216,7 @@ paths:
         '404':
           description: Credential not found
         '422':
-          description: Request body does not match the expected schema
+          description: Request body does not match the expected schema, or the status list can't hold the status
   /v0/delete-catalog:
     post:
       tags:
@@ -1296,8 +1297,8 @@ paths:
         required: false
         schema:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
+          - type: 'null'
       responses:
         '200':
           description: Documents retrieved successfully
@@ -2390,7 +2391,7 @@ components:
       - development
     AuthorizationCode:
       type: object
-      description: 'Grant Type `authorization_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1'
+      description: 'Grant Type `authorization_code` as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.1.1>'
       properties:
         authorization_server:
           type:
@@ -2414,7 +2415,7 @@ components:
       type: object
       description: |-
         Represents an object of the `authorization_details` field of the `AuthorizationRequest` object in the Authorization Code Flow as
-        and in the `TokenRequest` object. : https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details
+        and in the `TokenRequest` object. : <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#authorization-details>
       required:
       - type
       - credential_configuration_id
@@ -2445,8 +2446,8 @@ components:
     AuthorizationRequest:
       type: object
       description: |-
-        The Authorization Request is used to request authorization as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint
-        In combination with this important paragraph: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei
+        The Authorization Request is used to request authorization as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-authorization-endpoint>
+        In combination with this important paragraph: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-final.html#name-identifying-credentials-bei>
         NOTE: this Authorization Request is not to be confused with the same-named request in OpenID for Verifiable Presentations.
       required:
       - response_type
@@ -2466,8 +2467,8 @@ components:
           - 'null'
         code_challenge_method:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CodeChallengeMethod'
+          - type: 'null'
         issuer_state:
           type:
           - string
@@ -2730,9 +2731,9 @@ components:
           description: One row per holder.
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
             description: Expiry applied to every credential; defaults to the template's credential expiration.
+          - type: 'null'
         templateId:
           type: string
           description: The published template every row is validated against and issued from.
@@ -2785,9 +2786,9 @@ components:
           description: Whether an email with the offer was requested for `recipientEmail`. Arrival is not tracked.
         error:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProblemSummary'
             description: Why the row was rejected or could not be created; absent on success.
+          - type: 'null'
         index:
           type: integer
           description: 0-based index of the row in the request array.
@@ -2857,8 +2858,7 @@ components:
           type: string
           default: ''
         display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
+          $ref: '#/components/schemas/CatalogDisplay'
           default:
             name: ''
             description: ''
@@ -3008,8 +3008,8 @@ components:
             type: string
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
         first_interacted_at:
           type:
           - string
@@ -3024,8 +3024,8 @@ components:
           format: date-time
         pending_changes:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/PendingChanges'
+          - type: 'null'
         url:
           type: string
           format: uri
@@ -3042,8 +3042,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/LogoProperties'
+          - type: 'null'
         name:
           type:
           - string
@@ -3065,15 +3065,13 @@ components:
       type: object
       properties:
         display:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogDisplay'
+          $ref: '#/components/schemas/CatalogDisplay'
           default:
             name: ''
             description: ''
             icon: null
         visibility:
-          oneOf:
-          - $ref: '#/components/schemas/CatalogVisibility'
+          $ref: '#/components/schemas/CatalogVisibility'
           default: Private
     CreateCredentialReissuanceRequest:
       type: object
@@ -3087,8 +3085,8 @@ components:
           type: string
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
+          - type: 'null'
         originalCredentialId:
           type: string
         reason:
@@ -3132,12 +3130,11 @@ components:
       properties:
         credentialExpiration:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Expiration'
+          - type: 'null'
           default: null
         dataModel:
-          oneOf:
-          - $ref: '#/components/schemas/DataModel'
+          $ref: '#/components/schemas/DataModel'
           default: w3c_vc_data_model_v2-0
         description:
           type:
@@ -3146,17 +3143,15 @@ components:
           default: null
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Display'
+          - type: 'null'
           default: null
         holderAuthorization:
-          oneOf:
-          - $ref: '#/components/schemas/HolderAuthorization'
+          $ref: '#/components/schemas/HolderAuthorization'
           default:
             pre_authorized: true
         holderType:
-          oneOf:
-          - $ref: '#/components/schemas/HolderType'
+          $ref: '#/components/schemas/HolderType'
           default: individual
         schema: {}
         schemaPropertiesAttributes:
@@ -3169,14 +3164,13 @@ components:
           propertyNames:
             type: string
         status:
-          oneOf:
-          - type: string
-            enum:
-            - draft
-            - published
-            - archived
-            - deleted
+          type: string
           default: draft
+          enum:
+          - draft
+          - published
+          - archived
+          - deleted
         tags:
           type:
           - array
@@ -3193,8 +3187,7 @@ components:
             type: string
           default: []
         visibility:
-          oneOf:
-          - $ref: '#/components/schemas/Visibility'
+          $ref: '#/components/schemas/Visibility'
           default: private
       additionalProperties: false
     CreatePublicOfferRequest:
@@ -3282,8 +3275,8 @@ components:
           $ref: '#/components/schemas/CredentialStatus'
         data:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Data'
+          - type: 'null'
         expires_at:
           type:
           - string
@@ -3336,8 +3329,8 @@ components:
           - 'null'
         background_image:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Image'
+          - type: 'null'
         description:
           type:
           - string
@@ -3348,8 +3341,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Logo'
+          - type: 'null'
         name:
           type: string
         text_color:
@@ -3364,8 +3357,8 @@ components:
         properties:
           credential_metadata:
             oneOf:
-            - type: 'null'
             - $ref: '#/components/schemas/CredentialMetadata'
+            - type: 'null'
           credential_signing_alg_values_supported:
             type: array
             items:
@@ -3387,10 +3380,10 @@ components:
             type:
             - string
             - 'null'
-      description: 'Credentials Supported object as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1'
+      description: 'Credentials Supported object as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-12.2.4-2.11.1>'
     CredentialErrorResponse:
       type: string
-      description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+      description: Credential Error Response as defined in OpenID4VCI 1.0 - <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
       enum:
       - invalid_credential_request
       - unknown_credential_configuration
@@ -3486,7 +3479,7 @@ components:
       type: object
       description: |-
         Credential Issuer Metadata as described here:
-        https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html
+        <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html>
       required:
       - credential_issuer
       - credential_endpoint
@@ -3498,8 +3491,8 @@ components:
             format: uri
         batch_credential_issuance:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/BatchCredentialIssuance'
+          - type: 'null'
         credential_configurations_supported:
           type: object
           additionalProperties:
@@ -3518,8 +3511,8 @@ components:
           format: uri
         credential_response_encryption:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialResponseEncryption'
+          - type: 'null'
         deferred_credential_endpoint:
           type:
           - string
@@ -3562,7 +3555,7 @@ components:
             $ref: '#/components/schemas/CredentialConfigurationsSupportedDisplay'
     CredentialOfferParameters:
       type: object
-      description: 'Credential Offer Parameters as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters'
+      description: 'Credential Offer Parameters as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-offer-parameters>'
       required:
       - credential_issuer
       - credential_configuration_ids
@@ -3574,8 +3567,8 @@ components:
           format: uri
         grants:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Grants'
+          - type: 'null'
     CredentialRequest:
       allOf:
       - $ref: '#/components/schemas/CredentialIdentifierOrCredentialConfigurationId'
@@ -3583,13 +3576,13 @@ components:
         properties:
           proofs:
             oneOf:
-            - type: 'null'
             - $ref: '#/components/schemas/Proofs'
-      description: 'Credential Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request'
+            - type: 'null'
+      description: 'Credential Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request>'
     CredentialResponse:
       allOf:
       - $ref: '#/components/schemas/CredentialResponseType'
-      description: 'Credential Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response'
+      description: 'Credential Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-response>'
     CredentialResponseEncryption:
       type: object
       description: Algorithms and content-encryption methods supported for encrypted Credential Responses.
@@ -3653,12 +3646,15 @@ components:
           type: integer
           minimum: 0
         status:
-          type: string
-          enum:
-          - VALID
-          - INVALID
-          - SUSPENDED
-          - UNDEFINED
+          oneOf:
+          - type: string
+            enum:
+            - VALID
+            - INVALID
+            - SUSPENDED
+          - type: integer
+            maximum: 3
+            minimum: 0
         status_list_url:
           type: string
     CredentialView:
@@ -3668,8 +3664,8 @@ components:
       properties:
         data:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Data'
+          - type: 'null'
         id:
           type: string
         received_offer_id:
@@ -3690,8 +3686,8 @@ components:
         credential: {}
         expiresAt:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/CredentialExpiry'
+          - type: 'null'
         isSigned:
           type: boolean
         offerId:
@@ -3747,125 +3743,80 @@ components:
           - 'null'
     DidDocument:
       type: object
-      description: A DID document as defined by W3C DID Core.
+      description: 'A DID document (DID Core §4): the core properties, plus any extension property.'
       required:
       - id
       properties:
+        '@context':
+          oneOf:
+          - type: string
+            format: uri
+            description: A context URI.
+          - type: array
+            items: {}
+            description: Context URIs and objects.
+            minItems: 1
+          - type: object
+            description: A context object.
+            additionalProperties: true
+          description: The JSON-LD context, carried as data (DID Core §6.3.1).
         alsoKnownAs:
           type: array
           items:
             type: string
             format: uri
+            description: A URI.
+          description: Other identifiers of the subject (DID Core §5.1.3).
         assertionMethod:
           type: array
           items:
-            oneOf:
-            - type: string
-              description: A reference to a verification method.
-            - $ref: '#/components/schemas/DidVerificationMethod'
+            $ref: '#/components/schemas/MethodRef'
+          description: The `assertionMethod` relationship (DID Core §5.3.2).
         authentication:
           type: array
           items:
-            oneOf:
-            - type: string
-              description: A reference to a verification method.
-            - $ref: '#/components/schemas/DidVerificationMethod'
+            $ref: '#/components/schemas/MethodRef'
+          description: The `authentication` relationship (DID Core §5.3.1).
         capabilityDelegation:
           type: array
           items:
-            oneOf:
-            - type: string
-              description: A reference to a verification method.
-            - $ref: '#/components/schemas/DidVerificationMethod'
+            $ref: '#/components/schemas/MethodRef'
+          description: The `capabilityDelegation` relationship (DID Core §5.3.5).
         capabilityInvocation:
           type: array
           items:
-            oneOf:
-            - type: string
-              description: A reference to a verification method.
-            - $ref: '#/components/schemas/DidVerificationMethod'
+            $ref: '#/components/schemas/MethodRef'
+          description: The `capabilityInvocation` relationship (DID Core §5.3.4).
         controller:
           oneOf:
           - type: string
             description: The DID of the controller.
+            pattern: ^did:[a-z0-9]+:(([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})*:)*([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})+$
           - type: array
             items:
               type: string
               description: The DID of a controller.
+              pattern: ^did:[a-z0-9]+:(([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})*:)*([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})+$
+          description: The DIDs whose controllers may change this document (DID Core §5.1.2); an empty set means none.
         id:
           type: string
-          description: The DID subject.
+          description: The DID of the subject (DID Core §5.1.1).
+          pattern: ^did:[a-z0-9]+:(([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})*:)*([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})+$
         keyAgreement:
           type: array
           items:
-            oneOf:
-            - type: string
-              description: A reference to a verification method.
-            - $ref: '#/components/schemas/DidVerificationMethod'
+            $ref: '#/components/schemas/MethodRef'
+          description: The `keyAgreement` relationship (DID Core §5.3.3).
         service:
           type: array
           items:
-            $ref: '#/components/schemas/DidService'
+            $ref: '#/components/schemas/Service'
+          description: Ways of interacting with the subject (DID Core §5.4).
         verificationMethod:
           type: array
           items:
-            $ref: '#/components/schemas/DidVerificationMethod'
-      additionalProperties: true
-    DidService:
-      type: object
-      description: A service as defined by W3C DID Core.
-      required:
-      - id
-      - type
-      - serviceEndpoint
-      properties:
-        id:
-          type: string
-          description: The DID URL identifying the service.
-        serviceEndpoint:
-          oneOf:
-          - type: string
-            format: uri
-          - type: array
-            items:
-              type: string
-              format: uri
-          - type: object
-            description: A map of service endpoints.
-            additionalProperties: true
-        type:
-          oneOf:
-          - type: string
-            description: The service type, e.g. `LinkedDomains`.
-          - type: array
-            items:
-              type: string
-              description: A service type.
-      additionalProperties: true
-    DidVerificationMethod:
-      type: object
-      description: A verification method as defined by W3C DID Core.
-      required:
-      - id
-      - type
-      - controller
-      properties:
-        controller:
-          type: string
-          description: The DID of the controller.
-        id:
-          type: string
-          description: The DID URL identifying the verification method.
-        publicKeyJwk:
-          type: object
-          description: The public key as a JSON Web Key.
-          additionalProperties: true
-        publicKeyMultibase:
-          type: string
-          description: The multibase-encoded public key.
-        type:
-          type: string
-          description: The verification method type, e.g. `JsonWebKey2020`.
+            $ref: '#/components/schemas/VerificationMethod'
+          description: Verification methods the relationships may reference (DID Core §5.2).
       additionalProperties: true
     Display:
       type: object
@@ -3874,8 +3825,8 @@ components:
       properties:
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TemplateLogo'
+          - type: 'null'
         name:
           type: string
     Document:
@@ -3886,18 +3837,18 @@ components:
       properties:
         did_method:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/SupportedDidMethod'
+          - type: 'null'
         document:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DidDocument'
+          - type: 'null'
         id:
           type: string
         iota_metadata:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/IotaMetadata'
+          - type: 'null'
         status:
           type: string
           enum:
@@ -4013,24 +3964,24 @@ components:
           - 'null'
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
         url:
           type:
           - string
           - 'null'
     Grants:
       type: object
-      description: 'Grants as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3'
+      description: 'Grants as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-2.3>'
       properties:
         authorization_code:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/AuthorizationCode'
+          - type: 'null'
         urn:ietf:params:oauth:grant-type:pre-authorized_code:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/PreAuthorizedCode'
+          - type: 'null'
     HolderAuthorization:
       type: object
       required:
@@ -4040,8 +3991,8 @@ components:
           type: boolean
         tx_code_constraints:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+          - type: 'null'
     HolderCredentialsEndpointRequest:
       type: object
       required:
@@ -4199,9 +4150,9 @@ components:
           description: Whether an additional interaction is required or the authorization has been completed.
         type:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/InteractionType'
             description: The interaction type required by the Authorization Server.
+          - type: 'null'
     InteractiveAuthorizationStatus:
       type: string
       description: The response status from the Interactive Authorization Endpoint.
@@ -4243,6 +4194,86 @@ components:
         wallet_address:
           type: string
           example: '0x1234567890'
+    Jwk:
+      type: object
+      description: 'A JSON Web Key (RFC 7517 §4): the key type, the parameters of RFC 7518 §6 and RFC 8037 §2 for that type, and the common members. Parameters are base64url-encoded without padding.'
+      required:
+      - kty
+      properties:
+        alg:
+          type: string
+          description: The algorithm intended for use with the key (RFC 7517 §4.4).
+        crv:
+          type: string
+          description: 'The curve of an `EC` or `OKP` key: `P-256`, `secp256k1`, `Ed25519`, ...'
+        d:
+          type: string
+          description: The private key of an `EC` or `OKP` key, or the private exponent of an `RSA` key.
+        dp:
+          type: string
+          description: The first factor CRT exponent of an `RSA` private key.
+        dq:
+          type: string
+          description: The second factor CRT exponent of an `RSA` private key.
+        e:
+          type: string
+          description: The public exponent of an `RSA` key.
+        k:
+          type: string
+          description: The value of an `oct` key.
+        key_ops:
+          type: array
+          items:
+            type: string
+            description: An operation, such as `sign` or `verify`.
+          description: The operations the key is intended for (RFC 7517 §4.3).
+        kid:
+          type: string
+          description: The key id (RFC 7517 §4.5).
+        kty:
+          type: string
+          description: 'The key type (RFC 7517 §4.1): `EC`, `OKP`, `RSA` or `oct`.'
+        n:
+          type: string
+          description: The modulus of an `RSA` key.
+        oth:
+          type: array
+          items:
+            type: object
+            required:
+            - r
+            - d
+            - t
+            properties:
+              d:
+                type: string
+                description: The factor CRT exponent.
+              r:
+                type: string
+                description: The prime factor.
+              t:
+                type: string
+                description: The factor CRT coefficient.
+          description: Other primes of an `RSA` private key (RFC 7518 §6.3.2.7).
+        p:
+          type: string
+          description: The first prime factor of an `RSA` private key.
+        q:
+          type: string
+          description: The second prime factor of an `RSA` private key.
+        qi:
+          type: string
+          description: The first CRT coefficient of an `RSA` private key.
+        use:
+          type: string
+          description: 'The intended use of the key (RFC 7517 §4.2): `sig` or `enc`.'
+        x:
+          type: string
+          description: The x coordinate of an `EC` key, or the `OKP` public key.
+        y:
+          type: string
+          description: The y coordinate of an `EC` key.
+      additionalProperties: true
     JwtVcJsonCredentialDefinition:
       type: object
       description: Credential definition for the `jwt_vc_json` format.
@@ -4573,6 +4604,12 @@ components:
         catalogId:
           type: string
           default: ''
+    MethodRef:
+      oneOf:
+      - type: string
+        description: A DID URL, possibly relative, of a method under `verificationMethod`.
+      - $ref: '#/components/schemas/VerificationMethod'
+      description: 'An entry of a verification relationship (DID Core §5.3): a reference to a verification method, or a method embedded in the relationship.'
     MsoMdocParameters:
       type: object
       required:
@@ -4593,7 +4630,7 @@ components:
           type: string
     NotificationErrorResponse:
       type: string
-      description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+      description: 'Notification Error Response as defined in OpenID4VCI 1.0: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response>'
       enum:
       - invalid_notification_request
       - invalid_notification_id
@@ -4606,7 +4643,7 @@ components:
       - credential_deleted
     NotificationRequest:
       type: object
-      description: 'Notification Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request'
+      description: 'Notification Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-request>'
       required:
       - notification_id
       - event
@@ -4627,7 +4664,7 @@ components:
       properties:
         error:
           type: string
-          description: Credential Error Response as defined in OpenID4VCI 1.0 - https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors
+          description: Credential Error Response as defined in OpenID4VCI 1.0 - <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-request-errors>
           enum:
           - invalid_credential_request
           - unknown_credential_configuration
@@ -4648,7 +4685,7 @@ components:
       properties:
         error:
           type: string
-          description: 'Notification Error Response as defined in OpenID4VCI 1.0: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response'
+          description: 'Notification Error Response as defined in OpenID4VCI 1.0: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response>'
           enum:
           - invalid_notification_request
           - invalid_notification_id
@@ -4664,7 +4701,7 @@ components:
       properties:
         error:
           type: string
-          description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+          description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
           enum:
           - invalid_request
           - invalid_client
@@ -4703,8 +4740,8 @@ components:
           - 'null'
         delivery_options:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DeliveryOptions'
+          - type: 'null'
         form_url_encoded_credential_offer:
           type:
           - string
@@ -4790,9 +4827,9 @@ components:
       properties:
         deliveryOptions:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/DeliveryOptions'
             description: Optional delivery settings associated with the offer.
+          - type: 'null'
         offerId:
           type: string
           description: Unique identifier of the offer to create or retrieve.
@@ -4816,12 +4853,15 @@ components:
       - credentialStatus
       properties:
         credentialStatus:
-          type: string
-          enum:
-          - VALID
-          - INVALID
-          - SUSPENDED
-          - UNDEFINED
+          oneOf:
+          - type: string
+            enum:
+            - VALID
+            - INVALID
+            - SUSPENDED
+          - type: integer
+            maximum: 3
+            minimum: 0
     PatchProfileEndpointRequest:
       type: object
       properties:
@@ -4839,8 +4879,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProfileLogo'
+          - type: 'null'
     PendingChanges:
       type: object
       required:
@@ -4852,11 +4892,11 @@ components:
             type: string
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ConnectionDisplayProperties'
+          - type: 'null'
     PreAuthorizedCode:
       type: object
-      description: 'Grant Type `pre-authorized_code` as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1'
+      description: 'Grant Type `pre-authorized_code` as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#section-4.1.1-5.2.1>'
       required:
       - pre-authorized_code
       properties:
@@ -4874,8 +4914,8 @@ components:
           type: string
         tx_code:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/TxCodeConstraints'
+          - type: 'null'
     PresentationView:
       type: object
       required:
@@ -4938,8 +4978,8 @@ components:
           - 'null'
         logo:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ProfileLogo'
+          - type: 'null'
         source:
           $ref: '#/components/schemas/Source'
     ProfileLogo:
@@ -4980,13 +5020,13 @@ components:
           type: boolean
         type:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/FormFieldType'
             description: |-
               Allows the caller to store additional type information not supported by standard JSON Schema keywords.
               This can be used by frontends to preserve field type information for visualizations.
               Purely a rendering hint that UniCore stores as given and never validates against the
               schema or the issued values.
+          - type: 'null'
     PublicOfferStatusDto:
       type: object
       required:
@@ -5133,6 +5173,43 @@ components:
         path:
           type: string
           description: JSON pointer to the offending value within the claims; empty for the claims object itself.
+    Service:
+      type: object
+      description: 'A service (DID Core §5.4): a way of interacting with the DID subject.'
+      required:
+      - id
+      - type
+      - serviceEndpoint
+      properties:
+        id:
+          type: string
+          description: The DID URL of the service, usually the document's DID with a fragment.
+        serviceEndpoint:
+          oneOf:
+          - type: string
+            format: uri
+            description: The endpoint URI.
+          - type: array
+            items:
+              type: string
+              format: uri
+              description: An endpoint URI.
+            minItems: 1
+          - type: object
+            description: An endpoint map.
+            additionalProperties: true
+          description: 'Where the service is: a URI, a set of URIs, or a map.'
+        type:
+          oneOf:
+          - type: string
+            description: A service type.
+          - type: array
+            items:
+              type: string
+              description: A service type.
+            minItems: 1
+          description: The service type or types.
+      additionalProperties: true
     ServiceResource:
       oneOf:
       - type: object
@@ -5167,12 +5244,12 @@ components:
             $ref: '#/components/schemas/LinkedVerifiablePresentation'
         resource:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/ServiceResource'
+          - type: 'null'
         service:
           oneOf:
+          - $ref: '#/components/schemas/Service'
           - type: 'null'
-          - $ref: '#/components/schemas/DidService'
     Source:
       type: string
       enum:
@@ -5315,7 +5392,7 @@ components:
           type: string
     TokenErrorResponse:
       type: string
-      description: 'Token Error Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response'
+      description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
       enum:
       - invalid_request
       - invalid_client
@@ -5375,10 +5452,10 @@ components:
             type:
             - string
             - 'null'
-      description: 'Token Request as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request'
+      description: 'Token Request as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-request>'
     TokenResponse:
       type: object
-      description: 'Token Response as described here: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response'
+      description: 'Token Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-successful-token-response>'
       required:
       - access_token
       - token_type
@@ -5418,11 +5495,11 @@ components:
           maxLength: 300
         input_mode:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - numeric
             - text
+          - type: 'null'
           default: numeric
         length:
           type:
@@ -5440,6 +5517,8 @@ components:
         Type metadata of an SD-JWT VC credential type.
 
         See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
+      required:
+      - vct
       properties:
         claims:
           type: array
@@ -5470,25 +5549,10 @@ components:
           - string
           - 'null'
           description: A human-readable name for the type.
-        schema:
-          type:
-          - object
-          - 'null'
-          description: An embedded JSON Schema for the credential.
-          additionalProperties: {}
-          propertyNames:
-            type: string
-        schema_uri:
-          type:
-          - string
-          - 'null'
+        vct:
+          type: string
           format: uri
-          description: A URI referencing a JSON Schema for the credential.
-        schema_uri#integrity:
-          type:
-          - string
-          - 'null'
-          description: Integrity metadata for the referenced JSON Schema.
+          description: The type described, the URL this metadata is retrieved from.
     TypeMetadataClaim:
       type: object
       description: Information about particular claims of an SD-JWT VC type.
@@ -5508,12 +5572,12 @@ components:
           $ref: '#/components/schemas/ClaimPathPointer'
         sd:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - always
             - allowed
             - never
+          - type: 'null'
           description: Whether the claim is selectively disclosable.
         svg_id:
           type:
@@ -5565,8 +5629,8 @@ components:
       properties:
         credentialExpiration:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Expiration'
+          - type: 'null'
           default: null
         description:
           type:
@@ -5575,13 +5639,13 @@ components:
           default: null
         display:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Display'
+          - type: 'null'
           default: null
         holderAuthorization:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/HolderAuthorization'
+          - type: 'null'
           default: null
         id:
           type: string
@@ -5598,13 +5662,13 @@ components:
             type: string
         status:
           oneOf:
-          - type: 'null'
           - type: string
             enum:
             - draft
             - published
             - archived
             - deleted
+          - type: 'null'
           default: null
         tags:
           type:
@@ -5627,8 +5691,8 @@ components:
           default: null
         visibility:
           oneOf:
-          - type: 'null'
           - $ref: '#/components/schemas/Visibility'
+          - type: 'null'
           default: null
       additionalProperties: false
     Validation:
@@ -5677,6 +5741,31 @@ components:
       properties:
         credential_definition:
           $ref: '#/components/schemas/VcSdJwtCredentialDefinition'
+    VerificationMethod:
+      type: object
+      description: 'A verification method (DID Core §5.2): a public key, carried as a JWK or a multibase string, with its type and controller.'
+      required:
+      - id
+      - type
+      - controller
+      properties:
+        controller:
+          type: string
+          description: The DID of the controller of the key.
+          pattern: ^did:[a-z0-9]+:(([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})*:)*([A-Za-z0-9._-]|%[0-9A-Fa-f]{2})+$
+        id:
+          type: string
+          description: The DID URL of the method, usually the document's DID with a fragment.
+        publicKeyJwk:
+          $ref: '#/components/schemas/Jwk'
+          description: The public key as a JWK (DID Core §5.2.1).
+        publicKeyMultibase:
+          type: string
+          description: The public key as a multibase string (DID Core §5.2.1).
+        type:
+          type: string
+          description: The verification method type, such as `JsonWebKey2020`, `JsonWebKey` or `Multikey`.
+      additionalProperties: true
     Version:
       type: object
       properties:
