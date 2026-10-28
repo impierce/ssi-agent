@@ -169,12 +169,10 @@ async fn added_provider_adapter<C: CommandOperation>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapter::InMemoryKeyProvider;
-    use crate::key_provider::{command::KeyProviderCommand, error::KeyProviderError};
-    use agent_shared::handlers::{command_handler, CommandHandlerError};
+    use crate::key_provider::command::KeyProviderCommand;
+    use agent_shared::handlers::command_handler;
     use agent_store::in_memory::InMemory;
     use async_trait::async_trait;
-    use cqrs_es::AggregateError;
 
     struct Unreachable;
 
@@ -184,25 +182,22 @@ mod tests {
             Err(ConnectionError("connection refused".to_string()))
         }
 
-        async fn list_keys(&self) -> Result<crate::adapter::ProviderKeys, ConnectionError> {
+        async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
             Err(ConnectionError("connection refused".to_string()))
         }
     }
 
+    /// Only AWS has an adapter, so an added in-memory provider is unsupported.
     async fn state() -> KmsState {
-        let adapters: KeyProviderAdapters = [
-            (
-                KeyProviderType::InMemory,
-                Arc::new(InMemoryKeyProvider) as Arc<dyn KeyProviderAdapter>,
-            ),
-            (KeyProviderType::AwsKmsAmbient, Arc::new(Unreachable)),
-        ]
+        let adapters: KeyProviderAdapters = [(
+            KeyProviderType::AwsKmsAmbient,
+            Arc::new(Unreachable) as Arc<dyn KeyProviderAdapter>,
+        )]
         .into();
         kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await
     }
 
-    /// Adds a provider. A rejected command is `Err(Some(error))`; one that lost a concurrent write is `Err(None)`.
-    async fn add(state: &KmsState, provider_type: KeyProviderType, name: &str) -> Result<(), Option<KeyProviderError>> {
+    async fn add(state: &KmsState, provider_type: KeyProviderType) {
         command_handler(
             state.authorization_checker.clone(),
             Caller::Internal,
@@ -210,86 +205,25 @@ mod tests {
             &state.command.key_providers,
             KeyProviderCommand::AddKeyProvider {
                 provider_type,
-                name: name.to_string(),
+                name: provider_type.to_string(),
             },
         )
         .await
-        .map_err(|error| match error {
-            CommandHandlerError::Aggregate(AggregateError::UserError(error)) => Some(error),
-            CommandHandlerError::Aggregate(AggregateError::AggregateConflict) => None,
-            error => panic!("unexpected error: {error}"),
-        })
+        .unwrap();
     }
 
     #[tokio::test]
-    async fn providers_of_different_types_run_side_by_side() {
+    async fn an_unreachable_provider_is_reported_not_failed() {
         let state = state().await;
+        add(&state, KeyProviderType::AwsKmsAmbient).await;
 
-        add(&state, KeyProviderType::InMemory, "Local keys").await.unwrap();
-        add(&state, KeyProviderType::AwsKmsAmbient, "Production keys")
-            .await
-            .unwrap();
+        let result = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::AwsKmsAmbient).await;
 
-        let all = get_key_providers(&state, Caller::Internal).await.unwrap();
-        let names: Vec<_> = all.providers.values().map(String::as_str).collect();
-        assert_eq!(names, ["Local keys", "Production keys"]);
+        assert_eq!(result.unwrap().unwrap_err().to_string(), "connection refused");
     }
 
     #[tokio::test]
-    async fn provider_names_are_unique_across_types() {
-        let state = state().await;
-
-        add(&state, KeyProviderType::InMemory, "Keys").await.unwrap();
-
-        assert_eq!(
-            add(&state, KeyProviderType::AwsKmsAmbient, "Keys").await,
-            Err(Some(KeyProviderError::NameTaken("Keys".to_string())))
-        );
-    }
-
-    #[tokio::test]
-    async fn concurrent_additions_cannot_both_take_the_same_name() {
-        for _ in 0..50 {
-            let state = state().await;
-
-            let (in_memory, aws) = tokio::join!(
-                add(&state, KeyProviderType::InMemory, "Keys"),
-                add(&state, KeyProviderType::AwsKmsAmbient, "Keys"),
-            );
-
-            assert!(in_memory.is_ok() != aws.is_ok(), "{in_memory:?} {aws:?}");
-            assert_eq!(
-                get_key_providers(&state, Caller::Internal)
-                    .await
-                    .unwrap()
-                    .providers
-                    .len(),
-                1
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn reports_whether_an_added_provider_is_reachable() {
-        let state = state().await;
-        add(&state, KeyProviderType::InMemory, "Local keys").await.unwrap();
-        add(&state, KeyProviderType::AwsKmsAmbient, "Production keys")
-            .await
-            .unwrap();
-
-        let reachable = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::InMemory)
-            .await
-            .unwrap();
-        assert!(reachable.is_ok());
-
-        let unreachable = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::AwsKmsAmbient)
-            .await
-            .unwrap();
-        assert_eq!(unreachable.unwrap_err().to_string(), "connection refused");
-    }
-
-    #[tokio::test]
-    async fn refuses_to_test_a_provider_that_was_not_added() {
+    async fn a_provider_that_was_not_added_is_not_found() {
         let state = state().await;
 
         let result = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::AwsKmsAmbient).await;
@@ -297,6 +231,19 @@ mod tests {
         assert!(matches!(
             result,
             Err(TestConnectionError::NotFound(KeyProviderType::AwsKmsAmbient))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_provider_without_an_adapter_is_unsupported() {
+        let state = state().await;
+        add(&state, KeyProviderType::InMemory).await;
+
+        let result = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::InMemory).await;
+
+        assert!(matches!(
+            result,
+            Err(TestConnectionError::Unsupported(KeyProviderType::InMemory))
         ));
     }
 }

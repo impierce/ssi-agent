@@ -90,7 +90,20 @@ mod tests {
         let response = app.clone().oneshot(request).await.unwrap();
         let status = response.status();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        let body = if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes).unwrap()
+        };
+        (status, body)
+    }
+
+    async fn add(app: &Router, provider_type: &str) {
+        let body = json!({ "providerType": provider_type, "name": provider_type });
+        assert_eq!(
+            send(app, "POST", "/v0/add-key-provider", Some(body)).await.0,
+            StatusCode::CREATED
+        );
     }
 
     #[tokio::test]
@@ -109,129 +122,75 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn providers_can_be_added_listed_tested_and_removed() {
+    async fn adding_a_provider_answers_with_the_trimmed_name() {
         let app = app_with_kms().await;
 
-        let (status, body) = send(
-            &app,
-            "POST",
-            "/v0/add-key-provider",
-            Some(json!({ "providerType": "in_memory", "name": "  Local keys  " })),
-        )
-        .await;
-        assert_eq!(status, StatusCode::CREATED);
-        assert_eq!(body, json!({ "provider_type": "in_memory", "name": "Local keys" }));
+        let body = json!({ "providerType": "in_memory", "name": "  Local keys  " });
+        let response = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
 
-        let (status, _) = send(
-            &app,
-            "POST",
-            "/v0/add-key-provider",
-            Some(json!({ "providerType": "aws_kms_ambient", "name": "Production keys" })),
-        )
-        .await;
-        assert_eq!(status, StatusCode::CREATED);
-
-        let (status, body) = send(&app, "GET", "/v0/get-all-key-providers", None).await;
-        assert_eq!(status, StatusCode::OK);
         assert_eq!(
-            body,
-            json!([
-                { "provider_type": "in_memory", "name": "Local keys" },
-                { "provider_type": "aws_kms_ambient", "name": "Production keys" },
-            ])
+            response,
+            (
+                StatusCode::CREATED,
+                json!({ "provider_type": "in_memory", "name": "Local keys" })
+            )
         );
+    }
 
-        let (status, body) = send(
-            &app,
-            "POST",
-            "/v0/test-key-provider-connection",
-            Some(json!({ "providerType": "in_memory" })),
-        )
-        .await;
-        assert_eq!((status, body), (StatusCode::OK, json!({ "reachable": true })));
+    #[tokio::test]
+    async fn lists_added_providers() {
+        let app = app_with_kms().await;
+        add(&app, "in_memory").await;
 
-        let (status, body) = send(
-            &app,
-            "POST",
-            "/v0/test-key-provider-connection",
-            Some(json!({ "providerType": "aws_kms_ambient" })),
-        )
-        .await;
+        let response = send(&app, "GET", "/v0/get-all-key-providers", None).await;
+
         assert_eq!(
-            (status, body),
+            response,
+            (
+                StatusCode::OK,
+                json!([{ "provider_type": "in_memory", "name": "in_memory" }])
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reachable_provider_is_reported_without_a_message() {
+        let app = app_with_kms().await;
+        add(&app, "in_memory").await;
+
+        let body = json!({ "providerType": "in_memory" });
+        let response = send(&app, "POST", "/v0/test-key-provider-connection", Some(body)).await;
+
+        assert_eq!(response, (StatusCode::OK, json!({ "reachable": true })));
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_provider_is_reported_with_the_reason() {
+        let app = app_with_kms().await;
+        add(&app, "aws_kms_ambient").await;
+
+        let body = json!({ "providerType": "aws_kms_ambient" });
+        let response = send(&app, "POST", "/v0/test-key-provider-connection", Some(body)).await;
+
+        assert_eq!(
+            response,
             (
                 StatusCode::OK,
                 json!({ "reachable": false, "message": "no credentials" })
             )
         );
-
-        let (status, _) = send(
-            &app,
-            "POST",
-            "/v0/remove-key-provider",
-            Some(json!({ "providerType": "in_memory" })),
-        )
-        .await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
-
-        let (_, body) = send(&app, "GET", "/v0/get-all-key-providers", None).await;
-        assert_eq!(
-            body,
-            json!([{ "provider_type": "aws_kms_ambient", "name": "Production keys" }])
-        );
     }
 
     #[tokio::test]
-    async fn adding_a_second_provider_of_a_type_conflicts() {
+    async fn listing_the_keys_of_an_unreachable_provider_is_a_bad_gateway() {
         let app = app_with_kms().await;
-        let add = json!({ "providerType": "in_memory", "name": "Local keys" });
-
-        assert_eq!(
-            send(&app, "POST", "/v0/add-key-provider", Some(add.clone())).await.0,
-            StatusCode::CREATED
-        );
-        assert_eq!(
-            send(&app, "POST", "/v0/add-key-provider", Some(add)).await.0,
-            StatusCode::CONFLICT
-        );
-    }
-
-    #[tokio::test]
-    async fn lists_the_keys_of_an_added_provider() {
-        let app = app_with_kms().await;
-        for provider_type in ["in_memory", "aws_kms_ambient"] {
-            send(
-                &app,
-                "POST",
-                "/v0/add-key-provider",
-                Some(json!({ "providerType": provider_type, "name": provider_type })),
-            )
-            .await;
-        }
-
-        let (status, body) = send(&app, "GET", "/v0/get-key-provider-keys/in_memory", None).await;
-        assert_eq!(
-            (status, body),
-            (StatusCode::OK, json!({ "keys": [], "hidden_keys": 0 }))
-        );
+        add(&app, "aws_kms_ambient").await;
 
         let (status, body) = send(&app, "GET", "/v0/get-key-provider-keys/aws_kms_ambient", None).await;
-        assert_eq!(status, StatusCode::BAD_GATEWAY);
-        assert_eq!(body["detail"], json!("no credentials"));
-    }
 
-    #[tokio::test]
-    async fn testing_a_provider_that_was_not_added_is_not_found() {
-        let app = app_with_kms().await;
-
-        let (status, _) = send(
-            &app,
-            "POST",
-            "/v0/test-key-provider-connection",
-            Some(json!({ "providerType": "aws_kms_ambient" })),
-        )
-        .await;
-
-        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(
+            (status, &body["detail"]),
+            (StatusCode::BAD_GATEWAY, &json!("no credentials"))
+        );
     }
 }

@@ -310,7 +310,6 @@ mod tests {
         let server = MockServer::start().await;
         list_keys()
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "Keys": [], "Truncated": false })))
-            .expect(1)
             .mount(&server)
             .await;
 
@@ -321,15 +320,7 @@ mod tests {
     async fn reports_why_the_provider_is_unreachable() {
         let server = MockServer::start().await;
         list_keys()
-            .respond_with(
-                ResponseTemplate::new(400)
-                    .insert_header("x-amzn-ErrorType", "AccessDeniedException")
-                    .set_body_json(json!({
-                        "__type": "AccessDeniedException",
-                        "message": "User is not authorized to perform: kms:ListKeys"
-                    })),
-            )
-            .expect(1)
+            .respond_with(aws_error("AccessDeniedException"))
             .mount(&server)
             .await;
 
@@ -337,7 +328,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "AccessDeniedException: User is not authorized to perform: kms:ListKeys"
+            "AccessDeniedException: AccessDeniedException for this key"
         );
     }
 
@@ -432,35 +423,31 @@ mod tests {
 
     #[tokio::test]
     async fn reports_whether_each_key_can_be_used() {
-        let states = [
-            ("enabled", "Enabled", ProviderKeyState::Enabled),
-            ("disabled", "Disabled", ProviderKeyState::Disabled),
-            ("deleting", "PendingDeletion", ProviderKeyState::PendingDeletion),
-            ("creating", "Creating", ProviderKeyState::Unavailable),
-        ];
-        let ids: Vec<_> = states.iter().map(|(id, _, _)| *id).collect();
-        let server = account_with_keys(&ids).await;
-        for (id, aws_state, _) in states {
+        let server = account_with_keys(&["enabled", "disabled", "deleting", "creating"]).await;
+        for (id, aws_state) in [
+            ("enabled", "Enabled"),
+            ("disabled", "Disabled"),
+            ("deleting", "PendingDeletion"),
+            ("creating", "Creating"),
+        ] {
             describe_key(id)
                 .respond_with(described(id, aws_state))
                 .mount(&server)
                 .await;
         }
 
-        let reported: Vec<_> = provider(&server.uri())
-            .list_keys()
-            .await
-            .unwrap()
-            .keys
-            .into_iter()
-            .map(|key| (key.id, key.state))
-            .collect();
+        let keys = provider(&server.uri()).list_keys().await.unwrap().keys;
 
-        let expected: Vec<_> = states
-            .iter()
-            .map(|(id, _, state)| ((*id).to_string(), *state))
-            .collect();
-        assert_eq!(reported, expected);
+        let states: Vec<_> = keys.iter().map(|key| (key.id.as_str(), key.state)).collect();
+        assert_eq!(
+            states,
+            [
+                ("enabled", ProviderKeyState::Enabled),
+                ("disabled", ProviderKeyState::Disabled),
+                ("deleting", ProviderKeyState::PendingDeletion),
+                ("creating", ProviderKeyState::Unavailable),
+            ]
+        );
     }
 
     #[tokio::test]
@@ -482,10 +469,12 @@ mod tests {
         let server = MockServer::start().await;
         list_keys()
             .respond_with(ResponseTemplate::new(503))
-            .expect(1)
             .mount(&server)
             .await;
 
-        assert!(provider(&server.uri()).test_connection().await.is_err());
+        let result = provider(&server.uri()).test_connection().await;
+
+        assert!(result.is_err());
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
 }
