@@ -15,6 +15,7 @@ use identity_iota::storage::{Storage, StorageSigner};
 use identity_kit::did::{
     Context, Did, DidDocument, MethodType, VerificationMaterial, VerificationMethod, VerificationRelationship,
 };
+use identity_kit::jose::Jwk;
 use identity_kit::methods::{jwk::DidJwk, key::DidKey};
 use identity_storage::{JwkStorage, KeyIdStorage};
 use iota_sdk::types::base_types::IotaAddress;
@@ -841,7 +842,7 @@ fn from_iota_document(document: IotaDocument) -> Result<DidDocument, DocumentErr
 fn verification_method(
     did: &Did,
     did_method: SupportedDidMethod,
-    public_key_jwk: &identity_kit::jose::Jwk,
+    public_key_jwk: &Jwk,
 ) -> Result<VerificationMethod, DocumentError> {
     let fragment = (did_method == SupportedDidMethod::Key)
         .then_some(did.method_specific_id())

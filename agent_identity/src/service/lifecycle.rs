@@ -15,6 +15,7 @@ use crate::{
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
 use identity_iota::credential::Jwt;
+use identity_kit::did::Service as DocumentService;
 use serde::Serialize;
 use shared_kernel::authorization::{
     Actor, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
@@ -122,36 +123,35 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
             }
             let service_url = did_document.id.join(&format!("#{}", service.service_id))?;
             let current = did_document.service(&service_url);
-            let desired: Option<identity_kit::did::Service> =
-                if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
-                    let presentations = service
-                        .presentations
-                        .iter()
-                        .filter(|presentation| presentation.holder == did_document.id.as_str())
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    if service.is_active()
-                        && document_can_link(document, state.services.iota_sponsoring_enabled)
-                        && !presentations.is_empty()
-                    {
-                        Some(convert(&linked_verifiable_presentation_service(
-                            &service.service_id,
-                            did_document.id.as_str(),
-                            &presentations,
-                        )?)?)
-                    } else {
-                        None
-                    }
-                } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
-                    let mut entry: identity_kit::did::Service =
-                        convert(service.service.as_ref().expect("active service has an entry"))?;
-                    entry.id = service_url;
-                    Some(entry)
-                } else if service.is_active() {
-                    continue;
+            let desired: Option<DocumentService> = if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
+                let presentations = service
+                    .presentations
+                    .iter()
+                    .filter(|presentation| presentation.holder == did_document.id.as_str())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if service.is_active()
+                    && document_can_link(document, state.services.iota_sponsoring_enabled)
+                    && !presentations.is_empty()
+                {
+                    Some(convert(&linked_verifiable_presentation_service(
+                        &service.service_id,
+                        did_document.id.as_str(),
+                        &presentations,
+                    )?)?)
                 } else {
                     None
-                };
+                }
+            } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
+                let mut entry: DocumentService =
+                    convert(service.service.as_ref().expect("active service has an entry"))?;
+                entry.id = service_url;
+                Some(entry)
+            } else if service.is_active() {
+                continue;
+            } else {
+                None
+            };
             let command = match desired {
                 Some(entry) if current != Some(&entry) => DocumentCommand::AddService {
                     service_id: service.service_id.clone(),

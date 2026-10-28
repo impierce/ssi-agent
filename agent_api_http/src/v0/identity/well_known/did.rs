@@ -7,6 +7,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use identity_kit::did::DidDocument;
 use std::sync::Arc;
 
 use crate::handlers::public_query_handler;
@@ -22,7 +23,7 @@ use crate::v0::openapi::PROTOCOL_TAG;
     operation_id = "well_known_did_json",
     tags = ["DID", PROTOCOL_TAG],
     responses(
-        (status = 200, description = "DID document", body = identity_kit::did::DidDocument),
+        (status = 200, description = "DID document", body = DidDocument),
         (status = 404, description = "No enabled `did:web` DID document exists"),
     )
 )]
