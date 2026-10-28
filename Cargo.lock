@@ -11371,6 +11371,7 @@ dependencies = [
 name = "shared-kernel"
 version = "0.1.0"
 dependencies = [
+ "agent_macros",
  "async-trait",
  "chrono",
  "convert_case 0.11.0",

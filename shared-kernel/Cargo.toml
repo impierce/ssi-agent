@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+agent_macros = { path = "../agent_macros" }
+
 async-trait.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 convert_case = "0.11"
