@@ -11,8 +11,11 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct KeyReference {
     pub provider_type: KeyProviderType,
-    /// The provider's identifier for the key.
+    /// The provider's identifier for the key, which names this key for good.
     pub provider_key_id: String,
+    /// The label the key was created with, which also names it in the provider unless it is moved to another key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     pub algorithm: JwsAlgorithm,
     pub public_key: Jwk,
 }
@@ -68,6 +71,7 @@ mod tests {
         KeyReference {
             provider_type: KeyProviderType::InMemory,
             provider_key_id: provider_key_id.to_string(),
+            label: None,
             algorithm: JwsAlgorithm::EdDSA,
             // The public key of RFC 8032's first Ed25519 test vector.
             public_key: Jwk::from_ed25519_public(&[

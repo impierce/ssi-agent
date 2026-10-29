@@ -204,7 +204,7 @@ mod tests {
             (status, fields),
             (
                 StatusCode::CREATED,
-                vec!["id", "provider_type", "provider_key_id", "algorithm", "public_key"]
+                vec!["id", "providerType", "providerKeyId", "algorithm", "publicKey"]
             )
         );
     }

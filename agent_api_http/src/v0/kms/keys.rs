@@ -18,12 +18,16 @@ use std::sync::Arc;
 
 /// A key this instance created in one of its key providers.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 #[schema(as = Key)]
 pub struct KeyDto {
     pub id: String,
     pub provider_type: KeyProviderType,
-    /// The provider's identifier for the key.
+    /// The provider's identifier for the key, which names this key for good.
     pub provider_key_id: String,
+    /// The label the key was created with, which also names it in the provider unless it is moved to another key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     pub algorithm: JwsAlgorithm,
     pub public_key: Jwk,
 }
@@ -33,6 +37,7 @@ impl KeyDto {
         let KeyReference {
             provider_type,
             provider_key_id,
+            label,
             algorithm,
             public_key,
         } = reference;
@@ -40,6 +45,7 @@ impl KeyDto {
             id,
             provider_type,
             provider_key_id,
+            label,
             algorithm,
             public_key,
         }
