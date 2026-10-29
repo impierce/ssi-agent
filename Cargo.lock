@@ -93,8 +93,6 @@ dependencies = [
  "identity-kit",
  "identity_core",
  "identity_credential",
- "identity_did",
- "identity_document",
  "indexmap 2.14.0",
  "jsonwebtoken",
  "lazy_static",
@@ -148,7 +146,6 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "did_manager",
  "identity_credential",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -437,12 +434,9 @@ dependencies = [
  "did_iota",
  "futures",
  "identity-kit",
- "identity_document",
  "identity_iota",
- "identity_jose",
  "identity_stronghold_ext",
  "iota-sdk 1.1.5",
- "iota-sdk 1.22.0-alpha",
  "iota_stronghold",
  "jsonwebtoken",
  "lazy_static",
@@ -474,9 +468,7 @@ dependencies = [
  "flate2",
  "http-serde",
  "identity-kit",
- "identity_core",
  "identity_iota",
- "identity_jose",
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
@@ -3188,15 +3180,6 @@ dependencies = [
  "ssi-dids 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ssi-jwk 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "tokio",
-]
-
-[[package]]
-name = "did_manager"
-version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
-dependencies = [
- "consumer",
- "producer",
 ]
 
 [[package]]
@@ -9576,28 +9559,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "producer"
-version = "0.1.0"
-source = "git+https://github.com/impierce/did-manager?tag=v1.0.0-beta.9#72f005445d4f3689a05e024514372a9c66df114a"
-dependencies = [
- "did_iota",
- "did_jwk",
- "did_key",
- "did_web",
- "identity_iota",
- "identity_storage",
- "identity_stronghold",
- "identity_stronghold_ext",
- "iota-sdk 1.1.5",
- "iota_stronghold",
- "log",
- "serde",
- "serde_json",
- "shared",
- "url",
 ]
 
 [[package]]
