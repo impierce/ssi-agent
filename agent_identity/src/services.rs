@@ -888,14 +888,19 @@ mod tests {
                 .insert_service(linked_vp::service(service_id, [presentation_url]).unwrap())
                 .unwrap();
 
-            Mock::given(method("GET"))
-                .and(path("/.well-known/did.json"))
-                .respond_with(ResponseTemplate::new(200).set_body_json(&self.document))
-                .mount(mock_server)
-                .await;
+            self.serve_document(mock_server).await;
             Mock::given(method("GET"))
                 .and(path("/linked-vp"))
                 .respond_with(ResponseTemplate::new(200).set_body_string(presentation_jwt.as_str()))
+                .mount(mock_server)
+                .await;
+        }
+
+        /// Serves the document alone, as an issuer that links no presentation does.
+        async fn serve_document(&self, mock_server: &MockServer) {
+            Mock::given(method("GET"))
+                .and(path("/.well-known/did.json"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(&self.document))
                 .mount(mock_server)
                 .await;
         }
@@ -1002,6 +1007,81 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn document_keys_resolve_only_under_the_role_relationship() {
+        let keys = InMemoryKeyStore::new();
+        let key = keys
+            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA))
+            .await
+            .unwrap();
+        let jwk = keys.public_jwk(&key).await.unwrap();
+        let mut document = DidDocument::new("did:web:example.org".parse().unwrap());
+        let id = document.id.join("#key-1").unwrap();
+        let method = VerificationMethod::new(
+            id.clone(),
+            MethodType::JSON_WEB_KEY_2020,
+            document.id.clone(),
+            VerificationMaterial::jwk(&jwk),
+        );
+        document
+            .insert_verification_method(method, [VerificationRelationship::Authentication])
+            .unwrap();
+        let document_keys = DocumentKeys(document);
+        let reference = KeyReference::DidUrl(id);
+
+        assert_eq!(
+            document_keys.resolve_key(&reference, KeyRole::Subject).await.unwrap(),
+            jwk.public()
+        );
+        // Not unsupported, so that a `CompositeKeyResolver` doesn't try the next resolver.
+        let error = document_keys
+            .resolve_key(&reference, KeyRole::Issuer)
+            .await
+            .unwrap_err();
+        assert!(!error.is_unsupported());
+
+        let other_did = KeyReference::DidUrl("did:web:example.com#key-1".parse().unwrap());
+        assert!(document_keys
+            .resolve_key(&other_did, KeyRole::Subject)
+            .await
+            .unwrap_err()
+            .is_unsupported());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_resolves_the_keys_of_other_issuers() {
+        let holder_server = MockServer::start().await;
+        let issuer_server = MockServer::start().await;
+        let mut holder = Holder::new(&holder_server);
+        let mut issuer = Holder::new(&issuer_server);
+        let holder_did = holder.did().to_owned();
+        let holder_method = holder.add_key().await;
+        let issuer_method = issuer.add_key().await;
+
+        // Issued to the holder by another DID, whose key is not in the holder's document.
+        let credential = Credential::new(
+            issuer.document.id.clone(),
+            "2026-03-04T12:00:00Z".parse().unwrap(),
+            CredentialSubject::new(holder.document.id.clone()).with_property("Content", "Great collab!"),
+        )
+        .with_type("Endorsement");
+        let credential_jwt = issuer.credential_jwt(&credential, &issuer_method).await;
+        let presentation_jwt = holder.presentation_jwt(vec![credential_jwt], &holder_method).await;
+        issuer.serve_document(&issuer_server).await;
+        holder.serve(&holder_server, &presentation_jwt).await;
+
+        let validations = IdentityServices::default()
+            .fetch_linked_vp_validations(&[verified_linked_did(&holder_did)])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        assert!(validations[0].result.valid, "{:?}", validations[0].result.error);
+        assert_eq!(validations[0].credentials.len(), 1);
+        assert!(validations[0].credentials[0].result.valid);
+        assert_eq!(validations[0].credentials[0].credential, Some(credential));
+    }
+
+    #[tokio::test]
     #[serial_test::serial]
     async fn fetch_linked_vp_validations_reports_credentials_next_to_a_malformed_entry() {
         let mock_server = MockServer::start().await;
@@ -1011,15 +1091,15 @@ mod tests {
         let credential = holder.credential();
         let credential_jwt = holder.credential_jwt(&credential, &method).await;
 
-        // A presentation whose second entry is not a JWT, which fails decoding the presentation as a whole.
+        // A presentation whose second entry is not a JWT and whose third is not even a string, which fail decoding the
+        // presentation as a whole.
         let mut claims = LinkedPresentationBuilder::new(holder.document.id.clone())
             .with_credential(credential_jwt.clone())
             .jwt_claims()
             .unwrap();
-        claims.additional["vp"]["verifiableCredential"]
-            .as_array_mut()
-            .unwrap()
-            .push("not-a-jwt".into());
+        let entries = claims.additional["vp"]["verifiableCredential"].as_array_mut().unwrap();
+        entries.push("not-a-jwt".into());
+        entries.push(42.into());
         let header = JwsHeader::new(JwsAlgorithm::EdDSA)
             .with_typ("JWT")
             .with_kid(method.as_str());
