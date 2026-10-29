@@ -371,7 +371,7 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
         ),
         (
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(AwsKmsAmbientKeyProvider::new()),
+            Arc::new(AwsKmsAmbientKeyProvider::new().with_key_tags(aws_key_tags(config().deployment_alias.as_deref()))),
         ),
     ]
     .into();
@@ -380,6 +380,18 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
     Some(Arc::new(
         kms_state(builder, event_bus, development_providers_allowed, adapters).await,
     ))
+}
+
+/// The tag under which AWS KMS keys carry the alias of the deployment that created them, which IAM policies match on.
+const DEPLOYMENT_ALIAS_TAG: &str = "unitrust-alias";
+
+/// The tags of every key this deployment creates in AWS KMS: its alias, if it has one.
+fn aws_key_tags(deployment_alias: Option<&str>) -> Vec<(String, String)> {
+    deployment_alias
+        .filter(|alias| !alias.is_empty())
+        .map(|alias| (DEPLOYMENT_ALIAS_TAG.to_string(), alias.to_string()))
+        .into_iter()
+        .collect()
 }
 
 /// Builds the full core SSI agent Router (app + metadata + probes).
@@ -508,5 +520,23 @@ mod tests {
         let enabled = kms_state_if_enabled(&InMemory, &event_bus).await;
         set_config().feature.kms = false;
         assert!(enabled.is_some());
+    }
+
+    #[test]
+    fn keys_are_tagged_with_the_deployment_alias() {
+        assert_eq!(
+            aws_key_tags(Some("eridani")),
+            vec![("unitrust-alias".to_string(), "eridani".to_string())]
+        );
+    }
+
+    #[test]
+    fn keys_are_not_tagged_without_a_deployment_alias() {
+        assert_eq!(aws_key_tags(None), vec![]);
+    }
+
+    #[test]
+    fn keys_are_not_tagged_with_an_empty_deployment_alias() {
+        assert_eq!(aws_key_tags(Some("")), vec![]);
     }
 }

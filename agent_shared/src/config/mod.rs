@@ -114,6 +114,11 @@ pub struct ApplicationConfiguration {
     pub public_url: Url,
     #[config(default)]
     pub overwrite_previous_did_web: Option<String>,
+    /// The alias the hosting environment knows this deployment by, such as `eridani`. Every key this deployment
+    /// creates in AWS KMS is tagged with it, so IAM policies can limit a deployment to its own keys. Set through
+    /// `UNICORE__DEPLOYMENT_ALIAS`.
+    #[config(default)]
+    pub deployment_alias: Option<String>,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
