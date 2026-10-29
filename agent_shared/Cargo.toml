@@ -20,9 +20,7 @@ flate2.workspace = true
 http-serde = "2.1"
 identity-kit.workspace = true
 # TODO: replace all identity_* with identity_iota?
-identity_core.workspace = true
 identity_iota.workspace = true
-identity_jose.workspace = true
 jsonwebtoken.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true

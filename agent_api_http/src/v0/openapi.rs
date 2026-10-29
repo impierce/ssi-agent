@@ -1,3 +1,4 @@
+use crate::v0::events::openapi::Webhooks;
 use utoipa::OpenApi;
 
 #[derive(OpenApi)]
@@ -10,6 +11,7 @@ use utoipa::OpenApi;
     servers(
         (url = "http://localhost:3033", description = "Local development")
     ),
+    modifiers(&Webhooks),
     nest(
         (path = "/v0", api = crate::v0::configuration::ConfigurationApi),
         (path = "/v0", api = crate::v0::holder::openapi::HolderApi),

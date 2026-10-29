@@ -22,10 +22,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 futures.workspace = true
 identity-kit.workspace = true
-identity_document.workspace = true
 identity_iota.workspace = true
-identity_jose.workspace = true
-iota-sdk.workspace = true
 iota-sdk-legacy.workspace = true
 iota_stronghold = { version = "2.1" }
 jsonwebtoken.workspace = true

@@ -282,6 +282,29 @@ mod tests {
     }
 
     #[test]
+    fn both_documents_publish_the_cloud_event_webhook() {
+        use agent_api_http::v0::events::openapi::CLOUD_EVENT_WEBHOOK;
+
+        for (name, document) in [("published", published_openapi()), ("full", full_openapi())] {
+            let webhooks = serde_json::to_value(&document).unwrap()["webhooks"].clone();
+            assert_eq!(
+                webhooks
+                    .as_object()
+                    .map(|webhooks| webhooks.keys().cloned().collect::<Vec<_>>()),
+                Some(vec![CLOUD_EVENT_WEBHOOK.to_string()]),
+                "the {name} document should publish exactly the CloudEvent webhook"
+            );
+
+            let content = &webhooks[CLOUD_EVENT_WEBHOOK]["post"]["requestBody"]["content"];
+            assert_eq!(
+                content["application/cloudevents+json"]["schema"]["$ref"],
+                "#/components/schemas/CloudEvent"
+            );
+            assert!(schema_names(&document).contains("CloudEvent"));
+        }
+    }
+
+    #[test]
     fn full_api_adds_exactly_the_protocol_operations() {
         let published = PublishedApiDoc::openapi();
         let full = FullApiDoc::openapi();
