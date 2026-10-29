@@ -113,6 +113,12 @@ impl IntoApiErrorExt for CreateKeyError {
                 .message(self.to_string())
                 .source(self)
                 .finish(),
+            CreateKeyError::InvalidLabel(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Key Label")
+                .type_url(type_url("kms#invalid-key-label"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
         }
     }
 }
@@ -121,6 +127,7 @@ impl IntoApiErrorExt for CreateKeyError {
 mod tests {
     use super::*;
     use crate::error::tests::assert_problems;
+    use agent_kms::adapter::InvalidLabel;
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use identity_kit::{
         jose::{JwsAlgorithm, KeyType},
@@ -206,10 +213,17 @@ mod tests {
 
     #[test]
     fn create_key_errors_successfully_convert_to_problem_details() {
-        assert_problems([(
-            CreateKeyError::UnsupportedAlgorithm(JwsAlgorithm::ES384),
-            StatusCode::BAD_REQUEST,
-            Some("kms#unsupported-key-algorithm"),
-        )]);
+        assert_problems([
+            (
+                CreateKeyError::UnsupportedAlgorithm(JwsAlgorithm::ES384),
+                StatusCode::BAD_REQUEST,
+                Some("kms#unsupported-key-algorithm"),
+            ),
+            (
+                CreateKeyError::InvalidLabel(InvalidLabel("`aws/x` can't be an AWS KMS alias name".to_string())),
+                StatusCode::BAD_REQUEST,
+                Some("kms#invalid-key-label"),
+            ),
+        ]);
     }
 }

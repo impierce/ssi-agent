@@ -6,11 +6,13 @@
 //! AWS KMS until the waiting period ends.
 
 use crate::{describe, AwsKmsAmbientKeyProvider};
+use agent_kms::adapter::InvalidLabel;
 use async_trait::async_trait;
 use aws_sdk_kms::{
     error::{ProvideErrorMetadata, SdkError},
     primitives::Blob,
     types::{KeyMetadata, KeySpec as AwsKeySpec, KeyState, KeyUsageType, MessageType, SigningAlgorithmSpec, Tag},
+    Client,
 };
 use identity_kit::{
     jose::{ecdsa_signature_from_der, Jwk, JwsAlgorithm, KeyType},
@@ -29,6 +31,60 @@ const MAX_RAW_MESSAGE: usize = 4096;
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct AwsKmsError(String);
+
+/// A key the store generated.
+pub(crate) struct Created {
+    /// The key's id in the store: its label, or its ARN when it has no label.
+    pub name: KeyId,
+    /// The key's ARN, which names this key for good, whereas a label's alias can be pointed at another key.
+    pub arn: KeyId,
+}
+
+/// Creates a key and, when it has a label, the label's alias. Returns the key's ARN.
+async fn create_named_key(
+    client: Client,
+    spec: AwsKeySpec,
+    tags: Vec<Tag>,
+    label: Option<(String, String)>,
+) -> Result<String, KeyStoreError> {
+    let created = client
+        .create_key()
+        .key_usage(KeyUsageType::SignVerify)
+        .key_spec(spec)
+        .set_tags((!tags.is_empty()).then_some(tags))
+        .send()
+        .await
+        .map_err(|error| backend(&error))?;
+    let metadata = created
+        .key_metadata()
+        .ok_or_else(|| KeyStoreError::backend(AwsKmsError("AWS KMS returned no key metadata".to_string())))?;
+    let key_id = metadata.key_id();
+
+    if let Some((label, alias)) = label {
+        if let Err(error) = client
+            .create_alias()
+            .alias_name(&alias)
+            .target_key_id(key_id)
+            .send()
+            .await
+        {
+            // Don't leave a key behind that nothing names.
+            if let Err(rollback) = client.schedule_key_deletion().key_id(key_id).send().await {
+                return Err(KeyStoreError::backend(AwsKmsError(format!(
+                    "AWS KMS created key {key_id} but could not name it `{label}` ({}) nor schedule its deletion ({})",
+                    describe(&error),
+                    describe(&rollback)
+                ))));
+            }
+            return Err(match error.code() {
+                Some("AlreadyExistsException") => KeyStoreError::AlreadyExists(KeyId::new(label)),
+                _ => backend(&error),
+            });
+        }
+    }
+
+    Ok(metadata.arn().unwrap_or(key_id).to_string())
+}
 
 impl AwsKmsAmbientKeyProvider {
     /// Runs `request` within the deadline, reporting a timeout as a backend error.
@@ -97,6 +153,65 @@ impl AwsKmsAmbientKeyProvider {
                 .insert(key.as_str().to_string(), alg);
         }
         Ok(alg)
+    }
+
+    /// Generates a key for `spec` and gives it its label, if it has one.
+    pub(crate) async fn create(&self, spec: KeySpec) -> Result<Created, KeyStoreError> {
+        spec.validate()?;
+        let aws_spec = match spec.key_type {
+            KeyType::P256 => AwsKeySpec::EccNistP256,
+            KeyType::Ed25519 => AwsKeySpec::EccNistEdwards25519,
+            key_type => return Err(KeyStoreError::UnsupportedKeyType(key_type)),
+        };
+        if !ALGORITHMS.contains(&spec.alg) {
+            return Err(KeyStoreError::UnsupportedAlgorithm(spec.alg));
+        }
+
+        let label = spec
+            .label
+            .as_deref()
+            .map(|label| {
+                Ok::<_, KeyStoreError>((
+                    label.to_string(),
+                    alias_for_label(label).map_err(KeyStoreError::backend)?,
+                ))
+            })
+            .transpose()?;
+        let tags: Vec<Tag> = self
+            .key_tags
+            .iter()
+            .map(|(key, value)| Tag::builder().tag_key(key).tag_value(value).build())
+            .collect::<Result<_, _>>()
+            .map_err(KeyStoreError::backend)?;
+
+        let client = self
+            .bounded(async {
+                if let Some((label, alias)) = &label {
+                    if self.metadata(&KeyId::new(alias.as_str())).await?.is_some() {
+                        return Err(KeyStoreError::AlreadyExists(KeyId::new(label.as_str())));
+                    }
+                }
+                // Resolves the AWS configuration, which the SDK's own timeouts don't cover.
+                Ok(self.client().await.clone())
+            })
+            .await?;
+
+        // Creating the key and naming it runs in its own task, so that neither the deadline nor a caller that gives
+        // up can stop it after the key exists and leave it behind unnamed. The SDK's own timeouts bound each request.
+        let arn = KeyId::new(
+            tokio::spawn(create_named_key(client, aws_spec, tags, label.clone()))
+                .await
+                .map_err(KeyStoreError::backend)??,
+        );
+
+        self.algorithms
+            .write()
+            .expect("lock poisoned")
+            .insert(arn.as_str().to_string(), spec.alg);
+        Ok(Created {
+            name: label.map_or_else(|| arn.clone(), |(label, _)| KeyId::new(label)),
+            arn,
+        })
     }
 
     /// Maps an error of an operation on `key`: an unknown key, or one pending deletion, is `NotFound`.
@@ -215,90 +330,7 @@ impl KeyStore for AwsKmsAmbientKeyProvider {
     }
 
     async fn generate(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
-        spec.validate()?;
-        let aws_spec = match spec.key_type {
-            KeyType::P256 => AwsKeySpec::EccNistP256,
-            KeyType::Ed25519 => AwsKeySpec::EccNistEdwards25519,
-            key_type => return Err(KeyStoreError::UnsupportedKeyType(key_type)),
-        };
-        if !ALGORITHMS.contains(&spec.alg) {
-            return Err(KeyStoreError::UnsupportedAlgorithm(spec.alg));
-        }
-
-        let label = spec.label.as_deref().map(alias_for_label).transpose()?;
-        let tags: Vec<Tag> = self
-            .key_tags
-            .iter()
-            .map(|(key, value)| Tag::builder().tag_key(key).tag_value(value).build())
-            .collect::<Result<_, _>>()
-            .map_err(KeyStoreError::backend)?;
-
-        self.bounded(async {
-            if let Some((label, alias)) = &label {
-                if self.metadata(&KeyId::new(alias.as_str())).await?.is_some() {
-                    return Err(KeyStoreError::AlreadyExists(KeyId::new(label.as_str())));
-                }
-            }
-            // Resolves the AWS configuration, which the SDK's own timeouts don't cover.
-            self.client().await;
-            Ok(())
-        })
-        .await?;
-
-        // Creating the key and its alias isn't cut off by the deadline, which could stop it after the key exists and
-        // leave it behind unnamed. The SDK's own timeouts bound each request.
-        let created = self
-            .client()
-            .await
-            .create_key()
-            .key_usage(KeyUsageType::SignVerify)
-            .key_spec(aws_spec)
-            .set_tags((!tags.is_empty()).then_some(tags))
-            .send()
-            .await
-            .map_err(|error| backend(&error))?;
-        let metadata = created
-            .key_metadata()
-            .ok_or_else(|| KeyStoreError::backend(AwsKmsError("AWS KMS returned no key metadata".to_string())))?;
-        let key_id = metadata.key_id().to_string();
-
-        let id = match label {
-            Some((label, alias)) => {
-                if let Err(error) = self
-                    .client()
-                    .await
-                    .create_alias()
-                    .alias_name(&alias)
-                    .target_key_id(&key_id)
-                    .send()
-                    .await
-                {
-                    // Don't leave a key behind that nothing names.
-                    if let Err(rollback) = self.client().await.schedule_key_deletion().key_id(&key_id).send().await {
-                        return Err(KeyStoreError::backend(AwsKmsError(format!(
-                            "AWS KMS created key {key_id} but could not name it `{label}` ({}) nor schedule its \
-                             deletion ({})",
-                            describe(&error),
-                            describe(&rollback)
-                        ))));
-                    }
-                    return Err(match error.code() {
-                        Some("AlreadyExistsException") => KeyStoreError::AlreadyExists(KeyId::new(label)),
-                        _ => backend(&error),
-                    });
-                }
-                KeyId::new(label)
-            }
-            None => KeyId::new(metadata.arn().unwrap_or(&key_id)),
-        };
-
-        if names_one_key(&id) {
-            self.algorithms
-                .write()
-                .expect("lock poisoned")
-                .insert(id.as_str().to_string(), spec.alg);
-        }
-        Ok(id)
+        Ok(self.create(spec).await?.name)
     }
 
     async fn delete(&self, key: &KeyId) -> Result<(), KeyStoreError> {
@@ -354,8 +386,8 @@ fn names_one_key(key: &KeyId) -> bool {
     !id.starts_with("alias/") && (!id.starts_with("arn:") || !id.contains(":alias/"))
 }
 
-/// The label and alias for a key generated with `label`, if AWS KMS accepts it as an alias name.
-fn alias_for_label(label: &str) -> Result<(String, String), KeyStoreError> {
+/// The alias for a key generated with `label`, if AWS KMS accepts it as an alias name.
+pub(crate) fn alias_for_label(label: &str) -> Result<String, InvalidLabel> {
     let valid = !label.is_empty()
         && label.len() <= 250
         && !label.starts_with("aws/")
@@ -365,11 +397,11 @@ fn alias_for_label(label: &str) -> Result<(String, String), KeyStoreError> {
     let alias = aws_key_id(&KeyId::new(label));
     // An id AWS KMS reads as an ARN, key ID or alias is not a label.
     if !valid || alias == label {
-        return Err(KeyStoreError::backend(AwsKmsError(format!(
+        return Err(InvalidLabel(format!(
             "`{label}` can't be an AWS KMS alias name: use letters, digits, `/`, `_` and `-`, not an ARN or key ID"
-        ))));
+        )));
     }
-    Ok((label.to_string(), alias))
+    Ok(alias)
 }
 
 fn is_key_uuid(id: &str) -> bool {
@@ -414,6 +446,7 @@ where
 mod tests {
     use super::*;
     use crate::fake_kms::FakeKms;
+    use agent_kms::adapter::KeyProviderAdapter;
     use identity_kit::keys::testsuite;
     use std::time::Duration;
 
@@ -497,6 +530,39 @@ mod tests {
         let result = store.generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256)).await;
 
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn names_the_key_although_the_caller_gives_up() {
+        let kms = FakeKms::start().await;
+        kms.delay("CreateAlias", Duration::from_millis(200));
+        let store = kms.provider();
+        let spec = KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer");
+        tokio::time::timeout(Duration::from_millis(50), store.generate(spec))
+            .await
+            .unwrap_err();
+        tokio::time::sleep(Duration::from_millis(400)).await;
+
+        let named = store.exists(&KeyId::new("issuer")).await.unwrap();
+
+        assert!(named);
+    }
+
+    #[tokio::test]
+    async fn creates_a_labelled_key_for_the_kms_under_its_arn() {
+        let kms = FakeKms::start().await;
+
+        let key = KeyProviderAdapter::create(
+            &kms.provider(),
+            KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            key.as_str(),
+            "arn:aws:kms:eu-central-1:123456789012:key/00000000-0000-0000-0000-000000000001"
+        );
     }
 
     #[tokio::test]
@@ -608,7 +674,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "key store backend error: `1234abcd-12ab-34cd-56ef-1234567890ab` can't be an AWS KMS alias name: use \
+            "`1234abcd-12ab-34cd-56ef-1234567890ab` can't be an AWS KMS alias name: use \
              letters, digits, `/`, `_` and `-`, not an ARN or key ID"
         );
     }
@@ -619,7 +685,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "key store backend error: `aws/reserved` can't be an AWS KMS alias name: use letters, digits, `/`, `_` \
+            "`aws/reserved` can't be an AWS KMS alias name: use letters, digits, `/`, `_` \
              and `-`, not an ARN or key ID"
         );
     }

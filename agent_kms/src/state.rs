@@ -1,4 +1,4 @@
-use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
+use crate::adapter::{ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
 use crate::key::{
     aggregate::{Key, KeyReference},
     command::{CreateKey, KeyCommand},
@@ -17,7 +17,7 @@ use agent_shared::{
 };
 use identity_kit::{
     jose::{JwsAlgorithm, KeyType},
-    keys::{KeySpec, KeyStoreError},
+    keys::{KeyId, KeySpec, KeyStoreError},
 };
 use shared_kernel::authorization::{
     AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation, QueryOperation,
@@ -26,6 +26,7 @@ use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use thiserror::Error;
+use tracing::error;
 use uuid::Uuid;
 
 impl QueryOperation for KeyProvidersView {
@@ -212,6 +213,8 @@ pub enum CreateKeyError {
     #[error("Keys that sign with {0} can't be created")]
     UnsupportedAlgorithm(JwsAlgorithm),
     #[error(transparent)]
+    InvalidLabel(#[from] InvalidLabel),
+    #[error(transparent)]
     KeyStore(#[from] KeyStoreError),
     #[error(transparent)]
     Record(#[from] CommandHandlerError<KeyError>),
@@ -219,12 +222,13 @@ pub enum CreateKeyError {
 
 /// Creates a key in an added provider and records its reference. Returns the new key's ID and its reference.
 ///
-/// The key is generated before it is recorded: if recording fails, the key stays in the provider unrecorded.
+/// The key is generated before it is recorded. When it can't be recorded, it is deleted from the provider again, which
+/// also frees its label. Once the key is being generated, a caller that gives up doesn't stop this.
 ///
 /// # Errors
 ///
 /// Fails when the algorithm isn't supported, the caller isn't authorized, the provider hasn't been added or has no
-/// adapter, or the provider can't create the key.
+/// adapter, the provider can't give the key its label, or the provider can't create the key.
 pub async fn create_key(
     state: &KmsState,
     caller: Caller,
@@ -238,18 +242,56 @@ pub async fn create_key(
         algorithm => return Err(CreateKeyError::UnsupportedAlgorithm(algorithm)),
     };
     let adapter = added_provider_adapter(state, caller.clone(), provider_type, &CreateKey).await?;
+    if let Some(label) = &label {
+        adapter.check_label(label)?;
+    }
 
+    let state = state.clone();
     let spec = KeySpec::new(key_type, algorithm);
-    let provider_key_id = adapter
-        .generate(match label {
+    tokio::spawn(async move {
+        let spec = match &label {
             Some(label) => spec.with_label(label),
             None => spec,
-        })
-        .await?;
+        };
+        let provider_key_id = adapter.create(spec).await?;
+
+        let recorded = record_created_key(
+            &state,
+            caller,
+            adapter.as_ref(),
+            provider_type,
+            &provider_key_id,
+            label.clone(),
+            algorithm,
+        )
+        .await;
+        if recorded.is_err() {
+            // A labelled key is deleted by its label, which frees the label as well.
+            let key = label.map_or(provider_key_id, KeyId::new);
+            if let Err(error) = adapter.delete(&key).await {
+                error!(%key, %error, "A key was created in the `{provider_type}` key provider but neither recorded nor deleted");
+            }
+        }
+        recorded
+    })
+    .await
+    .unwrap_or_else(|error| std::panic::resume_unwind(error.into_panic()))
+}
+
+async fn record_created_key(
+    state: &KmsState,
+    caller: Caller,
+    adapter: &dyn KeyProviderAdapter,
+    provider_type: KeyProviderType,
+    provider_key_id: &KeyId,
+    label: Option<String>,
+    algorithm: JwsAlgorithm,
+) -> Result<(String, KeyReference), CreateKeyError> {
     let reference = KeyReference {
         provider_type,
-        public_key: adapter.public_jwk(&provider_key_id).await?,
+        public_key: adapter.public_jwk(provider_key_id).await?,
         provider_key_id: provider_key_id.as_str().to_string(),
+        label,
         algorithm,
     };
 
@@ -292,7 +334,12 @@ mod tests {
     use crate::adapter::InMemoryKeyStore;
     use crate::key_provider::command::KeyProviderCommand;
     use agent_store::in_memory::InMemory;
-    use identity_kit::keys::{KeyId, KeyStore};
+    use async_trait::async_trait;
+    use identity_kit::{
+        jose::Jwk,
+        keys::{KeyStore, KeyStoreCapabilities},
+    };
+    use std::time::Duration;
 
     async fn state_with(adapters: KeyProviderAdapters) -> KmsState {
         kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await
@@ -306,6 +353,92 @@ mod tests {
                 Arc::new(UnreachableKeyProvider) as Arc<dyn KeyProviderAdapter>,
             )]
             .into(),
+        )
+        .await
+    }
+
+    /// An in-memory provider that can be made slow to generate, unable to return public keys, or refusing labels.
+    struct FakeProvider {
+        keys: InMemoryKeyStore,
+        generate_delay: Duration,
+        public_keys_fail: bool,
+        labels_refused: bool,
+    }
+
+    impl FakeProvider {
+        fn new() -> Self {
+            Self {
+                keys: InMemoryKeyStore::new(),
+                generate_delay: Duration::ZERO,
+                public_keys_fail: false,
+                labels_refused: false,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl KeyStore for FakeProvider {
+        fn capabilities(&self) -> KeyStoreCapabilities {
+            self.keys.capabilities()
+        }
+
+        async fn public_jwk(&self, key: &KeyId) -> Result<Jwk, KeyStoreError> {
+            if self.public_keys_fail {
+                return Err(KeyStoreError::backend(ConnectionError("not reachable".to_string())));
+            }
+            self.keys.public_jwk(key).await
+        }
+
+        async fn sign(&self, key: &KeyId, alg: JwsAlgorithm, data: &[u8]) -> Result<Vec<u8>, KeyStoreError> {
+            self.keys.sign(key, alg, data).await
+        }
+
+        async fn exists(&self, key: &KeyId) -> Result<bool, KeyStoreError> {
+            self.keys.exists(key).await
+        }
+
+        async fn generate(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+            tokio::time::sleep(self.generate_delay).await;
+            self.keys.generate(spec).await
+        }
+
+        async fn delete(&self, key: &KeyId) -> Result<(), KeyStoreError> {
+            self.keys.delete(key).await
+        }
+    }
+
+    #[async_trait]
+    impl KeyProviderAdapter for FakeProvider {
+        async fn test_connection(&self) -> Result<(), ConnectionError> {
+            Ok(())
+        }
+
+        async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
+            Ok(ProviderKeys::default())
+        }
+
+        fn check_label(&self, label: &str) -> Result<(), InvalidLabel> {
+            if self.labels_refused {
+                return Err(InvalidLabel(format!("`{label}` is refused")));
+            }
+            Ok(())
+        }
+    }
+
+    /// A state whose in-memory provider is `provider`, added.
+    async fn state_with_provider(provider: Arc<FakeProvider>) -> KmsState {
+        let state = state_with([(KeyProviderType::InMemory, provider as Arc<dyn KeyProviderAdapter>)].into()).await;
+        add(&state, KeyProviderType::InMemory).await;
+        state
+    }
+
+    async fn create_labelled(state: &KmsState) -> Result<(String, KeyReference), CreateKeyError> {
+        create_key(
+            state,
+            Caller::Internal,
+            KeyProviderType::InMemory,
+            JwsAlgorithm::EdDSA,
+            Some("issuer".to_string()),
         )
         .await
     }
@@ -386,32 +519,60 @@ mod tests {
 
     #[tokio::test]
     async fn records_the_public_key_the_provider_holds() {
-        let provider = Arc::new(InMemoryKeyStore::new());
-        let state = state_with(
-            [(
-                KeyProviderType::InMemory,
-                provider.clone() as Arc<dyn KeyProviderAdapter>,
-            )]
-            .into(),
-        )
-        .await;
-        add(&state, KeyProviderType::InMemory).await;
+        let provider = Arc::new(FakeProvider::new());
+        let state = state_with_provider(provider.clone()).await;
 
-        let (_, reference) = create_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::InMemory,
-            JwsAlgorithm::EdDSA,
-            None,
-        )
-        .await
-        .unwrap();
+        let (_, reference) = create_labelled(&state).await.unwrap();
 
         let held = provider
             .public_jwk(&KeyId::new(reference.provider_key_id))
             .await
             .unwrap();
         assert_eq!(reference.public_key, held);
+    }
+
+    #[tokio::test]
+    async fn refuses_a_label_the_provider_cannot_give() {
+        let state = state_with_provider(Arc::new(FakeProvider {
+            labels_refused: true,
+            ..FakeProvider::new()
+        }))
+        .await;
+
+        let result = create_labelled(&state).await;
+
+        assert_eq!(result.unwrap_err().to_string(), "`issuer` is refused");
+    }
+
+    #[tokio::test]
+    async fn deletes_a_key_it_could_not_record() {
+        let provider = Arc::new(FakeProvider {
+            public_keys_fail: true,
+            ..FakeProvider::new()
+        });
+        let state = state_with_provider(provider.clone()).await;
+        create_labelled(&state).await.unwrap_err();
+
+        let left = provider.exists(&KeyId::new("issuer")).await.unwrap();
+
+        assert!(!left);
+    }
+
+    #[tokio::test]
+    async fn records_the_key_although_the_caller_gives_up() {
+        let state = state_with_provider(Arc::new(FakeProvider {
+            generate_delay: Duration::from_millis(100),
+            ..FakeProvider::new()
+        }))
+        .await;
+        tokio::time::timeout(Duration::from_millis(20), create_labelled(&state))
+            .await
+            .unwrap_err();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        let keys = get_keys(&state, Caller::Internal).await.unwrap().keys;
+
+        assert_eq!(keys.len(), 1);
     }
 
     #[tokio::test]

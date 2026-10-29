@@ -3,7 +3,9 @@
 //! Credentials and region are resolved through the standard AWS chain: environment variables, shared config files,
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
-use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys};
+use agent_kms::adapter::{
+    ConnectionError, InvalidLabel, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys,
+};
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
 use aws_sdk_kms::{
@@ -13,7 +15,10 @@ use aws_sdk_kms::{
     Client,
 };
 use futures::{stream, StreamExt as _, TryStreamExt as _};
-use identity_kit::jose::JwsAlgorithm;
+use identity_kit::{
+    jose::JwsAlgorithm,
+    keys::{KeyId, KeySpec, KeyStoreError},
+};
 use std::{collections::HashMap, sync::RwLock, time::Duration};
 use tokio::sync::OnceCell;
 use tracing::debug;
@@ -179,6 +184,15 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
             "Listed AWS KMS keys"
         );
         Ok(listing)
+    }
+
+    fn check_label(&self, label: &str) -> Result<(), InvalidLabel> {
+        key_store::alias_for_label(label).map(drop)
+    }
+
+    /// Returns the new key's ARN: a label's alias can be pointed at another key.
+    async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        Ok(self.create(spec).await?.arn)
     }
 }
 
