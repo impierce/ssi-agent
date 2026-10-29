@@ -30,6 +30,8 @@ struct FakeKey {
     /// `None` for a key spec the fake does not sign with.
     signing_key: Option<SigningKey>,
     state: &'static str,
+    /// The tags it was created with, as key and value.
+    tags: Vec<(String, String)>,
 }
 
 impl FakeKey {
@@ -97,6 +99,7 @@ impl State {
                 spec,
                 signing_key,
                 state: "Enabled",
+                tags: Vec::new(),
             },
         );
         id
@@ -165,6 +168,22 @@ impl FakeKms {
         state.aliases.insert(alias.to_string(), target);
     }
 
+    /// Every alias, in order.
+    pub fn aliases(&self) -> Vec<String> {
+        self.state.lock().unwrap().aliases.keys().cloned().collect()
+    }
+
+    /// The tags of every key, in the order they were created.
+    pub fn key_tags(&self) -> Vec<Vec<(String, String)>> {
+        self.state
+            .lock()
+            .unwrap()
+            .keys
+            .values()
+            .map(|key| key.tags.clone())
+            .collect()
+    }
+
     /// The state of every key, in the order they were created.
     pub fn key_states(&self) -> Vec<&'static str> {
         self.state.lock().unwrap().keys.values().map(|key| key.state).collect()
@@ -231,6 +250,19 @@ impl Responder {
                 _ => return error("ValidationException"),
             };
             let id = state.insert(spec, Some(signing_key));
+            if let Some(key) = state.keys.get_mut(&id) {
+                key.tags = body["Tags"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|tag| {
+                        (
+                            tag["TagKey"].as_str().unwrap_or_default().to_string(),
+                            tag["TagValue"].as_str().unwrap_or_default().to_string(),
+                        )
+                    })
+                    .collect();
+            }
             return ResponseTemplate::new(200).set_body_json(json!({ "KeyMetadata": state.metadata(&id) }));
         }
 
