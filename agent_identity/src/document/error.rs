@@ -30,6 +30,10 @@ pub enum DocumentError {
     VerificationMethodInsertionError(String),
     #[error("Failed to generate DID from key with Key ID: {0}")]
     GenerateDidError(KeyId),
+    #[error("Only `did:web` documents can add public keys, not `{0}` documents")]
+    AddPublicKeyUnsupportedError(SupportedDidMethod),
+    #[error("The public key to add is invalid: {0}")]
+    InvalidPublicKeyError(String),
 
     // did:iota: specific Errors
     #[error("Invalid Node Endpoint: {0}")]

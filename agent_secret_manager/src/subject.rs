@@ -33,7 +33,10 @@ pub struct Subject {
     pub stronghold_storage: StrongholdExtStorage,
     /// Holds the configured issuer keys.
     pub key_store: Arc<dyn KeyStore>,
+    /// The verification method each DID method signs with, per algorithm.
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
+    /// The keys of verification methods that the configured issuer keys don't back, by verification method.
+    method_keys: Arc<Mutex<HashMap<DidUrl, MethodKey>>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
     /// Resolves the DID methods `key_resolver` doesn't.
@@ -49,6 +52,13 @@ impl fmt::Debug for Subject {
             .field("resolver", &self.resolver)
             .finish_non_exhaustive()
     }
+}
+
+/// A key in a key store other than the configured issuer keys, such as a KMS key.
+#[derive(Clone)]
+pub struct MethodKey {
+    pub key_store: Arc<dyn KeyStore>,
+    pub key_id: identity_kit::keys::KeyId,
 }
 
 /// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
@@ -124,16 +134,37 @@ impl Subject {
             key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+            method_keys: Arc::new(Mutex::new(HashMap::new())),
             key_resolver: key_resolver(),
             resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
     }
 
     /// IdentityKit's signer with the configured issuer key for `algorithm`.
-    pub async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+    async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
         let (key, alg) = issuer_key(algorithm)?;
 
         Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)
+    }
+
+    /// IdentityKit's signer for the verification method `verification_method_id`: with the key inserted for it, or
+    /// else with the configured issuer key for `algorithm`.
+    pub async fn method_signer(
+        &self,
+        verification_method_id: &DidUrl,
+        algorithm: Algorithm,
+    ) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+        let Some(MethodKey { key_store, key_id }) = self.method_keys.lock().await.get(verification_method_id).cloned()
+        else {
+            return self.issuer_signer(algorithm).await;
+        };
+
+        Ok(KeySigner::new(key_store, key_id, JwsAlgorithm::try_from(algorithm)?).await?)
+    }
+
+    /// Signs for the verification method `verification_method_id` with `key` instead of a configured issuer key.
+    pub async fn insert_method_key(&self, verification_method_id: DidUrl, key: MethodKey) {
+        self.method_keys.lock().await.insert(verification_method_id, key);
     }
 
     pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
@@ -292,6 +323,7 @@ mod default_subject {
                 key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
                 stronghold_storage,
                 verification_method_ids,
+                method_keys: Arc::new(Mutex::new(HashMap::new())),
                 key_resolver: key_resolver(),
                 resolver: Resolver::new(),
             }
@@ -323,8 +355,20 @@ impl Sign for Subject {
             .map(ToString::to_string)
     }
 
-    async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?)
+    async fn sign(&self, message: &str, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        let verification_method_id = match SupportedDidMethod::from_str(subject_syntax_type) {
+            Ok(method) => {
+                self.get_verification_method_id(StorageKey::new(method, algorithm))
+                    .await
+            }
+            Err(_) => None,
+        };
+        let signer = match verification_method_id {
+            Some(verification_method_id) => self.method_signer(&verification_method_id, algorithm).await?,
+            None => self.issuer_signer(algorithm).await?,
+        };
+
+        Ok(signer.sign(message.as_bytes()).await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -364,6 +408,7 @@ mod tests {
     use super::*;
     use agent_shared::config::{default_issuer_eddsa_key_id, default_issuer_es256_key_id, SecretManagerConfig};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use identity_kit::keys::{InMemoryKeyStore, KeySpec, KeyType};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
@@ -412,6 +457,87 @@ mod tests {
         // Verify the signature
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+
+    /// An ES256 key in an in-memory key store, and its public JWK.
+    async fn in_memory_key() -> (MethodKey, Jwk) {
+        let key_store = Arc::new(InMemoryKeyStore::new());
+        let key_id = key_store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        let public_jwk = key_store.public_jwk(&key_id).await.unwrap();
+
+        (MethodKey { key_store, key_id }, public_jwk)
+    }
+
+    async fn configured_es256_public_jwk(subject: &Subject) -> Jwk {
+        subject
+            .get_public_key(KeyId::new(default_issuer_es256_key_id().as_str()))
+            .await
+            .unwrap()
+    }
+
+    fn signed_by(public_jwk: &Jwk, message: &str, signature: &[u8]) -> bool {
+        UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_jwk.p256_public_bytes().unwrap())
+            .verify(message.as_bytes(), signature)
+            .is_ok()
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_did_method_with_the_key_of_its_verification_method() {
+        let subject = Subject::test_subject().await;
+        let (key, public_jwk) = in_memory_key().await;
+        let verification_method_id: DidUrl = "did:web:example.org#kms".parse().unwrap();
+        subject.insert_method_key(verification_method_id.clone(), key).await;
+        subject
+            .insert_verification_method_id(
+                StorageKey::new(SupportedDidMethod::Web, Algorithm::ES256),
+                verification_method_id,
+            )
+            .await
+            .unwrap();
+
+        let signature = Sign::sign(&subject, "message", "did:web", Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(signed_by(&public_jwk, "message", &signature));
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_did_method_without_a_verification_method_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+
+        let signature = Sign::sign(&subject, "message", "did:web", Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(signed_by(
+            &configured_es256_public_jwk(&subject).await,
+            "message",
+            &signature
+        ));
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_verification_method_without_its_own_key_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+        let verification_method_id: DidUrl = "did:web:example.org#stronghold".parse().unwrap();
+
+        let signature = subject
+            .method_signer(&verification_method_id, Algorithm::ES256)
+            .await
+            .unwrap()
+            .sign(b"message")
+            .await
+            .unwrap();
+
+        assert!(signed_by(
+            &configured_es256_public_jwk(&subject).await,
+            "message",
+            &signature
+        ));
     }
 
     /// The public key of the `did:web` document [`serve_did_web`] serves.

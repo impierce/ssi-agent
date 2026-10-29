@@ -44,7 +44,7 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 base64.workspace = true
 futures.workspace = true
-identity-kit = { workspace = true, features = ["test-vectors"] }
+identity-kit = { workspace = true, features = ["in-memory", "test-vectors"] }
 lazy_static.workspace = true
 ring = "0.17.8"
 rstest.workspace = true

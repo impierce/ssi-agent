@@ -358,7 +358,7 @@ mod tests {
             }
             let kid: DidUrl = subject.key_id(&method, algorithm).await.unwrap().parse().unwrap();
             let signed_presentation = presentation
-                .sign(&kid, &subject.issuer_signer(algorithm).await.unwrap())
+                .sign(&kid, &subject.method_signer(&kid, algorithm).await.unwrap())
                 .await
                 .unwrap();
             self.presentations

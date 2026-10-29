@@ -1,7 +1,7 @@
 use super::aggregate::{IotaMetadata, Status};
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
-use identity_kit::did::{Did, DidDocument};
+use identity_kit::did::{Did, DidDocument, DidUrl};
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -24,6 +24,11 @@ pub enum DocumentEvent {
     PublicKeyUpdated {
         document_id: String,
         document: DidDocument,
+    },
+    PublicKeyAdded {
+        document_id: String,
+        document: DidDocument,
+        verification_method_id: DidUrl,
     },
     DocumentStatusUpdated {
         document_id: String,

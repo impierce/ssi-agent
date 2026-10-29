@@ -577,13 +577,27 @@ pub async fn initialize_documents(
         }
     }
 
-    // Signing caches are process-local, even when the DID document is reused.
+    cache_verification_method_ids(state).await?;
+
+    if did_web_overwritten {
+        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
+    }
+    Ok(())
+}
+
+/// Caches the verification method each enabled document signs with, per algorithm: the one of its configured issuer
+/// key. Signing caches are process-local, even when the DID document is reused.
+async fn cache_verification_method_ids(state: &IdentityState) -> anyhow::Result<()> {
     for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
         .await?
         .values()
     {
         if let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) {
-            for method in did_document.methods(None) {
+            // Added keys only sign once they are selected.
+            for method in did_document
+                .methods(None)
+                .filter(|method| !document.added_verification_methods.contains(&method.id))
+            {
                 if let Some(algorithm) = method.public_key_jwk().and_then(|jwk| jwk.alg()) {
                     state
                         .services
@@ -598,9 +612,6 @@ pub async fn initialize_documents(
         }
     }
 
-    if did_web_overwritten {
-        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
-    }
     Ok(())
 }
 
@@ -742,5 +753,80 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
             all_services,
             profile,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_secret_manager::subject::StorageKey;
+    use agent_store::in_memory::InMemory;
+
+    async fn handle(state: &IdentityState, command: DocumentCommand) {
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            "did-web",
+            &state.command.document,
+            command,
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn an_added_key_does_not_sign_after_a_restart() {
+        let state = identity_state(
+            &InMemory,
+            crate::services::IdentityServices::default(),
+            &EventBusHandle::default(),
+        )
+        .await;
+        handle(
+            &state,
+            DocumentCommand::CreateDocument {
+                document_id: "did-web".to_string(),
+                did_method: SupportedDidMethod::Web,
+                with_fixed_algorithm: None,
+            },
+        )
+        .await;
+        handle(
+            &state,
+            DocumentCommand::UpdatePublicKeys {
+                public_key_jwks: vec![],
+            },
+        )
+        .await;
+        handle(
+            &state,
+            DocumentCommand::AddPublicKey {
+                public_key_jwk: Box::new(
+                    serde_json::from_value(serde_json::json!({
+                        "kty": "OKP",
+                        "crv": "Ed25519",
+                        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                        "alg": "EdDSA"
+                    }))
+                    .unwrap(),
+                ),
+            },
+        )
+        .await;
+        state.services.subject.verification_method_ids.lock().await.clear();
+
+        cache_verification_method_ids(&state).await.unwrap();
+
+        assert_eq!(
+            state
+                .services
+                .subject
+                .get_verification_method_id(StorageKey::new(SupportedDidMethod::Web, Algorithm::EdDSA))
+                .await
+                .unwrap()
+                .to_string(),
+            "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
+        );
     }
 }

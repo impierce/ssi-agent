@@ -2827,6 +2827,13 @@ components:
       - id
       - status
       properties:
+        added_verification_methods:
+          type: array
+          items:
+            type: string
+          description: |-
+            The verification methods of keys that aren't configured issuer keys, such as KMS keys, in the order they were
+            added.
         did_method:
           oneOf:
           - $ref: '#/components/schemas/SupportedDidMethod'
