@@ -1,7 +1,10 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use agent_identity::{
-    connection::error::ConnectionError, document::error::DocumentError, profile::error::ProfileError,
-    service::error::ServiceError, state::SelectSigningKeyError,
+    connection::error::ConnectionError,
+    document::error::DocumentError,
+    profile::error::ProfileError,
+    service::error::ServiceError,
+    state::{AddKeyError, SelectSigningKeyError},
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -81,6 +84,28 @@ impl IntoApiErrorExt for SelectSigningKeyError {
             SelectSigningKeyError::Command(error) => error.into_api_error(),
             SelectSigningKeyError::Infrastructure(error) => {
                 tracing::error!("Selecting a signing key failed: {error:#}");
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+}
+
+impl IntoApiErrorExt for AddKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            AddKeyError::KeyNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Key Not Found")
+                .type_url(type_url("identity#key-not-found"))
+                .message(self.to_string())
+                .finish(),
+            AddKeyError::DocumentNotFound => ApiError::builder(StatusCode::CONFLICT)
+                .title("No did:web Document")
+                .type_url(type_url("identity#did-web-document-not-found"))
+                .message(self.to_string())
+                .finish(),
+            AddKeyError::Command(error) => error.into_api_error(),
+            AddKeyError::Infrastructure(error) => {
+                tracing::error!("Adding a key to a document failed: {error:#}");
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
             }
         }
@@ -241,6 +266,27 @@ mod tests {
             ),
             (
                 SelectSigningKeyError::Infrastructure(anyhow::anyhow!("error")),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn add_key_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                AddKeyError::KeyNotFound("key".to_string()),
+                StatusCode::NOT_FOUND,
+                Some("identity#key-not-found"),
+            ),
+            (
+                AddKeyError::DocumentNotFound,
+                StatusCode::CONFLICT,
+                Some("identity#did-web-document-not-found"),
+            ),
+            (
+                AddKeyError::Infrastructure(anyhow::anyhow!("error")),
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),

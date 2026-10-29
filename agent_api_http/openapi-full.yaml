@@ -649,6 +649,46 @@ paths:
           description: A provider of this type, or with this name, already exists
         '422':
           description: Request body does not match the expected schema
+  /v0/add-key-to-document:
+    post:
+      tags:
+      - Identity
+      summary: Add key to document
+      description: |-
+        Adds the public key of a key created in the Key Management System to your organisation's `did:web` document, as a
+        verification method. The key is available to sign with right away, but only signs once it is selected as the
+        signing key. Adding a key again changes nothing.
+      operationId: add_key_to_document
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - keyId
+              properties:
+                keyId:
+                  type: string
+                  description: The ID of a key created in the Key Management System.
+                  example: 0b6a7f8e-3f4c-4d2a-9b1e-5c8d7e6f5a4b
+        required: true
+      responses:
+        '200':
+          description: Key added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddKeyToDocumentResponse'
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: No key has the given ID
+        '409':
+          description: There is no enabled `did:web` document to add the key to
+        '422':
+          description: Request body does not match the expected schema
   /v0/add-linked-domains:
     post:
       tags:
@@ -2597,6 +2637,15 @@ components:
           description: A name for the provider, unique among the providers this instance lists. It can't be changed later.
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
+    AddKeyToDocumentResponse:
+      type: object
+      required:
+      - verificationMethodId
+      properties:
+        verificationMethodId:
+          type: string
+          description: The verification method of the key, named by the thumbprint of its public key.
+          example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
     AddTemplatesRequest:
       type: object
       properties:

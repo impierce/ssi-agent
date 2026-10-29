@@ -1,7 +1,10 @@
 use crate::key::{command::KeyCommand, error::KeyError, event::KeyEvent};
 use crate::key_provider::aggregate::KeyProviderType;
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_kit::jose::{Jwk, JwsAlgorithm};
+use identity_kit::{
+    jose::{Jwk, JwsAlgorithm},
+    keys::KeyId,
+};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use utoipa::ToSchema;
@@ -18,6 +21,14 @@ pub struct KeyReference {
     pub label: Option<String>,
     pub algorithm: JwsAlgorithm,
     pub public_key: Jwk,
+}
+
+impl KeyReference {
+    /// The ID that names this key in its provider for good.
+    #[must_use]
+    pub fn provider_key_id(&self) -> KeyId {
+        KeyId::new(&self.provider_key_id)
+    }
 }
 
 /// A key this instance created in one of its key providers.

@@ -13,8 +13,11 @@ use crate::key_provider::{
 };
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
-    handlers::{authorize_command, command_handler, query_handler, CommandHandlerError, QueryHandlerError},
+    handlers::{
+        authorize_command, command_handler, public_query_handler, query_handler, CommandHandlerError, QueryHandlerError,
+    },
 };
+use cqrs_es::persist::PersistenceError;
 use identity_kit::{
     jose::{JwsAlgorithm, KeyType},
     keys::{KeyId, KeySpec, KeyStoreError},
@@ -327,6 +330,45 @@ pub async fn get_keys(state: &KmsState, caller: Caller) -> Result<AllKeysView, Q
     .unwrap_or_default())
 }
 
+/// A key this instance created, with the adapter of its provider, which signs with it.
+#[derive(Clone)]
+pub struct SigningKey {
+    pub reference: KeyReference,
+    pub adapter: Arc<dyn KeyProviderAdapter>,
+}
+
+/// Returns the key `key_id` to sign with, or `None` when there is no such key or this instance has no adapter for its
+/// provider.
+///
+/// # Errors
+///
+/// Fails when the key can't be loaded.
+pub async fn signing_key(state: &KmsState, key_id: &str) -> Result<Option<SigningKey>, PersistenceError> {
+    Ok(public_query_handler(key_id, &state.query.key)
+        .await?
+        .and_then(|KeyView { reference }| with_adapter(state, reference?)))
+}
+
+/// Returns every key this instance created and has an adapter for, to sign with.
+///
+/// # Errors
+///
+/// Fails when the keys can't be loaded.
+pub async fn signing_keys(state: &KmsState) -> Result<Vec<SigningKey>, PersistenceError> {
+    Ok(public_query_handler("all_keys", &state.query.all_keys)
+        .await?
+        .unwrap_or_default()
+        .keys
+        .into_values()
+        .filter_map(|reference| with_adapter(state, reference))
+        .collect())
+}
+
+fn with_adapter(state: &KmsState, reference: KeyReference) -> Option<SigningKey> {
+    let adapter = state.adapters.get(&reference.provider_type)?.clone();
+    Some(SigningKey { reference, adapter })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -610,5 +652,48 @@ mod tests {
         .await;
 
         assert!(get_keys(&state, Caller::Internal).await.unwrap().keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn gives_a_key_to_sign_with_with_the_adapter_of_its_provider() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let (id, reference) = create_labelled(&state).await.unwrap();
+
+        let signing_key = signing_key(&state, &id).await.unwrap();
+
+        assert_eq!(signing_key.map(|key| key.reference), Some(reference));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_key_cannot_sign() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+
+        let signing_key = signing_key(&state, "unknown").await.unwrap();
+
+        assert!(signing_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_key_without_an_adapter_for_its_provider_cannot_sign() {
+        let mut state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let (id, _) = create_labelled(&state).await.unwrap();
+        state.adapters = Arc::new(KeyProviderAdapters::new());
+
+        let signing_key = signing_key(&state, &id).await.unwrap();
+
+        assert!(signing_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn gives_every_created_key_to_sign_with() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let (_, reference) = create_labelled(&state).await.unwrap();
+
+        let signing_keys = signing_keys(&state).await.unwrap();
+
+        assert_eq!(
+            signing_keys.into_iter().map(|key| key.reference).collect::<Vec<_>>(),
+            vec![reference]
+        );
     }
 }
