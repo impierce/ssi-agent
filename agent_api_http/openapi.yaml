@@ -1792,6 +1792,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Version'
+webhooks:
+  cloud-event:
+    post:
+      tags:
+      - Events
+      summary: Receive a CloudEvent
+      description: |-
+        Sent to the `target_url` of every target configured under `event_publishers.http` whose `events.types` include the event's type, with the headers configured for that target, e.g. a shared secret.
+
+        Delivery is fire-and-forget: each request times out after 10 seconds and is not retried, and events are dropped when the publisher falls behind the event bus. The response status is only logged.
+      requestBody:
+        description: The event, in the CloudEvents JSON format.
+        content:
+          application/cloudevents+json:
+            schema:
+              $ref: '#/components/schemas/CloudEvent'
+        required: true
+      responses:
+        2XX:
+          description: The event was received. Other statuses are logged and the event is not resent.
 components:
   schemas:
     AcceptConnectionChangesRequest:
