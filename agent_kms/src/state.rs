@@ -87,10 +87,8 @@ pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyPr
     )
     .await?
     .unwrap_or_default();
-    if !state.development_providers_allowed {
-        view.providers
-            .retain(|provider_type, _| !provider_type.is_development_only());
-    }
+    view.providers
+        .retain(|provider_type, _| KeyProviders::is_visible(*provider_type, state.development_providers_allowed));
     Ok(view)
 }
 

@@ -4465,12 +4465,12 @@ components:
       type: object
       description: A key provider this instance is connected to.
       required:
-      - provider_type
+      - providerType
       - name
       properties:
         name:
           type: string
-        provider_type:
+        providerType:
           $ref: '#/components/schemas/KeyProviderType'
     KeyProviderType:
       type: string
@@ -5201,7 +5201,7 @@ components:
         id:
           type: string
           description: The provider's identifier for the key.
-        resource_name:
+        resourceName:
           type:
           - string
           - 'null'
@@ -5222,9 +5222,9 @@ components:
       description: The keys in a provider that this instance may use.
       required:
       - keys
-      - hidden_keys
+      - hiddenKeys
       properties:
-        hidden_keys:
+        hiddenKeys:
           type: integer
           description: |-
             How many more keys exist in the provider that this instance's credentials may not use. When this is above

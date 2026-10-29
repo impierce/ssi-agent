@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 /// A key provider this instance is connected to.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 #[schema(as = KeyProvider)]
 pub struct KeyProviderDto {
     pub provider_type: KeyProviderType,
@@ -42,6 +43,7 @@ pub struct KeyProviderTypeRequest {
 
 /// The outcome of a connection test. It is not stored.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionTestResult {
     pub reachable: bool,
     /// Why the provider could not be reached, as reported by the provider.

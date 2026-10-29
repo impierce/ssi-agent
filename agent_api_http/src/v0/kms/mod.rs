@@ -119,7 +119,7 @@ mod tests {
             response,
             (
                 StatusCode::CREATED,
-                json!({ "provider_type": "in_memory", "name": "Local keys" })
+                json!({ "providerType": "in_memory", "name": "Local keys" })
             )
         );
     }
@@ -135,7 +135,7 @@ mod tests {
             response,
             (
                 StatusCode::OK,
-                json!([{ "provider_type": "in_memory", "name": "in_memory" }])
+                json!([{ "providerType": "in_memory", "name": "in_memory" }])
             )
         );
     }

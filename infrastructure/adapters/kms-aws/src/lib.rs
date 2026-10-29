@@ -23,6 +23,8 @@ const OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
 /// Upper bound for one whole request, including resolving the ambient AWS configuration and credentials on first
 /// use, which the SDK's own timeouts don't cover.
 const REQUEST_DEADLINE: Duration = Duration::from_secs(30);
+/// How many keys AWS KMS lists per page, its maximum.
+const LIST_PAGE_SIZE: i32 = 1000;
 /// How many keys are described at the same time when listing keys.
 const DESCRIBE_CONCURRENCY: usize = 8;
 
@@ -147,54 +149,60 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
     /// denied are left out and counted, so the IAM policy of the deployment decides which keys it sees. Keys
     /// deleted in the meantime are left out without being counted. Any other failure fails the whole listing rather
     /// than hiding keys.
+    ///
+    /// Each request has its own deadline, so listing a large account takes longer instead of failing.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
-        self.within_deadline(async {
-            let client = self.client().await;
-            let ids = list_key_ids(client).await?;
-            let listed = ids.len();
+        let client = self.within_deadline(async { Ok(self.client().await) }).await?;
+        let ids = self.list_key_ids(client).await?;
+        let listed = ids.len();
 
-            let described: Vec<Described> = stream::iter(ids)
-                .map(|id| describe_key(client, id))
-                .buffered(DESCRIBE_CONCURRENCY)
-                .try_collect()
-                .await?;
+        let described: Vec<Described> = stream::iter(ids)
+            .map(|id| self.within_deadline(describe_key(client, id)))
+            .buffered(DESCRIBE_CONCURRENCY)
+            .try_collect()
+            .await?;
 
-            let mut listing = ProviderKeys::default();
-            for key in described {
-                match key {
-                    Described::Visible(key) => listing.keys.push(key),
-                    Described::Hidden => listing.hidden_keys += 1,
-                    Described::Gone => {}
-                }
+        let mut listing = ProviderKeys::default();
+        for key in described {
+            match key {
+                Described::Visible(key) => listing.keys.push(key),
+                Described::Hidden => listing.hidden_keys += 1,
+                Described::Gone => {}
             }
+        }
 
-            debug!(
-                listed,
-                visible = listing.keys.len(),
-                hidden = listing.hidden_keys,
-                "Listed AWS KMS keys"
-            );
-            Ok(listing)
-        })
-        .await
+        debug!(
+            listed,
+            visible = listing.keys.len(),
+            hidden = listing.hidden_keys,
+            "Listed AWS KMS keys"
+        );
+        Ok(listing)
     }
 }
 
-/// Lists the IDs of every key in the account, following AWS's pagination.
-async fn list_key_ids(client: &Client) -> Result<Vec<String>, ConnectionError> {
-    let mut ids = Vec::new();
-    let mut marker = None;
-    loop {
-        let page = client
-            .list_keys()
-            .set_marker(marker)
-            .send()
-            .await
-            .map_err(|error| ConnectionError(describe(&error)))?;
-        ids.extend(page.keys().iter().filter_map(|key| key.key_id().map(str::to_string)));
-        match page.next_marker() {
-            Some(next) if page.truncated() => marker = Some(next.to_string()),
-            _ => return Ok(ids),
+impl AwsKmsAmbientKeyProvider {
+    /// Lists the IDs of every key in the account, following AWS's pagination.
+    async fn list_key_ids(&self, client: &Client) -> Result<Vec<String>, ConnectionError> {
+        let mut ids = Vec::new();
+        let mut marker = None;
+        loop {
+            let page = self
+                .within_deadline(async {
+                    client
+                        .list_keys()
+                        .limit(LIST_PAGE_SIZE)
+                        .set_marker(marker.take())
+                        .send()
+                        .await
+                        .map_err(|error| ConnectionError(describe(&error)))
+                })
+                .await?;
+            ids.extend(page.keys().iter().filter_map(|key| key.key_id().map(str::to_string)));
+            match page.next_marker() {
+                Some(next) if page.truncated() => marker = Some(next.to_string()),
+                _ => return Ok(ids),
+            }
         }
     }
 }
@@ -463,6 +471,33 @@ mod tests {
         let error = provider.test_connection().await.unwrap_err();
 
         assert_eq!(error.to_string(), "AWS KMS did not respond within 0.2 seconds");
+    }
+
+    #[tokio::test]
+    async fn keeps_listing_past_the_deadline_while_each_request_answers_in_time() {
+        let server = MockServer::start().await;
+        list_keys()
+            .and(body_partial_json(json!({ "Marker": "page-2" })))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({ "Keys": [], "Truncated": false }))
+                    .set_delay(Duration::from_millis(150)),
+            )
+            .mount(&server)
+            .await;
+        list_keys()
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({ "Keys": [], "Truncated": true, "NextMarker": "page-2" }))
+                    .set_delay(Duration::from_millis(150)),
+            )
+            .mount(&server)
+            .await;
+        let provider = provider(&server.uri()).with_deadline(Duration::from_millis(250));
+
+        let result = provider.list_keys().await;
+
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[tokio::test]

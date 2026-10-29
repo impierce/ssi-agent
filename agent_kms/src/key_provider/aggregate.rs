@@ -43,6 +43,20 @@ impl KeyProviders {
     /// The ID of the single key providers aggregate.
     pub const ID: &'static str = "key_providers";
 
+    /// Whether the provider of this type has been added and may be used. A development-only provider added while
+    /// running with the `development` profile is hidden when running with another profile on the same event store.
+    #[must_use]
+    pub fn is_visible(provider_type: KeyProviderType, development_providers_allowed: bool) -> bool {
+        development_providers_allowed || !provider_type.is_development_only()
+    }
+
+    /// The providers that may be used, by type, in the order they were added.
+    pub fn visible(&self, development_providers_allowed: bool) -> impl Iterator<Item = (&KeyProviderType, &String)> {
+        self.providers
+            .iter()
+            .filter(move |(provider_type, _)| Self::is_visible(**provider_type, development_providers_allowed))
+    }
+
     /// The form in which a provider name is stored.
     #[must_use]
     pub fn normalize_name(name: &str) -> String {
@@ -71,25 +85,31 @@ impl Aggregate for KeyProviders {
 
         let events = match command {
             AddKeyProvider { provider_type, name } => {
+                if !Self::is_visible(provider_type, services.development_providers_allowed) {
+                    return Err(KeyProviderError::DevelopmentOnly(provider_type));
+                }
                 if self.providers.contains_key(&provider_type) {
                     return Err(KeyProviderError::AlreadyAdded(provider_type));
-                }
-                if provider_type.is_development_only() && !services.development_providers_allowed {
-                    return Err(KeyProviderError::DevelopmentOnly(provider_type));
                 }
 
                 let name = Self::normalize_name(&name);
                 if name.is_empty() {
                     return Err(KeyProviderError::MissingName);
                 }
-                if self.providers.values().any(|existing| *existing == name) {
+                // A hidden provider's name is free, as nothing shows it. Its provider type can't be added meanwhile.
+                if self
+                    .visible(services.development_providers_allowed)
+                    .any(|(_, existing)| *existing == name)
+                {
                     return Err(KeyProviderError::NameTaken(name));
                 }
 
                 vec![KeyProviderAdded { provider_type, name }]
             }
             RemoveKeyProvider { provider_type } => {
-                if !self.providers.contains_key(&provider_type) {
+                if !self.providers.contains_key(&provider_type)
+                    || !Self::is_visible(provider_type, services.development_providers_allowed)
+                {
                     return Err(KeyProviderError::NotFound(provider_type));
                 }
 
@@ -226,6 +246,38 @@ mod tests {
                 name: "Keys".to_string(),
             })
             .then_expect_error(KeyProviderError::NameTaken("Keys".to_string()));
+    }
+
+    #[test]
+    fn frees_the_name_of_a_hidden_development_provider() {
+        KeyProviderTestFramework::with(services(false))
+            .given(vec![added(KeyProviderType::InMemory, "Keys")])
+            .when(KeyProviderCommand::AddKeyProvider {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                name: "Keys".to_string(),
+            })
+            .then_expect_events(vec![added(KeyProviderType::AwsKmsAmbient, "Keys")]);
+    }
+
+    #[test]
+    fn rejects_a_hidden_development_provider_as_development_only() {
+        KeyProviderTestFramework::with(services(false))
+            .given(vec![added(KeyProviderType::InMemory, "Keys")])
+            .when(KeyProviderCommand::AddKeyProvider {
+                provider_type: KeyProviderType::InMemory,
+                name: "Keys".to_string(),
+            })
+            .then_expect_error(KeyProviderError::DevelopmentOnly(KeyProviderType::InMemory));
+    }
+
+    #[test]
+    fn does_not_find_a_hidden_development_provider_to_remove() {
+        KeyProviderTestFramework::with(services(false))
+            .given(vec![added(KeyProviderType::InMemory, "Keys")])
+            .when(KeyProviderCommand::RemoveKeyProvider {
+                provider_type: KeyProviderType::InMemory,
+            })
+            .then_expect_error(KeyProviderError::NotFound(KeyProviderType::InMemory));
     }
 
     #[test]

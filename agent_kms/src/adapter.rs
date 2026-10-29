@@ -14,6 +14,7 @@ pub struct ConnectionError(pub String);
 
 /// A key that exists in a key provider, as reported by the provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderKey {
     /// The provider's identifier for the key.
     pub id: String,
@@ -26,6 +27,7 @@ pub struct ProviderKey {
 
 /// The keys in a provider that this instance may use.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderKeys {
     pub keys: Vec<ProviderKey>,
     /// How many more keys exist in the provider that this instance's credentials may not use. When this is above
