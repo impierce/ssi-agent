@@ -25,6 +25,8 @@ use product_common::gas_station::GasStationOptions;
 use product_common::network_name::NetworkName;
 use product_common::transaction::TransactionBuilder;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 use url::Url;
@@ -76,6 +78,11 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[schema(value_type = Vec<String>)]
     pub added_verification_methods: Vec<DidUrl>,
+    /// The verification method selected to sign with, per algorithm. Without one, an algorithm signs with the
+    /// configured issuer key.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[schema(value_type = HashMap<String, String>)]
+    pub signing_methods: HashMap<Algorithm, DidUrl>,
 }
 
 impl Aggregate for Document {
@@ -382,6 +389,28 @@ impl Aggregate for Document {
                     verification_method_id,
                 }])
             }
+            SelectSigningKey { verification_method_id } => {
+                let document = self.document.as_ref().ok_or(MissingDocumentError)?;
+                let method = document
+                    .methods(None)
+                    .find(|method| method.id == verification_method_id)
+                    .ok_or_else(|| UnknownVerificationMethodError(verification_method_id.to_string()))?;
+                let algorithm = method
+                    .public_key_jwk()
+                    .and_then(|jwk| jwk.alg())
+                    .and_then(|alg| Algorithm::from_str(alg).ok())
+                    .ok_or_else(|| VerificationMethodAlgorithmError(verification_method_id.to_string()))?;
+
+                if self.signing_methods.get(&algorithm) == Some(&verification_method_id) {
+                    return Ok(());
+                }
+
+                Ok(vec![SigningKeySelected {
+                    document_id: self.document_id.clone(),
+                    algorithm,
+                    verification_method_id,
+                }])
+            }
             OverwritePreviousDidWeb {
                 previous_did,
                 public_url,
@@ -670,6 +699,14 @@ impl Aggregate for Document {
                 self.document_id = document_id;
                 self.document.replace(document);
                 self.added_verification_methods.push(verification_method_id);
+            }
+            SigningKeySelected {
+                document_id,
+                algorithm,
+                verification_method_id,
+            } => {
+                self.document_id = document_id;
+                self.signing_methods.insert(algorithm, verification_method_id);
             }
             DocumentStatusUpdated { document_id, status } => {
                 self.document_id = document_id;
@@ -1030,38 +1067,6 @@ pub mod document_tests {
             ])
     }
 
-    /// An EdDSA key as a KMS returns it, with the KMS's own `kid`.
-    fn kms_public_key() -> Jwk {
-        serde_json::from_value(serde_json::json!({
-            "kty": "OKP",
-            "crv": "Ed25519",
-            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-            "alg": "EdDSA",
-            "kid": "arn:aws:kms:eu-central-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
-        }))
-        .unwrap()
-    }
-
-    fn kms_verification_method() -> VerificationMethod {
-        VerificationMethod::new(
-            "did:web:my-domain.example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
-                .parse()
-                .unwrap(),
-            MethodType::JSON_WEB_KEY_2020,
-            "did:web:my-domain.example.org".parse().unwrap(),
-            VerificationMaterial::jwk(
-                &serde_json::from_value::<Jwk>(serde_json::json!({
-                    "kty": "OKP",
-                    "crv": "Ed25519",
-                    "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                    "alg": "EdDSA",
-                    "kid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
-                }))
-                .unwrap(),
-            ),
-        )
-    }
-
     fn with_kms_verification_method(mut document: DidDocument) -> DidDocument {
         document
             .insert_verification_method(kms_verification_method(), VerificationRelationship::ALL.iter().copied())
@@ -1172,6 +1177,90 @@ pub mod document_tests {
             document.methods(None).cloned().collect::<Vec<_>>(),
             [vec![kms_verification_method()], both_verification_methods].concat()
         );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn selects_a_signing_key_for_the_algorithm_of_its_verification_method(
+        document_id: String,
+        document: DidDocument,
+    ) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                document_created(&document_id, SupportedDidMethod::Web, document.clone()),
+                kms_public_key_added(&document_id, document),
+            ])
+            .when(DocumentCommand::SelectSigningKey {
+                verification_method_id: kms_verification_method().id,
+            })
+            .then_expect_events(vec![DocumentEvent::SigningKeySelected {
+                document_id,
+                algorithm: Algorithm::EdDSA,
+                verification_method_id: kms_verification_method().id,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn selecting_the_selected_signing_key_again_selects_nothing(document_id: String, document: DidDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                document_created(&document_id, SupportedDidMethod::Web, document.clone()),
+                kms_public_key_added(&document_id, document),
+                DocumentEvent::SigningKeySelected {
+                    document_id: document_id.clone(),
+                    algorithm: Algorithm::EdDSA,
+                    verification_method_id: kms_verification_method().id,
+                },
+            ])
+            .when(DocumentCommand::SelectSigningKey {
+                verification_method_id: kms_verification_method().id,
+            })
+            .then_expect_events(vec![])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn only_a_verification_method_of_the_document_can_sign(document_id: String, document: DidDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![document_created(&document_id, SupportedDidMethod::Web, document)])
+            .when(DocumentCommand::SelectSigningKey {
+                verification_method_id: kms_verification_method().id,
+            })
+            .then_expect_error_message(
+                "The document has no verification method \
+                 `did:web:my-domain.example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k`",
+            )
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn a_signing_key_must_name_its_algorithm(document_id: String, mut document: DidDocument) {
+        let verification_method_id: DidUrl = "did:web:my-domain.example.org#no-alg".parse().unwrap();
+        let public_key_jwk: Jwk = serde_json::from_value(serde_json::json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        }))
+        .unwrap();
+        document
+            .insert_verification_method(
+                VerificationMethod::new(
+                    verification_method_id.clone(),
+                    MethodType::JSON_WEB_KEY_2020,
+                    document.id.clone(),
+                    VerificationMaterial::jwk(&public_key_jwk),
+                ),
+                VerificationRelationship::ALL.iter().copied(),
+            )
+            .unwrap();
+
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![document_created(&document_id, SupportedDidMethod::Web, document)])
+            .when(DocumentCommand::SelectSigningKey { verification_method_id })
+            .then_expect_error_message(
+                "The key of verification method `did:web:my-domain.example.org#no-alg` names no supported algorithm",
+            )
     }
 
     #[rstest]
@@ -1380,6 +1469,39 @@ pub mod test_utils {
                     "kid": "bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0",
                     "crv": "Ed25519",
                     "x": "GlnK9ePs802XxAglROQzoGurm9Qpv0IFPEbdMCILN_U"
+                }))
+                .unwrap(),
+            ),
+        )
+    }
+
+    /// An EdDSA key as a KMS returns it, with the KMS's own `kid`.
+    pub fn kms_public_key() -> Jwk {
+        serde_json::from_value(json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            "alg": "EdDSA",
+            "kid": "arn:aws:kms:eu-central-1:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab"
+        }))
+        .unwrap()
+    }
+
+    /// The verification method of [`kms_public_key`], once added to the document.
+    pub fn kms_verification_method() -> VerificationMethod {
+        VerificationMethod::new(
+            "did:web:my-domain.example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+                .parse()
+                .unwrap(),
+            MethodType::JSON_WEB_KEY_2020,
+            controller(),
+            VerificationMaterial::jwk(
+                &serde_json::from_value::<Jwk>(json!({
+                    "kty": "OKP",
+                    "crv": "Ed25519",
+                    "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                    "alg": "EdDSA",
+                    "kid": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
                 }))
                 .unwrap(),
             ),

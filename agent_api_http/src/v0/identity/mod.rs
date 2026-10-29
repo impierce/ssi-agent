@@ -16,7 +16,7 @@ use axum::{
 use connections::{
     accept_connection_changes, get_connection, get_connections, post_connection, remove_connection, sync_connection,
 };
-use documents::{get_document, get_documents};
+use documents::{get_document, get_documents, post_select_signing_key};
 use services::{
     linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
     linked_vp::{
@@ -45,6 +45,7 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
                 .route("/connections/remove-connection", post(remove_connection))
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
+                .route("/select-signing-key", post(post_select_signing_key))
                 .route("/profile", get(get_profile).patch(patch_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))

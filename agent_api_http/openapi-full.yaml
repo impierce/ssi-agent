@@ -2283,6 +2283,43 @@ paths:
           description: Catalog not found
         '422':
           description: Request body does not match the expected schema
+  /v0/select-signing-key:
+    post:
+      tags:
+      - Identity
+      summary: Select signing key
+      description: |-
+        Signs with the given verification method from now on, for the algorithm of its key, in the DID document it belongs
+        to. Selecting the key that is already selected is a no-op.
+      operationId: select_signing_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationMethodId
+              properties:
+                verificationMethodId:
+                  type: string
+                  description: The verification method to sign with, in one of your organisation's DID documents.
+                  example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+        required: true
+      responses:
+        '204':
+          description: Signing key selected
+        '400':
+          description: The verification method's key names no supported algorithm
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: No DID document has the verification method
+        '409':
+          description: The verification method's key is not available to sign with
+        '422':
+          description: Request body does not match the expected schema
   /v0/services:
     get:
       tags:
@@ -4078,6 +4115,15 @@ components:
           oneOf:
           - $ref: '#/components/schemas/IotaMetadata'
           - type: 'null'
+        signing_methods:
+          type: object
+          description: |-
+            The verification method selected to sign with, per algorithm. Without one, an algorithm signs with the
+            configured issuer key.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
         status:
           type: string
           enum:

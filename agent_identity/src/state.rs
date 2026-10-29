@@ -3,6 +3,7 @@ use crate::connection::views::all_connections::AllConnectionsView;
 use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
+use crate::document::error::DocumentError;
 use crate::document::views::all_documents::AllDocumentsView;
 use crate::profile::aggregate::{Profile, Source};
 use crate::profile::command::ProfileCommand;
@@ -12,13 +13,15 @@ use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, views::ServiceView},
 };
+use agent_secret_manager::subject::{StorageKey, Subject};
 use agent_shared::config::{config, config_mut, Display, SupportedDidMethod, ToggleOptions};
-use agent_shared::handlers::command_handler;
+use agent_shared::handlers::{authorize_command, command_handler, CommandHandlerError};
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
     handlers::public_query_handler,
 };
 use cqrs_es::persist::PersistenceError;
+use identity_kit::did::DidUrl;
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, Caller, QueryOperation};
@@ -26,6 +29,7 @@ use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 use tracing::{info, warn};
 
 /// The fixed identifier for the `Profile` aggregate, which is treated as a singleton.
@@ -585,34 +589,125 @@ pub async fn initialize_documents(
     Ok(())
 }
 
-/// Caches the verification method each enabled document signs with, per algorithm: the one of its configured issuer
-/// key. Signing caches are process-local, even when the DID document is reused.
+/// Caches the verification method each enabled document signs with, per algorithm. Signing caches are process-local,
+/// even when the DID document is reused.
 async fn cache_verification_method_ids(state: &IdentityState) -> anyhow::Result<()> {
     for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
         .await?
         .values()
     {
-        if let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) {
-            // Added keys only sign once they are selected.
-            for method in did_document
-                .methods(None)
-                .filter(|method| !document.added_verification_methods.contains(&method.id))
-            {
-                if let Some(algorithm) = method.public_key_jwk().and_then(|jwk| jwk.alg()) {
-                    state
-                        .services
-                        .subject
-                        .insert_verification_method_id(
-                            agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
-                            method.id.clone(),
-                        )
-                        .await?;
-                }
-            }
-        }
+        cache_signing_methods(&state.services.subject, document).await?;
     }
 
     Ok(())
+}
+
+/// Caches the verification method `document` signs with, per algorithm: the selected one, or else the one of its
+/// configured issuer key. Added keys only sign once they are selected.
+async fn cache_signing_methods(subject: &Subject, document: &Document) -> anyhow::Result<()> {
+    let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) else {
+        return Ok(());
+    };
+
+    let configured_methods = did_document
+        .methods(None)
+        .filter(|method| !document.added_verification_methods.contains(&method.id))
+        .filter_map(|method| {
+            let alg = method.public_key_jwk().and_then(|jwk| jwk.alg())?;
+            Some(alg.parse().map(|algorithm| (algorithm, method.id.clone())))
+        })
+        .collect::<Result<Vec<(Algorithm, DidUrl)>, _>>()?;
+    for (algorithm, verification_method_id) in configured_methods {
+        subject
+            .insert_verification_method_id(StorageKey::new(did_method, algorithm), verification_method_id)
+            .await?;
+    }
+
+    for (algorithm, verification_method_id) in &document.signing_methods {
+        if !did_document
+            .methods(None)
+            .any(|method| method.id == *verification_method_id)
+        {
+            warn!(%verification_method_id, "The selected signing key is no longer in the DID document");
+            continue;
+        }
+        if document.added_verification_methods.contains(verification_method_id)
+            && !subject.has_method_key(verification_method_id).await
+        {
+            warn!(%verification_method_id, "The selected signing key is not available");
+            continue;
+        }
+        subject
+            .insert_verification_method_id(StorageKey::new(did_method, *algorithm), verification_method_id.clone())
+            .await?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Error)]
+pub enum SelectSigningKeyError {
+    #[error("No document has the verification method `{0}`")]
+    NotFound(DidUrl),
+    #[error("The key of verification method `{0}` is not available to sign with")]
+    KeyUnavailable(DidUrl),
+    #[error(transparent)]
+    Command(#[from] CommandHandlerError<DocumentError>),
+    #[error(transparent)]
+    Infrastructure(#[from] anyhow::Error),
+}
+
+/// Signs with the verification method `verification_method_id` from now on, for the algorithm of its key, in the
+/// document of its DID.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, no document has the verification method, or the verification method's key
+/// was added but isn't available to sign with.
+pub async fn select_signing_key(
+    state: &IdentityState,
+    caller: Caller,
+    verification_method_id: DidUrl,
+) -> Result<(), SelectSigningKeyError> {
+    let Some((document_id, document)) = query_all_documents(state, |(_, document)| {
+        document
+            .document
+            .as_ref()
+            .is_some_and(|did_document| did_document.id == *verification_method_id.did())
+    })
+    .await?
+    .into_iter()
+    .next() else {
+        return Err(SelectSigningKeyError::NotFound(verification_method_id));
+    };
+    let command = DocumentCommand::SelectSigningKey {
+        verification_method_id: verification_method_id.clone(),
+    };
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        &document_id,
+        &command,
+    )
+    .await
+    .map_err(CommandHandlerError::Authorization)?;
+
+    if document.added_verification_methods.contains(&verification_method_id)
+        && !state.services.subject.has_method_key(&verification_method_id).await
+    {
+        return Err(SelectSigningKeyError::KeyUnavailable(verification_method_id));
+    }
+
+    command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        &document_id,
+        &state.command.document,
+        command,
+    )
+    .await?;
+
+    Ok(cache_verification_method_ids(state).await?)
 }
 
 /// Constructs pairs of configured DID methods with their associated signing algorithms.
@@ -759,8 +854,108 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_secret_manager::subject::StorageKey;
+    use crate::document::aggregate::test_utils::{
+        document_with_multiple_verification_methods, kms_public_key, kms_verification_method,
+    };
+    use agent_secret_manager::subject::MethodKey;
     use agent_store::in_memory::InMemory;
+    use identity_kit::did::VerificationRelationship;
+    use identity_kit::jose::JwsAlgorithm;
+    use identity_kit::keys::{InMemoryKeyStore, KeySpec, KeyStore, KeyType};
+
+    const CONFIGURED_EDDSA_METHOD: &str = "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0";
+    const KMS_METHOD: &str = "did:web:my-domain.example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";
+
+    /// A key to sign for the KMS verification method with. Which key it is doesn't matter here.
+    async fn method_key() -> MethodKey {
+        let key_store = Arc::new(InMemoryKeyStore::new());
+        let key_id = key_store
+            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA))
+            .await
+            .unwrap();
+
+        MethodKey { key_store, key_id }
+    }
+
+    /// A `did:web` document with the configured issuer keys and an added KMS key, signing with `signing_methods`.
+    fn did_web_document(signing_methods: impl IntoIterator<Item = (Algorithm, &'static str)>) -> Document {
+        let mut did_document = document_with_multiple_verification_methods::default();
+        did_document
+            .insert_verification_method(kms_verification_method(), VerificationRelationship::ALL.iter().copied())
+            .unwrap();
+
+        Document {
+            document_id: "did-web".to_string(),
+            document: Some(did_document),
+            did_method: Some(SupportedDidMethod::Web),
+            status: Status::SignAndValidate,
+            added_verification_methods: vec![kms_verification_method().id],
+            signing_methods: signing_methods
+                .into_iter()
+                .map(|(algorithm, id)| (algorithm, id.parse().unwrap()))
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    async fn eddsa_signing_method(subject: &Subject) -> String {
+        subject
+            .get_verification_method_id(StorageKey::new(SupportedDidMethod::Web, Algorithm::EdDSA))
+            .await
+            .unwrap()
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn an_added_key_does_not_sign_until_it_is_selected() {
+        let subject = Subject::test_subject().await;
+        subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+
+        cache_signing_methods(&subject, &did_web_document([])).await.unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, CONFIGURED_EDDSA_METHOD);
+    }
+
+    #[tokio::test]
+    async fn a_selected_key_signs() {
+        let subject = Subject::test_subject().await;
+        subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+
+        cache_signing_methods(&subject, &did_web_document([(Algorithm::EdDSA, KMS_METHOD)]))
+            .await
+            .unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, KMS_METHOD);
+    }
+
+    #[tokio::test]
+    async fn a_selected_key_that_is_not_available_does_not_sign() {
+        let subject = Subject::test_subject().await;
+
+        cache_signing_methods(&subject, &did_web_document([(Algorithm::EdDSA, KMS_METHOD)]))
+            .await
+            .unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, CONFIGURED_EDDSA_METHOD);
+    }
+
+    #[tokio::test]
+    async fn a_selected_key_that_left_the_document_does_not_sign() {
+        let subject = Subject::test_subject().await;
+
+        cache_signing_methods(
+            &subject,
+            &did_web_document([(Algorithm::EdDSA, "did:web:my-domain.example.org#replaced")]),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, CONFIGURED_EDDSA_METHOD);
+    }
 
     async fn handle(state: &IdentityState, command: DocumentCommand) {
         command_handler(
@@ -774,9 +969,8 @@ mod tests {
         .unwrap();
     }
 
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn an_added_key_does_not_sign_after_a_restart() {
+    /// An identity state with a `did:web` document that has an added KMS key.
+    async fn state_with_added_key() -> IdentityState {
         let state = identity_state(
             &InMemory,
             crate::services::IdentityServices::default(),
@@ -802,31 +996,48 @@ mod tests {
         handle(
             &state,
             DocumentCommand::AddPublicKey {
-                public_key_jwk: Box::new(
-                    serde_json::from_value(serde_json::json!({
-                        "kty": "OKP",
-                        "crv": "Ed25519",
-                        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                        "alg": "EdDSA"
-                    }))
-                    .unwrap(),
-                ),
+                public_key_jwk: Box::new(kms_public_key()),
             },
         )
         .await;
-        state.services.subject.verification_method_ids.lock().await.clear();
 
-        cache_verification_method_ids(&state).await.unwrap();
+        state
+    }
 
-        assert_eq!(
-            state
-                .services
-                .subject
-                .get_verification_method_id(StorageKey::new(SupportedDidMethod::Web, Algorithm::EdDSA))
-                .await
-                .unwrap()
-                .to_string(),
-            "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0"
-        );
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn selecting_a_key_signs_with_it_right_away() {
+        let state = state_with_added_key().await;
+        state
+            .services
+            .subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+
+        select_signing_key(&state, Caller::Internal, KMS_METHOD.parse().unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(eddsa_signing_method(&state.services.subject).await, KMS_METHOD);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn selecting_a_key_that_is_not_available_fails() {
+        let state = state_with_added_key().await;
+
+        let result = select_signing_key(&state, Caller::Internal, KMS_METHOD.parse().unwrap()).await;
+
+        assert!(matches!(result, Err(SelectSigningKeyError::KeyUnavailable(_))));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn selecting_a_key_of_an_unknown_did_fails() {
+        let state = state_with_added_key().await;
+
+        let result = select_signing_key(&state, Caller::Internal, "did:web:other.example#key".parse().unwrap()).await;
+
+        assert!(matches!(result, Err(SelectSigningKeyError::NotFound(_))));
     }
 }

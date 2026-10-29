@@ -162,6 +162,11 @@ impl Subject {
         Ok(KeySigner::new(key_store, key_id, JwsAlgorithm::try_from(algorithm)?).await?)
     }
 
+    /// Whether a key was inserted for the verification method `verification_method_id`.
+    pub async fn has_method_key(&self, verification_method_id: &DidUrl) -> bool {
+        self.method_keys.lock().await.contains_key(verification_method_id)
+    }
+
     /// Signs for the verification method `verification_method_id` with `key` instead of a configured issuer key.
     pub async fn insert_method_key(&self, verification_method_id: DidUrl, key: MethodKey) {
         self.method_keys.lock().await.insert(verification_method_id, key);

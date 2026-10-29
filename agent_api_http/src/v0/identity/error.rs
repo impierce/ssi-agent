@@ -1,7 +1,7 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use agent_identity::{
     connection::error::ConnectionError, document::error::DocumentError, profile::error::ProfileError,
-    service::error::ServiceError,
+    service::error::ServiceError, state::SelectSigningKeyError,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -49,8 +49,40 @@ impl IntoApiErrorExt for DocumentError {
                 .type_url(type_url("identity#invalid-origin"))
                 .message(self.to_string())
                 .finish(),
+            UnknownVerificationMethodError(_) => verification_method_not_found(self.to_string()),
+            VerificationMethodAlgorithmError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Verification Method Algorithm")
+                .type_url(type_url("identity#unsupported-verification-method-algorithm"))
+                .message(self.to_string())
+                .finish(),
             // TODO: Implement appropriate Problem Details responses
             _ => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+        }
+    }
+}
+
+fn verification_method_not_found(message: String) -> ApiError {
+    ApiError::builder(StatusCode::NOT_FOUND)
+        .title("Verification Method Not Found")
+        .type_url(type_url("identity#verification-method-not-found"))
+        .message(message)
+        .finish()
+}
+
+impl IntoApiErrorExt for SelectSigningKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            SelectSigningKeyError::NotFound(_) => verification_method_not_found(self.to_string()),
+            SelectSigningKeyError::KeyUnavailable(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Signing Key Unavailable")
+                .type_url(type_url("identity#signing-key-unavailable"))
+                .message(self.to_string())
+                .finish(),
+            SelectSigningKeyError::Command(error) => error.into_api_error(),
+            SelectSigningKeyError::Infrastructure(error) => {
+                tracing::error!("Selecting a signing key failed: {error:#}");
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 }
@@ -171,12 +203,44 @@ mod tests {
                 Some("identity#invalid-origin"),
             ),
             (
+                DocumentError::UnknownVerificationMethodError("did:web:example.org#key".to_string()),
+                StatusCode::NOT_FOUND,
+                Some("identity#verification-method-not-found"),
+            ),
+            (
+                DocumentError::VerificationMethodAlgorithmError("did:web:example.org#key".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("identity#unsupported-verification-method-algorithm"),
+            ),
+            (
                 DocumentError::MissingDocumentError,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),
             (
                 DocumentError::IotaPublishDocumentError("error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn select_signing_key_errors_successfully_convert_to_problem_details() {
+        let verification_method_id = || "did:web:example.org#key".parse().unwrap();
+        assert_problems([
+            (
+                SelectSigningKeyError::NotFound(verification_method_id()),
+                StatusCode::NOT_FOUND,
+                Some("identity#verification-method-not-found"),
+            ),
+            (
+                SelectSigningKeyError::KeyUnavailable(verification_method_id()),
+                StatusCode::CONFLICT,
+                Some("identity#signing-key-unavailable"),
+            ),
+            (
+                SelectSigningKeyError::Infrastructure(anyhow::anyhow!("error")),
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),

@@ -30,6 +30,11 @@ pub enum DocumentEvent {
         document: DidDocument,
         verification_method_id: DidUrl,
     },
+    SigningKeySelected {
+        document_id: String,
+        algorithm: Algorithm,
+        verification_method_id: DidUrl,
+    },
     DocumentStatusUpdated {
         document_id: String,
         status: Status,
