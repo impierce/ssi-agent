@@ -51,6 +51,8 @@ identity-kit = { workspace = true, features = ["test-vectors"] }
 lazy_static.workspace = true
 ring = "0.17.8"
 rstest.workspace = true
+wiremock.workspace = true
 
 [features]
-test_utils = []
+test_utils = ["identity-kit/local-network"]
+allow-localhost = ["identity-kit/local-network"]

@@ -1,6 +1,6 @@
 use cqrs_es::DomainEvent;
 use derivative::Derivative;
-use identity_document::service::Service as DocumentService;
+use identity_kit::did::Service as DocumentService;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use url::Url;

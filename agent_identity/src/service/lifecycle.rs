@@ -74,9 +74,8 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
         } => {
             *verification_methods = linkable_documents()
                 .flat_map(|document| document.methods(None))
-                .map(convert)
-                .collect::<Result<_, _>>()
-                .map_err(anyhow::Error::from)?;
+                .cloned()
+                .collect();
         }
         ServiceCommand::AddLinkedVerifiablePresentations {
             presentation_ids,
@@ -143,8 +142,7 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
                     None
                 }
             } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
-                let mut entry: DocumentService =
-                    convert(service.service.as_ref().expect("active service has an entry"))?;
+                let mut entry = service.service.clone().expect("active service has an entry");
                 entry.id = service_url;
                 Some(entry)
             } else if service.is_active() {
@@ -288,7 +286,7 @@ pub async fn verify(
                 Ok(actual) => {
                     let problems: Vec<String> = expected_dids
                         .iter()
-                        .filter_map(|did| match actual.iter().find(|linked| linked.did.did() == did.did()) {
+                        .filter_map(|did| match actual.iter().find(|linked| linked.did == *did) {
                             Some(linked) if linked.domain_linkage_valid => None,
                             Some(linked) => Some(format!(
                                 "{did}: {}",

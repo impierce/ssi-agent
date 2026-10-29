@@ -17,7 +17,7 @@ use axum::{
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use identity_core::common::Url;
-use identity_did::DIDUrl;
+use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::Caller;
 
@@ -95,7 +95,7 @@ pub struct GetConnectionsEndpointRequest {
     pub url: Option<Url>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
-    pub did: Option<DIDUrl>,
+    pub did: Option<Did>,
 }
 
 /// List all connections

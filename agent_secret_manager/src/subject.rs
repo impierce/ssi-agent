@@ -8,7 +8,11 @@ use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use did_manager_iota::consumer::NodeUrls;
 use identity_iota::did::DIDUrl;
 use identity_iota::storage::KeyId;
-use identity_iota::{did::DID, document::DIDUrlQuery};
+use identity_iota::{
+    did::DID,
+    document::DIDUrlQuery,
+    verification::{MethodRelationship, MethodScope},
+};
 use identity_kit::{
     did::{DidUrl, VerificationRelationship},
     jose::{Jwk, JwsAlgorithm, Signer as _},
@@ -48,15 +52,44 @@ impl fmt::Debug for Subject {
 }
 
 /// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
-/// HTTP client.
+/// HTTP client. With the `allow-localhost` feature, that client may also fetch them from the local network over plain
+/// `http`, like the agent's other outbound requests; see
+/// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
 fn key_resolver() -> identity_kit::resolver::Resolver {
-    let client = ReqwestClient::new().expect("Failed to initialize the HTTP client for `did:web`");
+    #[cfg(not(feature = "allow-localhost"))]
+    let client = ReqwestClient::new();
+    #[cfg(feature = "allow-localhost")]
+    let client = local_network_client();
 
+    resolver_with(client.expect("Failed to initialize the HTTP client for `did:web`"))
+}
+
+/// IdentityKit's HTTP client, which may also reach the local network over plain `http`.
+#[cfg(any(feature = "allow-localhost", feature = "test_utils"))]
+fn local_network_client() -> Result<ReqwestClient, identity_kit::methods::web::HttpError> {
+    ReqwestClient::builder()
+        .dangerous_allow_loopback()
+        .dangerous_allow_private_network()
+        .build()
+}
+
+fn resolver_with(client: ReqwestClient) -> identity_kit::resolver::Resolver {
     identity_kit::resolver::Resolver::builder()
         .with(DidKey::new())
         .with(DidJwk)
         .with(DidWeb::new(client))
         .build()
+}
+
+/// The scope of the `identity_*` crates for `relationship`.
+fn method_scope(relationship: VerificationRelationship) -> MethodScope {
+    MethodScope::VerificationRelationship(match relationship {
+        VerificationRelationship::Authentication => MethodRelationship::Authentication,
+        VerificationRelationship::AssertionMethod => MethodRelationship::AssertionMethod,
+        VerificationRelationship::KeyAgreement => MethodRelationship::KeyAgreement,
+        VerificationRelationship::CapabilityInvocation => MethodRelationship::CapabilityInvocation,
+        VerificationRelationship::CapabilityDelegation => MethodRelationship::CapabilityDelegation,
+    })
 }
 
 /// The configured issuer key that signs with `algorithm`.
@@ -94,6 +127,13 @@ impl Subject {
             key_resolver: key_resolver(),
             resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
+    }
+
+    /// IdentityKit's signer with the configured issuer key for `algorithm`.
+    pub async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+        let (key, alg) = issuer_key(algorithm)?;
+
+        Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)
     }
 
     pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
@@ -150,7 +190,7 @@ impl Subject {
             .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
 
         let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), None)
+            .resolve_method(DIDUrlQuery::from(&did_url), relationship.map(method_scope))
             .ok_or(anyhow!(
                 "Failed to resolve verification method for DID URL: `{did_url}`"
             ))?;
@@ -191,6 +231,16 @@ mod default_subject {
             "did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoib09ZMmRNVlU3R0s1YWwxcTdFQXh1b1lsb3hNUWx2NVpOWk9hdGlVWFFIZyIsImt0eSI6IkVDIiwieCI6IkZtazEzZ08yU0dMYnVYZUwyNHFKUEhDTm5jbkk2bEJ1NlpRTDJFVlp2NEUiLCJ5IjoiZnoyS3ZNaHVmelVwTWVMOS1LMnJlOWZ3QTNtemcxYnBmYmNlSVFTdWloWSJ9#0";
         const DID_JWK_EDDSA_VERIFICATION_METHOD_ID: &str =
             "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ#0";
+    }
+
+    impl Subject {
+        /// This subject, resolving `did:web` documents on the local network over plain `http` as well, for tests
+        /// that serve them from mock servers.
+        pub fn with_local_network_resolver(mut self) -> Self {
+            self.key_resolver =
+                resolver_with(local_network_client().expect("Failed to initialize the HTTP client for `did:web`"));
+            self
+        }
     }
 
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
@@ -253,10 +303,7 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let (key, alg) = issuer_key(algorithm)?;
-        let signer = KeySigner::new(Arc::clone(&self.key_store), key, alg).await?;
-
-        Ok(signer.sign(message.as_bytes()).await?)
+        Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -344,5 +391,68 @@ mod tests {
         // Verify the signature
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+
+    /// The public key of the `did:web` document [`serve_did_web`] serves.
+    fn did_web_public_key() -> serde_json::Value {
+        serde_json::json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        })
+    }
+
+    /// Serves a `did:web` document on `localhost` and returns the DID URL of its verification method.
+    async fn serve_did_web() -> (wiremock::MockServer, String) {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, MockServer, ResponseTemplate,
+        };
+
+        let server = MockServer::start().await;
+        let did = format!("did:web:localhost%3A{}", server.address().port());
+        let did_url = format!("{did}#key-0");
+        let document = serde_json::json!({
+            "id": did,
+            "verificationMethod": [{
+                "id": did_url,
+                "type": "JsonWebKey2020",
+                "controller": did,
+                "publicKeyJwk": did_web_public_key()
+            }],
+            "assertionMethod": [did_url]
+        });
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(document))
+            .mount(&server)
+            .await;
+
+        (server, did_url)
+    }
+
+    #[cfg(not(feature = "allow-localhost"))]
+    #[tokio::test]
+    async fn does_not_resolve_did_web_on_the_local_network() {
+        let subject = Subject::test_subject().await;
+        let (server, did_url) = serve_did_web().await;
+
+        assert!(subject.resolve_public_key(&did_url).await.is_err());
+        assert_eq!(server.received_requests().await.unwrap().len(), 0);
+    }
+
+    #[cfg(feature = "allow-localhost")]
+    mod allow_localhost_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn resolves_did_web_on_the_local_network() {
+            let subject = Subject::test_subject().await;
+            let (_server, did_url) = serve_did_web().await;
+
+            let public_key = subject.resolve_public_key(&did_url).await.unwrap();
+
+            assert_eq!(serde_json::json!(public_key), did_web_public_key());
+        }
     }
 }
