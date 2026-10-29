@@ -69,6 +69,11 @@ fn into_directory(url: Url) -> Url {
     convert_url(url, true)
 }
 
+/// Treats an empty value, such as an empty environment variable, as none.
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
 /// Converts a URL into a resource URL by removing the trailing slash if it has one.
 fn into_resource(url: Url) -> Url {
     convert_url(url, false)
@@ -116,8 +121,8 @@ pub struct ApplicationConfiguration {
     pub overwrite_previous_did_web: Option<String>,
     /// The alias the hosting environment knows this deployment by, such as `eridani`. Every key this deployment
     /// creates in AWS KMS is tagged with it, so IAM policies can limit a deployment to its own keys. Set through
-    /// `UNICORE__DEPLOYMENT_ALIAS`.
-    #[config(default)]
+    /// `UNICORE__DEPLOYMENT_ALIAS`; empty means none.
+    #[config(default, transform_with = "non_empty")]
     pub deployment_alias: Option<String>,
     #[config(
         default = r#"{
@@ -1624,5 +1629,37 @@ mod tests {
     #[serial]
     fn kms_feature_flag_rejects_unrecognized_values() {
         assert!(kms_feature_flag(Some("maybe")).is_err());
+    }
+
+    fn deployment_alias(value: Option<&str>) -> Option<String> {
+        temp_env::with_var("UNICORE__DEPLOYMENT_ALIAS", value, || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::File::from_str(
+                    r#"
+                        event_store:
+                            type: "in_memory"
+                    "#,
+                    config::FileFormat::Yaml,
+                ))
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development)
+                .unwrap()
+                .deployment_alias
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn an_empty_deployment_alias_is_none() {
+        assert_eq!(deployment_alias(Some("")), None);
+    }
+
+    #[test]
+    #[serial]
+    fn reads_the_deployment_alias() {
+        assert_eq!(deployment_alias(Some("eridani")), Some("eridani".to_string()));
     }
 }
