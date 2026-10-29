@@ -202,11 +202,8 @@ async fn issue_linked_domains(
             let algorithm =
                 Algorithm::from_str(alg).map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
 
-            // TODO: Currently UniCore always uses the same keys for signing regardless of the DID method.
-            // Once we implement DID method-specific keys, then we should use the key of the verification
-            // method's DID method here.
             let signer = subject
-                .issuer_signer(algorithm)
+                .method_signer(verification_method_id, algorithm)
                 .await
                 .map_err(|err| SigningError(err.to_string()))?;
             let credential = DomainLinkageCredentialBuilder::new(
@@ -648,6 +645,52 @@ pub mod service_tests {
             serde_json::to_value(&service.service_endpoint).unwrap(),
             json!({ "origins": ["https://a.example", "https://b.example"] })
         );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    async fn signs_each_credential_with_the_key_of_its_verification_method(linked_domains_service_id: String) {
+        use agent_secret_manager::subject::MethodKey;
+        use identity_kit::jose::{CompactJws, DefaultVerifier, JwsAlgorithm};
+        use identity_kit::keys::{InMemoryKeyStore, KeySpec, KeyStore, KeyType};
+
+        web_did_method();
+        let services = IdentityServices::default();
+        let key_store = Arc::new(InMemoryKeyStore::new());
+        let key_id = key_store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        let public_jwk = key_store.public_jwk(&key_id).await.unwrap();
+        let verification_method = VerificationMethod::new(
+            "did:web:my-domain.example.org#kms".parse().unwrap(),
+            identity_kit::did::MethodType::JSON_WEB_KEY_2020,
+            "did:web:my-domain.example.org".parse().unwrap(),
+            identity_kit::did::VerificationMaterial::jwk(&public_jwk),
+        );
+        services
+            .subject
+            .insert_method_key(verification_method.id.clone(), MethodKey { key_store, key_id })
+            .await;
+
+        let events = ServiceTestFramework::with(services)
+            .given_no_previous_events()
+            .when(ServiceCommand::AddLinkedDomains {
+                service_id: linked_domains_service_id,
+                verification_methods: vec![verification_method],
+                origins: vec![url("https://a.example")],
+            })
+            .inspect_result()
+            .expect("linking succeeds");
+
+        let [ServiceEvent::LinkedDomainsAdded { resource, .. }] = events.as_slice() else {
+            panic!("expected a single LinkedDomainsAdded event, got {events:?}");
+        };
+        let [jwt] = linked_dids(resource).try_into().unwrap();
+        assert!(CompactJws::decode(jwt.as_str())
+            .unwrap()
+            .verify(&DefaultVerifier, &public_jwk)
+            .is_ok());
     }
 
     #[rstest]
