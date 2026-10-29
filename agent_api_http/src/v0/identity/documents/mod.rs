@@ -152,27 +152,39 @@ pub(crate) async fn post_select_signing_key(
 mod tests {
     use super::*;
     use agent_identity::services::IdentityServices;
+    use agent_kms::state::kms_state;
     use axum::{body::Body, extract::Request};
     use shared_kernel::authorization::NoActorExtractor;
+    use shared_kernel::EventBusHandle;
     use tower::ServiceExt;
 
-    #[tokio::test]
-    async fn selecting_a_signing_key_of_an_unknown_did_answers_not_found() {
-        let event_bus = shared_kernel::EventBusHandle::default();
-        let state = agent_identity::identity_state(
+    async fn app(kms_enabled: bool) -> axum::Router {
+        let event_bus = EventBusHandle::default();
+        let identity_state = agent_identity::identity_state(
             &agent_store::in_memory::InMemory,
             IdentityServices::default(),
             &event_bus,
         )
         .await;
-        let app = crate::app(
+        let kms_state = if kms_enabled {
+            Some(Arc::new(
+                kms_state(&agent_store::in_memory::InMemory, &event_bus, true, Default::default()).await,
+            ))
+        } else {
+            None
+        };
+
+        crate::app(
             crate::ApiState {
-                identity_state: Some(Arc::new(state)),
+                identity_state: Some(Arc::new(identity_state)),
+                kms_state,
                 ..Default::default()
             },
             Arc::new(NoActorExtractor),
-        );
+        )
+    }
 
+    async fn select_signing_key(app: axum::Router) -> (StatusCode, Vec<u8>) {
         let response = app
             .oneshot(
                 Request::builder()
@@ -184,8 +196,28 @@ mod tests {
             )
             .await
             .unwrap();
+        let status = response.status();
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (
+            status,
+            axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+    }
+
+    #[tokio::test]
+    async fn selecting_a_signing_key_does_not_exist_without_the_key_management_system() {
+        let (status, body) = select_signing_key(app(false).await).await;
+
+        assert_eq!((status, body.is_empty()), (StatusCode::NOT_FOUND, true));
+    }
+
+    #[tokio::test]
+    async fn selecting_a_signing_key_of_an_unknown_did_answers_not_found() {
+        let (_, body) = select_signing_key(app(true).await).await;
+
         let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(
             problem["type"],
