@@ -45,7 +45,6 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
                 .route("/connections/remove-connection", post(remove_connection))
                 .route("/documents", get(get_documents))
                 .route("/documents/{document_id}", get(get_document))
-                .route("/select-signing-key", post(post_select_signing_key))
                 .route("/profile", get(get_profile).patch(patch_profile))
                 .route("/services", get(services))
                 .route("/services/{service_id}", get(service))
@@ -64,6 +63,17 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         .route(
             "/linked-verifiable-presentations/{presentation_id}",
             get(get_linked_verifiable_presentation_by_id),
+        )
+        .with_state(identity_state)
+}
+
+/// The identity endpoints that only the Key Management System's keys make useful, mounted only when the Key Management
+/// System is enabled.
+pub fn kms_router(identity_state: Arc<IdentityState>) -> Router {
+    Router::new()
+        .nest(
+            API_VERSION,
+            Router::new().route("/select-signing-key", post(post_select_signing_key)),
         )
         .with_state(identity_state)
 }
