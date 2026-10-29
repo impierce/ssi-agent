@@ -3,7 +3,7 @@ use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
 use agent_identity::{
     document::aggregate::Document,
-    state::{select_signing_key, IdentityState},
+    state::{add_key, select_signing_key, IdentityState},
 };
 use agent_shared::config::SupportedDidMethod;
 use axum::{
@@ -148,6 +148,57 @@ pub(crate) async fn post_select_signing_key(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddKeyToDocumentRequest {
+    /// The ID of a key created in the Key Management System.
+    #[schema(example = "0b6a7f8e-3f4c-4d2a-9b1e-5c8d7e6f5a4b")]
+    pub key_id: String,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddKeyToDocumentResponse {
+    /// The verification method of the key, named by the thumbprint of its public key.
+    #[schema(example = "did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k")]
+    pub verification_method_id: String,
+}
+
+/// Add key to document
+///
+/// Adds the public key of a key created in the Key Management System to your organisation's `did:web` document, as a
+/// verification method. The key is available to sign with right away, but only signs once it is selected as the
+/// signing key. Adding a key again changes nothing.
+#[utoipa::path(
+    post,
+    path = "/add-key-to-document",
+    operation_id = "add_key_to_document",
+    tags = ["Identity"],
+    request_body(content = inline(AddKeyToDocumentRequest), content_type = "application/json"),
+    responses(
+        (status = 200, description = "Key added", body = AddKeyToDocumentResponse),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
+        (status = 404, description = "No key has the given ID"),
+        (status = 409, description = "There is no enabled `did:web` document to add the key to"),
+        (status = 422, description = "Request body does not match the expected schema"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn post_add_key_to_document(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+    Json(AddKeyToDocumentRequest { key_id }): Json<AddKeyToDocumentRequest>,
+) -> Result<Json<AddKeyToDocumentResponse>, ApiError> {
+    let verification_method_id = add_key(&state, actor.map_or(Caller::Anonymous, Caller::Actor), &key_id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
+
+    Ok(Json(AddKeyToDocumentResponse {
+        verification_method_id: verification_method_id.to_string(),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,13 +236,26 @@ mod tests {
     }
 
     async fn select_signing_key(app: axum::Router) -> (StatusCode, Vec<u8>) {
+        post(
+            app,
+            "/v0/select-signing-key",
+            r#"{"verificationMethodId":"did:web:example.org#key"}"#,
+        )
+        .await
+    }
+
+    async fn add_key_to_document(app: axum::Router) -> (StatusCode, Vec<u8>) {
+        post(app, "/v0/add-key-to-document", r#"{"keyId":"key"}"#).await
+    }
+
+    async fn post(app: axum::Router, uri: &str, body: &'static str) -> (StatusCode, Vec<u8>) {
         let response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/v0/select-signing-key")
+                    .uri(uri)
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"verificationMethodId":"did:web:example.org#key"}"#))
+                    .body(Body::from(body))
                     .unwrap(),
             )
             .await
@@ -222,6 +286,24 @@ mod tests {
         assert_eq!(
             problem["type"],
             crate::error::type_url("identity#verification-method-not-found")
+        );
+    }
+
+    #[tokio::test]
+    async fn adding_a_key_to_a_document_does_not_exist_without_the_key_management_system() {
+        let (status, body) = add_key_to_document(app(false).await).await;
+
+        assert_eq!((status, body.is_empty()), (StatusCode::NOT_FOUND, true));
+    }
+
+    #[tokio::test]
+    async fn adding_a_key_without_a_did_web_document_answers_conflict() {
+        let (_, body) = add_key_to_document(app(true).await).await;
+
+        let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            problem["type"],
+            crate::error::type_url("identity#did-web-document-not-found")
         );
     }
 }
