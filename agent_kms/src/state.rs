@@ -220,6 +220,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn keeps_a_production_provider_outside_the_development_profile() {
+        let mut state = state().await;
+        add(&state, KeyProviderType::InMemory).await;
+        add(&state, KeyProviderType::AwsKmsAmbient).await;
+        state.development_providers_allowed = false;
+
+        let providers = get_key_providers(&state, Caller::Internal).await.unwrap();
+
+        assert!(!providers.providers.contains_key(&KeyProviderType::InMemory));
+        assert!(providers.providers.contains_key(&KeyProviderType::AwsKmsAmbient));
+    }
+
+    #[tokio::test]
     async fn an_unreachable_provider_is_reported_not_failed() {
         let state = state().await;
         add(&state, KeyProviderType::AwsKmsAmbient).await;
