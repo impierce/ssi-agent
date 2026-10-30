@@ -10,6 +10,7 @@ agent_authorization = { path = "../agent_authorization" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
+agent_kms = { path = "../agent_kms" }
 agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
@@ -63,6 +64,7 @@ agent_event_publisher_http = { path = "../agent_event_publisher_http", features 
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
+agent_kms = { path = "../agent_kms", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }

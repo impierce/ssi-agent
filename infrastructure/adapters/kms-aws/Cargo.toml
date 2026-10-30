@@ -1,0 +1,30 @@
+[package]
+name = "kms-aws"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+agent_kms = { path = "../../../agent_kms" }
+
+async-trait.workspace = true
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-kms = "1"
+futures.workspace = true
+identity-kit.workspace = true
+sha2 = "0.11"
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+ed25519-dalek = { version = "3.0", features = ["alloc", "pkcs8"] }
+identity-kit = { workspace = true, features = ["test-vectors"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+serde_json.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true

@@ -13,11 +13,20 @@ use agent_identity::services::{IdentityServices, LinkedVerifiablePresentationSou
 use agent_issuance::{
     application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
+use agent_kms::{
+    adapter::{InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters},
+    key_provider::aggregate::KeyProviderType,
+    kms_state, KmsState,
+};
 use agent_secret_manager::{service::Service as _, subject::Subject};
-use agent_shared::config::{config, EventStoreType};
-use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres};
+use agent_shared::{
+    config::{config, EventStoreType},
+    profile::ApplicationProfile,
+};
+use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, CqrsComponentBuilder};
 use agent_verification::services::VerificationServices;
 pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
+use kms_aws::AwsKmsAmbientKeyProvider;
 use probes::{
     liveness::{healthz, livez},
     readiness::{readyz, ReadinessState},
@@ -153,6 +162,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
     let event_store_type = config().event_store.type_.clone();
     let event_verification;
+    let kms_state;
     let readiness = ReadinessState::default();
 
     // TODO: Refactor this to reduce code duplication.
@@ -204,6 +214,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
+                kms_state = kms_state_if_enabled(&builder, &event_bus).await;
                 event_verification = EventVerification::Postgres(builder);
                 states
             }
@@ -258,6 +269,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
+                kms_state = kms_state_if_enabled(&builder, &event_bus).await;
                 event_verification = EventVerification::MongoDb(builder);
                 states
             }
@@ -305,6 +317,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
+                kms_state = kms_state_if_enabled(&InMemory, &event_bus).await;
                 event_verification = EventVerification::InMemory;
                 states
             }
@@ -334,10 +347,40 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             holder_state: Some(holder_state),
             verification_state: Some(verification_state),
             events_state: Some(Arc::new(agent_api_http::v0::events::EventsState::from(event_bus))),
+            kms_state,
         },
         event_verification,
         readiness,
     })
+}
+
+/// Builds the Key Management System, which stays hidden unless the `kms` feature flag is enabled.
+async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    event_bus: &shared_kernel::event_bus::EventBusHandle,
+) -> Option<Arc<KmsState>> {
+    if !config().feature.kms {
+        return None;
+    }
+
+    info!("Key Management System enabled");
+
+    let adapters: KeyProviderAdapters = [
+        (
+            KeyProviderType::InMemory,
+            Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+        ),
+        (
+            KeyProviderType::AwsKmsAmbient,
+            Arc::new(AwsKmsAmbientKeyProvider::new()),
+        ),
+    ]
+    .into();
+    let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
+
+    Some(Arc::new(
+        kms_state(builder, event_bus, development_providers_allowed, adapters).await,
+    ))
 }
 
 /// Builds the full core SSI agent Router (app + metadata + probes).
@@ -448,4 +491,23 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
     };
 
     axum::serve(listener, router).await.unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_shared::config::set_config;
+
+    #[tokio::test]
+    async fn builds_the_kms_only_when_its_feature_flag_is_enabled() {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+
+        set_config().feature.kms = false;
+        assert!(kms_state_if_enabled(&InMemory, &event_bus).await.is_none());
+
+        set_config().feature.kms = true;
+        let enabled = kms_state_if_enabled(&InMemory, &event_bus).await;
+        set_config().feature.kms = false;
+        assert!(enabled.is_some());
+    }
 }

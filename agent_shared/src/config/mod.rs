@@ -89,6 +89,10 @@ pub struct ApplicationConfiguration {
     #[config(default)]
     #[serde(default, skip_serializing_if = "DevConfig::is_empty")]
     pub dev: DevConfig,
+    /// Switches for features that are still under development and hidden unless explicitly enabled.
+    #[config(default)]
+    #[serde(default, skip_serializing_if = "FeatureFlags::all_disabled")]
+    pub feature: FeatureFlags,
     #[config(default)]
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
@@ -445,6 +449,42 @@ pub struct DevConfig {
 impl DevConfig {
     fn is_empty(&self) -> bool {
         self.api_key.is_none()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct FeatureFlags {
+    /// Enables the Key Management System. Set through `UNICORE__FEATURE__KMS`; absent or empty means disabled.
+    #[serde(default, deserialize_with = "deserialize_feature_flag")]
+    pub kms: bool,
+}
+
+impl FeatureFlags {
+    fn all_disabled(&self) -> bool {
+        !self.kms
+    }
+}
+
+/// Reads a feature flag that is either a boolean or a string, so that an empty environment variable disables the
+/// feature instead of failing to load the configuration.
+fn deserialize_feature_flag<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Flag {
+        Bool(bool),
+        Text(String),
+    }
+
+    match Option::<Flag>::deserialize(deserializer)? {
+        None => Ok(false),
+        Some(Flag::Bool(enabled)) => Ok(enabled),
+        Some(Flag::Text(value)) => match value.trim().to_ascii_lowercase().as_str() {
+            "" | "false" | "0" | "off" | "no" => Ok(false),
+            "true" | "1" | "on" | "yes" => Ok(true),
+            other => Err(serde::de::Error::custom(format!(
+                "invalid feature flag value `{other}`, expected `true` or `false`"
+            ))),
+        },
     }
 }
 
@@ -1541,5 +1581,43 @@ mod tests {
         let empty_format = r#"{}"#;
         let events: Events = serde_json::from_str(empty_format).unwrap();
         assert!(events.types.is_empty());
+    }
+    fn kms_feature_flag(value: Option<&str>) -> Result<bool, SharedError> {
+        temp_env::with_var("UNICORE__FEATURE__KMS", value, || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::File::from_str(
+                    r#"
+                        event_store:
+                            type: "in_memory"
+                    "#,
+                    config::FileFormat::Yaml,
+                ))
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development)
+                .map(|config| config.feature.kms)
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_disabled_when_its_variable_is_missing_or_empty() {
+        assert!(!kms_feature_flag(None).unwrap());
+        assert!(!kms_feature_flag(Some("")).unwrap());
+        assert!(!kms_feature_flag(Some("false")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_enabled_when_its_variable_is_true() {
+        assert!(kms_feature_flag(Some("true")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_flag_rejects_unrecognized_values() {
+        assert!(kms_feature_flag(Some("maybe")).is_err());
     }
 }
