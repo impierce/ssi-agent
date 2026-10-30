@@ -384,7 +384,7 @@ fn is_key_uuid(id: &str) -> bool {
 }
 
 /// The JWS algorithm a key signs with, if this store supports it.
-fn signing_algorithm(metadata: &KeyMetadata) -> Option<JwsAlgorithm> {
+pub(super) fn signing_algorithm(metadata: &KeyMetadata) -> Option<JwsAlgorithm> {
     if metadata.key_usage() != Some(&KeyUsageType::SignVerify) {
         return None;
     }

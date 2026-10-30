@@ -54,7 +54,8 @@ pub trait KeyProviderAdapter: KeyStore {
     /// Checks that the provider can be reached with the configured credentials.
     async fn test_connection(&self) -> Result<(), ConnectionError>;
 
-    /// Lists the keys that exist in the provider and that the configured credentials can see.
+    /// Lists the keys that exist in the provider, that the configured credentials can see and that the provider can
+    /// sign with.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError>;
 }
 

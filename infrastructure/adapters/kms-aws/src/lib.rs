@@ -29,6 +29,7 @@ const LIST_PAGE_SIZE: i32 = 1000;
 const DESCRIBE_CONCURRENCY: usize = 8;
 
 mod key_store;
+use key_store::signing_algorithm;
 pub use key_store::AwsKmsError;
 
 #[cfg(test)]
@@ -147,8 +148,8 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
     /// `kms:ListKeys` can't be limited in IAM and returns every key in the AWS account, including other tenants'
     /// keys when an account is shared. Each key is therefore described as well, and keys whose `kms:DescribeKey` is
     /// denied are left out and counted, so the IAM policy of the deployment decides which keys it sees. Keys
-    /// deleted in the meantime are left out without being counted. Any other failure fails the whole listing rather
-    /// than hiding keys.
+    /// deleted in the meantime, and keys this provider can't sign with, such as encryption keys, are left out
+    /// without being counted. Any other failure fails the whole listing rather than hiding keys.
     ///
     /// Each request has its own deadline, so listing a large account takes longer instead of failing.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
@@ -167,7 +168,7 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
             match key {
                 Described::Visible(key) => listing.keys.push(key),
                 Described::Hidden => listing.hidden_keys += 1,
-                Described::Gone => {}
+                Described::Gone | Described::Unsupported => {}
             }
         }
 
@@ -214,11 +215,16 @@ enum Described {
     Hidden,
     /// The key was deleted after it was listed.
     Gone,
+    /// The key can't sign with an algorithm this provider supports.
+    Unsupported,
 }
 
 async fn describe_key(client: &Client, id: String) -> Result<Described, ConnectionError> {
     match client.describe_key().key_id(&id).send().await {
         Ok(output) => Ok(output.key_metadata().map_or(Described::Gone, |metadata| {
+            if signing_algorithm(metadata).is_none() {
+                return Described::Unsupported;
+            }
             Described::Visible(ProviderKey {
                 id: metadata.key_id().to_string(),
                 resource_name: metadata.arn().map(str::to_string),
@@ -293,8 +299,12 @@ mod tests {
     }
 
     fn described(id: &str, state: &str) -> ResponseTemplate {
+        described_as(id, state, "SIGN_VERIFY", "ECC_NIST_P256")
+    }
+
+    fn described_as(id: &str, state: &str, usage: &str, spec: &str) -> ResponseTemplate {
         ResponseTemplate::new(200).set_body_json(json!({
-            "KeyMetadata": { "KeyId": id, "Arn": arn(id), "KeyState": state }
+            "KeyMetadata": { "KeyId": id, "Arn": arn(id), "KeyState": state, "KeyUsage": usage, "KeySpec": spec }
         }))
     }
 
@@ -408,6 +418,28 @@ mod tests {
                 hidden_keys: 1,
             }
         );
+    }
+
+    #[tokio::test]
+    async fn leaves_out_keys_this_provider_cannot_sign_with() {
+        let server = account_with_keys(&["p-256", "ed25519", "encryption", "rsa"]).await;
+        for (id, usage, spec) in [
+            ("p-256", "SIGN_VERIFY", "ECC_NIST_P256"),
+            ("ed25519", "SIGN_VERIFY", "ECC_NIST_EDWARDS25519"),
+            ("encryption", "ENCRYPT_DECRYPT", "SYMMETRIC_DEFAULT"),
+            ("rsa", "SIGN_VERIFY", "RSA_2048"),
+        ] {
+            describe_key(id)
+                .respond_with(described_as(id, "Enabled", usage, spec))
+                .mount(&server)
+                .await;
+        }
+
+        let listing = provider(&server.uri()).list_keys().await.unwrap();
+
+        let ids: Vec<_> = listing.keys.iter().map(|key| key.id.as_str()).collect();
+        assert_eq!(ids, ["p-256", "ed25519"]);
+        assert_eq!(listing.hidden_keys, 0);
     }
 
     #[tokio::test]
