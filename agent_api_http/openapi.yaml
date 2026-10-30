@@ -1933,7 +1933,7 @@ components:
       properties:
         name:
           type: string
-          description: A name for the provider, unique across all providers. It can't be changed later.
+          description: A name for the provider, unique among the providers this instance lists. It can't be changed later.
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
     AddTemplatesRequest:

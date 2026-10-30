@@ -31,7 +31,7 @@ pub struct KeyProviderDto {
 #[serde(rename_all = "camelCase")]
 pub struct AddKeyProviderRequest {
     pub provider_type: KeyProviderType,
-    /// A name for the provider, unique across all providers. It can't be changed later.
+    /// A name for the provider, unique among the providers this instance lists. It can't be changed later.
     pub name: String,
 }
 
