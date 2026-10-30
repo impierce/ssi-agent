@@ -492,3 +492,22 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 
     axum::serve(listener, router).await.unwrap();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_shared::config::set_config;
+
+    #[tokio::test]
+    async fn builds_the_kms_only_when_its_feature_flag_is_enabled() {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+
+        set_config().feature.kms = false;
+        assert!(kms_state_if_enabled(&InMemory, &event_bus).await.is_none());
+
+        set_config().feature.kms = true;
+        let enabled = kms_state_if_enabled(&InMemory, &event_bus).await;
+        set_config().feature.kms = false;
+        assert!(enabled.is_some());
+    }
+}
