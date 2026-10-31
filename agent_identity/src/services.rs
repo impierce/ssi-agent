@@ -1563,14 +1563,9 @@ mod tests {
     fn rustsec_2026_0258_dependency_paths_remain_scoped() {
         let lockfile = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../Cargo.lock"));
 
-        let vulnerable_reqwest = locked_package(lockfile, "reqwest", "0.11.27");
-        assert!(vulnerable_reqwest.contains("\"h2 0.3.27\""));
-        assert!(vulnerable_reqwest.contains("\"hyper 0.14.32\""));
-
         let vulnerable_hyper = locked_package(lockfile, "hyper", "0.14.32");
         assert!(vulnerable_hyper.contains("\"h2 0.3.27\""));
-
-        assert!(locked_package(lockfile, "iota-sdk", "1.1.5").contains("\"reqwest 0.11.27\""));
+        assert!(locked_package(lockfile, "aws-smithy-http-client", "1.5.1").contains("\"hyper 0.14.32\""));
 
         let identity = locked_package(lockfile, "agent_identity", "0.1.0");
         assert!(identity.contains("\"reqwest 0.12.28\""));
