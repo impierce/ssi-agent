@@ -29,9 +29,9 @@ const ALGORITHM_PREFIX: &str = "algorithm/";
 ///
 /// A key is a record in the `iota_identity_vault` vault of the `iota_identity_client` client, named by its id, the
 /// layout of the snapshots the agent has always written. A record holds only the private key, so the algorithm of a
-/// key this store generates is kept in the client store next to it. The algorithms of older keys are given when the
-/// store is opened, and the fixed ids keys used to be generated under are known as well: `ed25519-0` (`EdDSA`),
-/// `es256-0` (`ES256`) and `rs256-0` (`RS256`).
+/// key this store generates is kept in the client store next to it. Older keys were generated under fixed ids that name
+/// their algorithm, `ed25519-0` (`EdDSA`), `es256-0` (`ES256`) and `rs256-0` (`RS256`), and the algorithms of any
+/// others are given when the store is opened.
 #[derive(Clone)]
 pub struct StrongholdKeyStore {
     stronghold: Stronghold,
@@ -57,7 +57,7 @@ impl StrongholdKeyStore {
     const ALGORITHMS: [JwsAlgorithm; 3] = [JwsAlgorithm::EdDSA, JwsAlgorithm::ES256, JwsAlgorithm::RS256];
 
     /// Opens the snapshot at `path`, encrypted with a key derived from `password`, and creates it when there is none.
-    /// `known_keys` gives the algorithms of keys the snapshot doesn't record one for.
+    /// `known_keys` gives the algorithms of keys the snapshot doesn't record one for and whose id doesn't name one.
     ///
     /// # Errors
     ///
@@ -123,12 +123,12 @@ impl StrongholdKeyStore {
             return Ok(Some(alg));
         }
 
-        Ok(self.known_keys.get(key).copied().or(match key.as_str() {
+        Ok(match key.as_str() {
             "ed25519-0" => Some(JwsAlgorithm::EdDSA),
             "es256-0" => Some(JwsAlgorithm::ES256),
             "rs256-0" => Some(JwsAlgorithm::RS256),
-            _ => None,
-        }))
+            _ => self.known_keys.get(key).copied(),
+        })
     }
 
     /// The algorithm of `key`, which must exist.
@@ -444,6 +444,22 @@ mod tests {
 
         assert!(store.exists(&key).await.unwrap());
         assert_eq!(store.public_jwk(&key).await.unwrap().alg(), Some("RS256"));
+    }
+
+    #[tokio::test]
+    async fn takes_the_algorithm_of_a_fixed_id_over_a_given_one() {
+        let snapshot = TempSnapshot::new();
+        let key = KeyId::new("es256-0");
+        let store = StrongholdKeyStore::open(&snapshot.0, "password", [(key.clone(), JwsAlgorithm::EdDSA)]).unwrap();
+        execute_procedure_ext(
+            &store.client,
+            Es256Procs::GenerateKey(es256::GenerateKey {
+                output: StrongholdKeyStore::location(&key),
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(store.public_jwk(&key).await.unwrap().alg(), Some("ES256"));
     }
 
     #[tokio::test]

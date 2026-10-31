@@ -48,11 +48,22 @@ pub async fn stronghold_key_store() -> StrongholdKeyStore {
     // TODO: currently `generate` will generate a 'static' key-ids for each keytype. In a future improvement we need to
     // make sure that the key-ids are generated dynamically and stored in some sort of key manager.
     for (key, alg) in issuer_keys() {
-        if !store
+        if store
             .exists(&key)
             .await
             .expect("Failed to read the Stronghold snapshot")
         {
+            let public_jwk = store
+                .public_jwk(&key)
+                .await
+                .unwrap_or_else(|error| panic!("Failed to read issuer key `{key}`: {error}"));
+            if public_jwk.alg() != Some(alg.as_str()) {
+                panic!(
+                    "Issuer key `{key}` is configured for {alg} but signs with {}",
+                    public_jwk.alg().unwrap_or("an unknown algorithm")
+                );
+            }
+        } else {
             info!("Generating new key: {key}");
             let key_type = key_type(alg).expect("the issuer keys sign with algorithms the store generates");
             store

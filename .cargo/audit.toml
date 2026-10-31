@@ -60,11 +60,9 @@ ignore = [
     # The vulnerable h2 instance is selected by hyper 0.14.32 in the AWS SDK's legacy HTTP client
     # (aws-smithy-http-client), used by kms-aws. It is an outbound client, so a
     # malicious or compromised remote HTTP/2 peer can trigger the issue.
-    # Connection commands request CommandAuthorization::ACTOR_REQUIRED, which limits exposure when
-    # enforced by the configured authorization checker but is not, by itself, a reason to consider
-    # every outbound path trusted. The public Axum listener and direct reqwest 0.12 clients use the
-    # patched h2 0.4.18 instance. Tests assert both the lockfile paths and command authorization
-    # marker so this global ignore is revisited if either boundary changes.
+    # The public Axum listener and direct reqwest 0.12 clients use the patched h2 0.4.18 instance.
+    # `rustsec_2026_0258_dependency_paths_remain_scoped` asserts these lockfile paths, so this global
+    # ignore is revisited when they change.
     # No patched release for the remaining transitive dependency paths is available yet.
     # TODO: revisit once a patched release becomes available upstream.
     "RUSTSEC-2026-0258",
