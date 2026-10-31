@@ -321,8 +321,8 @@ Progress:
 
 - [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
 - [x] Generate keys in a provider
-- [ ] Sign credentials and presentations with provider keys
-- [ ] Use provider keys in DID documents
+- [x] Sign credentials and presentations with provider keys, for `did:web`
+- [x] Use provider keys in DID documents, for `did:web`
 - [ ] Replace Stronghold as the secret manager
 
 #### Example
