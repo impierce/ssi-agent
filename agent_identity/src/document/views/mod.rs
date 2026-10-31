@@ -15,14 +15,12 @@ impl View<Document> for Document {
                 document,
                 status,
                 with_fixed_algorithm: signing_algorithm,
-                iota_metadata,
             } => {
                 self.document_id = document_id.clone();
                 self.did_method.replace(*did_method);
                 self.document.replace(document.clone());
                 self.status.clone_from(status);
                 self.with_fixed_algorithm.clone_from(signing_algorithm);
-                self.iota_metadata.clone_from(iota_metadata);
             }
             PublicKeyUpdated { document_id, document }
             | DocumentDidWebOverwritten {
@@ -38,15 +36,6 @@ impl View<Document> for Document {
             ServiceAdded { document_id, document } | ServiceRemoved { document_id, document } => {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
-            }
-            DocumentPublished {
-                document_id,
-                document,
-                iota_metadata,
-            } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-                self.iota_metadata.clone_from(iota_metadata);
             }
             DocumentDeleted { document_id, document } => {
                 self.document_id.clone_from(document_id);

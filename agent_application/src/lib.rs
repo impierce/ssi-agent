@@ -135,11 +135,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     let identity_services = |holder_state: &Arc<HolderState>| {
         Arc::new(IdentityServices {
             linked_verifiable_presentations: Arc::new(HolderPresentations(holder_state.clone())),
-            ..IdentityServices::new(
-                subject.clone(),
-                config().public_url.clone(),
-                config().iota_sponsoring_service_url.is_some(),
-            )
+            ..IdentityServices::new(subject.clone(), config().public_url.clone())
         })
     };
     let authorization_services = Arc::new(AuthorizationServices::new(subject.clone()));

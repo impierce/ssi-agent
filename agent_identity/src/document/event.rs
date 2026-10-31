@@ -1,4 +1,4 @@
-use super::aggregate::{IotaMetadata, Status};
+use super::aggregate::Status;
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
 use identity_kit::did::{Did, DidDocument};
@@ -14,7 +14,6 @@ pub enum DocumentEvent {
         status: Status,
         document: DidDocument,
         with_fixed_algorithm: Option<Algorithm>,
-        iota_metadata: Option<IotaMetadata>,
     },
     DocumentDidWebOverwritten {
         document_id: String,
@@ -36,11 +35,6 @@ pub enum DocumentEvent {
     ServiceRemoved {
         document_id: String,
         document: DidDocument,
-    },
-    DocumentPublished {
-        document_id: String,
-        document: DidDocument,
-        iota_metadata: Option<IotaMetadata>,
     },
     DocumentDeleted {
         document_id: String,

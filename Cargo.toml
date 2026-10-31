@@ -79,7 +79,6 @@ identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.
 identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false }
-iota-sdk = { git = "https://github.com/iotaledger/iota", package = "iota-sdk", rev = "96196f0da231883ec69cda04892c600ef6afa982" }
 # TODO: Check if this is still needed.
 iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
     "tls",
@@ -95,10 +94,6 @@ mime = { version = "0.3" }
 mongo-es = "0.4.1"
 once_cell = { version = "1.19" }
 opentelemetry = "0.31"
-product_common = { git = "https://github.com/iotaledger/product-core", tag = "v0.8.16", package = "product_common", features = [
-    "gas-station",
-    "default-http-client",
-] }
 percent-encoding = "2.3"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [

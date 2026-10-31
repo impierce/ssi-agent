@@ -84,14 +84,10 @@ impl LinkedDid {
     }
 }
 
-pub(crate) fn document_can_link(document: &Document, iota_sponsoring_enabled: bool) -> bool {
+pub(crate) fn document_can_link(document: &Document) -> bool {
     document.document.is_some()
         && document.status != Status::Disabled
         && document.did_method.is_some_and(|method| method.supports_update())
-        && document
-            .iota_metadata
-            .as_ref()
-            .is_none_or(|metadata| metadata.is_funded || iota_sponsoring_enabled)
 }
 
 /// Resolves keys from a DID document the caller already holds. A key of another DID is unsupported, which lets a
@@ -188,12 +184,11 @@ pub struct IdentityServices {
     /// local development builds; public HTTP and sensitive address ranges remain blocked. See
     /// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
     pub allow_local_network_outbound: bool,
-    pub iota_sponsoring_enabled: bool,
     pub linked_verifiable_presentations: Arc<dyn LinkedVerifiablePresentationSource>,
 }
 
 impl IdentityServices {
-    pub fn new(subject: Arc<Subject>, public_url: Url, iota_sponsoring_enabled: bool) -> Self {
+    pub fn new(subject: Arc<Subject>, public_url: Url) -> Self {
         Self {
             subject,
             public_url,
@@ -201,7 +196,6 @@ impl IdentityServices {
             cname_resolver: crate::dns::system_resolver(),
             client: Client::new(),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
-            iota_sponsoring_enabled,
             linked_verifiable_presentations: Arc::new(NoLinkedVerifiablePresentations),
         }
     }
@@ -219,11 +213,7 @@ impl IdentityServices {
         Arc::new(Self {
             allow_local_network_outbound: true,
             linkage_clock: Arc::new(crate::service::aggregate::test_utils::issuance_date),
-            ..Self::new(
-                Arc::new(subject),
-                "https://my-domain.example.org/".parse().unwrap(),
-                false,
-            )
+            ..Self::new(Arc::new(subject), "https://my-domain.example.org/".parse().unwrap())
         })
     }
 
@@ -1323,7 +1313,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap());
         services.allow_local_network_outbound = true;
 
         let issuer_url: Url = mock_server.uri().parse().unwrap();
@@ -1351,7 +1341,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap());
         services.allow_local_network_outbound = true;
 
         let issuer_url: Url = mock_server.uri().parse().unwrap();
@@ -1393,7 +1383,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap());
         services.allow_local_network_outbound = false;
         let origin: Url = mock_server.uri().replace("127.0.0.1", "localhost").parse().unwrap();
 
@@ -1425,7 +1415,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap());
         services.allow_local_network_outbound = true;
         let origin: Url = mock_server.uri().parse().unwrap();
 
@@ -1449,7 +1439,7 @@ mod tests {
             .await;
 
         let subject = Arc::new(Subject::new().await);
-        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap(), false);
+        let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap());
         services.allow_local_network_outbound = true;
         let origin: Url = mock_server.uri().parse().unwrap();
 
@@ -1580,12 +1570,7 @@ mod tests {
         let vulnerable_hyper = locked_package(lockfile, "hyper", "0.14.32");
         assert!(vulnerable_hyper.contains("\"h2 0.3.27\""));
 
-        for (name, version) in [("did-web", "0.2.2"), ("iota-sdk", "1.1.5")] {
-            assert!(
-                locked_package(lockfile, name, version).contains("\"reqwest 0.11.27\""),
-                "expected {name} {version} to select reqwest 0.11.27"
-            );
-        }
+        assert!(locked_package(lockfile, "iota-sdk", "1.1.5").contains("\"reqwest 0.11.27\""));
 
         let identity = locked_package(lockfile, "agent_identity", "0.1.0");
         assert!(identity.contains("\"reqwest 0.12.28\""));
