@@ -10,7 +10,7 @@ agent_kms = { path = "../../../agent_kms" }
 
 async-trait.workspace = true
 aws-config = { version = "1", features = ["behavior-version-latest"] }
-aws-sdk-kms = "1"
+aws-sdk-kms = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 futures.workspace = true
 identity-kit.workspace = true
 sha2 = "0.11"

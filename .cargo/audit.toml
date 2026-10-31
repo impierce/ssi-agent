@@ -64,7 +64,7 @@ ignore = [
     # Connection commands request CommandAuthorization::ACTOR_REQUIRED, which limits exposure when
     # enforced by the configured authorization checker but is not, by itself, a reason to consider
     # every outbound path trusted. The public Axum listener and direct reqwest 0.12 clients use the
-    # patched h2 0.4.18 instance. Tests assert both the lockfile paths and command authorization
+    # patched h2 0.4 instance (0.4.16 or later). Tests assert both the lockfile paths and command authorization
     # marker so this global ignore is revisited if either boundary changes.
     # No patched release for the remaining transitive dependency paths is available yet.
     # TODO: revisit once a patched release becomes available upstream.
