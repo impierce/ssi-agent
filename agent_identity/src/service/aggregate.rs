@@ -5,12 +5,10 @@ use crate::{
 };
 use chrono::{DateTime, TimeDelta, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::common::OrderedSet;
-use identity_did::DIDUrl;
-use identity_document::service::ServiceEndpoint;
 use identity_kit::{
     did::{DidUrl, Service as DocumentService, VerificationMethod},
     domain_linkage::{self, DomainLinkageConfiguration, DomainLinkageCredentialBuilder},
+    linked_vp,
 };
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
@@ -119,26 +117,16 @@ pub(crate) fn linked_verifiable_presentation_service(
     service_id: &str,
     document_did: &str,
     presentations: &[LinkedVerifiablePresentation],
-) -> Result<identity_document::service::Service, ServiceError> {
+) -> Result<DocumentService, ServiceError> {
     use ServiceError::*;
 
     if presentations.is_empty() {
         return Err(EmptyPresentationIds);
     }
-    let endpoints = presentations
-        .iter()
-        .map(|presentation| presentation.url.as_str().parse::<identity_core::common::Url>())
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| InvalidUrlError(error.to_string()))?;
-    let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(endpoints));
+    let id =
+        DidUrl::parse(&format!("{document_did}#{service_id}")).map_err(|error| InvalidDidError(error.to_string()))?;
 
-    identity_document::service::Service::builder(Default::default())
-        .id(format!("{document_did}#{service_id}")
-            .parse::<DIDUrl>()
-            .map_err(|error| InvalidDidError(error.to_string()))?)
-        .type_("LinkedVerifiablePresentation")
-        .service_endpoint(service_endpoint)
-        .build()
+    linked_vp::service(id, presentations.iter().map(|presentation| presentation.url.clone()))
         .map_err(|error| ServiceBuilderError(error.to_string()))
 }
 
@@ -405,7 +393,8 @@ impl Aggregate for Service {
                         &presentation_id,
                         signed_presentations.get(&presentation_id),
                         &linkable_documents,
-                    )?;
+                    )
+                    .await?;
                     added.push(LinkedVerifiablePresentation {
                         url: linked_verifiable_presentation_url(&services.public_url, &presentation_id)?,
                         presentation_id,

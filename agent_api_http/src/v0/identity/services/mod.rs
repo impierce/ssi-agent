@@ -127,22 +127,18 @@ mod tests {
         Router,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-    use identity_core::{
-        common::{Object, Url as IdentityUrl},
-        convert::ToJson,
-    };
-    use identity_credential::{
-        credential::{CredentialBuilder, Jwt, Subject as CredentialSubject},
-        presentation::{JwtPresentationOptions, PresentationBuilder},
-    };
     use identity_kit::{
-        did::DidDocument,
+        did::{Did, DidDocument, DidUrl, Uri},
         domain_linkage::{DomainLinkageConfiguration, DomainLinkageValidator},
         jose::{DefaultVerifier, Jwk},
+        linked_vp::LinkedPresentationBuilder,
         resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
-        vc::validation::{CredentialValidationOptions, TimeOptions},
+        vc::{
+            validation::{CredentialValidationOptions, TimeOptions},
+            Credential, Jwt, Subject as CredentialSubject,
+        },
     };
-    use jsonwebtoken::{Algorithm, Header};
+    use jsonwebtoken::Algorithm;
     use oid4vc_core::{Sign as _, Subject as _};
     use serde_json::{json, Value};
     use shared_kernel::authorization::{
@@ -346,49 +342,25 @@ mod tests {
         async fn create_presentation_for(&self, presentation_id: &str, credential_subjects: &[&str]) {
             let method = SupportedDidMethod::Web.to_string();
             let algorithm = Algorithm::EdDSA;
-            let holder = self
-                .state
-                .services
-                .subject
-                .identifier(&method, algorithm)
-                .await
-                .unwrap();
-            let mut presentation = PresentationBuilder::new(IdentityUrl::parse(&holder).unwrap(), Object::new());
+            let subject = &self.state.services.subject;
+            let holder: Did = subject.identifier(&method, algorithm).await.unwrap().parse().unwrap();
+            let mut presentation = LinkedPresentationBuilder::new(holder.clone());
             for credential_subject in credential_subjects {
-                let credential = CredentialBuilder::new(Object::new())
-                    .issuer(IdentityUrl::parse(holder.as_str()).unwrap())
-                    .subject(CredentialSubject::with_id(
-                        IdentityUrl::parse(*credential_subject).unwrap(),
-                    ))
-                    .build()
-                    .unwrap()
-                    .serialize_jwt(Default::default())
-                    .unwrap();
-                let unsigned_credential = format!("e30.{}.signature", URL_SAFE_NO_PAD.encode(credential.as_bytes()));
-                presentation = presentation.credential(Jwt::from(unsigned_credential));
+                let credential = Credential::new(
+                    holder.clone(),
+                    chrono::Utc::now(),
+                    CredentialSubject::new(credential_subject.parse::<Uri>().unwrap()),
+                );
+                let claims = serde_json::to_vec(&credential.to_jwt_claims().unwrap()).unwrap();
+                let unsigned_credential =
+                    format!("eyJhbGciOiJFZERTQSJ9.{}.c2lnbmF0dXJl", URL_SAFE_NO_PAD.encode(claims));
+                presentation = presentation.with_credential(unsigned_credential.parse().unwrap());
             }
-            let presentation = presentation.build().unwrap();
-            let payload = presentation.serialize_jwt(&JwtPresentationOptions::default()).unwrap();
-            let kid = self.state.services.subject.key_id(&method, algorithm).await.unwrap();
-            let header = Header {
-                alg: algorithm,
-                typ: Some("JWT".into()),
-                kid: Some(kid),
-                ..Default::default()
-            };
-            let message = [
-                URL_SAFE_NO_PAD.encode(header.to_json_vec().unwrap()),
-                URL_SAFE_NO_PAD.encode(payload.as_bytes()),
-            ]
-            .join(".");
-            let signature = self
-                .state
-                .services
-                .subject
-                .sign(&message, &method, algorithm)
+            let kid: DidUrl = subject.key_id(&method, algorithm).await.unwrap().parse().unwrap();
+            let signed_presentation = presentation
+                .sign(&kid, &subject.issuer_signer(algorithm).await.unwrap())
                 .await
                 .unwrap();
-            let signed_presentation = Jwt::from(format!("{message}.{}", URL_SAFE_NO_PAD.encode(signature)));
             self.presentations
                 .presentations
                 .lock()

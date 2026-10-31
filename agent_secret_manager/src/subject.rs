@@ -14,7 +14,7 @@ use identity_iota::{
     verification::{MethodRelationship, MethodScope},
 };
 use identity_kit::{
-    did::{DidUrl, VerificationRelationship},
+    did::{Did, DidDocument, DidUrl, VerificationRelationship},
     jose::{Jwk, JwsAlgorithm, Signer as _},
     keys::{KeySigner, KeyStore},
     methods::{jwk::DidJwk, key::DidKey, web::DidWeb, web::ReqwestClient},
@@ -157,6 +157,27 @@ impl Subject {
 
     pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DidUrl> {
         self.verification_method_ids.lock().await.get(&key).cloned()
+    }
+
+    /// Resolves the DID document of `did`, with the DID methods `key_resolver` doesn't resolve as well.
+    pub async fn resolve_document(&self, did: &Did) -> anyhow::Result<DidDocument> {
+        if self.key_resolver.supports(did.method()) {
+            return self
+                .key_resolver
+                .resolve(did)
+                .await
+                .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did}`, error: {err}"))?
+                .document
+                .ok_or_else(|| anyhow!("Failed to resolve DID Document for DID: `{did}`"));
+        }
+
+        let document = self
+            .resolver
+            .resolve(did.as_str())
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did}`, error: {err}"))?;
+
+        Ok(serde_json::from_value(serde_json::to_value(document)?)?)
     }
 
     /// Resolves the public key for a given DID URL.
