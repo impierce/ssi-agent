@@ -79,12 +79,6 @@ identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.
 identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
 identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false }
-# TODO: Check if this is still needed.
-iota-sdk-legacy = { version = "1.0", package = "iota-sdk", default-features = false, features = [
-    "tls",
-    "client",
-    "stronghold",
-] }
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
