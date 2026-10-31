@@ -1,10 +1,6 @@
 use agent_shared::{config::config, profile::ApplicationProfile};
-use did_manager_identity_stronghold_ext::StrongholdExtStorage;
-use identity_iota::{
-    storage::{JwkStorage, KeyId, KeyType},
-    verification::jws::JwsAlgorithm,
-};
-use iota_sdk_legacy::client::secret::stronghold::StrongholdSecretManager;
+use identity_kit::keys::{KeySpec, KeyStore};
+use key_store::{issuer_keys, key_type, StrongholdKeyStore};
 use log::info;
 
 pub mod key_store;
@@ -12,7 +8,7 @@ pub mod service;
 pub mod signer;
 pub mod subject;
 
-pub async fn stronghold_storage() -> StrongholdExtStorage {
+pub async fn stronghold_key_store() -> StrongholdKeyStore {
     #[cfg(feature = "test_utils")]
     iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
 
@@ -43,51 +39,39 @@ pub async fn stronghold_storage() -> StrongholdExtStorage {
 
     info!("Stronghold path: {stronghold_path}");
 
-    let stronghold_adapter = StrongholdSecretManager::builder()
-        .password(stronghold_password.clone())
-        .build(stronghold_path)
-        .expect("Failed to initialize stronghold adapter");
-
-    let stronghold_storage = StrongholdExtStorage::new(stronghold_adapter);
+    let store = StrongholdKeyStore::open(stronghold_path, &stronghold_password, issuer_keys())
+        .expect("Failed to open the Stronghold snapshot");
 
     info!("Stronghold storage initialized");
-
-    let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-    let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
 
     // Generate keys if they don't exist
     // TODO: currently `generate` will generate a 'static' key-ids for each keytype. In a future improvement we need to
     // make sure that the key-ids are generated dynamically and stored in some sort of key manager.
-    if stronghold_storage
-        .get_ed25519_public_key(&ed25519_key_id)
-        .await
-        .is_err()
-    {
-        info!("Generating new key: {ed25519_key_id}",);
-        let key_id = generate(&stronghold_storage, KeyType::new("Ed25519"), JwsAlgorithm::EdDSA)
+    for (key, alg) in issuer_keys() {
+        if store
+            .exists(&key)
             .await
-            .expect("Failed to generate Ed25519 key");
-        assert_eq!(key_id, ed25519_key_id);
+            .expect("Failed to read the Stronghold snapshot")
+        {
+            let public_jwk = store
+                .public_jwk(&key)
+                .await
+                .unwrap_or_else(|error| panic!("Failed to read issuer key `{key}`: {error}"));
+            if public_jwk.alg() != Some(alg.as_str()) {
+                panic!(
+                    "Issuer key `{key}` is configured for {alg} but signs with {}",
+                    public_jwk.alg().unwrap_or("an unknown algorithm")
+                );
+            }
+        } else {
+            info!("Generating new key: {key}");
+            let key_type = key_type(alg).expect("the issuer keys sign with algorithms the store generates");
+            store
+                .generate(KeySpec::new(key_type, alg).with_label(key.as_str()))
+                .await
+                .unwrap_or_else(|error| panic!("Failed to generate {alg} key `{key}`: {error}"));
+        }
     }
-    if stronghold_storage.get_es256_public_key(&es256_key_id).await.is_err() {
-        info!("Generating new key: {es256_key_id}",);
-        let key_id = generate(&stronghold_storage, KeyType::new("ES256"), JwsAlgorithm::ES256)
-            .await
-            .expect("Failed to generate ES256 key");
-        assert_eq!(key_id, es256_key_id);
-    }
 
-    stronghold_storage
-}
-
-pub async fn generate(
-    stronghold_ext_storage: &StrongholdExtStorage,
-    key_type: KeyType,
-    alg: JwsAlgorithm,
-) -> anyhow::Result<KeyId> {
-    let key_id = stronghold_ext_storage.generate(key_type.clone(), alg).await?.key_id;
-
-    info!("Generated new `{key_type}` key with key ID `{key_id}`");
-
-    Ok(key_id)
+    store
 }
