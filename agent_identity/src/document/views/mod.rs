@@ -31,6 +31,23 @@ impl View<Document> for Document {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
+            PublicKeyAdded {
+                document_id,
+                document,
+                verification_method_id,
+            } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+                self.added_verification_methods.push(verification_method_id.clone());
+            }
+            SigningKeySelected {
+                document_id,
+                algorithm,
+                verification_method_id,
+            } => {
+                self.document_id.clone_from(document_id);
+                self.signing_methods.insert(*algorithm, verification_method_id.clone());
+            }
             DocumentStatusUpdated { document_id, status } => {
                 self.document_id.clone_from(document_id);
                 self.status.clone_from(status);

@@ -16,7 +16,7 @@ use axum::{
 use connections::{
     accept_connection_changes, get_connection, get_connections, post_connection, remove_connection, sync_connection,
 };
-use documents::{get_document, get_documents};
+use documents::{get_document, get_documents, post_add_key_to_document, post_select_signing_key};
 use services::{
     linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
     linked_vp::{
@@ -63,6 +63,19 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         .route(
             "/linked-verifiable-presentations/{presentation_id}",
             get(get_linked_verifiable_presentation_by_id),
+        )
+        .with_state(identity_state)
+}
+
+/// The identity endpoints that only the Key Management System's keys make useful, mounted only when the Key Management
+/// System is enabled.
+pub fn kms_router(identity_state: Arc<IdentityState>) -> Router {
+    Router::new()
+        .nest(
+            API_VERSION,
+            Router::new()
+                .route("/add-key-to-document", post(post_add_key_to_document))
+                .route("/select-signing-key", post(post_select_signing_key)),
         )
         .with_state(identity_state)
 }

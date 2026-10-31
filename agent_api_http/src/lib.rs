@@ -84,6 +84,11 @@ where
         .clone()
         .map(v0::identity::well_known_router)
         .unwrap_or_default();
+    let identity_kms = identity_state
+        .clone()
+        .filter(|_| kms_state.is_some())
+        .map(v0::identity::kms_router)
+        .unwrap_or_default();
     let app = Router::new()
         .merge(identity_state.map(v0::identity::router).unwrap_or_default())
         .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
@@ -105,6 +110,7 @@ where
         .merge(holder_state.map(v0::holder::router).unwrap_or_default())
         .merge(verification_state.map(v0::verification::router).unwrap_or_default())
         .merge(kms_state.map(v0::kms::router).unwrap_or_default())
+        .merge(identity_kms)
         .merge(public::router(library_state))
         // Trace layers
         .layer(

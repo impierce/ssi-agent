@@ -1,4 +1,6 @@
-use crate::v0::identity::documents::{__path_get_document, __path_get_documents};
+use crate::v0::identity::documents::{
+    __path_get_document, __path_get_documents, __path_post_add_key_to_document, __path_post_select_signing_key,
+};
 use crate::v0::identity::profiles::{__path_get_profile, __path_patch_profile};
 use crate::v0::identity::services::linked_domains::{
     __path_add_linked_domains, __path_remove_linked_domains, __path_verify_linked_domains,
@@ -11,7 +13,7 @@ use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_document, get_documents, get_profile, patch_profile,
+    paths(get_document, get_documents, post_add_key_to_document, post_select_signing_key, get_profile, patch_profile,
         services, service,
         add_linked_domains, remove_linked_domains, verify_linked_domains,
         add_linked_verifiable_presentations, remove_linked_verifiable_presentations),

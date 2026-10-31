@@ -52,6 +52,7 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 ] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
+identity-kit.workspace = true
 reqwest.workspace = true
 serde_norway.workspace = true
 testcontainers-modules = { version = "0.15", features = ["postgres"] }

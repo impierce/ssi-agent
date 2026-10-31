@@ -3,22 +3,26 @@ use crate::connection::views::all_connections::AllConnectionsView;
 use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
+use crate::document::error::DocumentError;
 use crate::document::views::all_documents::AllDocumentsView;
 use crate::profile::aggregate::{Profile, Source};
 use crate::profile::command::ProfileCommand;
 use crate::profile::views::ProfileView;
 use crate::service::views::all_services::AllServicesView;
+use crate::services::ExternalKey;
 use crate::{
     document::{aggregate::Document, views::DocumentView},
     service::{aggregate::Service, views::ServiceView},
 };
+use agent_secret_manager::subject::{MethodKey, StorageKey, Subject};
 use agent_shared::config::{config, config_mut, Display, SupportedDidMethod, ToggleOptions};
-use agent_shared::handlers::command_handler;
+use agent_shared::handlers::{authorize_command, command_handler, CommandHandlerError};
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
     handlers::public_query_handler,
 };
 use cqrs_es::persist::PersistenceError;
+use identity_kit::{did::DidUrl, keys::KeyStore as _};
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, Caller, QueryOperation};
@@ -26,6 +30,7 @@ use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 use tracing::{info, warn};
 
 /// The fixed identifier for the `Profile` aggregate, which is treated as a singleton.
@@ -577,30 +582,236 @@ pub async fn initialize_documents(
         }
     }
 
-    // Signing caches are process-local, even when the DID document is reused.
+    load_external_keys(state).await?;
+    cache_verification_method_ids(state).await?;
+
+    if did_web_overwritten {
+        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
+    }
+    Ok(())
+}
+
+/// Caches the verification method each enabled document signs with, per algorithm. Signing caches are process-local,
+/// even when the DID document is reused.
+async fn cache_verification_method_ids(state: &IdentityState) -> anyhow::Result<()> {
     for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
         .await?
         .values()
     {
-        if let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) {
-            for method in did_document.methods(None) {
-                if let Some(algorithm) = method.public_key_jwk().and_then(|jwk| jwk.alg()) {
+        cache_signing_methods(&state.services.subject, document).await?;
+    }
+
+    Ok(())
+}
+
+/// Caches the verification method `document` signs with, per algorithm: the selected one, or else the one of its
+/// configured issuer key. Added keys only sign once they are selected.
+async fn cache_signing_methods(subject: &Subject, document: &Document) -> anyhow::Result<()> {
+    let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) else {
+        return Ok(());
+    };
+
+    let configured_methods = did_document
+        .methods(None)
+        .filter(|method| !document.added_verification_methods.contains(&method.id))
+        .filter_map(|method| {
+            let alg = method.public_key_jwk().and_then(|jwk| jwk.alg())?;
+            Some(alg.parse().map(|algorithm| (algorithm, method.id.clone())))
+        })
+        .collect::<Result<Vec<(Algorithm, DidUrl)>, _>>()?;
+    for (algorithm, verification_method_id) in configured_methods {
+        subject
+            .insert_verification_method_id(StorageKey::new(did_method, algorithm), verification_method_id)
+            .await?;
+    }
+
+    for (algorithm, verification_method_id) in &document.signing_methods {
+        if !did_document
+            .methods(None)
+            .any(|method| method.id == *verification_method_id)
+        {
+            warn!(%verification_method_id, "The selected signing key is no longer in the DID document");
+            continue;
+        }
+        if document.added_verification_methods.contains(verification_method_id)
+            && !subject.has_method_key(verification_method_id).await
+        {
+            warn!(%verification_method_id, "The selected signing key is not available");
+            continue;
+        }
+        subject
+            .insert_verification_method_id(StorageKey::new(did_method, *algorithm), verification_method_id.clone())
+            .await?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Error)]
+pub enum SelectSigningKeyError {
+    #[error("No document has the verification method `{0}`")]
+    NotFound(DidUrl),
+    #[error("The key of verification method `{0}` is not available to sign with")]
+    KeyUnavailable(DidUrl),
+    #[error(transparent)]
+    Command(#[from] CommandHandlerError<DocumentError>),
+    #[error(transparent)]
+    Infrastructure(#[from] anyhow::Error),
+}
+
+/// Signs with the verification method `verification_method_id` from now on, for the algorithm of its key, in the
+/// document of its DID.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, no document has the verification method, or the verification method's key
+/// was added but isn't available to sign with.
+pub async fn select_signing_key(
+    state: &IdentityState,
+    caller: Caller,
+    verification_method_id: DidUrl,
+) -> Result<(), SelectSigningKeyError> {
+    let Some((document_id, document)) = query_all_documents(state, |(_, document)| {
+        document
+            .document
+            .as_ref()
+            .is_some_and(|did_document| did_document.id == *verification_method_id.did())
+    })
+    .await?
+    .into_iter()
+    .next() else {
+        return Err(SelectSigningKeyError::NotFound(verification_method_id));
+    };
+    let command = DocumentCommand::SelectSigningKey {
+        verification_method_id: verification_method_id.clone(),
+    };
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        &document_id,
+        &command,
+    )
+    .await
+    .map_err(CommandHandlerError::Authorization)?;
+
+    if document.added_verification_methods.contains(&verification_method_id)
+        && !state.services.subject.has_method_key(&verification_method_id).await
+    {
+        return Err(SelectSigningKeyError::KeyUnavailable(verification_method_id));
+    }
+
+    command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        &document_id,
+        &state.command.document,
+        command,
+    )
+    .await?;
+
+    Ok(cache_verification_method_ids(state).await?)
+}
+
+#[derive(Debug, Error)]
+pub enum AddKeyError {
+    #[error("There is no key `{0}`")]
+    KeyNotFound(String),
+    #[error("There is no enabled `did:web` document to add a key to")]
+    DocumentNotFound,
+    #[error(transparent)]
+    Command(#[from] CommandHandlerError<DocumentError>),
+    #[error(transparent)]
+    Infrastructure(#[from] anyhow::Error),
+}
+
+/// Adds the public key of the external key `key_id` to the `did:web` document, and returns the ID of its verification
+/// method. The key is available to sign with right away, but only signs once it is selected. Adding a key again
+/// changes nothing.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, there is no such key, or there is no enabled `did:web` document.
+pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Result<DidUrl, AddKeyError> {
+    let Some((document_id, did)) = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    })
+    .await?
+    .into_iter()
+    .find_map(|(document_id, document)| Some((document_id, document.document?.id))) else {
+        return Err(AddKeyError::DocumentNotFound);
+    };
+    let ExternalKey { method_key, public_key } = state
+        .services
+        .external_keys
+        .key(key_id)
+        .await?
+        .ok_or_else(|| AddKeyError::KeyNotFound(key_id.to_string()))?;
+    let thumbprint = public_key.thumbprint_sha256().map_err(anyhow::Error::from)?;
+
+    command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        &document_id,
+        &state.command.document,
+        DocumentCommand::AddPublicKey {
+            public_key_jwk: Box::new(public_key),
+        },
+    )
+    .await?;
+
+    let verification_method_id = did.to_url().with_fragment(&thumbprint);
+    state
+        .services
+        .subject
+        .insert_method_key(verification_method_id.clone(), method_key)
+        .await;
+
+    Ok(verification_method_id)
+}
+
+/// Makes the external key of every added verification method available to sign with again, after a restart. A
+/// verification method is named by the thumbprint of its key. When a key can't be loaded or no longer exists in its
+/// store, its verification method is unavailable and the configured issuer key signs instead.
+async fn load_external_keys(state: &IdentityState) -> anyhow::Result<()> {
+    let keys = match state.services.external_keys.keys().await {
+        Ok(keys) => keys,
+        Err(error) => {
+            warn!(%error, "The external keys could not be loaded");
+            return Ok(());
+        }
+    };
+    let keys_by_thumbprint: HashMap<String, MethodKey> = keys
+        .into_iter()
+        .filter_map(|key| Some((key.public_key.thumbprint_sha256().ok()?, key.method_key)))
+        .collect();
+
+    for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
+        .await?
+        .values()
+    {
+        for verification_method_id in &document.added_verification_methods {
+            let Some(method_key) = verification_method_id
+                .fragment()
+                .and_then(|thumbprint| keys_by_thumbprint.get(thumbprint))
+            else {
+                continue;
+            };
+            match method_key.key_store.exists(&method_key.key_id).await {
+                Ok(true) => {
                     state
                         .services
                         .subject
-                        .insert_verification_method_id(
-                            agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
-                            method.id.clone(),
-                        )
-                        .await?;
+                        .insert_method_key(verification_method_id.clone(), method_key.clone())
+                        .await
+                }
+                Ok(false) => warn!(%verification_method_id, "The key of the verification method no longer exists"),
+                Err(error) => {
+                    warn!(%verification_method_id, %error, "The key of the verification method could not be reached")
                 }
             }
         }
     }
 
-    if did_web_overwritten {
-        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
-    }
     Ok(())
 }
 
@@ -742,5 +953,323 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
             all_services,
             profile,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::aggregate::test_utils::{
+        document_with_multiple_verification_methods, kms_public_key, kms_verification_method,
+    };
+    use agent_store::in_memory::InMemory;
+    use identity_kit::did::VerificationRelationship;
+    use identity_kit::jose::JwsAlgorithm;
+    use identity_kit::keys::{InMemoryKeyStore, KeySpec, KeyStore, KeyType};
+
+    const CONFIGURED_EDDSA_METHOD: &str = "did:web:my-domain.example.org#bQKQRzaop7CgEvqVq8UlgLGsdF-R-hnLFkKFZqW2VN0";
+    const KMS_METHOD: &str = "did:web:my-domain.example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k";
+
+    /// A key to sign for the KMS verification method with. Which key it is doesn't matter here.
+    async fn method_key() -> MethodKey {
+        let key_store = Arc::new(InMemoryKeyStore::new());
+        let key_id = key_store
+            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA))
+            .await
+            .unwrap();
+
+        MethodKey { key_store, key_id }
+    }
+
+    /// A `did:web` document with the configured issuer keys and an added KMS key, signing with `signing_methods`.
+    fn did_web_document(signing_methods: impl IntoIterator<Item = (Algorithm, &'static str)>) -> Document {
+        let mut did_document = document_with_multiple_verification_methods::default();
+        did_document
+            .insert_verification_method(kms_verification_method(), VerificationRelationship::ALL.iter().copied())
+            .unwrap();
+
+        Document {
+            document_id: "did-web".to_string(),
+            document: Some(did_document),
+            did_method: Some(SupportedDidMethod::Web),
+            status: Status::SignAndValidate,
+            added_verification_methods: vec![kms_verification_method().id],
+            signing_methods: signing_methods
+                .into_iter()
+                .map(|(algorithm, id)| (algorithm, id.parse().unwrap()))
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    async fn eddsa_signing_method(subject: &Subject) -> String {
+        subject
+            .get_verification_method_id(StorageKey::new(SupportedDidMethod::Web, Algorithm::EdDSA))
+            .await
+            .unwrap()
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn an_added_key_does_not_sign_until_it_is_selected() {
+        let subject = Subject::test_subject().await;
+        subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+
+        cache_signing_methods(&subject, &did_web_document([])).await.unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, CONFIGURED_EDDSA_METHOD);
+    }
+
+    #[tokio::test]
+    async fn a_selected_key_signs() {
+        let subject = Subject::test_subject().await;
+        subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+
+        cache_signing_methods(&subject, &did_web_document([(Algorithm::EdDSA, KMS_METHOD)]))
+            .await
+            .unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, KMS_METHOD);
+    }
+
+    #[tokio::test]
+    async fn a_selected_key_that_is_not_available_does_not_sign() {
+        let subject = Subject::test_subject().await;
+
+        cache_signing_methods(&subject, &did_web_document([(Algorithm::EdDSA, KMS_METHOD)]))
+            .await
+            .unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, CONFIGURED_EDDSA_METHOD);
+    }
+
+    #[tokio::test]
+    async fn a_selected_key_that_left_the_document_does_not_sign() {
+        let subject = Subject::test_subject().await;
+
+        cache_signing_methods(
+            &subject,
+            &did_web_document([(Algorithm::EdDSA, "did:web:my-domain.example.org#replaced")]),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(eddsa_signing_method(&subject).await, CONFIGURED_EDDSA_METHOD);
+    }
+
+    async fn handle(state: &IdentityState, command: DocumentCommand) {
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            "did-web",
+            &state.command.document,
+            command,
+        )
+        .await
+        .unwrap();
+    }
+
+    /// External keys that only has the KMS key, as `kms-key`, or with `None`, fails to load any key.
+    struct FakeExternalKeys(Option<ExternalKey>);
+
+    #[async_trait::async_trait]
+    impl crate::services::ExternalKeySource for FakeExternalKeys {
+        async fn key(&self, key_id: &str) -> anyhow::Result<Option<ExternalKey>> {
+            Ok(self.keys().await?.into_iter().find(|_| key_id == "kms-key"))
+        }
+
+        async fn keys(&self) -> anyhow::Result<Vec<ExternalKey>> {
+            match &self.0 {
+                Some(key) => Ok(vec![key.clone()]),
+                None => anyhow::bail!("unavailable"),
+            }
+        }
+    }
+
+    async fn kms_key() -> FakeExternalKeys {
+        FakeExternalKeys(Some(ExternalKey {
+            method_key: method_key().await,
+            public_key: kms_public_key(),
+        }))
+    }
+
+    /// An identity state with a `did:web` document, whose external keys come from `external_keys`.
+    async fn state_with_did_web(external_keys: FakeExternalKeys) -> IdentityState {
+        let mut services = Arc::unwrap_or_clone(crate::services::IdentityServices::default());
+        services.external_keys = Arc::new(external_keys);
+        let state = identity_state(&InMemory, Arc::new(services), &EventBusHandle::default()).await;
+        handle(
+            &state,
+            DocumentCommand::CreateDocument {
+                document_id: "did-web".to_string(),
+                did_method: SupportedDidMethod::Web,
+                with_fixed_algorithm: None,
+            },
+        )
+        .await;
+        handle(
+            &state,
+            DocumentCommand::UpdatePublicKeys {
+                public_key_jwks: vec![],
+            },
+        )
+        .await;
+
+        state
+    }
+
+    /// An identity state with a `did:web` document that has an added KMS key.
+    async fn state_with_added_key() -> IdentityState {
+        state_with_added_key_from(kms_key().await).await
+    }
+
+    async fn state_with_added_key_from(external_keys: FakeExternalKeys) -> IdentityState {
+        let state = state_with_did_web(external_keys).await;
+        handle(
+            &state,
+            DocumentCommand::AddPublicKey {
+                public_key_jwk: Box::new(kms_public_key()),
+            },
+        )
+        .await;
+
+        state
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn selecting_a_key_signs_with_it_right_away() {
+        let state = state_with_added_key().await;
+        state
+            .services
+            .subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+
+        select_signing_key(&state, Caller::Internal, KMS_METHOD.parse().unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(eddsa_signing_method(&state.services.subject).await, KMS_METHOD);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn selecting_a_key_that_is_not_available_fails() {
+        let state = state_with_added_key().await;
+
+        let result = select_signing_key(&state, Caller::Internal, KMS_METHOD.parse().unwrap()).await;
+
+        assert!(matches!(result, Err(SelectSigningKeyError::KeyUnavailable(_))));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn selecting_a_key_of_an_unknown_did_fails() {
+        let state = state_with_added_key().await;
+
+        let result = select_signing_key(&state, Caller::Internal, "did:web:other.example#key".parse().unwrap()).await;
+
+        assert!(matches!(result, Err(SelectSigningKeyError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn adding_a_key_names_its_verification_method_by_its_thumbprint() {
+        let state = state_with_did_web(kms_key().await).await;
+
+        let verification_method_id = add_key(&state, Caller::Internal, "kms-key").await.unwrap();
+
+        assert_eq!(verification_method_id.to_string(), KMS_METHOD);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn an_added_key_can_be_selected_right_away() {
+        let state = state_with_did_web(kms_key().await).await;
+        let verification_method_id = add_key(&state, Caller::Internal, "kms-key").await.unwrap();
+
+        let result = select_signing_key(&state, Caller::Internal, verification_method_id).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn adding_an_unknown_key_fails() {
+        let state = state_with_did_web(kms_key().await).await;
+
+        let result = add_key(&state, Caller::Internal, "unknown").await;
+
+        assert!(matches!(result, Err(AddKeyError::KeyNotFound(_))));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn adding_a_key_without_a_did_web_document_fails() {
+        let mut services = Arc::unwrap_or_clone(crate::services::IdentityServices::default());
+        services.external_keys = Arc::new(kms_key().await);
+        let state = identity_state(&InMemory, Arc::new(services), &EventBusHandle::default()).await;
+
+        let result = add_key(&state, Caller::Internal, "kms-key").await;
+
+        assert!(matches!(result, Err(AddKeyError::DocumentNotFound)));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn loads_the_key_of_an_added_verification_method() {
+        let state = state_with_added_key().await;
+
+        load_external_keys(&state).await.unwrap();
+
+        assert!(
+            state
+                .services
+                .subject
+                .has_method_key(&KMS_METHOD.parse().unwrap())
+                .await
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn does_not_load_a_key_its_store_no_longer_holds() {
+        let key = ExternalKey {
+            method_key: method_key().await,
+            public_key: kms_public_key(),
+        };
+        key.method_key.key_store.delete(&key.method_key.key_id).await.unwrap();
+        let state = state_with_added_key_from(FakeExternalKeys(Some(key))).await;
+
+        load_external_keys(&state).await.unwrap();
+
+        assert!(
+            !state
+                .services
+                .subject
+                .has_method_key(&KMS_METHOD.parse().unwrap())
+                .await
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn keys_that_fail_to_load_leave_the_added_verification_methods_without_a_key() {
+        let state = state_with_added_key_from(FakeExternalKeys(None)).await;
+
+        load_external_keys(&state).await.unwrap();
+
+        assert!(
+            !state
+                .services
+                .subject
+                .has_method_key(&KMS_METHOD.parse().unwrap())
+                .await
+        );
     }
 }
