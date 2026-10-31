@@ -288,7 +288,6 @@ mod tests {
             let mut services = IdentityServices::new(
                 Arc::new(Subject::test_subject().await.with_local_network_resolver()),
                 configuration.public_url.clone(),
-                configuration.iota_sponsoring_service_url.is_some(),
             );
             services.allow_local_network_outbound = true;
             services.cname_resolver = cname.clone();

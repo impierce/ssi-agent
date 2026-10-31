@@ -1,18 +1,10 @@
 use crate::key_store::{issuer_keys, StrongholdKeyStore};
 use crate::stronghold_storage;
-use agent_shared::config::{config, SupportedDidMethod};
+use agent_shared::config::SupportedDidMethod;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use did_manager_consumer::resolver::Resolver;
 use did_manager_identity_stronghold_ext::StrongholdExtStorage;
-use did_manager_iota::consumer::NodeUrls;
-use identity_iota::did::DIDUrl;
 use identity_iota::storage::KeyId;
-use identity_iota::{
-    did::DID,
-    document::DIDUrlQuery,
-    verification::{MethodRelationship, MethodScope},
-};
 use identity_kit::{
     did::{Did, DidDocument, DidUrl, VerificationRelationship},
     jose::{Jwk, JwsAlgorithm, Signer as _},
@@ -36,8 +28,6 @@ pub struct Subject {
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
-    /// Resolves the DID methods `key_resolver` doesn't.
-    pub resolver: Resolver,
 }
 
 impl fmt::Debug for Subject {
@@ -46,7 +36,6 @@ impl fmt::Debug for Subject {
             .field("stronghold_storage", &self.stronghold_storage)
             .field("verification_method_ids", &self.verification_method_ids)
             .field("key_resolver", &self.key_resolver)
-            .field("resolver", &self.resolver)
             .finish_non_exhaustive()
     }
 }
@@ -81,17 +70,6 @@ fn resolver_with(client: ReqwestClient) -> identity_kit::resolver::Resolver {
         .build()
 }
 
-/// The scope of the `identity_*` crates for `relationship`.
-fn method_scope(relationship: VerificationRelationship) -> MethodScope {
-    MethodScope::VerificationRelationship(match relationship {
-        VerificationRelationship::Authentication => MethodRelationship::Authentication,
-        VerificationRelationship::AssertionMethod => MethodRelationship::AssertionMethod,
-        VerificationRelationship::KeyAgreement => MethodRelationship::KeyAgreement,
-        VerificationRelationship::CapabilityInvocation => MethodRelationship::CapabilityInvocation,
-        VerificationRelationship::CapabilityDelegation => MethodRelationship::CapabilityDelegation,
-    })
-}
-
 /// The configured issuer key that signs with `algorithm`.
 fn issuer_key(algorithm: Algorithm) -> anyhow::Result<(identity_kit::keys::KeyId, JwsAlgorithm)> {
     let alg = JwsAlgorithm::try_from(algorithm)?;
@@ -107,25 +85,11 @@ impl Subject {
     pub async fn new() -> Self {
         let stronghold_storage = stronghold_storage().await;
 
-        // TODO: all networks are set to the same node URL ==> introduce per-network configuration?
-        let node_urls = NodeUrls {
-            mainnet: config().iota_node_url.clone(),
-            testnet: config().iota_node_url.clone(),
-            devnet: config().iota_node_url.clone(),
-        };
-
-        let username_password = config()
-            .iota_node_username
-            .clone()
-            .zip(config().iota_node_password.clone());
-        let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
-
         Self {
             key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
             stronghold_storage,
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
             key_resolver: key_resolver(),
-            resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
         }
     }
 
@@ -159,25 +123,14 @@ impl Subject {
         self.verification_method_ids.lock().await.get(&key).cloned()
     }
 
-    /// Resolves the DID document of `did`, with the DID methods `key_resolver` doesn't resolve as well.
+    /// Resolves the DID document of `did`.
     pub async fn resolve_document(&self, did: &Did) -> anyhow::Result<DidDocument> {
-        if self.key_resolver.supports(did.method()) {
-            return self
-                .key_resolver
-                .resolve(did)
-                .await
-                .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did}`, error: {err}"))?
-                .document
-                .ok_or_else(|| anyhow!("Failed to resolve DID Document for DID: `{did}`"));
-        }
-
-        let document = self
-            .resolver
-            .resolve(did.as_str())
+        self.key_resolver
+            .resolve(did)
             .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did}`, error: {err}"))?;
-
-        Ok(serde_json::from_value(serde_json::to_value(document)?)?)
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did}`, error: {err}"))?
+            .document
+            .ok_or_else(|| anyhow!("Failed to resolve DID Document for DID: `{did}`"))
     }
 
     /// Resolves the public key for a given DID URL.
@@ -194,34 +147,10 @@ impl Subject {
         did_url: &DidUrl,
         relationship: Option<VerificationRelationship>,
     ) -> anyhow::Result<Jwk> {
-        if self.key_resolver.supports(did_url.did().method()) {
-            return self
-                .key_resolver
-                .resolve_public_key(did_url, relationship)
-                .await
-                .map_err(|err| anyhow!("Failed to resolve public key for DID URL: `{did_url}`, error: {err}"));
-        }
-
-        let did_url = DIDUrl::parse(did_url.as_ref()).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
-
-        let document = self
-            .resolver
-            .resolve(did_url.did().as_str())
+        self.key_resolver
+            .resolve_public_key(did_url, relationship)
             .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
-
-        let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), relationship.map(method_scope))
-            .ok_or(anyhow!(
-                "Failed to resolve verification method for DID URL: `{did_url}`"
-            ))?;
-
-        let public_key_jwk = verification_method
-            .data()
-            .public_key_jwk()
-            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))?;
-
-        Ok(serde_json::from_value(serde_json::to_value(public_key_jwk)?)?)
+            .map_err(|err| anyhow!("Failed to resolve public key for DID URL: `{did_url}`, error: {err}"))
     }
 }
 
@@ -293,7 +222,6 @@ mod default_subject {
                 stronghold_storage,
                 verification_method_ids,
                 key_resolver: key_resolver(),
-                resolver: Resolver::new(),
             }
         }
     }
