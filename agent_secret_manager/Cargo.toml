@@ -9,14 +9,13 @@ publish.workspace = true
 agent_shared = { path = "../agent_shared" }
 
 # TODO: Fully remove `did_manager`.
-# - The `producer` module has already been eliminated.
-# - In the `consumer` module, only the `Resolver` struct is still in use.
+# - The `producer` and `consumer` modules have already been eliminated.
 # - All components of the `identity_stronghold_ext` module are still active.
 #
 # Future work: Migrate the remaining functionality into UniCore.
-did_manager_consumer = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9", package = "consumer" }
-did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9", package = "identity_stronghold_ext" }
-did_manager_iota = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9", package = "did_iota" }
+did_manager_identity_stronghold_ext = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9", package = "identity_stronghold_ext", features = [
+    "send-sync-storage",
+] }
 
 anyhow.workspace = true
 async-trait.workspace = true
