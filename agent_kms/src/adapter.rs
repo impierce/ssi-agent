@@ -3,7 +3,7 @@
 use crate::key_provider::aggregate::KeyProviderType;
 use async_trait::async_trait;
 pub use identity_kit::keys::InMemoryKeyStore;
-use identity_kit::keys::KeyStore;
+use identity_kit::keys::{KeyId, KeySpec, KeyStore, KeyStoreError};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -11,6 +11,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct ConnectionError(pub String);
+
+/// Why a provider can't give a key this label. The message is shown to the operator.
+#[derive(Debug, Error)]
+#[error("{0}")]
+pub struct InvalidLabel(pub String);
 
 /// A key that exists in a key provider, as reported by the provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
@@ -57,6 +62,25 @@ pub trait KeyProviderAdapter: KeyStore {
     /// Lists the keys that exist in the provider, that the configured credentials can see and that the provider can
     /// sign with.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError>;
+
+    /// Checks, before anything is created, that the provider can give a key `label`.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the provider can't use `label` to name a key.
+    fn check_label(&self, _label: &str) -> Result<(), InvalidLabel> {
+        Ok(())
+    }
+
+    /// Generates a key as [`KeyStore::generate`] does, but returns an id that names this key for good, also where
+    /// the provider lets a label be moved to another key. A labelled key can still be deleted by its label.
+    ///
+    /// # Errors
+    ///
+    /// Fails as [`KeyStore::generate`] does.
+    async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        self.generate(spec).await
+    }
 }
 
 /// The adapter for each provider type this instance can use.

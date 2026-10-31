@@ -320,7 +320,7 @@ Connects UniCore to external key providers, so that keys can be generated in, an
 Progress:
 
 - [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
-- [ ] Generate keys in a provider
+- [x] Generate keys in a provider
 - [ ] Sign credentials and presentations with provider keys
 - [ ] Use provider keys in DID documents
 - [ ] Replace Stronghold as the secret manager

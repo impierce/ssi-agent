@@ -3,7 +3,9 @@
 //! Credentials and region are resolved through the standard AWS chain: environment variables, shared config files,
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
-use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys};
+use agent_kms::adapter::{
+    ConnectionError, InvalidLabel, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys,
+};
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
 use aws_sdk_kms::{
@@ -13,7 +15,10 @@ use aws_sdk_kms::{
     Client,
 };
 use futures::{stream, StreamExt as _, TryStreamExt as _};
-use identity_kit::jose::JwsAlgorithm;
+use identity_kit::{
+    jose::JwsAlgorithm,
+    keys::{KeyId, KeySpec, KeyStoreError},
+};
 use std::{collections::HashMap, sync::RwLock, time::Duration};
 use tokio::sync::OnceCell;
 use tracing::debug;
@@ -41,8 +46,9 @@ pub struct AwsKmsAmbientKeyProvider {
     /// The algorithm of every key looked up so far by key ID or key ARN, which always name the same key. A key's spec
     /// never changes in AWS KMS.
     algorithms: RwLock<HashMap<String, JwsAlgorithm>>,
-    /// Tags given to every key this provider generates, for example to scope IAM policies to a tenant.
-    key_tags: Vec<(String, String)>,
+    /// The alias of the deployment this provider generates keys for, if any. Its keys are tagged with it and their
+    /// aliases are prefixed with it, so IAM policies can limit a deployment to its own keys and aliases.
+    deployment_alias: Option<String>,
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -58,7 +64,7 @@ impl AwsKmsAmbientKeyProvider {
             client,
             deadline: REQUEST_DEADLINE,
             algorithms: RwLock::default(),
-            key_tags: Vec::new(),
+            deployment_alias: None,
         }
     }
 
@@ -68,11 +74,12 @@ impl AwsKmsAmbientKeyProvider {
         Self::with_cell(OnceCell::new_with(Some(client)))
     }
 
-    /// Tags every key this provider generates with `tags`, as key and value.
+    /// Generates keys for the deployment `alias`: tagged `unitrust-alias = <alias>`, with the alias
+    /// `alias/<alias>/<label>` for a label.
     #[must_use]
-    pub fn with_key_tags(self, tags: impl IntoIterator<Item = (String, String)>) -> Self {
+    pub fn with_deployment_alias(self, alias: impl Into<String>) -> Self {
         Self {
-            key_tags: tags.into_iter().collect(),
+            deployment_alias: Some(alias.into()),
             ..self
         }
     }
@@ -179,6 +186,15 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
             "Listed AWS KMS keys"
         );
         Ok(listing)
+    }
+
+    fn check_label(&self, label: &str) -> Result<(), InvalidLabel> {
+        key_store::alias_for_label(self.deployment_alias.as_deref(), label).map(drop)
+    }
+
+    /// Returns the new key's ARN: a label's alias can be pointed at another key.
+    async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        Ok(self.create(spec).await?.arn)
     }
 }
 

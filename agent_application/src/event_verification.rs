@@ -15,7 +15,7 @@ use agent_issuance::{
     offer::aggregate::Offer as IssuanceOffer, public_offer::aggregate::PublicOffer, reissuance::aggregate::Reissuance,
     server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
 };
-use agent_kms::key_provider::aggregate::KeyProviders;
+use agent_kms::{key::aggregate::Key, key_provider::aggregate::KeyProviders};
 use agent_library::{catalog::aggregate::Catalog, template::aggregate::Template};
 pub use agent_store::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier};
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
@@ -26,7 +26,7 @@ use std::sync::LazyLock;
 /// Used during application startup by persistent event stores (e.g. PostgreSQL, MongoDB)
 /// to verify that all historical persisted events can still be deserialized into current domain
 /// event definitions before the application transitions to the ready state.
-static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 22]> = LazyLock::new(|| {
+static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 23]> = LazyLock::new(|| {
     [
         EventVerifier::for_aggregate::<AccessToken>(),
         EventVerifier::for_aggregate::<AuthorizationCode>(),
@@ -50,6 +50,7 @@ static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 22]> = LazyLock::new(|| {
         EventVerifier::for_aggregate::<ReceivedOffer>(),
         EventVerifier::for_aggregate::<AuthorizationRequest>(),
         EventVerifier::for_aggregate::<KeyProviders>(),
+        EventVerifier::for_aggregate::<Key>(),
     ]
 });
 
@@ -92,6 +93,36 @@ mod tests {
         );
 
         assert_eq!(report.checked, 1);
+        assert!(report.is_compatible(), "{:?}", report.incompatible);
+    }
+
+    #[test]
+    fn persisted_key_events_are_recognized_by_core_verification() {
+        let report = verify_events_with(
+            [RawStoredEvent {
+                aggregate_type: "key".to_string(),
+                aggregate_id: "key-id".to_string(),
+                sequence: 1,
+                event_type: "KeyCreated".to_string(),
+                event_version: "1".to_string(),
+                payload: serde_json::json!({
+                    "KeyCreated": {
+                        "reference": {
+                            "provider_type": "in_memory",
+                            "provider_key_id": "issuer",
+                            "algorithm": "EdDSA",
+                            "public_key": {
+                                "kty": "OKP",
+                                "crv": "Ed25519",
+                                "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPZpiMlrwIaaPcHURo"
+                            }
+                        }
+                    }
+                }),
+            }],
+            core_event_verifiers(),
+        );
+
         assert!(report.is_compatible(), "{:?}", report.incompatible);
     }
 }
