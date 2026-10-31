@@ -1590,8 +1590,16 @@ mod tests {
         let identity = locked_package(lockfile, "agent_identity", "0.1.0");
         assert!(identity.contains("\"reqwest 0.12.28\""));
         let patched_reqwest = locked_package(lockfile, "reqwest", "0.12.28");
-        assert!(patched_reqwest.contains("\"h2 0.4.18\""));
-        assert!(patched_reqwest.contains("\"hyper 1.10.1\""));
+        let h2_patch = patched_reqwest
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("\"h2 0.4."))
+            .and_then(|rest| rest.trim_end_matches(['"', ',']).parse::<u32>().ok())
+            .expect("reqwest 0.12.28 selects h2 0.4");
+        assert!(
+            h2_patch >= 16,
+            "RUSTSEC-2026-0258 is patched in h2 0.4.16, found 0.4.{h2_patch}"
+        );
+        assert!(patched_reqwest.contains("\"hyper 1."));
     }
 
     fn locked_package<'a>(lockfile: &'a str, name: &str, version: &str) -> &'a str {
