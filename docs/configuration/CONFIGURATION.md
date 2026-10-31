@@ -302,6 +302,36 @@ event_store:
   connection_string: postgresql://user:password@database:5432/demo
 ```
 
+### Feature flags
+
+Feature flags enable features that are still in development. All of them are disabled by default. A disabled feature is not built at all: its endpoints return `404` and it stores nothing. An empty value counts as disabled. The `feature` section only appears in the [current configuration](#inspecting-the-current-configuration) when at least one flag is enabled.
+
+| Environment variable    | `config.yaml` | Default |
+| ----------------------- | ------------- | ------- |
+| `UNICORE__FEATURE__KMS` | `feature.kms` | `false` |
+
+#### Key Management System (`kms`)
+
+Connects UniCore to external key providers, so that keys can be generated in, and sign inside, a provider instead of Stronghold. Available providers:
+
+- AWS KMS, using the AWS credentials and region of the environment UniCore runs in.
+- An in-memory provider, only available with the `development` [profile](./profiles.md).
+
+Progress:
+
+- [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
+- [ ] Generate keys in a provider
+- [ ] Sign credentials and presentations with provider keys
+- [ ] Use provider keys in DID documents
+- [ ] Replace Stronghold as the secret manager
+
+#### Example
+
+```yaml
+feature:
+  kms: true
+```
+
 <!--
 ## More configuration options
 

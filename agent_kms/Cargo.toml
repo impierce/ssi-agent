@@ -1,0 +1,32 @@
+[package]
+name = "agent_kms"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+agent_shared = { path = "../agent_shared" }
+shared-kernel.workspace = true
+
+identity-kit = { workspace = true, features = ["in-memory"] }
+
+async-trait.workspace = true
+cqrs-es.workspace = true
+indexmap.workspace = true
+serde.workspace = true
+strum.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+agent_store = { path = "../agent_store" }
+
+tokio.workspace = true
+
+[features]
+test_utils = []
+
+[lints]
+workspace = true
