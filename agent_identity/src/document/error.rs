@@ -1,5 +1,5 @@
 use agent_shared::config::SupportedDidMethod;
-use identity_iota::storage::KeyId;
+use identity_kit::keys::KeyId;
 use jsonwebtoken::Algorithm;
 use thiserror::Error;
 

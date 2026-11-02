@@ -210,14 +210,8 @@ pub fn issuer_keys() -> [(KeyId, JwsAlgorithm); 2] {
     let secret_manager = &config().secret_manager;
 
     [
-        (
-            KeyId::new(secret_manager.issuer_eddsa_key_id.as_str()),
-            JwsAlgorithm::EdDSA,
-        ),
-        (
-            KeyId::new(secret_manager.issuer_es256_key_id.as_str()),
-            JwsAlgorithm::ES256,
-        ),
+        (secret_manager.issuer_eddsa_key_id.clone(), JwsAlgorithm::EdDSA),
+        (secret_manager.issuer_es256_key_id.clone(), JwsAlgorithm::ES256),
     ]
 }
 

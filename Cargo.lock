@@ -450,7 +450,6 @@ dependencies = [
  "base64 0.22.1",
  "futures",
  "identity-kit",
- "identity_iota",
  "iota_stronghold",
  "jsonwebtoken",
  "lazy_static",

@@ -3,11 +3,10 @@ use crate::stronghold_key_store;
 use agent_shared::config::SupportedDidMethod;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use identity_iota::storage::KeyId;
 use identity_kit::{
     did::{Did, DidDocument, DidUrl, VerificationRelationship},
     jose::{Jwk, JwsAlgorithm, Signer as _},
-    keys::{KeySigner, KeyStore},
+    keys::{KeyId, KeySigner, KeyStore},
     methods::{jwk::DidJwk, key::DidKey, web::DidWeb, web::ReqwestClient},
     resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
 };
@@ -68,7 +67,7 @@ fn resolver_with(client: ReqwestClient) -> identity_kit::resolver::Resolver {
 }
 
 /// The configured issuer key that signs with `algorithm`.
-fn issuer_key(algorithm: Algorithm) -> anyhow::Result<(identity_kit::keys::KeyId, JwsAlgorithm)> {
+fn issuer_key(algorithm: Algorithm) -> anyhow::Result<(KeyId, JwsAlgorithm)> {
     let alg = JwsAlgorithm::try_from(algorithm)?;
 
     issuer_keys()
@@ -95,10 +94,7 @@ impl Subject {
     }
 
     pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
-        Ok(self
-            .key_store
-            .public_jwk(&identity_kit::keys::KeyId::new(key_id.as_str()))
-            .await?)
+        Ok(self.key_store.public_jwk(&key_id).await?)
     }
 
     pub async fn insert_verification_method_id(
