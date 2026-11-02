@@ -1,5 +1,8 @@
 use agent_shared::{config::config, profile::ApplicationProfile};
-use identity_kit::keys::{KeySpec, KeyStore};
+use identity_kit::{
+    jose::JwsAlgorithm,
+    keys::{KeyId, KeySpec, KeyStore},
+};
 use key_store::{issuer_keys, key_type, StrongholdKeyStore};
 use log::info;
 
@@ -44,10 +47,18 @@ pub async fn stronghold_key_store() -> StrongholdKeyStore {
 
     info!("Stronghold storage initialized");
 
+    ensure_issuer_keys(&store, issuer_keys()).await;
+
+    store
+}
+
+/// Generates the issuer keys the store doesn't hold, and checks that the ones it holds sign with their configured
+/// algorithm.
+async fn ensure_issuer_keys(store: &StrongholdKeyStore, keys: impl IntoIterator<Item = (KeyId, JwsAlgorithm)>) {
     // Generate keys if they don't exist
     // TODO: currently `generate` will generate a 'static' key-ids for each keytype. In a future improvement we need to
     // make sure that the key-ids are generated dynamically and stored in some sort of key manager.
-    for (key, alg) in issuer_keys() {
+    for (key, alg) in keys {
         if store
             .exists(&key)
             .await
@@ -72,6 +83,25 @@ pub async fn stronghold_key_store() -> StrongholdKeyStore {
                 .unwrap_or_else(|error| panic!("Failed to generate {alg} key `{key}`: {error}"));
         }
     }
+}
 
-    store
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use identity_kit::jose::KeyType;
+
+    #[tokio::test]
+    #[should_panic(expected = "Issuer key `es256-0` is configured for EdDSA but signs with ES256")]
+    async fn refuses_an_issuer_key_that_signs_with_another_algorithm() {
+        iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0).unwrap();
+        let snapshot = std::env::temp_dir().join(format!("stronghold-issuer-keys-{}.dat", uuid::Uuid::new_v4()));
+        let store = StrongholdKeyStore::open(&snapshot, "password", []).unwrap();
+        store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("es256-0"))
+            .await
+            .unwrap();
+        std::fs::remove_file(&snapshot).unwrap();
+
+        ensure_issuer_keys(&store, [(KeyId::new("es256-0"), JwsAlgorithm::EdDSA)]).await;
+    }
 }

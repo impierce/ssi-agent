@@ -155,6 +155,16 @@ impl StrongholdKeyStore {
             .map_err(KeyStoreError::backend)
     }
 
+    /// Removes a generated key that couldn't be written into the snapshot, so the store keeps matching the snapshot.
+    fn discard(&self, key: &KeyId) {
+        if let Err(error) = self.client.vault(VAULT_PATH).delete_secret(key.as_str()) {
+            log::warn!("Failed to discard the unsaved key `{key}`: {error}");
+        }
+        if let Err(error) = self.client.store().delete(&Self::algorithm_entry(key)) {
+            log::warn!("Failed to discard the algorithm of the unsaved key `{key}`: {error}");
+        }
+    }
+
     /// The public key of `key`, which signs with `alg`, without `alg` and `kid`.
     fn public_key(&self, key: &KeyId, alg: JwsAlgorithm) -> Result<Jwk, KeyStoreError> {
         let private_key = Self::location(key);
@@ -314,11 +324,16 @@ impl KeyStore for StrongholdKeyStore {
             }
             alg => return Err(KeyStoreError::UnsupportedAlgorithm(alg)),
         }
-        self.client
+        let stored = self
+            .client
             .store()
             .insert(Self::algorithm_entry(&key), spec.alg.as_str().as_bytes().to_vec(), None)
-            .map_err(KeyStoreError::backend)?;
-        self.persist()?;
+            .map_err(KeyStoreError::backend)
+            .and_then(|_| self.persist());
+        if let Err(error) = stored {
+            self.discard(&key);
+            return Err(error);
+        }
 
         Ok(key)
     }
@@ -347,6 +362,7 @@ mod tests {
     impl Drop for TempSnapshot {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.0);
+            let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -426,6 +442,31 @@ mod tests {
         DefaultVerifier
             .verify(JwsAlgorithm::ES256, b"data", &signature, &public_jwk)
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn discards_a_generated_key_the_snapshot_could_not_be_written_with() {
+        let snapshot = TempSnapshot::new();
+        let store = StrongholdKeyStore::open(&snapshot.0, "password", []).unwrap();
+        let spec = KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA).with_label("signing-key");
+        let key = KeyId::new("signing-key");
+
+        // Writing the snapshot ends in renaming a temporary file onto its path, which fails onto a non-empty directory.
+        std::fs::remove_file(&snapshot.0).unwrap();
+        std::fs::create_dir(&snapshot.0).unwrap();
+        std::fs::write(snapshot.0.join("blocker"), b"").unwrap();
+        assert!(store.generate(spec.clone()).await.is_err());
+        assert!(!store.exists(&key).await.unwrap());
+        assert!(!store.has_record(&key).unwrap());
+        assert!(store.algorithm(&key).unwrap().is_none());
+
+        std::fs::remove_dir_all(&snapshot.0).unwrap();
+        assert_eq!(store.generate(spec).await.unwrap(), key);
+        let public_jwk = store.public_jwk(&key).await.unwrap();
+        drop(store);
+
+        let reopened = StrongholdKeyStore::open(&snapshot.0, "password", []).unwrap();
+        assert_eq!(reopened.public_jwk(&key).await.unwrap(), public_jwk);
     }
 
     #[tokio::test]
