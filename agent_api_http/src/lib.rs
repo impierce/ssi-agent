@@ -146,14 +146,25 @@ where
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
 }
 
-/// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
-/// events route — which stays outside the trace layer so SSE payloads are not logged.
+/// Rejects a `NUL` in the request URI or body without logging anything, for the events router —
+/// which stays outside the trace layer so SSE payloads and secret webhook headers are not logged.
 pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
     if uri_contains_null_byte(request.uri()) {
         return Err(null_byte_rejection().into_axum_response());
     }
 
-    Ok(next.run(request).await)
+    let (parts, body) = request.into_parts();
+    let bytes = body
+        .collect()
+        .await
+        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
+        .to_bytes();
+
+    if body_contains_null_byte(&bytes) {
+        return Err(null_byte_rejection().into_axum_response());
+    }
+
+    Ok(next.run(Request::from_parts(parts, Body::from(bytes))).await)
 }
 
 // This middleware logs the request body before passing it on.

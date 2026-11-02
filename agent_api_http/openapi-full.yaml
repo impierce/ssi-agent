@@ -620,6 +620,35 @@ paths:
                 type: string
         '404':
           description: The authorization request does not exist
+  /v0/activate-event-publisher:
+    post:
+      tags:
+      - Events
+      summary: Activate an Event Publisher
+      description: Resumes an existing event publisher and starts its background worker immediately.
+      operationId: activate_event_publisher
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateEventPublisher'
+            example:
+              id: f2202574-9a5b-5ecd-a1a3-df5ca8e87354
+        required: true
+      responses:
+        '200':
+          description: Event publisher activated
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Event publisher not found
+      x-access-operation: event_publishing.publishers.activate
   /v0/add-linked-domains:
     post:
       tags:
@@ -1016,6 +1045,49 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/BatchFailedProblem'
+  /v0/create-event-publisher:
+    post:
+      tags:
+      - Events
+      summary: Create an Event Publisher
+      description: |-
+        Registers a new runtime event publisher (HTTP webhook or NATS publisher). When `enabled` is
+        `true` (the default), the publisher starts receiving and forwarding matching CloudEvents immediately.
+      operationId: create_event_publisher
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventPublisher'
+            example:
+              name: Production Issuance Webhook
+              description: Forwards issuance CloudEvents to the billing service
+              enabled: true
+              events:
+              - com.impierce.unicore.issuance.credential.offered
+              - com.impierce.unicore.issuance.credential.issued
+              config:
+                publisherType: http
+                targetUrl: https://billing.example.org/webhooks/unicore
+                headers:
+                  Authorization: Bearer secret-webhook-token
+        required: true
+      responses:
+        '200':
+          description: Event publisher created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPublisher'
+        '400':
+          description: Invalid event publisher configuration or event types
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '409':
+          description: An event publisher with this ID already exists
+      x-access-operation: event_publishing.publishers.create
   /v0/create-new-catalog:
     post:
       tags:
@@ -1216,6 +1288,35 @@ paths:
           description: Credential not found
         '422':
           description: Request body does not match the expected schema
+  /v0/deactivate-event-publisher:
+    post:
+      tags:
+      - Events
+      summary: Deactivate an Event Publisher
+      description: Temporarily pauses an event publisher and stops its background worker immediately without deleting its configuration.
+      operationId: deactivate_event_publisher
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivateEventPublisher'
+            example:
+              id: f2202574-9a5b-5ecd-a1a3-df5ca8e87354
+        required: true
+      responses:
+        '200':
+          description: Event publisher deactivated
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Event publisher not found
+      x-access-operation: event_publishing.publishers.deactivate
   /v0/delete-catalog:
     post:
       tags:
@@ -1239,6 +1340,35 @@ paths:
           description: Catalog not found
         '422':
           description: Request body does not match the expected schema
+  /v0/delete-event-publisher:
+    post:
+      tags:
+      - Events
+      summary: Delete an Event Publisher
+      description: Permanently deletes an event publisher and stops its background worker immediately.
+      operationId: delete_event_publisher
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteEventPublisher'
+            example:
+              id: f2202574-9a5b-5ecd-a1a3-df5ca8e87354
+        required: true
+      responses:
+        '200':
+          description: Event publisher deleted
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Event publisher not found
+      x-access-operation: event_publishing.publishers.delete
   /v0/delete-public-offer:
     post:
       tags:
@@ -1509,6 +1639,53 @@ paths:
                 $ref: '#/components/schemas/Reissuance'
         '404':
           description: Credential reissuance relation not found
+  /v0/get-event-publisher-by-id/{id}:
+    get:
+      tags:
+      - Events
+      summary: Get Event Publisher by ID
+      description: Retrieves a single configured event publisher by its identifier, with HTTP header values redacted.
+      operationId: get_event_publisher_by_id
+      parameters:
+      - name: id
+        in: path
+        description: Event publisher ID
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Event publisher retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPublisher'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Event publisher not found
+      x-access-operation: event_publishing.publishers.read
+  /v0/get-event-publisher-list:
+    get:
+      tags:
+      - Events
+      summary: List all Event Publishers
+      description: Retrieves all configured event publishers, with HTTP header values redacted.
+      operationId: get_event_publisher_list
+      responses:
+        '200':
+          description: Event publisher list retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPublisherList'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+      x-access-operation: event_publishing.publishers.read
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -2227,6 +2404,48 @@ paths:
           description: Public offer not found
         '422':
           description: Request body does not match the expected schema
+  /v0/update-event-publisher:
+    post:
+      tags:
+      - Events
+      summary: Update an Event Publisher
+      description: |-
+        Updates the name, description, subscribed event types, or transport configuration of an existing
+        event publisher. If the publisher is currently active, its background worker is replaced immediately.
+      operationId: update_event_publisher
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEventPublisher'
+            example:
+              id: f2202574-9a5b-5ecd-a1a3-df5ca8e87354
+              name: Production Issuance Webhook
+              description: Updated target URL and event filter
+              events:
+              - com.impierce.unicore.issuance.*
+              config:
+                publisherType: http
+                targetUrl: https://billing.example.org/v2/webhooks/unicore
+                headers:
+                  Authorization: '****'
+        required: true
+      responses:
+        '200':
+          description: Event publisher updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPublisher'
+        '400':
+          description: Invalid event publisher configuration or event types
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Event publisher not found
+      x-access-operation: event_publishing.publishers.update
   /v0/update-template:
     post:
       tags:
@@ -2354,6 +2573,14 @@ components:
   schemas:
     AcceptConnectionChangesRequest:
       type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    ActivateEventPublisher:
+      type: object
+      description: Request payload for activating a paused event publisher.
       required:
       - id
       properties:
@@ -3127,6 +3354,38 @@ components:
           type: string
         originalCredentialId:
           type: string
+    CreateEventPublisher:
+      type: object
+      description: Request payload for creating a runtime event publisher.
+      required:
+      - name
+      - events
+      - config
+      properties:
+        config:
+          $ref: '#/components/schemas/EventPublisherConfig'
+          description: Transport-specific publisher configuration (`http` or `nats`).
+        description:
+          type:
+          - string
+          - 'null'
+          description: Optional operator description.
+        enabled:
+          type: boolean
+          description: Whether the event publisher should start dispatching events immediately (defaults to `true`).
+        events:
+          type: array
+          items:
+            type: string
+          description: CloudEvent type patterns to subscribe to (exact types, prefix globs like `com.impierce.unicore.issuance.*`, or `*`).
+        id:
+          type:
+          - string
+          - 'null'
+          description: Optional explicit identifier; a UUID v4 is generated when omitted.
+        name:
+          type: string
+          description: Human-readable display name for this event publisher.
     CreateNewTemplateRequestBody:
       type: object
       properties:
@@ -3718,12 +3977,28 @@ components:
       properties:
         vct:
           type: string
+    DeactivateEventPublisher:
+      type: object
+      description: Request payload for deactivating (pausing) an event publisher.
+      required:
+      - id
+      properties:
+        id:
+          type: string
     DeleteCatalogRequest:
       type: object
       properties:
         catalogId:
           type: string
           default: ''
+    DeleteEventPublisher:
+      type: object
+      description: Request payload for deleting an event publisher.
+      required:
+      - id
+      properties:
+        id:
+          type: string
     DeletePublicOfferRequest:
       type: object
       required:
@@ -3962,6 +4237,65 @@ components:
           type: string
         recipientEmail:
           type: string
+    EventPublisher:
+      type: object
+      description: Published read model for a configured event publisher.
+      required:
+      - id
+      - name
+      - enabled
+      - publisherType
+      - events
+      - config
+      - createdAt
+      - lastModifiedAt
+      properties:
+        config:
+          $ref: '#/components/schemas/EventPublisherConfig'
+        createdAt:
+          type: string
+          format: date-time
+        description:
+          type:
+          - string
+          - 'null'
+        enabled:
+          type: boolean
+        events:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+        lastModifiedAt:
+          type: string
+          format: date-time
+        name:
+          type: string
+        publisherType:
+          $ref: '#/components/schemas/EventPublisherType'
+          description: Repeats the `config` discriminator so listing and filtering needn't reach inside it.
+    EventPublisherConfig:
+      oneOf:
+      - $ref: '#/components/schemas/HttpEventPublisherConfigDto'
+      - $ref: '#/components/schemas/NatsEventPublisherConfigDto'
+      description: Transport-specific configuration for an event publisher, discriminated by `publisherType`.
+      discriminator:
+        propertyName: publisherType
+        mapping:
+          http: '#/components/schemas/HttpEventPublisherConfigDto'
+          nats: '#/components/schemas/NatsEventPublisherConfigDto'
+    EventPublisherList:
+      type: array
+      items:
+        $ref: '#/components/schemas/EventPublisher'
+      description: List of configured event publishers.
+    EventPublisherType:
+      type: string
+      description: Identifies the transport mechanism of an [`EventPublisherConfig`].
+      enum:
+      - http
+      - nats
     Expiration:
       oneOf:
       - type: object
@@ -4055,6 +4389,44 @@ components:
       enum:
       - individual
       - organization
+    HttpEventPublisherConfigDto:
+      allOf:
+      - $ref: '#/components/schemas/HttpPublisherConfig'
+      - type: object
+        required:
+        - publisherType
+        properties:
+          publisherType:
+            $ref: '#/components/schemas/HttpEventPublisherType'
+      description: Configuration for an HTTP webhook event publisher.
+    HttpEventPublisherType:
+      type: string
+      description: Marks a configuration payload as being for an `http` webhook event publisher.
+      enum:
+      - http
+    HttpPublisherConfig:
+      type: object
+      description: Transport-specific configuration for an HTTP webhook event publisher.
+      required:
+      - targetUrl
+      properties:
+        headers:
+          type:
+          - object
+          - 'null'
+          description: |-
+            Optional HTTP headers attached to every outgoing webhook request.
+            Header values are redacted as `"****"` in query responses.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
+        targetUrl:
+          type: string
+          description: |-
+            Destination HTTP or HTTPS URL that receives CloudEvents via `POST` with
+            `Content-Type: application/cloudevents+json`.
+          example: https://example.com/webhooks/unicore
     IdTokenAuthorizationResponse:
       type: object
       description: |-
@@ -4580,6 +4952,36 @@ components:
       properties:
         doctype:
           type: string
+    NatsEventPublisherConfigDto:
+      allOf:
+      - $ref: '#/components/schemas/NatsPublisherConfig'
+      - type: object
+        required:
+        - publisherType
+        properties:
+          publisherType:
+            $ref: '#/components/schemas/NatsEventPublisherType'
+      description: Configuration for a NATS event publisher.
+    NatsEventPublisherType:
+      type: string
+      description: Marks a configuration payload as being for a `nats` event publisher.
+      enum:
+      - nats
+    NatsPublisherConfig:
+      type: object
+      description: Transport-specific configuration for a NATS event publisher.
+      required:
+      - natsUrl
+      - subject
+      properties:
+        natsUrl:
+          type: string
+          description: NATS server URL (`nats://host:port` or `tls://host:port`).
+          example: nats://127.0.0.1:4222
+        subject:
+          type: string
+          description: NATS subject to which matching CloudEvents are published.
+          example: unicore.events
     NonceResponse:
       type: object
       description: |-
@@ -5560,6 +5962,32 @@ components:
           additionalProperties: {}
           propertyNames:
             type: string
+    UpdateEventPublisher:
+      type: object
+      description: Request payload for updating an existing runtime event publisher.
+      required:
+      - id
+      properties:
+        config:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/EventPublisherConfig'
+        description:
+          type:
+          - string
+          - 'null'
+        events:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        id:
+          type: string
+        name:
+          type:
+          - string
+          - 'null'
     UpdateTemplateEndpointRequest:
       type: object
       properties:
@@ -5723,7 +6151,7 @@ tags:
 - name: Holder
   description: Manage the credentials your organisation holds itself.
 - name: Events
-  description: Stream domain events as CloudEvents via SSE.
+  description: Stream domain events as CloudEvents via SSE and manage runtime event publishers.
 - name: Connections
   description: Manage trusted connections.
 - name: Profile

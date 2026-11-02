@@ -23,32 +23,6 @@ signing_algorithms_supported:
   eddsa:
     enabled: false
 
-# agent_event_publisher_http
-# Configure here which integration events will be dispatched to a specific `target_url`. In the example below, the
-# HTTP forwarder listens for issuance events matching the pattern. The CloudEvents will be dispatched to the target endpoint.
-event_publishers:
-  http:
-    - enabled: false
-      target_url: "https://my-domain.example.org/event-subscriber"
-      headers:
-        Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-      events:
-        types:
-          - "com.impierce.unicore.issuance.credential.offered"
-          - "com.impierce.unicore.issuance.credential.issued"
-        # To enable the interactive authorization flow for OID4VCI, the event below needs to be listened to.
-        # types:
-        #   - "com.impierce.unicore.verification.presentation.verified"
-  nats:
-    enabled: true
-    nats_url: "nats://localhost:4222"
-    subjects:
-      - name: "email.commands"
-        events:
-          types:
-            - "com.impierce.unicore.issuance.offer.tx_code_generated"
-            - "com.impierce.unicore.issuance.offer.email_sent"
-
 # These display parameters are interpreted by identity wallets.
 display:
   # This value will also be used in the SIOPv2/OID4VP `client_metadata`'s `client_name` property.

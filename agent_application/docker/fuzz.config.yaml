@@ -35,11 +35,6 @@ signing_algorithms_supported:
   eddsa:
     enabled: true
 
-# No publishers: a fuzz run must not emit traffic to anything outside the compose project.
-event_publishers:
-  http: []
-  nats: null
-
 display:
   - name: UniCore
     locale: en

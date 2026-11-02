@@ -1,16 +1,25 @@
+pub mod config;
+pub mod error;
 pub mod openapi;
+pub mod publishers;
 
 use axum::{
     extract::{Query, State},
     response::sse::{self, KeepAlive, Sse},
-    routing::get,
+    routing::{get, post},
     Router,
+};
+use bc_event_publishing::application::{
+    command::EventPublishingCommand, query::EventPublishingQuery, service::EventPublishingContext,
+    views::EventPublishingView,
 };
 use chrono::{DateTime, Utc};
 use futures::stream::{Stream, StreamExt};
+use hyper::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use shared_kernel::{
+    application_service::ApplicationContext as _,
     authorization::Caller,
     event_bus::{EventBus, EventBusError, EventBusHandle, EventFilter},
 };
@@ -28,6 +37,7 @@ use std::sync::Arc;
 pub struct EventsState {
     pub event_bus: EventBusHandle,
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
+    pub event_publishing: Option<Arc<EventPublishingContext>>,
 }
 
 impl EventsState {
@@ -36,7 +46,83 @@ impl EventsState {
         Self {
             event_bus,
             authorization_checker,
+            event_publishing: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_event_publishing(mut self, event_publishing: Arc<EventPublishingContext>) -> Self {
+        self.event_publishing = Some(event_publishing);
+        self
+    }
+
+    pub(crate) async fn dispatch_command(
+        &self,
+        caller: Caller,
+        aggregate_id: String,
+        command: EventPublishingCommand,
+    ) -> Result<String, ApiError> {
+        let context = self.event_publishing_context()?;
+        let auth_request = AuthorizationRequest {
+            caller: caller.clone(),
+            operation: AuthorizationOperation::Command {
+                aggregate_id: aggregate_id.clone(),
+                resource_id: context.command_resource_id(&command),
+                operation_name: context.command_operation_name(&command),
+            },
+        };
+        self.authorization_checker
+            .is_authorized(&auth_request)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)?;
+
+        context
+            .handle_command(&aggregate_id, command, &caller)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)
+    }
+
+    pub(crate) async fn dispatch_query(
+        &self,
+        caller: Caller,
+        query: EventPublishingQuery,
+    ) -> Result<EventPublishingView, ApiError> {
+        let context = self.event_publishing_context()?;
+        let auth_request = AuthorizationRequest {
+            caller,
+            operation: AuthorizationOperation::Query {
+                resource_id: context.query_resource_id(&query),
+                operation_name: context.query_operation_name(&query),
+            },
+        };
+        self.authorization_checker
+            .is_authorized(&auth_request)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)?;
+
+        context
+            .handle_query(query)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)
+    }
+
+    pub(crate) async fn query_unchecked(&self, query: EventPublishingQuery) -> Result<EventPublishingView, ApiError> {
+        let context = self.event_publishing_context()?;
+        context
+            .handle_query(query)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn event_publishing_context(&self) -> Result<&EventPublishingContext, ApiError> {
+        self.event_publishing.as_deref().ok_or_else(|| {
+            ApiError::builder(StatusCode::SERVICE_UNAVAILABLE)
+                .title("Event Publishing Unavailable")
+                .type_url(crate::error::type_url("events#event-publishing-unavailable"))
+                .message("The event publishing service is not configured")
+                .finish()
+        })
     }
 }
 
@@ -45,6 +131,7 @@ impl From<EventBusHandle> for EventsState {
         Self {
             event_bus,
             authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+            event_publishing: None,
         }
     }
 }
@@ -72,10 +159,23 @@ pub fn router(state: Arc<EventsState>) -> Router {
             crate::API_VERSION,
             Router::new()
                 .route("/events", get(events_sse_handler))
+                .route("/create-event-publisher", post(publishers::create_event_publisher))
+                .route("/update-event-publisher", post(publishers::update_event_publisher))
+                .route("/activate-event-publisher", post(publishers::activate_event_publisher))
+                .route(
+                    "/deactivate-event-publisher",
+                    post(publishers::deactivate_event_publisher),
+                )
+                .route("/delete-event-publisher", post(publishers::delete_event_publisher))
+                .route(
+                    "/get-event-publisher-by-id/{id}",
+                    get(publishers::get_event_publisher_by_id),
+                )
+                .route("/get-event-publisher-list", get(publishers::get_event_publisher_list))
                 .with_state(state),
         )
-        // Merged after the trace layer that carries the null-byte rejection for other routes, so
-        // it applies the URI half of that check itself.
+        // Merged after the trace layer so SSE payloads and secret webhook headers are not logged,
+        // while still rejecting NUL bytes in both URI and request body.
         .layer(axum::middleware::from_fn(crate::reject_null_byte_uri))
 }
 
@@ -705,5 +805,159 @@ mod tests {
             .unwrap();
         let response = tower::ServiceExt::oneshot(app, req).await.unwrap();
         assert_eq!(response.status(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_event_publisher_http_routes_lifecycle_and_validation() {
+        use bc_event_publishing::{
+            application::{builder::EventPublishingContextBuilder, views::EventPublisherViewRepositories},
+            domain::event_publisher::services::KnownEventTypes,
+        };
+        use shared_kernel::test_utils::in_memory::InMemoryStore;
+
+        let bus_handle = EventBusHandle::new(64);
+        let views = EventPublisherViewRepositories::from_factory(&InMemoryStore);
+        let known_events = KnownEventTypes::with_event_types([
+            "com.impierce.unicore.issuance.credential.offered",
+            "com.impierce.unicore.issuance.credential.issued",
+        ]);
+        let context = EventPublishingContextBuilder::new()
+            .with_views(views)
+            .with_event_bus(bus_handle.clone())
+            .with_known_event_types(known_events)
+            .build(&InMemoryStore)
+            .await
+            .unwrap();
+
+        let state = Arc::new(EventsState::from(bus_handle).with_event_publishing(Arc::new(context)));
+        let app = router(state);
+
+        // 1. NUL byte in request body is rejected with 400
+        let nul_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/v0/create-event-publisher")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(r#"{"name":"bad\u0000"}"#))
+            .unwrap();
+        let nul_resp = tower::ServiceExt::oneshot(app.clone(), nul_req).await.unwrap();
+        assert_eq!(nul_resp.status(), axum::http::StatusCode::BAD_REQUEST);
+
+        // 2. Invalid targetUrl is rejected with 400
+        let invalid_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/v0/create-event-publisher")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&json!({
+                    "name": "Bad Webhook",
+                    "events": ["com.impierce.unicore.issuance.credential.issued"],
+                    "config": {
+                        "publisherType": "http",
+                        "targetUrl": "ftp://invalid.example.org"
+                    }
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let invalid_resp = tower::ServiceExt::oneshot(app.clone(), invalid_req).await.unwrap();
+        assert_eq!(invalid_resp.status(), axum::http::StatusCode::BAD_REQUEST);
+
+        // 3. Create valid HTTP publisher -> 200 OK with redacted secret header
+        let create_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/v0/create-event-publisher")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&json!({
+                    "name": "Live Webhook",
+                    "description": "Initial",
+                    "events": ["com.impierce.unicore.issuance.credential.issued"],
+                    "config": {
+                        "publisherType": "http",
+                        "targetUrl": "https://subscriber.example.org/events",
+                        "headers": {
+                            "Authorization": "Bearer secret-123"
+                        }
+                    }
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let create_resp = tower::ServiceExt::oneshot(app.clone(), create_req).await.unwrap();
+        assert_eq!(create_resp.status(), axum::http::StatusCode::OK);
+        let created_bytes = axum::body::to_bytes(create_resp.into_body(), usize::MAX).await.unwrap();
+        let created_json: serde_json::Value = serde_json::from_slice(&created_bytes).unwrap();
+        let pub_id = created_json["id"].as_str().unwrap().to_string();
+        assert_eq!(created_json["enabled"], true);
+        assert_eq!(created_json["publisherType"], "http");
+        assert_eq!(created_json["config"]["headers"]["authorization"], "****");
+
+        // 4. Get by ID and List
+        let get_req = axum::http::Request::builder()
+            .method("GET")
+            .uri(format!("/v0/get-event-publisher-by-id/{pub_id}"))
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let get_resp = tower::ServiceExt::oneshot(app.clone(), get_req).await.unwrap();
+        assert_eq!(get_resp.status(), axum::http::StatusCode::OK);
+
+        let list_req = axum::http::Request::builder()
+            .method("GET")
+            .uri("/v0/get-event-publisher-list")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let list_resp = tower::ServiceExt::oneshot(app.clone(), list_req).await.unwrap();
+        assert_eq!(list_resp.status(), axum::http::StatusCode::OK);
+        let list_bytes = axum::body::to_bytes(list_resp.into_body(), usize::MAX).await.unwrap();
+        let list_json: serde_json::Value = serde_json::from_slice(&list_bytes).unwrap();
+        assert_eq!(list_json.as_array().unwrap().len(), 1);
+
+        // 5. Update, Deactivate, Activate, Delete
+        let update_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/v0/update-event-publisher")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&json!({
+                    "id": pub_id,
+                    "name": "Updated Webhook",
+                    "description": "Updated",
+                    "events": ["com.impierce.unicore.issuance.*"],
+                    "config": {
+                        "publisherType": "http",
+                        "targetUrl": "https://subscriber.example.org/v2/events"
+                    }
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let update_resp = tower::ServiceExt::oneshot(app.clone(), update_req).await.unwrap();
+        assert_eq!(update_resp.status(), axum::http::StatusCode::OK);
+
+        for endpoint in [
+            "/v0/deactivate-event-publisher",
+            "/v0/activate-event-publisher",
+            "/v0/delete-event-publisher",
+        ] {
+            let req = axum::http::Request::builder()
+                .method("POST")
+                .uri(endpoint)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&json!({ "id": pub_id })).unwrap(),
+                ))
+                .unwrap();
+            let resp = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
+            assert_eq!(resp.status(), axum::http::StatusCode::OK, "failed on {endpoint}");
+        }
+
+        // 6. Get after delete returns 404
+        let get_deleted_req = axum::http::Request::builder()
+            .method("GET")
+            .uri(format!("/v0/get-event-publisher-by-id/{pub_id}"))
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let get_deleted_resp = tower::ServiceExt::oneshot(app, get_deleted_req).await.unwrap();
+        assert_eq!(get_deleted_resp.status(), axum::http::StatusCode::NOT_FOUND);
     }
 }

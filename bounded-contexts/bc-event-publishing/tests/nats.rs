@@ -1,8 +1,9 @@
 //! Integration test against a NATS server running in Docker (`docker-tests` feature): configured events are
 //! published as CloudEvents to the configured subject.
 
-use agent_event_publisher_nats::NatsEventPublisher;
-use agent_shared::config::{set_config, EventPublisherNats, Events, NatsSubject};
+use bc_event_publishing::{
+    domain::event_publisher::config::NatsPublisherConfig, infrastructure::nats::NatsEventPublisherWorker,
+};
 use futures::StreamExt as _;
 use serde_json::Value;
 use shared_kernel::event_bus::{CloudEvent, EventBusHandle};
@@ -13,25 +14,6 @@ use testcontainers_modules::{
 };
 
 const SUBJECT: &str = "unicore.offers";
-
-/// Sets the NATS event publisher configuration. Each file in `tests/` runs in its own process, so this only affects
-/// the configuration of this test binary.
-fn configure_nats(nats: Option<EventPublisherNats>) {
-    set_config().event_publishers.nats = nats;
-}
-
-fn nats_config(enabled: bool, nats_url: &str) -> EventPublisherNats {
-    EventPublisherNats {
-        enabled,
-        nats_url: nats_url.to_string(),
-        subjects: vec![NatsSubject {
-            name: SUBJECT.to_string(),
-            events: Events {
-                types: vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
-            },
-        }],
-    }
-}
 
 #[tokio::test]
 async fn configured_offer_events_are_published_as_cloud_events() {
@@ -44,22 +26,31 @@ async fn configured_offer_events_are_published_as_cloud_events() {
 
     let event_bus = EventBusHandle::new(100);
 
-    // Without an enabled configuration, nothing is loaded.
-    configure_nats(None);
-    assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
-    configure_nats(Some(nats_config(false, &nats_url)));
-    assert!(NatsEventPublisher::from_config(&event_bus).await.unwrap().is_none());
+    // An unreachable server fails connecting directly.
+    assert!(NatsEventPublisherWorker::connect(
+        "nats-unreachable".to_string(),
+        vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
+        NatsPublisherConfig {
+            nats_url: "nats://127.0.0.1:1".to_string(),
+            subject: SUBJECT.to_string(),
+        },
+        &event_bus,
+    )
+    .await
+    .is_err());
 
-    // An unreachable server fails loading instead of silently dropping events.
-    configure_nats(Some(nats_config(true, "nats://127.0.0.1:1")));
-    assert!(NatsEventPublisher::from_config(&event_bus).await.is_err());
-
-    // Configure the publisher against the running NATS container
-    configure_nats(Some(nats_config(true, &nats_url)));
-    let publisher = NatsEventPublisher::from_config(&event_bus)
-        .await
-        .unwrap()
-        .expect("publisher should load when enabled");
+    // Connect the publisher worker against the running NATS container
+    let publisher = NatsEventPublisherWorker::connect(
+        "nats-offers".to_string(),
+        vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
+        NatsPublisherConfig {
+            nats_url: nats_url.clone(),
+            subject: SUBJECT.to_string(),
+        },
+        &event_bus,
+    )
+    .await
+    .expect("publisher worker should connect to running NATS container");
     let publisher_handle = publisher.spawn();
 
     // Subscribe to NATS subject
@@ -67,7 +58,6 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     let mut subscriber = client.subscribe(SUBJECT).await.unwrap();
     client.flush().await.unwrap();
 
-    // Allow a short moment for publisher background task connection to establish
     tokio::time::sleep(Duration::from_millis(200)).await;
 
     // An event that is not configured is not published

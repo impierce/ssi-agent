@@ -25,8 +25,8 @@ volumes:
   - ../../agent_secret_manager/tests/res/test.stronghold:/app/stronghold.dat
 ```
 
-3. _(optional)_ In case you are interested in the events that UniCore produces, you can configure a HTTP Event Publisher that sends
-   certain events to a URL of your choice. More information about the HTTP Event Publisher [can be found here](../../agent_event_publisher_http/README.md).
+3. _(optional)_ In case you are interested in the events that UniCore produces, you can create a runtime HTTP or NATS Event Publisher via `POST /v0/create-event-publisher` that sends
+   certain events to a destination of your choice. More information about available integration events [can be found here](../../docs/integration-events.md).
 
 4. To start the **SSI Agent**, a **Postgres** database along with **pgadmin** (Postgres Admin Interface) simply run:
 
@@ -51,16 +51,20 @@ UniCore facilitates the utilization of just-in-time data request events for cust
 
 To integrate just-in-time data request events into your workflow, adhere to the following steps:
 
-1. Configure the HTTP Event Publisher to listen for the `com.impierce.unicore.issuance.credential.request_verified` event. Refer to the [HTTP Event Publisher documentation](../../agent_event_publisher_http/README.md) for detailed configuration instructions:
+1. Create an HTTP Event Publisher via `POST /v0/create-event-publisher` listening for the `com.impierce.unicore.issuance.credential.request_verified` event. Refer to the [Integration Events documentation](../../docs/integration-events.md) for the full catalog of event types:
 
-   ```yaml
-   event_publishers:
-     http:
-       - enabled: true
-         target_url: "https://my-domain.example.org/ssi-event-subscriber"
-         events:
-           types:
-             - com.impierce.unicore.issuance.credential.request_verified
+   ```json
+   {
+     "name": "Custom Credential Signing Webhook",
+     "enabled": true,
+     "events": [
+       "com.impierce.unicore.issuance.credential.request_verified"
+     ],
+     "config": {
+       "publisherType": "http",
+       "targetUrl": "https://my-domain.example.org/ssi-event-subscriber"
+     }
+   }
    ```
 
 2. Upon initiation of the OpenID4VCI flow by a Wallet, the `com.impierce.unicore.issuance.credential.request_verified` event is triggered, containing relevant identifiers.

@@ -14,6 +14,7 @@ agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
+bc-event-publishing = { path = "../bounded-contexts/bc-event-publishing" }
 shared-kernel.workspace = true
 
 anyhow.workspace = true
@@ -43,8 +44,8 @@ percent-encoding.workspace = true
 rand.workspace = true
 sd-jwt.workspace = true
 serde.workspace = true
-serde_with.workspace = true
 serde_json.workspace = true
+serde_with.workspace = true
 siopv2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -60,9 +61,6 @@ agent_api_http = { path = ".", features = ["test_utils"] }
 agent_authorization = { path = "../agent_authorization", features = [
     "test_utils",
 ] }
-agent_event_publisher_http = { path = "../agent_event_publisher_http", features = [
-    "test_utils",
-] }
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
@@ -74,6 +72,7 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [
     "test_utils",
 ] }
+shared-kernel = { workspace = true, features = ["test-utils"] }
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 async-trait.workspace = true

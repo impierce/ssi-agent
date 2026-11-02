@@ -66,7 +66,6 @@ version = "0.1.0"
 dependencies = [
  "agent_api_http",
  "agent_authorization",
- "agent_event_publisher_http",
  "agent_holder",
  "agent_identity",
  "agent_issuance",
@@ -82,6 +81,7 @@ dependencies = [
  "axum-auth 0.8.1",
  "axum-macros",
  "base64 0.22.1",
+ "bc-event-publishing",
  "chrono",
  "cqrs-es",
  "futures",
@@ -134,8 +134,6 @@ version = "0.1.0"
 dependencies = [
  "agent_api_http",
  "agent_authorization",
- "agent_event_publisher_http",
- "agent_event_publisher_nats",
  "agent_holder",
  "agent_identity",
  "agent_issuance",
@@ -147,6 +145,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum 0.8.9",
+ "bc-event-publishing",
  "chrono",
  "did_manager",
  "identity_credential",
@@ -205,36 +204,6 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
-]
-
-[[package]]
-name = "agent_event_publisher_http"
-version = "0.1.0"
-dependencies = [
- "agent_event_publisher_http",
- "agent_shared",
- "reqwest 0.12.28",
- "serde_json",
- "shared-kernel",
- "tokio",
- "tokio-stream",
- "tracing",
- "wiremock",
-]
-
-[[package]]
-name = "agent_event_publisher_nats"
-version = "0.1.0"
-dependencies = [
- "agent_shared",
- "async-nats",
- "futures",
- "serde_json",
- "shared-kernel",
- "testcontainers-modules",
- "tokio",
- "tokio-stream",
- "tracing",
 ]
 
 [[package]]
@@ -476,7 +445,6 @@ dependencies = [
  "config",
  "cqrs-es",
  "dotenvy",
- "http-serde",
  "identity_core",
  "identity_iota",
  "identity_jose",
@@ -1570,6 +1538,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba62675e8242a4c4e806d12f11d136e626e6c8361d6b829310732241652a178a"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "bc-event-publishing"
+version = "0.1.0"
+dependencies = [
+ "async-nats",
+ "chrono",
+ "futures",
+ "reqwest 0.12.28",
+ "rstest",
+ "serde",
+ "serde_json",
+ "shared-kernel",
+ "testcontainers-modules",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "tracing-test",
+ "url",
+ "utoipa",
+ "wiremock",
 ]
 
 [[package]]
@@ -4912,16 +4903,6 @@ name = "http-range-header"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "add0ab9360ddbd88cfeb3bd9574a1d85cfdfa14db10b3e21d3700dbc4328758f"
-
-[[package]]
-name = "http-serde"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f056c8559e3757392c8d091e796416e4649d8e49e88b8d76df6c002f05027fd"
-dependencies = [
- "http 1.4.2",
- "serde",
-]
 
 [[package]]
 name = "httparse"

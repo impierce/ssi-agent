@@ -18,6 +18,7 @@ use agent_issuance::{
 use agent_library::{catalog::aggregate::Catalog, template::aggregate::Template};
 pub use agent_store::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier};
 use agent_verification::authorization_request::aggregate::AuthorizationRequest;
+use bc_event_publishing::domain::event_publisher::aggregate::EventPublisher;
 use std::sync::LazyLock;
 
 /// Statically initialized list of event verifiers for all core aggregates.
@@ -25,7 +26,7 @@ use std::sync::LazyLock;
 /// Used during application startup by persistent event stores (e.g. PostgreSQL, MongoDB)
 /// to verify that all historical persisted events can still be deserialized into current domain
 /// event definitions before the application transitions to the ready state.
-static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 21]> = LazyLock::new(|| {
+static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 22]> = LazyLock::new(|| {
     [
         EventVerifier::for_aggregate::<AccessToken>(),
         EventVerifier::for_aggregate::<AuthorizationCode>(),
@@ -48,6 +49,7 @@ static CORE_EVENT_VERIFIERS: LazyLock<[EventVerifier; 21]> = LazyLock::new(|| {
         EventVerifier::for_aggregate::<Presentation>(),
         EventVerifier::for_aggregate::<ReceivedOffer>(),
         EventVerifier::for_aggregate::<AuthorizationRequest>(),
+        EventVerifier::for_aggregate::<EventPublisher>(),
     ]
 });
 

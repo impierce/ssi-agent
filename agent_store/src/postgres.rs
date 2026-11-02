@@ -4,9 +4,12 @@ use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, Query, View};
 use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewRepository};
-use shared_kernel::view_repository::DynViewRepository;
+use shared_kernel::{
+    command_handler::{CommandHandler, CommandHandlerFactory},
+    view_repository::{BoxedViewRepository, DynViewRepository, ViewRepositoryFactory},
+};
 use sqlx::{Pool, Row};
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
 impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
 where
@@ -99,5 +102,32 @@ impl CqrsComponentBuilder for Postgres {
             aggregate,
             all_aggregates,
         )
+    }
+}
+
+impl ViewRepositoryFactory for Postgres {
+    fn create_view_repository<V, A>(&self, name: &str) -> BoxedViewRepository<V, A>
+    where
+        V: View<A> + Clone + 'static,
+        A: Aggregate + 'static,
+    {
+        BoxedViewRepository::new(Box::new(PostgresViewRepository::new(name, self.pool.clone())))
+    }
+}
+
+impl CommandHandlerFactory for Postgres {
+    type Error = std::convert::Infallible;
+
+    fn create_handler<A>(
+        &self,
+        services: A::Services,
+        queries: Vec<Box<dyn Query<A>>>,
+    ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
+    where
+        A: Aggregate + 'static,
+        <A as Aggregate>::Command: Send,
+    {
+        let pool = self.pool.clone();
+        async move { Ok(Arc::new(postgres_es::postgres_cqrs(pool, queries, services)) as CommandHandler<A>) }
     }
 }

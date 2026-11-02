@@ -108,7 +108,6 @@ pub mod tests {
         authorization_requests::tests::authorization_requests, relying_party::request::tests::request, router,
     };
     use agent_secret_manager::{service::Service, subject::Subject};
-    use agent_shared::config::{set_config, Events};
     use agent_store::in_memory::InMemory;
     use agent_verification::{services::VerificationServices, verification_state};
     use axum::{
@@ -196,19 +195,17 @@ pub mod tests {
 
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
-        set_config().enable_event_publisher_http(0);
-        set_config().set_event_publisher_http_target_url(0, target_url.clone());
-        set_config().set_event_publisher_http_target_events(
-            0,
-            Events {
-                types: vec!["com.impierce.unicore.verification.presentation.verified".to_string()],
-            },
-        );
-
         let event_bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&event_bus) {
-            publisher.spawn();
-        }
+        bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
+            "test-pub".to_string(),
+            vec!["com.impierce.unicore.verification.presentation.verified".to_string()],
+            bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
+                target_url,
+                headers: None,
+            },
+            &event_bus,
+        )
+        .spawn();
 
         let verification_state =
             Arc::new(verification_state(&InMemory, VerificationServices::default().await, &event_bus).await);

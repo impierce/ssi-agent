@@ -269,8 +269,6 @@ pub struct ApplicationConfiguration {
         ]"#
     )]
     pub display: Vec<Display>,
-    #[config(default)]
-    pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
             alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
@@ -401,34 +399,6 @@ impl ApplicationConfiguration {
         if let Some(options) = self.did_methods.get_mut(&did_method) {
             options.enabled = false;
         }
-    }
-
-    // TODO: make generic: set_enabled(enabled: bool)
-    pub fn enable_event_publisher_http(&mut self, index: usize) {
-        if self.event_publishers.http.len() <= index {
-            self.event_publishers
-                .http
-                .resize(index + 1, EventPublisherHttp::default());
-        }
-        self.event_publishers.http[index].enabled = true;
-    }
-
-    pub fn set_event_publisher_http_target_url(&mut self, index: usize, target_url: String) {
-        if self.event_publishers.http.len() <= index {
-            self.event_publishers
-                .http
-                .resize(index + 1, EventPublisherHttp::default());
-        }
-        self.event_publishers.http[index].target_url = target_url;
-    }
-
-    pub fn set_event_publisher_http_target_events(&mut self, index: usize, events: Events) {
-        if self.event_publishers.http.len() <= index {
-            self.event_publishers
-                .http
-                .resize(index + 1, EventPublisherHttp::default());
-        }
-        self.event_publishers.http[index].events = events;
     }
 
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
@@ -578,45 +548,6 @@ pub struct Display {
     pub locale: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Deserialize, Clone, Serialize, Default)]
-pub struct EventPublishers {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub http: Vec<EventPublisherHttp>,
-    pub nats: Option<EventPublisherNats>,
-}
-
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-pub struct EventPublisherHttp {
-    pub enabled: bool,
-    pub target_url: String,
-    #[serde(with = "http_serde::option::header_map", default)]
-    pub headers: Option<reqwest::header::HeaderMap>,
-    pub events: Events,
-}
-
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-pub struct EventPublisherNats {
-    pub enabled: bool,
-    pub nats_url: String,
-    #[serde(default)]
-    pub subjects: Vec<NatsSubject>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct NatsSubject {
-    pub name: String,
-    #[serde(default)]
-    pub events: Events,
-}
-
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Events {
-    #[serde(default)]
-    pub types: Vec<String>,
 }
 
 /// All DID methods supported by UniCore
@@ -958,7 +889,6 @@ mod tests {
                   }
                 }
               ],
-              "event_publishers": {},
               "vp_formats_supported": {
                 "jwt_vc_json": {
                   "alg_values": ["ES256", "EdDSA"]
@@ -1301,8 +1231,6 @@ mod tests {
                     ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
 
                 assert!(config.signing_algorithms_supported[&Algorithm::EdDSA].enabled);
-                assert!(config.event_publishers.http.is_empty());
-                assert!(config.event_publishers.nats.is_none());
             },
         );
     }
@@ -1517,33 +1445,5 @@ mod tests {
                 );
             },
         );
-    }
-
-    #[test]
-    fn test_events_rejects_unknown_fields() {
-        // Old beta config format: events: { credential: [...] }
-        let old_format = r#"{"credential": ["UnsignedCredentialCreated"]}"#;
-        let res: Result<Events, _> = serde_json::from_str(old_format);
-        assert!(res.is_err(), "Expected unknown field 'credential' to be rejected");
-
-        let unknown_format = r#"{"offer": ["TxCodeGenerated"]}"#;
-        let res: Result<Events, _> = serde_json::from_str(unknown_format);
-        assert!(res.is_err(), "Expected unknown field 'offer' to be rejected");
-
-        // Valid new format
-        let valid_format = r#"{"types": ["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.issued"]}"#;
-        let events: Events = serde_json::from_str(valid_format).unwrap();
-        assert_eq!(
-            events.types,
-            vec![
-                "com.impierce.unicore.issuance.credential.offered",
-                "com.impierce.unicore.issuance.credential.issued"
-            ]
-        );
-
-        // Empty object defaults to empty types
-        let empty_format = r#"{}"#;
-        let events: Events = serde_json::from_str(empty_format).unwrap();
-        assert!(events.types.is_empty());
     }
 }
