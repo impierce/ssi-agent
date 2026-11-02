@@ -3,7 +3,7 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::storage::KeyId;
+use identity_kit::keys::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
