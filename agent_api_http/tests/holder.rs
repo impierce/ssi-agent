@@ -85,6 +85,11 @@ async fn post(app: &Router, uri: &str, body: Value) -> (StatusCode, Value) {
 }
 
 async fn mock_issuer() -> MockServer {
+    mock_issuer_issuing(credential_jwt("Offered")).await
+}
+
+/// An issuer whose credential endpoint answers with `credential`.
+async fn mock_issuer_issuing(credential: String) -> MockServer {
     let mock_server = MockServer::start().await;
     let uri = mock_server.uri();
 
@@ -125,7 +130,7 @@ async fn mock_issuer() -> MockServer {
     Mock::given(method("POST"))
         .and(path("/credential"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "credentials": [{ "credential": credential_jwt("Offered") }]
+            "credentials": [{ "credential": credential }]
         })))
         .mount(&mock_server)
         .await;
@@ -320,4 +325,28 @@ async fn accepting_an_offer_stores_the_issued_credential() {
     assert_eq!(credentials.as_array().unwrap().len(), 1);
     assert_eq!(credentials[0]["received_offer_id"], offer_id.as_str());
     assert_eq!(credentials[0]["data"]["raw"]["credentialSubject"]["name"], "Offered");
+}
+
+#[tokio::test]
+#[serial]
+async fn accepting_an_offer_of_an_sd_jwt_credential_is_refused() {
+    let app = setup().await;
+    let sd_jwt = format!("{}~", credential_jwt("Offered"));
+    let mock_server = mock_issuer_issuing(sd_jwt).await;
+    let offer_id = receive_offer(&app, &mock_server.uri()).await;
+
+    let (status, problem) = post(&app, &format!("/v0/holder/offers/{offer_id}/accept"), json!({})).await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{problem}");
+
+    let (_, offers) = get(&app, "/v0/holder/offers").await;
+    let offer = offers
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|offer| offer["id"] == offer_id.as_str())
+        .unwrap();
+    assert_eq!(offer["status"], "Accepted");
+
+    let (_, credentials) = get(&app, "/v0/holder/credentials").await;
+    assert!(credentials.as_array().unwrap().is_empty());
 }
