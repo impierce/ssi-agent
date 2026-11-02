@@ -3,10 +3,7 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::{
-    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL, IOTA_TESTNET_URL},
-    storage::KeyId,
-};
+use identity_iota::storage::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
@@ -295,19 +292,6 @@ pub struct ApplicationConfiguration {
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
-    #[config(default)]
-    pub iota_address: Option<String>,
-    #[config(default)]
-    pub iota_node_url: Option<String>,
-    #[config(default)]
-    pub iota_node_username: Option<String>,
-    #[config(default)]
-    pub iota_node_password: Option<String>,
-    #[config(default)]
-    pub iota_sponsoring_service_url: Option<Url>,
-    #[config(default)]
-    #[serde(serialize_with = "redact")]
-    pub iota_sponsoring_service_auth: Option<String>,
     // WARNING: When this is enabled, the authorization flow will be interactive. However, in the current form this
     // means that the issuance flow will always include an OpenID4VP Presentation Request containing a hardcoded DCQL
     // Query.
@@ -324,21 +308,6 @@ impl ApplicationConfiguration {
 
     /// Validates whether the configuration is suitable for development (enforce restrictions).
     pub fn validate_development(&self) -> Result<(), SharedError> {
-        if self.event_store.type_ == EventStoreType::InMemory {
-            for did_method in &[SupportedDidMethod::Iota] {
-                if self
-                    .did_methods
-                    .get(did_method)
-                    .map(|options| options.enabled)
-                    .unwrap_or_default()
-                {
-                    return Err(SharedError::InvalidConfiguration(format!(
-                        "`{did_method}` cannot be enabled when using the `in_memory` event store"
-                    )));
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -695,15 +664,6 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
     #[strum(serialize = "did:web")]
     Web,
-    #[serde(alias = "did_iota", alias = "did:iota", rename = "did_iota")]
-    #[strum(serialize = "did:iota")]
-    Iota,
-    #[serde(alias = "did_iota_dev", alias = "did:iota:dev", rename = "did_iota_dev")]
-    #[strum(serialize = "did:iota:dev")]
-    IotaDev,
-    #[serde(alias = "did_iota_test", alias = "did:iota:test", rename = "did_iota_test")]
-    #[strum(serialize = "did:iota:test")]
-    IotaTest,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -712,67 +672,27 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest => true,
+            SupportedDidMethod::Web => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
 
     pub fn hosted_centrally(&self) -> bool {
         match self {
-            SupportedDidMethod::Jwk
-            | SupportedDidMethod::Key
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest => false,
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
             SupportedDidMethod::Web => true,
         }
     }
-
-    pub fn hosted_decentrally(&self) -> bool {
-        match self {
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev | SupportedDidMethod::IotaTest => true,
-        }
-    }
 }
-
-const IOTA_NETWORK: &str = "iota";
-const IOTA_DEV_NETWORK: &str = "dev";
-const IOTA_TEST_NETWORK: &str = "test";
 
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
 
 impl SupportedDidMethod {
-    pub fn api_endpoint(&self) -> Option<&str> {
-        match self {
-            SupportedDidMethod::Iota => Some(IOTA_MAINNET_URL),
-            SupportedDidMethod::IotaDev => Some(IOTA_DEVNET_URL),
-            SupportedDidMethod::IotaTest => Some(IOTA_TESTNET_URL),
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
-        }
-    }
-
-    pub fn network_name(&self) -> Option<&str> {
-        match self {
-            SupportedDidMethod::Iota => Some(IOTA_NETWORK),
-            SupportedDidMethod::IotaDev => Some(IOTA_DEV_NETWORK),
-            SupportedDidMethod::IotaTest => Some(IOTA_TEST_NETWORK),
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
-        }
-    }
-
     pub fn fragment(&self) -> Option<&str> {
         match self {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
-            SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest
-            | SupportedDidMethod::Key
-            | SupportedDidMethod::Web => None,
+            SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
 }

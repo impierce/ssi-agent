@@ -169,17 +169,14 @@ mod tests {
         assert!(api_http_operations.is_subset(&published_operations));
         assert_eq!(published_operations.len(), api_http_operations.len() + 6);
 
-        let sponsoring_configuration = api_http
+        let public_templates = api_http
             .paths
-            .get_path_operation("/public/sponsoring-configuration", HttpMethod::Get)
-            .expect("sponsoring configuration operation should be registered");
-        assert_eq!(
-            sponsoring_configuration.operation_id.as_deref(),
-            Some("sponsoring_configuration")
-        );
+            .get_path_operation("/public/templates", HttpMethod::Get)
+            .expect("public templates operation should be registered");
+        assert_eq!(public_templates.operation_id.as_deref(), Some("get_public_templates"));
 
         let api_http_schemas = schema_names(&api_http);
-        assert!(api_http_schemas.contains("SponsoringConfiguration"));
+        assert!(api_http_schemas.contains("PublicTemplate"));
 
         let published_schemas = schema_names(&published);
         let operational_schemas: BTreeSet<_> = published_schemas.difference(&api_http_schemas).cloned().collect();

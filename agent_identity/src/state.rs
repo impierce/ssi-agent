@@ -647,41 +647,6 @@ fn get_did_methods_with_or_without_fixed_algorithm(
         .collect()
 }
 
-/// Publishes all decentrally hosted documents.
-///
-/// This asynchronous function performs the following steps:
-///
-/// 1. Query Documents: It retrieves all documents whose associated DID methods indicate they are
-///    hosted decentrally by filtering with the `SupportedDidMethod::hosted_decentrally` predicate.
-/// 2. Publish Documents: For each decentrally hosted document found, it sends a `PublishDocument`
-///    command via the command handler to publish the document.
-pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all the decentrally hosted Documents.
-    let decentrally_hosted_documents = query_all_documents(state, |(_, document)| {
-        document
-            .did_method
-            .as_ref()
-            .map(SupportedDidMethod::hosted_decentrally)
-            .unwrap_or_default()
-    })
-    .await?;
-
-    // Publish each decentrally hosted Documents.
-    for document_id in decentrally_hosted_documents.keys() {
-        // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
-        let _ = command_handler(
-            state.authorization_checker.clone(),
-            Caller::Internal,
-            document_id,
-            &state.command.document,
-            DocumentCommand::PublishDocument,
-        )
-        .await;
-    }
-
-    Ok(())
-}
-
 // TODO: Make this function generic and move it to a shared module.
 /// Asynchronously retrieves all documents and filters them using the provided predicate.
 ///

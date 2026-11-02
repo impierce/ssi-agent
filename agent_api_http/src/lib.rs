@@ -299,7 +299,9 @@ where
 mod tests {
     use super::*;
     use crate::extractors::RequestActor;
+    use agent_library::library_state;
     use agent_shared::config::config;
+    use agent_store::in_memory::InMemory;
     use axum::{body::Body, routing::get};
     use http::header::AUTHORIZATION;
     use http::Request;
@@ -555,14 +557,19 @@ mod tests {
     #[tokio::test]
     #[tracing_test::traced_test]
     async fn non_events_requests_are_logged_by_tracing_layer() {
-        let app = app_with_base_path(ApiState::default(), Arc::new(NoActorExtractor), "/");
+        let library_state = library_state(&InMemory, &Default::default(), vec![]).await;
+        let app = app_with_base_path(
+            ApiState {
+                library_state: Some(Arc::new(library_state)),
+                ..Default::default()
+            },
+            Arc::new(NoActorExtractor),
+            "/",
+        );
 
         let _response = tower::ServiceExt::oneshot(
             app,
-            Request::builder()
-                .uri("/public/sponsoring-configuration")
-                .body(Body::empty())
-                .unwrap(),
+            Request::builder().uri("/public/templates").body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();

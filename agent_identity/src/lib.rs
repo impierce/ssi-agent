@@ -4,7 +4,6 @@ pub mod document;
 pub mod profile;
 pub mod service;
 
-pub mod convert;
 pub mod dns;
 pub mod queries;
 pub mod services;

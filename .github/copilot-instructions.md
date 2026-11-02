@@ -146,7 +146,6 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 ```
 identity_* crates → https://github.com/iotaledger/identity (v1.9.6-beta.1)
-iota-sdk → https://github.com/iotaledger/iota (specific rev)
 ```
 
 ### Configuration & Environment

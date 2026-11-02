@@ -31,26 +31,6 @@ pub enum DocumentError {
     #[error("Failed to generate DID from key with Key ID: {0}")]
     GenerateDidError(KeyId),
 
-    // did:iota: specific Errors
-    #[error("Invalid Node Endpoint: {0}")]
-    InvalidNodeEndpointError(String),
-    #[error("Iota Client Builder error: {0}")]
-    IotaClientBuilderError(String),
-    #[error("Missing required network name for method: {0}")]
-    MissingNetworkNameError(SupportedDidMethod),
-    #[error("Iota Controler error: {0}")]
-    IotaControllerError(identity_iota::iota::rebased::Error),
-    #[error("Iota Identity error: {0}")]
-    IotaIdentityError(#[from] identity_iota::iota::rebased::Error),
-    #[error("Iota Product Common error: {0}")]
-    IotaProductCommonError(#[from] product_common::error::Error),
-    #[error("Failed to publish IOTA DID Document: {0}")]
-    IotaPublishDocumentError(String),
-    #[error("Failed to update IOTA DID Document: {0}")]
-    IotaUpdateDocumentError(String),
-    #[error("Falied to deactivate IOTA DID: {0}")]
-    IotaDeactivateDidError(String),
-
     // did:web specific Errors
     #[error("Opaque origin not supported")]
     OpaqueOriginError,

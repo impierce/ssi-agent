@@ -54,22 +54,6 @@ paths:
             application/yaml:
               schema:
                 type: string
-  /public/sponsoring-configuration:
-    get:
-      tags:
-      - Public
-      summary: Get the public sponsoring configuration
-      description: Returns the public display name, optional logo, and IOTA address used by sponsored identities.
-      operationId: sponsoring_configuration
-      responses:
-        '200':
-          description: Sponsoring configuration retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SponsoringConfiguration'
-        '404':
-          description: No sponsoring IOTA address is configured
   /public/templates:
     get:
       tags:
@@ -2773,10 +2757,6 @@ components:
           - type: 'null'
         id:
           type: string
-        iota_metadata:
-          oneOf:
-          - $ref: '#/components/schemas/IotaMetadata'
-          - type: 'null'
         status:
           type: string
           enum:
@@ -2953,41 +2933,6 @@ components:
           uptime:
             type: string
             description: The current uptime of the application in a human-friendly format.
-    IotaMetadata:
-      type: object
-      description: Metadata for IOTA-based DID Documents.
-      required:
-      - wallet_address
-      - is_funded
-      - balance
-      - is_published
-      - is_deactivated
-      properties:
-        balance:
-          type: integer
-          format: int64
-          minimum: 0
-        created_at:
-          type:
-          - string
-          - 'null'
-        explorer_url:
-          type:
-          - string
-          - 'null'
-        is_deactivated:
-          type: boolean
-        is_funded:
-          type: boolean
-        is_published:
-          type: boolean
-        updated_at:
-          type:
-          - string
-          - 'null'
-        wallet_address:
-          type: string
-          example: '0x1234567890'
     Jwk:
       type: object
       description: 'A JSON Web Key (RFC 7517 §4): the key type, the parameters of RFC 7518 §6 and RFC 8037 §2 for that type, and the common members. Parameters are base64url-encoded without padding.'
@@ -3792,21 +3737,6 @@ components:
       - Default
       - Runtime
       - None
-    SponsoringConfiguration:
-      type: object
-      required:
-      - name
-      - iota_address
-      properties:
-        iota_address:
-          type: string
-        logo_uri:
-          type:
-          - string
-          - 'null'
-          format: uri
-        name:
-          type: string
     SupportedDidMethod:
       type: string
       description: DID methods supported by UniCore
@@ -3814,9 +3744,6 @@ components:
       - did_jwk
       - did_key
       - did_web
-      - did_iota
-      - did_iota_dev
-      - did_iota_test
     SyncConnectionRequest:
       type: object
       required:
