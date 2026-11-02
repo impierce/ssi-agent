@@ -68,9 +68,7 @@ impl LinkedVerifiablePresentationSource for HolderPresentations {
         Ok(
             agent_shared::handlers::public_query_handler(presentation_id, &self.0.query.presentation)
                 .await?
-                .and_then(|Presentation { signed, .. }| signed)
-                .map(|signed| signed.as_str().parse())
-                .transpose()?,
+                .and_then(|Presentation { signed, .. }| signed),
         )
     }
 }

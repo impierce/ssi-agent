@@ -3,8 +3,10 @@ use crate::services::HolderServices;
 use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algorithm};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::convert::ToJson;
-use identity_credential::{credential::Jwt, presentation::JwtPresentationOptions};
+use identity_kit::{
+    did::Did,
+    vc::{Jwt, Presentation as VerifiablePresentation},
+};
 use jsonwebtoken::Header;
 use oid4vc_core::{Sign as _, Subject as _};
 use serde::{Deserialize, Serialize};
@@ -54,30 +56,30 @@ impl Aggregate for Presentation {
                     .await
                     .map_err(|err| MissingIdentifierError(err.to_string()))?;
 
-                let mut presentation_builder = identity_credential::presentation::Presentation::builder(
-                    subject_did
-                        .parse::<identity_core::common::Url>()
-                        .map_err(|err| InvalidUrlError(err.to_string()))?,
-                    Default::default(),
+                let holder_did: Did = subject_did
+                    .parse()
+                    .map_err(|err: identity_kit::did::DidError| InvalidUrlError(err.to_string()))?;
+                let verifiable_presentation = signed_credentials.into_iter().fold(
+                    VerifiablePresentation::new().with_holder(holder_did),
+                    VerifiablePresentation::with_credential,
                 );
-                for signed_credential in signed_credentials {
-                    presentation_builder = presentation_builder.credential(signed_credential);
+
+                let mut claims = verifiable_presentation
+                    .to_jwt_claims()
+                    .map_err(|err| PresentationBuilderError(err.to_string()))?;
+                #[cfg(feature = "test_utils")]
+                {
+                    claims.nbf = Some(0);
+                }
+                #[cfg(not(feature = "test_utils"))]
+                {
+                    claims.nbf = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .ok()
+                        .and_then(|now| i64::try_from(now.as_secs()).ok());
                 }
 
-                #[cfg(feature = "test_utils")]
-                let options = JwtPresentationOptions::default()
-                    .issuance_date(identity_core::common::Timestamp::from_unix(0).unwrap());
-                #[cfg(not(feature = "test_utils"))]
-                let options = JwtPresentationOptions::default();
-
-                let verifiable_presentation: identity_credential::presentation::Presentation<Jwt> =
-                    presentation_builder
-                        .build()
-                        .map_err(|err| PresentationBuilderError(err.to_string()))?;
-
-                let payload = verifiable_presentation
-                    .serialize_jwt(&options)
-                    .map_err(|err| SerializationError(err.to_string()))?;
+                let payload = serde_json::to_vec(&claims).map_err(|err| SerializationError(err.to_string()))?;
 
                 // The `kid` must name a verification method the DID Document actually carries, so
                 // that a verifier resolving the holder's DID can find the key this is signed with.
@@ -100,12 +102,9 @@ impl Aggregate for Presentation {
                 };
 
                 let message = [
-                    URL_SAFE_NO_PAD.encode(
-                        header
-                            .to_json_vec()
-                            .map_err(|err| SerializationError(err.to_string()))?,
-                    ),
-                    URL_SAFE_NO_PAD.encode(payload.as_bytes()),
+                    URL_SAFE_NO_PAD
+                        .encode(serde_json::to_vec(&header).map_err(|err| SerializationError(err.to_string()))?),
+                    URL_SAFE_NO_PAD.encode(payload),
                 ]
                 .join(".");
 
@@ -122,7 +121,7 @@ impl Aggregate for Presentation {
 
                 Ok(vec![PresentationCreated {
                     presentation_id,
-                    signed_presentation: Jwt::from(message),
+                    signed_presentation: Jwt::new(message).map_err(|err| SerializationError(err.to_string()))?,
                 }])
             }
         }?;
@@ -154,6 +153,7 @@ impl Aggregate for Presentation {
 #[cfg(test)]
 pub mod presentation_tests {
 
+    use crate::credential::signed::SignedCredential;
     use crate::offer::aggregate::test_utils::signed_credentials;
     use crate::offer::aggregate::OfferCredential;
 
@@ -176,7 +176,13 @@ pub mod presentation_tests {
             .given_no_previous_events()
             .when(PresentationCommand::CreatePresentation {
                 presentation_id: presentation_id.clone(),
-                signed_credentials: signed_credentials.into_iter().map(|c| c.credential).collect(),
+                signed_credentials: signed_credentials
+                    .into_iter()
+                    .map(|c| match c.credential {
+                        SignedCredential::Jwt(jwt) => jwt,
+                        SignedCredential::SdJwt(_) => unreachable!("the fixture credentials are JWTs"),
+                    })
+                    .collect(),
             })
             .then_expect_events(vec![PresentationEvent::PresentationCreated {
                 presentation_id,
@@ -200,6 +206,6 @@ pub mod test_utils {
     /// VP validation; decodable embedded credentials remain available as unverified data.
     #[fixture]
     pub fn signed_presentation() -> Jwt {
-        Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MCwidnAiOnsiQGNvbnRleHQiOiJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsInR5cGUiOiJWZXJpZmlhYmxlUHJlc2VudGF0aW9uIiwidmVyaWZpYWJsZUNyZWRlbnRpYWwiOlsiZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSTNvMlRXdG5SVGcwVGtOTmNFMWxRWGc1YWtzNVkyWTFWelJIT0dkaldqbDRkWGRLZGtjeFpUZDNUbXM0UzBObmRDSjkuZXlKcGMzTWlPaUprYVdRNmEyVjVPbm8yVFd0blJUZzBUa05OY0UxbFFYZzVha3M1WTJZMVZ6UkhPR2RqV2psNGRYZEtka2N4WlRkM1RtczRTME5uZENJc0luTjFZaUk2SW1ScFpEcHJaWGs2ZWtSdVlXVlNkMVEwWnpaQldrTkllbmgyVGt3M1JFeHFjVlJoVkRnNFlXMDBXRkkyVkZWSGNrdHlOa1JZYWpaVWVpSXNJbTVpWmlJNk1USTJNak13TkRBd01Dd2lhV0YwSWpveE1qWXlNekEwTURBd0xDSjJZeUk2ZXlKQVkyOXVkR1Y0ZENJNld5Sm9kSFJ3Y3pvdkwzZDNkeTUzTXk1dmNtY3ZNakF4T0M5amNtVmtaVzUwYVdGc2N5OTJNU0pkTENKMGVYQmxJanBiSWxabGNtbG1hV0ZpYkdWRGNtVmtaVzUwYVdGc0lsMHNJbU55WldSbGJuUnBZV3hUZFdKcVpXTjBJanA3SW1sa0lqb2laR2xrT210bGVUcDZSRzVoWlZKM1ZEUm5Oa0ZhUTBoNmVIWk9URGRFVEdweFZHRlVPRGhoYlRSWVVqWlVWVWR5UzNJMlJGaHFObFI2SWl3aVpHVm5jbVZsSWpwN0luUjVjR1VpT2lKTllYTjBaWEpFWldkeVpXVWlMQ0p1WVcxbElqb2lUV0Z6ZEdWeUlHOW1JRTlqWldGdWIyZHlZWEJvZVNKOUxDSm1hWEp6ZEY5dVlXMWxJam9pUm1WeWNtbHpJaXdpYkdGemRGOXVZVzFsSWpvaVVuVnpkR0ZqWldGdUluMHNJbWx6YzNWbGNpSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSWl3aWFYTnpkV0Z1WTJWRVlYUmxJam9pTWpBeE1DMHdNUzB3TVZRd01Eb3dNRG93TUZvaUxDSmpjbVZrWlc1MGFXRnNVM1JoZEhWeklqcDdJbWxrSWpvaWFIUjBjSE02THk5dGVTMWtiMjFoYVc0dVpYaGhiWEJzWlM1dmNtY3ZhV1YwWmkxdllYVjBhQzEwYjJ0bGJpMXpkR0YwZFhNdGJHbHpkQzh3SWl3aWRIbHdaU0k2SW5OMFlYUjFjMnhwYzNRcmFuZDBJaXdpYVdSNElqb3hNak1zSW5WeWFTSTZJbWgwZEhCek9pOHZiWGt0Wkc5dFlXbHVMbVY0WVcxd2JHVXViM0puTDJsbGRHWXRiMkYxZEdndGRHOXJaVzR0YzNSaGRIVnpMV3hwYzNRdk1DSjlmU3dpYzNSaGRIVnpJanA3SW5OMFlYUjFjMTlzYVhOMElqcDdJbWxrZUNJNk1USXpMQ0oxY21raU9pSm9kSFJ3Y3pvdkwyMTVMV1J2YldGcGJpNWxlR0Z0Y0d4bExtOXlaeTlwWlhSbUxXOWhkWFJvTFhSdmEyVnVMWE4wWVhSMWN5MXNhWE4wTHpBaWZYMTkuNm9WamZOMDZkelFtZDJvQ1ZCbTlsZ09raEwwbUxJSG4tSTh2VUIwT1gzbjdNYmpoSVdqamZBXzZTU3Zjb2ZHR0xqLUJGdDFmTUNEVXkxVnJpQ3ZpQUEiXX19.zJ6ieLFJ1LWozlV7y8LuYTF1EtWR1rtaHEqpBFaj2gkW9hDU7ha9nhJiuOwUKwK5Jl-H4SsyYEmavnSmsasYDQ".to_string())
+        "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MCwidnAiOnsiQGNvbnRleHQiOiJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsInR5cGUiOiJWZXJpZmlhYmxlUHJlc2VudGF0aW9uIiwidmVyaWZpYWJsZUNyZWRlbnRpYWwiOlsiZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKRlpFUlRRU0lzSW10cFpDSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSTNvMlRXdG5SVGcwVGtOTmNFMWxRWGc1YWtzNVkyWTFWelJIT0dkaldqbDRkWGRLZGtjeFpUZDNUbXM0UzBObmRDSjkuZXlKcGMzTWlPaUprYVdRNmEyVjVPbm8yVFd0blJUZzBUa05OY0UxbFFYZzVha3M1WTJZMVZ6UkhPR2RqV2psNGRYZEtka2N4WlRkM1RtczRTME5uZENJc0luTjFZaUk2SW1ScFpEcHJaWGs2ZWtSdVlXVlNkMVEwWnpaQldrTkllbmgyVGt3M1JFeHFjVlJoVkRnNFlXMDBXRkkyVkZWSGNrdHlOa1JZYWpaVWVpSXNJbTVpWmlJNk1USTJNak13TkRBd01Dd2lhV0YwSWpveE1qWXlNekEwTURBd0xDSjJZeUk2ZXlKQVkyOXVkR1Y0ZENJNld5Sm9kSFJ3Y3pvdkwzZDNkeTUzTXk1dmNtY3ZNakF4T0M5amNtVmtaVzUwYVdGc2N5OTJNU0pkTENKMGVYQmxJanBiSWxabGNtbG1hV0ZpYkdWRGNtVmtaVzUwYVdGc0lsMHNJbU55WldSbGJuUnBZV3hUZFdKcVpXTjBJanA3SW1sa0lqb2laR2xrT210bGVUcDZSRzVoWlZKM1ZEUm5Oa0ZhUTBoNmVIWk9URGRFVEdweFZHRlVPRGhoYlRSWVVqWlVWVWR5UzNJMlJGaHFObFI2SWl3aVpHVm5jbVZsSWpwN0luUjVjR1VpT2lKTllYTjBaWEpFWldkeVpXVWlMQ0p1WVcxbElqb2lUV0Z6ZEdWeUlHOW1JRTlqWldGdWIyZHlZWEJvZVNKOUxDSm1hWEp6ZEY5dVlXMWxJam9pUm1WeWNtbHpJaXdpYkdGemRGOXVZVzFsSWpvaVVuVnpkR0ZqWldGdUluMHNJbWx6YzNWbGNpSTZJbVJwWkRwclpYazZlalpOYTJkRk9EUk9RMDF3VFdWQmVEbHFTemxqWmpWWE5FYzRaMk5hT1hoMWQwcDJSekZsTjNkT2F6aExRMmQwSWl3aWFYTnpkV0Z1WTJWRVlYUmxJam9pTWpBeE1DMHdNUzB3TVZRd01Eb3dNRG93TUZvaUxDSmpjbVZrWlc1MGFXRnNVM1JoZEhWeklqcDdJbWxrSWpvaWFIUjBjSE02THk5dGVTMWtiMjFoYVc0dVpYaGhiWEJzWlM1dmNtY3ZhV1YwWmkxdllYVjBhQzEwYjJ0bGJpMXpkR0YwZFhNdGJHbHpkQzh3SWl3aWRIbHdaU0k2SW5OMFlYUjFjMnhwYzNRcmFuZDBJaXdpYVdSNElqb3hNak1zSW5WeWFTSTZJbWgwZEhCek9pOHZiWGt0Wkc5dFlXbHVMbVY0WVcxd2JHVXViM0puTDJsbGRHWXRiMkYxZEdndGRHOXJaVzR0YzNSaGRIVnpMV3hwYzNRdk1DSjlmU3dpYzNSaGRIVnpJanA3SW5OMFlYUjFjMTlzYVhOMElqcDdJbWxrZUNJNk1USXpMQ0oxY21raU9pSm9kSFJ3Y3pvdkwyMTVMV1J2YldGcGJpNWxlR0Z0Y0d4bExtOXlaeTlwWlhSbUxXOWhkWFJvTFhSdmEyVnVMWE4wWVhSMWN5MXNhWE4wTHpBaWZYMTkuNm9WamZOMDZkelFtZDJvQ1ZCbTlsZ09raEwwbUxJSG4tSTh2VUIwT1gzbjdNYmpoSVdqamZBXzZTU3Zjb2ZHR0xqLUJGdDFmTUNEVXkxVnJpQ3ZpQUEiXX19.zJ6ieLFJ1LWozlV7y8LuYTF1EtWR1rtaHEqpBFaj2gkW9hDU7ha9nhJiuOwUKwK5Jl-H4SsyYEmavnSmsasYDQ".parse().unwrap()
     }
 }
