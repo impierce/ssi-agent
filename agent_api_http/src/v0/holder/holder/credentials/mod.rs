@@ -1,7 +1,7 @@
 use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
-    credential::{aggregate::Credential, command::CredentialCommand},
+    credential::{aggregate::Credential, command::CredentialCommand, signed::SignedCredential},
     state::HolderState,
 };
 use axum::{
@@ -11,7 +11,6 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -51,7 +50,7 @@ pub(crate) async fn credentials(
 pub struct HolderCredentialsEndpointRequest {
     /// Compact JWT-encoded verifiable credential to add to the holder.
     #[schema(value_type = String)]
-    pub credential: Jwt,
+    pub credential: SignedCredential,
 }
 
 /// Store a credential in the organisation's wallet

@@ -1,10 +1,11 @@
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
+use crate::credential::signed::SignedCredential;
 use crate::services::HolderServices;
 use agent_shared::credential_status_checker::CredentialStatusChecker;
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_credential::credential::Jwt;
+use identity_kit::vc::Jwt;
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -52,6 +53,9 @@ impl Aggregate for Credential {
                 received_offer_id,
                 credential,
             } => {
+                let SignedCredential::Jwt(credential) = credential else {
+                    return Err(CredentialDecodingError);
+                };
                 let raw = get_unverified_jwt_claims(&serde_json::json!(credential))
                     .map_err(|_| CredentialError::CredentialDecodingError)?;
 
@@ -127,16 +131,30 @@ pub mod credential_tests {
             .when(CredentialCommand::AddCredential {
                 holder_credential_id: holder_credential_id.clone(),
                 received_offer_id: Some(received_offer_id.clone()),
-                credential: Jwt::from(JWT_VC_JSON_OBV3_JWT.to_string()),
+                credential: JWT_VC_JSON_OBV3_JWT.parse().unwrap(),
             })
             .then_expect_events(vec![CredentialEvent::CredentialAdded {
                 holder_credential_id,
                 received_offer_id: Some(received_offer_id),
-                credential: Jwt::from(JWT_VC_JSON_OBV3_JWT.to_string()),
+                credential: JWT_VC_JSON_OBV3_JWT.parse().unwrap(),
                 data: Data {
                     raw: get_unverified_jwt_claims(&serde_json::json!(JWT_VC_JSON_OBV3_JWT)).unwrap()["vc"].clone(),
                 },
             }])
+    }
+
+    /// Only JWT credentials are stored; an SD-JWT is refused as before.
+    #[rstest]
+    #[serial_test::serial]
+    async fn test_add_sd_jwt_credential(holder_credential_id: String, received_offer_id: String) {
+        CredentialTestFramework::with(HolderServices::default().await)
+            .given_no_previous_events()
+            .when(CredentialCommand::AddCredential {
+                holder_credential_id,
+                received_offer_id: Some(received_offer_id),
+                credential: crate::credential::signed::SD_JWT.parse().unwrap(),
+            })
+            .then_expect_error_message(&CredentialError::CredentialDecodingError.to_string())
     }
 }
 

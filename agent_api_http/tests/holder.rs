@@ -45,8 +45,9 @@ async fn setup() -> Router {
 fn credential_jwt(name: &str) -> String {
     let encode = |value: Value| URL_SAFE_NO_PAD.encode(value.to_string());
 
+    // The signature is never checked, but it must be base64url like any JWS segment.
     format!(
-        "{}.{}.signature",
+        "{}.{}.c2lnbmF0dXJl",
         encode(json!({ "alg": "EdDSA", "typ": "JWT" })),
         encode(json!({
             "vc": {
