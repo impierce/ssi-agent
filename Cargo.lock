@@ -305,9 +305,6 @@ dependencies = [
  "hickory-resolver",
  "identity-kit",
  "identity_core",
- "identity_document",
- "identity_iota",
- "identity_storage",
  "indexmap 2.14.2",
  "itertools 0.14.0",
  "jsonwebtoken",
@@ -5360,16 +5357,13 @@ dependencies = [
  "identity_document",
  "identity_iota_core",
  "identity_verification",
- "iota-crypto",
  "iota-sdk-types",
  "iota_interaction",
- "rand 0.8.8",
  "seahash",
  "secret-storage",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]
