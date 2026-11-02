@@ -1558,42 +1558,4 @@ mod tests {
         assert!(!is_globally_routable("::10.0.0.1".parse().unwrap()));
         assert!(!is_globally_routable("0.0.0.1".parse().unwrap()));
     }
-
-    #[test]
-    fn rustsec_2026_0258_dependency_paths_remain_scoped() {
-        let lockfile = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../Cargo.lock"));
-
-        let vulnerable_reqwest = locked_package(lockfile, "reqwest", "0.11.27");
-        assert!(vulnerable_reqwest.contains("\"h2 0.3.27\""));
-        assert!(vulnerable_reqwest.contains("\"hyper 0.14.32\""));
-
-        let vulnerable_hyper = locked_package(lockfile, "hyper", "0.14.32");
-        assert!(vulnerable_hyper.contains("\"h2 0.3.27\""));
-
-        assert!(locked_package(lockfile, "iota-sdk", "1.1.5").contains("\"reqwest 0.11.27\""));
-
-        let identity = locked_package(lockfile, "agent_identity", "0.1.0");
-        assert!(identity.contains("\"reqwest 0.12.28\""));
-        let patched_reqwest = locked_package(lockfile, "reqwest", "0.12.28");
-        let h2_patch = patched_reqwest
-            .lines()
-            .find_map(|line| line.trim().strip_prefix("\"h2 0.4."))
-            .and_then(|rest| rest.trim_end_matches(['"', ',']).parse::<u32>().ok())
-            .expect("reqwest 0.12.28 selects h2 0.4");
-        assert!(
-            h2_patch >= 16,
-            "RUSTSEC-2026-0258 is patched in h2 0.4.16, found 0.4.{h2_patch}"
-        );
-        assert!(patched_reqwest.contains("\"hyper 1."));
-    }
-
-    fn locked_package<'a>(lockfile: &'a str, name: &str, version: &str) -> &'a str {
-        lockfile
-            .split("[[package]]")
-            .find(|record| {
-                record.lines().any(|line| line == format!("name = \"{name}\""))
-                    && record.lines().any(|line| line == format!("version = \"{version}\""))
-            })
-            .unwrap_or_else(|| panic!("missing {name} {version} from Cargo.lock"))
-    }
 }

@@ -3,10 +3,9 @@ ignore = [
     # RUSTSEC-2023-0071: rsa (v0.8.2, v0.9.10) — Marvin Attack (RSA timing side-channel)
     # No upstream patch is available. Both versions are transitive dependencies:
     #   - rsa@0.8.2 via fastcrypto → IOTA identity SDK: deep internal SDK dependency.
-    #   - rsa@0.9.10 via stronghold_ext → identity_stronghold_ext (did-manager): backs the
-    #     `RS256` support added in did-manager v1.0.0-beta.9. Used for RSASSA-PKCS1-v1_5 signing
-    #     only, never for decryption, which is the primary Marvin Attack vector. Not currently
-    #     reachable either: `Subject` in agent_secret_manager only handles `EdDSA` and `ES256`.
+    #   - rsa@0.9.10 via stronghold_ext: backs `RS256` keys in agent_secret_manager's
+    #     `StrongholdKeyStore`. Used for RSASSA-PKCS1-v1_5 signing only, never for decryption,
+    #     which is the primary Marvin Attack vector.
     # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
     "RUSTSEC-2023-0071",
 
@@ -24,24 +23,6 @@ ignore = [
     # tracing crate with no custom logger that touches rand, so this condition is never met.
     "RUSTSEC-2026-0097",
 
-    # RUSTSEC-2026-0098: rustls-webpki — URI name constraints incorrectly accepted
-    # Exploitable only after successful certificate signature verification AND requires a
-    # compromised or malicious certificate authority to misuse URI name constraints.
-    # The ssi-agent does not use URI SAN name constraints anywhere in its TLS configuration.
-    "RUSTSEC-2026-0098",
-
-    # RUSTSEC-2026-0099: rustls-webpki — Wildcard DNS name constraints incorrectly accepted
-    # Same preconditions as RUSTSEC-2026-0098: requires CA misissuance of a certificate
-    # that would otherwise pass signature verification. Not exploitable without a
-    # compromised trusted certificate authority.
-    "RUSTSEC-2026-0099",
-
-    # RUSTSEC-2026-0104: rustls-webpki — Reachable panic in CRL parsing (DoS)
-    # Only triggered when parsing certificate revocation lists. Neither reqwest (v0.11,
-    # via iota-sdk 1.1.5/hyper-rustls) nor async-nats enable CRL checking in their TLS
-    # configurations, so CRL parsing code is never reached in this application.
-    "RUSTSEC-2026-0104",
-
     # RUSTSEC-2026-0194: quick-xml 0.39.4 — Quadratic run time in duplicate-attribute check
     # Same crate and dependency chain as RUSTSEC-2026-0195 below: quick-xml is only pulled in
     # through object_store inside the IOTA SDK. The ssi-agent never parses XML; the vulnerable
@@ -56,17 +37,4 @@ ignore = [
     # client directly, so the NsReader path is not reachable from ssi-agent application code.
     # TODO: revisit once the IOTA SDK upgrades quick-xml to >= 0.41.0.
     "RUSTSEC-2026-0195",
-
-    # RUSTSEC-2026-0258: h2 0.3.27 — unbounded empty DATA frames (low severity DoS)
-    # The vulnerable h2 instance is selected by reqwest 0.11.27 through hyper 0.14.32. Its
-    # workspace path is iota-sdk 1.1.5. It is an outbound client, so a
-    # malicious or compromised remote HTTP/2 peer can trigger the issue.
-    # Connection commands request CommandAuthorization::ACTOR_REQUIRED, which limits exposure when
-    # enforced by the configured authorization checker but is not, by itself, a reason to consider
-    # every outbound path trusted. The public Axum listener and direct reqwest 0.12 clients use the
-    # patched h2 0.4 instance (0.4.16 or later). Tests assert both the lockfile paths and command authorization
-    # marker so this global ignore is revisited if either boundary changes.
-    # No patched release for the remaining transitive dependency paths is available yet.
-    # TODO: revisit once a patched release becomes available upstream.
-    "RUSTSEC-2026-0258",
 ]

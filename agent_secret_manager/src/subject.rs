@@ -1,9 +1,8 @@
-use crate::key_store::{issuer_keys, StrongholdKeyStore};
-use crate::stronghold_storage;
+use crate::key_store::issuer_keys;
+use crate::stronghold_key_store;
 use agent_shared::config::SupportedDidMethod;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use did_manager_identity_stronghold_ext::StrongholdExtStorage;
 use identity_iota::storage::KeyId;
 use identity_kit::{
     did::{Did, DidDocument, DidUrl, VerificationRelationship},
@@ -22,7 +21,6 @@ use tokio::sync::Mutex;
 
 /// Responsible for signing and verifying data.
 pub struct Subject {
-    pub stronghold_storage: StrongholdExtStorage,
     /// Holds the configured issuer keys.
     pub key_store: Arc<dyn KeyStore>,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
@@ -33,7 +31,6 @@ pub struct Subject {
 impl fmt::Debug for Subject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Subject")
-            .field("stronghold_storage", &self.stronghold_storage)
             .field("verification_method_ids", &self.verification_method_ids)
             .field("key_resolver", &self.key_resolver)
             .finish_non_exhaustive()
@@ -83,11 +80,8 @@ fn issuer_key(algorithm: Algorithm) -> anyhow::Result<(identity_kit::keys::KeyId
 impl Subject {
     /// Create a new Subject.
     pub async fn new() -> Self {
-        let stronghold_storage = stronghold_storage().await;
-
         Self {
-            key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
-            stronghold_storage,
+            key_store: Arc::new(stronghold_key_store().await),
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
             key_resolver: key_resolver(),
         }
@@ -196,8 +190,6 @@ mod default_subject {
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
     impl Subject {
         pub async fn test_subject() -> Self {
-            let stronghold_storage = stronghold_storage().await;
-
             let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
                 (
                     StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
@@ -218,8 +210,7 @@ mod default_subject {
             ])));
 
             Self {
-                key_store: Arc::new(StrongholdKeyStore::issuer_keys(stronghold_storage.clone())),
-                stronghold_storage,
+                key_store: Arc::new(stronghold_key_store().await),
                 verification_method_ids,
                 key_resolver: key_resolver(),
             }
