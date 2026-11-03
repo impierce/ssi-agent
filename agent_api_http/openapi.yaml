@@ -2900,7 +2900,7 @@ components:
       - credential
       properties:
         credential:
-          $ref: '#/components/schemas/SignedCredential'
+          $ref: '#/components/schemas/Jwt'
           description: Compact JWT-encoded verifiable credential to add to the holder.
     HolderType:
       type: string

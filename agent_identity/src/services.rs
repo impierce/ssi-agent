@@ -841,13 +841,25 @@ mod tests {
 
         /// A presentation of `credential_jwt` followed by an entry that is not a JWT and one that is not even a string.
         async fn presentation_jwt_with_malformed_entries(&self, credential_jwt: Jwt, method: &DidUrl) -> Jwt {
+            self.presentation_jwt_with_entries(credential_jwt, ["not-a-jwt".into(), 42.into()], method)
+                .await
+        }
+
+        /// A presentation of `credential_jwt` followed by `entries` as they are.
+        async fn presentation_jwt_with_entries(
+            &self,
+            credential_jwt: Jwt,
+            entries: impl IntoIterator<Item = serde_json::Value>,
+            method: &DidUrl,
+        ) -> Jwt {
             let mut claims = LinkedPresentationBuilder::new(self.document.id.clone())
                 .with_credential(credential_jwt)
                 .jwt_claims()
                 .unwrap();
-            let entries = claims.additional["vp"]["verifiableCredential"].as_array_mut().unwrap();
-            entries.push("not-a-jwt".into());
-            entries.push(42.into());
+            claims.additional["vp"]["verifiableCredential"]
+                .as_array_mut()
+                .unwrap()
+                .extend(entries);
             let header = JwsHeader::new(JwsAlgorithm::EdDSA)
                 .with_typ("JWT")
                 .with_kid(method.as_str());
@@ -1059,21 +1071,25 @@ mod tests {
         let mut holder = Holder::new(&mock_server);
         let method = holder.add_key().await;
         let credential_jwt = holder.credential_jwt(&holder.credential(), &method).await;
-        let presentation_jwt = holder
-            .presentation_jwt_with_malformed_entries(credential_jwt, &method)
+
+        // Each malformed entry alone fails publication: one that is not a JWT, and one that is not even a string.
+        for entry in [serde_json::json!("not-a-jwt"), serde_json::json!(42)] {
+            let presentation_jwt = holder
+                .presentation_jwt_with_entries(credential_jwt.clone(), [entry.clone()], &method)
+                .await;
+
+            let result = validate_linked_verifiable_presentation(
+                "presentation",
+                Some(&presentation_jwt),
+                &[holder.document.clone()],
+            )
             .await;
 
-        let result = validate_linked_verifiable_presentation(
-            "presentation",
-            Some(&presentation_jwt),
-            &[holder.document.clone()],
-        )
-        .await;
-
-        assert!(
-            matches!(result, Err(ServiceError::PresentationInvalid(..))),
-            "{result:?}"
-        );
+            assert!(
+                matches!(result, Err(ServiceError::PresentationInvalid(..))),
+                "{entry}: {result:?}"
+            );
+        }
     }
 
     #[test]

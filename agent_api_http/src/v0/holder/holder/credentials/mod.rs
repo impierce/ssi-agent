@@ -49,6 +49,7 @@ pub(crate) async fn credentials(
 #[serde(rename_all = "camelCase")]
 pub struct HolderCredentialsEndpointRequest {
     /// Compact JWT-encoded verifiable credential to add to the holder.
+    #[schema(value_type = identity_kit::vc::Jwt)]
     pub credential: SignedCredential,
 }
 
