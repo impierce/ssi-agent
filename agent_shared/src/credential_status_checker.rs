@@ -37,11 +37,22 @@ pub struct CredentialStatusChecker {
 impl CredentialStatusChecker {
     // TODO: in the future it would be nice to have a flag every time it's called or only in the config to choose between strict validation also failing on operational errors or lenient validation as is currently.
     /// This function is basically a wrapper around `verify_status_claim` which allows us to differentiate between operational errors (unable to fetch or decode the status list token) and actual validation failures (credential status is invalid).
+    ///
+    /// The status list token is checked against the current time, with `CLOCK_SKEW_LEEWAY`.
     pub async fn check_credential_status(
         &self,
         status_claim: serde_json::Value,
     ) -> Result<(), CredentialStatusCheckerError> {
-        match self.verify_status_claim(status_claim).await {
+        self.check_credential_status_at(status_claim, chrono::Utc::now()).await
+    }
+
+    /// [`CredentialStatusChecker::check_credential_status`], checking the status list token against `now` instead.
+    pub async fn check_credential_status_at(
+        &self,
+        status_claim: serde_json::Value,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), CredentialStatusCheckerError> {
+        match self.verify_status_claim(status_claim, now).await {
             Ok(_) => Ok(()),
             // Unable to verify status is not a validation failure, so it's logged as a warning and the validation is skipped.
             Err(CredentialStatusCheckerError::FailedToGetCredentialStatus(e)) => {
@@ -61,7 +72,11 @@ impl CredentialStatusChecker {
     ///
     /// Returns `FailedToGetCredentialStatus` for operational issues (can't fetch, decode, etc.)
     /// Returns `CredentialStatusInvalid` for actual status validation failures.
-    async fn verify_status_claim(&self, status_claim: serde_json::Value) -> Result<(), CredentialStatusCheckerError> {
+    async fn verify_status_claim(
+        &self,
+        status_claim: serde_json::Value,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), CredentialStatusCheckerError> {
         if let Some(status_list_ref) = serde_json::from_value::<Status>(status_claim)
             .ok()
             .and_then(|status| status.status_list)
@@ -136,15 +151,15 @@ impl CredentialStatusChecker {
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
             // TODO: move this logic to IdentityKit.
-            let status_list_token = decode_status_list_token(&status_list_jwt, &decoding_key)
+            let status_list_token = decode_status_list_token(&status_list_jwt, &decoding_key, now)
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            // Checks that `sub` is the referenced URI, that the token was issued by now and hasn't expired, each with
+            // Checks that `sub` is the referenced URI, that the token was issued by `now` and hasn't expired, each with
             // the leeway, and that the index is in range.
             let status = status_list_token
                 .status_of(
                     &status_list_ref,
-                    TimeOptions::at(chrono::Utc::now())
+                    TimeOptions::at(now)
                         .with_leeway(CLOCK_SKEW_LEEWAY.to_std().expect("the clock skew leeway is positive")),
                 )
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
@@ -165,13 +180,15 @@ impl CredentialStatusChecker {
 /// [`CredentialStatusChecker::check_credential_status`].
 #[async_trait]
 impl StatusCheck for CredentialStatusChecker {
-    async fn check(&self, status: CredentialStatus<'_>, _time: TimeOptions) -> Result<(), StatusError> {
+    /// Checks the status list token against the validation time of `time`. Its leeway is not used: the status list
+    /// issuer's clock is tolerated with `CLOCK_SKEW_LEEWAY`, whatever the presentation's caller allows.
+    async fn check(&self, status: CredentialStatus<'_>, time: TimeOptions) -> Result<(), StatusError> {
         let CredentialStatus::StatusClaim(status) = status else {
             return Err(StatusError::Unsupported(status.mechanism()));
         };
         let status_claim = serde_json::to_value(status).map_err(|e| StatusError::Invalid(e.to_string()))?;
 
-        self.check_credential_status(status_claim)
+        self.check_credential_status_at(status_claim, time.now())
             .await
             .map_err(|e| StatusError::Invalid(e.to_string()))
     }
@@ -192,9 +209,13 @@ pub fn decompress_gzip(data: &[u8]) -> std::io::Result<String> {
     Ok(decompressed)
 }
 
-/// Verifies the signature of a status list token JWT and decodes its claims. Tokens issued in the future are rejected;
-/// `sub` and `exp` are checked by [`StatusListToken::status_of`].
-pub fn decode_status_list_token(status_list_jwt: &str, decoding_key: &DecodingKey) -> anyhow::Result<StatusListToken> {
+/// Verifies the signature of a status list token JWT and decodes its claims. Tokens issued after `now`, beyond
+/// `CLOCK_SKEW_LEEWAY`, are rejected; `sub` and `exp` are checked by [`StatusListToken::status_of`].
+pub fn decode_status_list_token(
+    status_list_jwt: &str,
+    decoding_key: &DecodingKey,
+    now: chrono::DateTime<chrono::Utc>,
+) -> anyhow::Result<StatusListToken> {
     let header = decode_header(status_list_jwt)?;
     if header.typ.as_deref() != Some(StatusListToken::TYP) {
         bail!("Invalid `typ` in the status list token header: {:?}", header.typ);
@@ -207,7 +228,7 @@ pub fn decode_status_list_token(status_list_jwt: &str, decoding_key: &DecodingKe
 
     let status_list_token = decode::<StatusListToken>(status_list_jwt, decoding_key, &validation)?.claims;
 
-    if status_list_token.iat > (chrono::Utc::now() + CLOCK_SKEW_LEEWAY).timestamp() {
+    if status_list_token.iat > (now + CLOCK_SKEW_LEEWAY).timestamp() {
         bail!(
             "The status list token is issued in the future: `iat` is {}",
             status_list_token.iat
@@ -382,6 +403,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_status_check_checks_the_status_list_token_against_the_validation_time() {
+        let now = chrono::Utc::now();
+        let validation_time = now - chrono::TimeDelta::seconds(600);
+        let mock_server = MockServer::start().await;
+        let uri = format!("{}/status_list", mock_server.uri());
+
+        // Valid at the validation time, but expired beyond the leeway by now.
+        let mut token = status_list_token(&uri, validation_time - chrono::TimeDelta::seconds(600));
+        token.exp = Some((now - chrono::TimeDelta::seconds(300)).timestamp());
+        Mock::given(method("GET"))
+            .and(path("/status_list"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(sign(&token), StatusListToken::MEDIA_TYPE))
+            .mount(&mock_server)
+            .await;
+        let status = serde_json::from_value::<Status>(status_claim(&uri, INVALID_INDEX)).unwrap();
+
+        let result = checker()
+            .check(CredentialStatus::StatusClaim(&status), TimeOptions::at(validation_time))
+            .await;
+
+        assert!(matches!(result, Err(StatusError::Invalid(_))), "{result:?}");
+    }
+
+    #[tokio::test]
     async fn test_status_list_token_for_another_uri_is_not_used() {
         let jwt = sign(&status_list_token(
             "https://example.org/other_status_list",
@@ -389,7 +434,9 @@ mod tests {
         ));
         let (_mock_server, uri) = serve(gzip(jwt.as_bytes()), true).await;
 
-        let result = checker().verify_status_claim(status_claim(&uri, INVALID_INDEX)).await;
+        let result = checker()
+            .verify_status_claim(status_claim(&uri, INVALID_INDEX), chrono::Utc::now())
+            .await;
 
         assert!(
             matches!(
@@ -404,7 +451,9 @@ mod tests {
     async fn test_status_list_token_larger_than_the_limit_is_not_read() {
         let (_mock_server, uri) = serve(vec![b'a'; MAX_STATUS_LIST_TOKEN_SIZE + 1], false).await;
 
-        let result = checker().verify_status_claim(status_claim(&uri, INVALID_INDEX)).await;
+        let result = checker()
+            .verify_status_claim(status_claim(&uri, INVALID_INDEX), chrono::Utc::now())
+            .await;
 
         assert!(
             matches!(&result, Err(CredentialStatusCheckerError::FailedToGetCredentialStatus(e)) if e.contains("larger than")),
@@ -433,13 +482,26 @@ mod tests {
             "https://example.org/status_list",
             now + chrono::TimeDelta::seconds(30),
         ));
-        assert!(decode_status_list_token(&jwt, &decoding_key).is_ok());
+        assert!(decode_status_list_token(&jwt, &decoding_key, now).is_ok());
 
         let jwt = sign(&status_list_token(
             "https://example.org/status_list",
             now + chrono::TimeDelta::seconds(120),
         ));
-        assert!(decode_status_list_token(&jwt, &decoding_key).is_err());
+        assert!(decode_status_list_token(&jwt, &decoding_key, now).is_err());
+    }
+
+    #[test]
+    fn test_decode_status_list_token_checks_iat_against_the_given_time() {
+        let decoding_key = DecodingKey::from_ed_der(&TEST_PUBLIC_KEY);
+        let validation_time = chrono::Utc::now() - chrono::TimeDelta::seconds(600);
+
+        // Issued after the validation time beyond the leeway, but before the wall clock.
+        let jwt = sign(&status_list_token(
+            "https://example.org/status_list",
+            validation_time + chrono::TimeDelta::seconds(120),
+        ));
+        assert!(decode_status_list_token(&jwt, &decoding_key, validation_time).is_err());
     }
 
     #[tokio::test]
@@ -456,7 +518,9 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = checker().verify_status_claim(status_claim(&uri, INVALID_INDEX)).await;
+        let result = checker()
+            .verify_status_claim(status_claim(&uri, INVALID_INDEX), chrono::Utc::now())
+            .await;
 
         assert!(
             matches!(result, Err(CredentialStatusCheckerError::CredentialStatusInvalid)),
@@ -472,7 +536,9 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let result = checker().verify_status_claim(status_claim(&uri, INVALID_INDEX)).await;
+        let result = checker()
+            .verify_status_claim(status_claim(&uri, INVALID_INDEX), chrono::Utc::now())
+            .await;
 
         assert!(
             matches!(
