@@ -16,7 +16,6 @@ async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
-derivative.workspace = true
 identity-kit.workspace = true
 indexmap.workspace = true
 iso8601.workspace = true
