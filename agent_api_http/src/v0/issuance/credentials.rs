@@ -1380,7 +1380,8 @@ pub mod tests {
             }
         };
 
-        let status_list_token = decode_status_list_token(&jwt_status_list_token, &decoding_key).unwrap();
+        let status_list_token =
+            decode_status_list_token(&jwt_status_list_token, &decoding_key, chrono::Utc::now()).unwrap();
         let status = status_list_token.status_list.get(TESTINDEX as u64);
 
         assert_eq!(status, Some(identity_kit::status_list::StatusType::INVALID));
