@@ -69,16 +69,6 @@ flate2 = "1.1"
 futures = "0.3"
 hickory-resolver = "0.26"
 mockall = "0.14"
-identity_core = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
-identity_credential = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false, features = [
-    "domain-linkage",
-    "presentation",
-] }
-identity_did = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
-identity_document = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
-identity_iota = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
-identity_storage = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1" }
-identity_verification = { git = "https://github.com/iotaledger/identity", tag = "v1.9.6-beta.1", default-features = false }
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
@@ -107,7 +97,7 @@ temp-env = "0.3"
 thiserror = "1.0"
 tokio = { version = "1.46", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-tower = { version = "0.4" }
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.6", features = ["compression-gzip", "cors", "trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }

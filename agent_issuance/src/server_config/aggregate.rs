@@ -2,7 +2,6 @@ use agent_shared::config::{config, Authorization};
 use agent_shared::UrlAppendHelpers as _;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json;
@@ -40,8 +39,7 @@ fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[
     signing_algorithms_supported
         .iter()
         .filter_map(|algorithm| {
-            algorithm
-                .to_json_value()
+            serde_json::to_value(algorithm)
                 .ok()
                 .and_then(|value| value.as_str().map(|s| AlgIdentifier::String(s.to_string())))
         })
