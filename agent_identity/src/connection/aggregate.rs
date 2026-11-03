@@ -1,13 +1,13 @@
 use crate::services::{DidConfigurationError, IdentityServices, LinkedDid};
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::common::Url;
 use identity_kit::{did::Did, vc::Credential};
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
 use tracing::{debug, info};
+use url::Url;
 use utoipa::openapi::{RefOr, Schema};
 use utoipa::{PartialSchema, ToSchema};
 

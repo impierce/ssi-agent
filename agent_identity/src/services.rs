@@ -339,7 +339,7 @@ impl IdentityServices {
         };
 
         LinkedVpValidation {
-            url: url.into(),
+            url,
             did,
             domain_linkage_valid: linked_did.domain_linkage_valid,
             result: ValidationResult {

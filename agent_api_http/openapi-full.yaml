@@ -3018,6 +3018,65 @@ components:
           - 'null'
         name:
           type: string
+    ClaimDisplay:
+      type: object
+      description: Display information for a claim in one locale (SD-JWT VC §5.6.2).
+      required:
+      - locale
+      - label
+      properties:
+        description:
+          type: string
+          description: A description for end users.
+        label:
+          type: string
+          description: The label of the claim for end users.
+        locale:
+          type: string
+          description: The language tag (RFC 5646).
+      additionalProperties: true
+    ClaimMetadata:
+      type: object
+      description: Metadata for the claim or claims at a path (SD-JWT VC §5.6).
+      required:
+      - path
+      properties:
+        display:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimDisplay'
+          description: Display information per locale (SD-JWT VC §5.6.2).
+        mandatory:
+          type: boolean
+          description: Whether the issuer must include the claim; default false.
+        path:
+          $ref: '#/components/schemas/ClaimPath'
+          description: The claim path (SD-JWT VC §5.6.1).
+        sd:
+          type: string
+          description: Whether the claim is selectively disclosable (SD-JWT VC §5.6.4); default `allowed`.
+          enum:
+          - always
+          - allowed
+          - never
+        svg_id:
+          type: string
+          description: The id of the claim in SVG templates.
+      additionalProperties: true
+    ClaimPath:
+      type: array
+      items:
+        oneOf:
+        - type: string
+          description: An object key.
+        - type: integer
+          description: An array index.
+          minimum: 0
+        - type: 'null'
+          description: Every element of an array.
+        description: A path component.
+      description: 'A claim path (SD-JWT VC §5.6.1), the claims path pointer of OID4VP §7: where a claim sits in a JSON credential.'
+      minItems: 1
     ClaimPathElement:
       oneOf:
       - type: string
@@ -3971,6 +4030,27 @@ components:
           - type: 'null'
         name:
           type: string
+    DisplayMetadata:
+      type: object
+      description: Display information for a type in one locale (SD-JWT VC §5.5).
+      required:
+      - locale
+      - name
+      properties:
+        description:
+          type: string
+          description: A description for end users.
+        locale:
+          type: string
+          description: The language tag (RFC 5646).
+        name:
+          type: string
+          description: The name of the type for end users.
+        rendering:
+          type: object
+          description: 'Rendering information: `simple`, `svg_templates`.'
+          additionalProperties: true
+      additionalProperties: true
     Document:
       type: object
       required:
@@ -5580,117 +5660,37 @@ components:
           minimum: 0
     TypeMetadata:
       type: object
-      description: |-
-        Type metadata of an SD-JWT VC credential type.
-
-        See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
+      description: 'SD-JWT VC type metadata (SD-JWT VC §5): what a `vct` means, how to display it, and which claims it carries.'
       required:
       - vct
       properties:
         claims:
           type: array
           items:
-            $ref: '#/components/schemas/TypeMetadataClaim'
+            $ref: '#/components/schemas/ClaimMetadata'
+          description: Claim metadata (SD-JWT VC §5.6).
         description:
-          type:
-          - string
-          - 'null'
-          description: A human-readable description for the type.
+          type: string
+          description: A description for developers.
         display:
           type: array
           items:
-            $ref: '#/components/schemas/TypeMetadataDisplay'
+            $ref: '#/components/schemas/DisplayMetadata'
+          description: Display information per locale (SD-JWT VC §5.5).
         extends:
-          type:
-          - string
-          - 'null'
+          type: string
           format: uri
-          description: A URI of another type that this type extends.
+          description: The type this one extends.
         extends#integrity:
-          type:
-          - string
-          - 'null'
-          description: Integrity metadata for the extended type.
+          type: string
+          description: The integrity metadata of the extended type's document (SD-JWT VC §6).
         name:
-          type:
-          - string
-          - 'null'
-          description: A human-readable name for the type.
+          type: string
+          description: A name for developers.
         vct:
           type: string
-          format: uri
-          description: The type described, the URL this metadata is retrieved from.
-    TypeMetadataClaim:
-      type: object
-      description: Information about particular claims of an SD-JWT VC type.
-      required:
-      - path
-      properties:
-        display:
-          type: array
-          items:
-            $ref: '#/components/schemas/TypeMetadataClaimDisplay'
-        mandatory:
-          type:
-          - boolean
-          - 'null'
-          description: Whether the claim must be present in the issued credential.
-        path:
-          $ref: '#/components/schemas/ClaimPathPointer'
-        sd:
-          oneOf:
-          - type: string
-            enum:
-            - always
-            - allowed
-            - never
-          - type: 'null'
-          description: Whether the claim is selectively disclosable.
-        svg_id:
-          type:
-          - string
-          - 'null'
-          description: The ID of the claim for reference in an SVG template.
-    TypeMetadataClaimDisplay:
-      type: object
-      description: Display information for a claim.
-      required:
-      - locale
-      - label
-      properties:
-        description:
-          type:
-          - string
-          - 'null'
-        label:
-          type: string
-        locale:
-          type: string
-          description: A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
-    TypeMetadataDisplay:
-      type: object
-      description: Display information for an SD-JWT VC type.
-      required:
-      - locale
-      - name
-      properties:
-        description:
-          type:
-          - string
-          - 'null'
-        locale:
-          type: string
-          description: A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
-        name:
-          type: string
-        rendering:
-          type:
-          - object
-          - 'null'
-          description: Rendering information, such as `simple` or `svg_templates`.
-          additionalProperties: {}
-          propertyNames:
-            type: string
+          description: 'The type described: a case-sensitive collision-resistant name.'
+      additionalProperties: true
     UpdateTemplateEndpointRequest:
       type: object
       properties:

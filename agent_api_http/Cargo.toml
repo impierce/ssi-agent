@@ -31,7 +31,6 @@ http-api-problem = { version = "0.60", features = ["axum", "api-error"] }
 http-body-util = "0.1"
 hyper = { version = "1.2" }
 identity-kit.workspace = true
-identity_core.workspace = true
 indexmap.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
