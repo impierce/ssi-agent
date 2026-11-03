@@ -338,6 +338,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_authorization_request(
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
@@ -348,12 +349,13 @@ pub mod tests {
 
         AuthorizationRequestTestFramework::with(verification_services)
             .given_no_previous_events()
-            .when(AuthorizationRequestCommand::CreateAuthorizationRequest {
+            .when_async(AuthorizationRequestCommand::CreateAuthorizationRequest {
                 state: "state".to_string(),
                 nonce: "nonce".to_string(),
                 dcql_query: None,
                 alternative_response_mode: None,
             })
+            .await
             .then_expect_events(vec![
                 AuthorizationRequestEvent::AuthorizationRequestCreated {
                     authorization_request: Box::new(GenericAuthorizationRequest::SIOPv2(Box::new(
@@ -371,6 +373,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_authorization_request_object(
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
     ) {
@@ -393,7 +396,8 @@ pub mod tests {
                     ),
                 },
             ])
-            .when(AuthorizationRequestCommand::SignAuthorizationRequestObject)
+            .when_async(AuthorizationRequestCommand::SignAuthorizationRequestObject)
+            .await
             .then_expect_events(vec![AuthorizationRequestEvent::AuthorizationRequestObjectSigned {
                 signed_authorization_request_object: signed_authorization_request_object(
                     &verifier_did_method.to_string(),
@@ -403,6 +407,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_verify_siopv2_authorization_response(
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
@@ -439,7 +444,8 @@ pub mod tests {
                     ),
                 },
             ])
-            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response })
+            .when_async(AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response })
+            .await
             .then_expect_events(vec![AuthorizationRequestEvent::SIOPv2AuthorizationResponseVerified {
                 id_token,
                 state: Some("state".to_string()),
@@ -449,6 +455,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_verify_oid4vp_authorization_response(
         // TODO: add `did:web`, check for other tests as well. Probably should be moved to E2E test.
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
@@ -505,7 +512,8 @@ pub mod tests {
                     ),
                 },
             ])
-            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response })
+            .when_async(AuthorizationRequestCommand::VerifyAuthorizationResponse { authorization_response })
+            .await
             .then_expect_events(vec![AuthorizationRequestEvent::OID4VPAuthorizationResponseVerified {
                 vp_token: decoded_vp_token,
                 state: Some("state".to_string()),
@@ -515,6 +523,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_verify_oid4vp_authorization_response_nonce_mismatch(
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] verifier_did_method: SupportedDidMethod,
         #[values(SupportedDidMethod::Key, SupportedDidMethod::Jwk)] provider_did_method: SupportedDidMethod,
@@ -549,9 +558,9 @@ pub mod tests {
                     ),
                 },
             ])
-            .when(AuthorizationRequestCommand::VerifyAuthorizationResponse {
+            .when_async(AuthorizationRequestCommand::VerifyAuthorizationResponse {
                 authorization_response,
-            })
+            }).await
             .then_expect_error_message(
                 "Invalid OID4VP Authorization Response: Presentation validation error: presentation: nonce Some(\"mismatched-nonce\") is not \"nonce\"",
             );
