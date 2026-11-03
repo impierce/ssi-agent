@@ -18,7 +18,6 @@ cqrs-es.workspace = true
 chrono.workspace = true
 derivative.workspace = true
 identity-kit.workspace = true
-identity_core.workspace = true
 indexmap.workspace = true
 iso8601.workspace = true
 jsonschema.workspace = true

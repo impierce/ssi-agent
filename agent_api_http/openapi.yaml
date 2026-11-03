@@ -3889,7 +3889,7 @@ components:
           format: int32
           description: The length of the PIN must be between 0 and 255 characters.
           examples:
-          - $serde_json::private::Number: '6'
+          - 6
           maximum: 255
           minimum: 0
     UpdateTemplateEndpointRequest:

@@ -259,12 +259,14 @@ impl Aggregate for Credential {
                 let iat = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
                 let created_at = iat.clone();
-                let iat = identity_core::common::Timestamp::parse(&iat).expect("Could not parse issuance_date");
+                let iat = DateTime::parse_from_rfc3339(&iat)
+                    .expect("Could not parse issuance_date")
+                    .timestamp();
 
                 // iss is set to the issuer DID
                 let default_did_method = get_preferred_did_method();
 
-                let iss: identity_core::common::Url = services
+                let iss: Url = services
                     .issuer
                     .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
@@ -320,8 +322,8 @@ impl Aggregate for Credential {
 
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
                             .iss(iss.to_string())
-                            .iat(iat.to_unix())
-                            .nbf(iat.to_unix()); // setting the `nbf` to `iat` makes the JWT immediately usable
+                            .iat(iat)
+                            .nbf(iat); // setting the `nbf` to `iat` makes the JWT immediately usable
 
                         if let Some(subject_id) = subject_id {
                             vc_jwt_builder = vc_jwt_builder.sub(subject_id);
@@ -369,7 +371,7 @@ impl Aggregate for Credential {
                             credential_data,
                             jti,
                             iss,
-                            DateTime::from_timestamp(iat.to_unix(), 0).ok_or(InvalidCredentialDataError)?,
+                            DateTime::from_timestamp(iat, 0).ok_or(InvalidCredentialDataError)?,
                             status_claim,
                             self.expires_at,
                             holder_kid,
@@ -922,7 +924,7 @@ async fn sign_dc_sd_jwt(
     issuer: &Arc<Subject>,
     credential_data: serde_json::Value,
     jti: Url,
-    iss: identity_core::common::Url,
+    iss: Url,
     iat: DateTime<Utc>,
     status_claim: identity_kit::status_list::Status,
     expires_at: Option<DateTime<Utc>>,
@@ -982,14 +984,14 @@ fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
     }
 }
 
-pub fn get_status_list_url(id: String) -> Result<identity_core::common::Url, CredentialError> {
+pub fn get_status_list_url(id: String) -> Result<Url, CredentialError> {
     let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
     status_list_url
         .path_segments_mut()
         .map_err(|_| CredentialError::InvalidCredentialStatus)?
         .push(&id);
 
-    Ok(status_list_url.into())
+    Ok(status_list_url)
 }
 
 #[cfg(test)]
@@ -1000,7 +1002,6 @@ pub mod credential_tests {
     use agent_shared::config::TESTINDEX;
     use jsonwebtoken::Algorithm;
 
-    use identity_core::common::Url;
     use identity_kit::sd_jwt_vc::SdJwtVc;
     use rstest::rstest;
     use serde_json::json;
