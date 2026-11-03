@@ -2,7 +2,8 @@
 //! published as CloudEvents to the configured subject.
 
 use bc_event_publishing::{
-    domain::event_publisher::config::NatsPublisherConfig, infrastructure::nats::NatsEventPublisherWorker,
+    domain::event_publisher::config::{EventPublisherFilter, NatsPublisherConfig},
+    infrastructure::nats::NatsEventPublisherWorker,
 };
 use futures::StreamExt as _;
 use serde_json::Value;
@@ -29,7 +30,9 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     // An unreachable server fails connecting directly.
     assert!(NatsEventPublisherWorker::connect(
         "nats-unreachable".to_string(),
-        vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
+        EventPublisherFilter {
+            types: vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
+        },
         NatsPublisherConfig {
             nats_url: "nats://127.0.0.1:1".to_string(),
             subject: SUBJECT.to_string(),
@@ -42,7 +45,9 @@ async fn configured_offer_events_are_published_as_cloud_events() {
     // Connect the publisher worker against the running NATS container
     let publisher = NatsEventPublisherWorker::connect(
         "nats-offers".to_string(),
-        vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
+        EventPublisherFilter {
+            types: vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
+        },
         NatsPublisherConfig {
             nats_url: nats_url.clone(),
             subject: SUBJECT.to_string(),

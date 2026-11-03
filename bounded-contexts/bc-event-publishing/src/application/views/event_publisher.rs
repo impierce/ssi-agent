@@ -1,5 +1,7 @@
 use crate::domain::event_publisher::{
-    aggregate::EventPublisher, config::EventPublisherConfig, event::EventPublisherEvent,
+    aggregate::EventPublisher,
+    config::{EventPublisherConfig, EventPublisherFilter},
+    event::EventPublisherEvent,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,7 +26,7 @@ pub struct EventPublisherView {
     pub name: String,
     pub description: Option<String>,
     pub enabled: bool,
-    pub events: Vec<String>,
+    pub filter: EventPublisherFilter,
     pub config: Option<EventPublisherConfig>,
     pub view_status: Status,
     pub created_at: DateTime<Utc>,
@@ -48,7 +50,7 @@ impl View<EventPublisher> for EventPublisherView {
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
                 occurred_at,
             } => {
@@ -56,7 +58,7 @@ impl View<EventPublisher> for EventPublisherView {
                 self.name.clone_from(name);
                 self.description.clone_from(description);
                 self.enabled = *enabled;
-                self.events.clone_from(events);
+                self.filter.clone_from(filter);
                 self.config = Some(config.clone());
                 self.view_status = Status::Configured;
                 self.created_at = *occurred_at;
@@ -67,14 +69,14 @@ impl View<EventPublisher> for EventPublisherView {
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
                 occurred_at,
             } => {
                 self.name.clone_from(name);
                 self.description.clone_from(description);
                 self.enabled = *enabled;
-                self.events.clone_from(events);
+                self.filter.clone_from(filter);
                 self.config = Some(config.clone());
                 self.last_modified_at = *occurred_at;
             }

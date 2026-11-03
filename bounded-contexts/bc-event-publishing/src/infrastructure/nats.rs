@@ -1,4 +1,4 @@
-use crate::domain::event_publisher::config::NatsPublisherConfig;
+use crate::domain::event_publisher::config::{EventPublisherFilter, NatsPublisherConfig};
 use async_nats::Client;
 use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
 use std::time::Duration;
@@ -27,14 +27,11 @@ impl NatsEventPublisherWorker {
     /// Returns [`async_nats::ConnectError`] if connecting to `config.nats_url` fails.
     pub async fn connect(
         id: String,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: NatsPublisherConfig,
         event_bus: &EventBusHandle,
     ) -> Result<Self, async_nats::ConnectError> {
-        let filter = EventFilter {
-            event_types: events,
-            ..Default::default()
-        };
+        let filter = filter.to_event_filter();
         let stream = event_bus.subscribe(filter.clone());
 
         info!(
@@ -62,14 +59,11 @@ impl NatsEventPublisherWorker {
     #[must_use]
     pub fn spawn_resilient(
         id: String,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: NatsPublisherConfig,
         event_bus: &EventBusHandle,
     ) -> tokio::task::JoinHandle<()> {
-        let filter = EventFilter {
-            event_types: events,
-            ..Default::default()
-        };
+        let filter = filter.to_event_filter();
         let stream = event_bus.subscribe(filter.clone());
 
         tokio::spawn(async move {
@@ -191,7 +185,9 @@ mod tests {
 
         let res = NatsEventPublisherWorker::connect(
             "nats-1".to_string(),
-            vec!["com.impierce.unicore.issuance.credential.offered".to_string()],
+            EventPublisherFilter {
+                types: vec!["com.impierce.unicore.issuance.credential.offered".to_string()],
+            },
             config,
             &event_bus,
         )
@@ -238,7 +234,9 @@ mod tests {
         let event_bus = EventBusHandle::new(100);
         let worker = NatsEventPublisherWorker::connect(
             "nats-1".to_string(),
-            vec!["com.impierce.unicore.credential.issued".to_string()],
+            EventPublisherFilter {
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
+            },
             config,
             &event_bus,
         )

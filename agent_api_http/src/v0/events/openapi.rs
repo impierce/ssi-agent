@@ -13,7 +13,7 @@ use crate::v0::events::{
     },
 };
 use bc_event_publishing::domain::event_publisher::config::{
-    EventPublisherType, HttpPublisherConfig, NatsPublisherConfig,
+    EventPublisherFilter, EventPublisherType, HttpPublisherConfig, NatsPublisherConfig,
 };
 use shared_kernel::event_bus::CloudEvent;
 use utoipa::OpenApi;
@@ -33,6 +33,7 @@ use utoipa::OpenApi;
     components(schemas(
         CloudEvent,
         EventPublisherType,
+        EventPublisherFilter,
         HttpPublisherConfig,
         NatsPublisherConfig,
         HttpEventPublisherType,

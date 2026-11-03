@@ -3,7 +3,7 @@ use crate::domain::event_publisher::{
         self, ActivateEventPublisher, CreateEventPublisher, DeactivateEventPublisher, DeleteEventPublisher,
         UpdateEventPublisher,
     },
-    config::EventPublisherConfig,
+    config::{EventPublisherConfig, EventPublisherFilter},
     error::EventPublisherError,
     event::EventPublisherEvent::{
         self, EventPublisherActivated, EventPublisherCreated, EventPublisherDeactivated, EventPublisherDeleted,
@@ -22,7 +22,7 @@ pub struct EventPublisherInner {
     pub name: String,
     pub description: Option<String>,
     pub enabled: bool,
-    pub events: Vec<String>,
+    pub filter: EventPublisherFilter,
     pub config: EventPublisherConfig,
     pub created_at: DateTime<Utc>,
     pub last_modified_at: DateTime<Utc>,
@@ -57,20 +57,20 @@ impl Aggregate for EventPublisher {
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
             } => {
-                self.create_event_publisher(id, name, description, enabled, events, config, service, sink)
+                self.create_event_publisher(id, name, description, enabled, filter, config, service, sink)
                     .await?;
             }
             UpdateEventPublisher {
                 id,
                 name,
                 description,
-                events,
+                filter,
                 config,
             } => {
-                self.update_event_publisher(id, name, description, events, config, service, sink)
+                self.update_event_publisher(id, name, description, filter, config, service, sink)
                     .await?;
             }
             ActivateEventPublisher { id } => {
@@ -95,22 +95,22 @@ impl Aggregate for EventPublisher {
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
                 occurred_at,
             } => {
-                self.event_publisher_created(id, name, description, enabled, events, config, occurred_at);
+                self.event_publisher_created(id, name, description, enabled, filter, config, occurred_at);
             }
             EventPublisherUpdated {
                 id: _,
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
                 occurred_at,
             } => {
-                self.event_publisher_updated(name, description, enabled, events, config, occurred_at);
+                self.event_publisher_updated(name, description, enabled, filter, config, occurred_at);
             }
             EventPublisherActivated { occurred_at, .. } => {
                 self.event_publisher_activated(occurred_at);
@@ -179,7 +179,9 @@ pub mod tests {
             name: "CRM Webhook".to_string(),
             description: Some("Forwards issuance events".to_string()),
             enabled: true,
-            events: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+            filter: EventPublisherFilter {
+                types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+            },
             config: http_config,
             occurred_at: Utc::now(),
         }
@@ -195,7 +197,9 @@ pub mod tests {
                 name: " CRM Webhook ".to_string(),
                 description: Some(" Forwards issuance events ".to_string()),
                 enabled: true,
-                events: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                filter: EventPublisherFilter {
+                    types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                },
                 config: http_config.clone(),
             })
             .inspect_result()
@@ -208,7 +212,7 @@ pub mod tests {
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
                 ..
             } => {
@@ -217,8 +221,10 @@ pub mod tests {
                 assert_eq!(description.as_deref(), Some("Forwards issuance events"));
                 assert!(*enabled);
                 assert_eq!(
-                    events,
-                    &vec!["com.impierce.unicore.issuance.credential.issued".to_string()]
+                    filter,
+                    &EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                    }
                 );
                 assert_eq!(config, &http_config);
             }
@@ -236,7 +242,9 @@ pub mod tests {
                 name: "Bad URL".to_string(),
                 description: None,
                 enabled: true,
-                events: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                filter: EventPublisherFilter {
+                    types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                },
                 config: EventPublisherConfig::Http(HttpPublisherConfig {
                     target_url: "ftp://bad.example.com".to_string(),
                     headers: None,
@@ -257,7 +265,9 @@ pub mod tests {
                 name: "Bad Event".to_string(),
                 description: None,
                 enabled: true,
-                events: vec!["com.unknown.event.type".to_string()],
+                filter: EventPublisherFilter {
+                    types: vec!["com.unknown.event.type".to_string()],
+                },
                 config: http_config,
             })
             .then_expect_error(InvalidEventTypes::UnknownEventType("com.unknown.event.type".to_string()).into());
@@ -278,7 +288,9 @@ pub mod tests {
                 id: publisher_id.clone(),
                 name: Some("Updated CRM Webhook".to_string()),
                 description: None,
-                events: Some(vec!["com.impierce.unicore.issuance.*".to_string()]),
+                filter: Some(EventPublisherFilter {
+                    types: vec!["com.impierce.unicore.issuance.*".to_string()],
+                }),
                 config: Some(EventPublisherConfig::Http(HttpPublisherConfig {
                     target_url: "https://example.com/webhooks/v2".to_string(),
                     headers: Some(redacted_headers),
@@ -291,12 +303,17 @@ pub mod tests {
         match &events[0] {
             EventPublisherEvent::EventPublisherUpdated {
                 name,
-                events,
+                filter,
                 config: EventPublisherConfig::Http(http),
                 ..
             } => {
                 assert_eq!(name, "Updated CRM Webhook");
-                assert_eq!(events, &vec!["com.impierce.unicore.issuance.*".to_string()]);
+                assert_eq!(
+                    filter,
+                    &EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.*".to_string()],
+                    }
+                );
                 assert_eq!(http.target_url, "https://example.com/webhooks/v2");
                 assert_eq!(
                     http.headers.as_ref().unwrap().get("authorization").map(String::as_str),
@@ -313,7 +330,7 @@ pub mod tests {
                 id: publisher_id,
                 name: Some("CRM Webhook".to_string()),
                 description: None,
-                events: None,
+                filter: None,
                 config: None,
             })
             .inspect_result()

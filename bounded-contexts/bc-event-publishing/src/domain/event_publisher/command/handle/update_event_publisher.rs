@@ -1,5 +1,7 @@
 use crate::domain::event_publisher::{
-    aggregate::EventPublisher, config::EventPublisherConfig, error::EventPublisherError,
+    aggregate::EventPublisher,
+    config::{EventPublisherConfig, EventPublisherFilter},
+    error::EventPublisherError,
     event::EventPublisherEvent::EventPublisherUpdated,
 };
 use chrono::Utc;
@@ -13,7 +15,7 @@ impl EventPublisher {
         id: String,
         name: Option<String>,
         description: Option<Option<String>>,
-        events: Option<Vec<String>>,
+        filter: Option<EventPublisherFilter>,
         config: Option<EventPublisherConfig>,
         service: &<EventPublisher as Aggregate>::Services,
         sink: &EventSink<Self>,
@@ -43,9 +45,9 @@ impl EventPublisher {
             None => current.description.clone(),
         };
 
-        let updated_events = match events {
-            Some(events) => service.known_event_types().validate_and_normalize(events)?,
-            None => current.events.clone(),
+        let updated_filter = match filter {
+            Some(filter) => service.known_event_types().validate_and_normalize_filter(filter)?,
+            None => current.filter.clone(),
         };
 
         let updated_config = match config {
@@ -55,7 +57,7 @@ impl EventPublisher {
 
         if updated_name == current.name
             && updated_description == current.description
-            && updated_events == current.events
+            && updated_filter == current.filter
             && updated_config == current.config
         {
             info!(publisher_id = %current.id, "Event publisher update submitted unchanged; skipping event write");
@@ -74,7 +76,7 @@ impl EventPublisher {
                 name: updated_name,
                 description: updated_description,
                 enabled: current.enabled,
-                events: updated_events,
+                filter: updated_filter,
                 config: updated_config,
                 occurred_at: Utc::now(),
             },

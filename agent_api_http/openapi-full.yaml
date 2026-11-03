@@ -1063,9 +1063,10 @@ paths:
               name: Production Issuance Webhook
               description: Forwards issuance CloudEvents to the billing service
               enabled: true
-              events:
-              - com.impierce.unicore.issuance.credential.offered
-              - com.impierce.unicore.issuance.credential.issued
+              filter:
+                types:
+                - com.impierce.unicore.issuance.credential.offered
+                - com.impierce.unicore.issuance.credential.issued
               config:
                 publisherType: http
                 targetUrl: https://billing.example.org/webhooks/unicore
@@ -2410,7 +2411,7 @@ paths:
       - Events
       summary: Update an Event Publisher
       description: |-
-        Updates the name, description, subscribed event types, or transport configuration of an existing
+        Updates the name, description, event subscription filter, or transport configuration of an existing
         event publisher. If the publisher is currently active, its background worker is replaced immediately.
       operationId: update_event_publisher
       requestBody:
@@ -2422,8 +2423,9 @@ paths:
               id: f2202574-9a5b-5ecd-a1a3-df5ca8e87354
               name: Production Issuance Webhook
               description: Updated target URL and event filter
-              events:
-              - com.impierce.unicore.issuance.*
+              filter:
+                types:
+                - com.impierce.unicore.issuance.*
               config:
                 publisherType: http
                 targetUrl: https://billing.example.org/v2/webhooks/unicore
@@ -3359,7 +3361,7 @@ components:
       description: Request payload for creating a runtime event publisher.
       required:
       - name
-      - events
+      - filter
       - config
       properties:
         config:
@@ -3373,11 +3375,9 @@ components:
         enabled:
           type: boolean
           description: Whether the event publisher should start dispatching events immediately (defaults to `true`).
-        events:
-          type: array
-          items:
-            type: string
-          description: CloudEvent type patterns to subscribe to (exact types, prefix globs like `com.impierce.unicore.issuance.*`, or `*`).
+        filter:
+          $ref: '#/components/schemas/EventPublisherFilter'
+          description: Event subscription filter matching `/v0/events` query parameters (`types`).
         id:
           type:
           - string
@@ -4245,7 +4245,7 @@ components:
       - name
       - enabled
       - publisherType
-      - events
+      - filter
       - config
       - createdAt
       - lastModifiedAt
@@ -4261,10 +4261,8 @@ components:
           - 'null'
         enabled:
           type: boolean
-        events:
-          type: array
-          items:
-            type: string
+        filter:
+          $ref: '#/components/schemas/EventPublisherFilter'
         id:
           type: string
         lastModifiedAt:
@@ -4285,6 +4283,26 @@ components:
         mapping:
           http: '#/components/schemas/HttpEventPublisherConfigDto'
           nats: '#/components/schemas/NatsEventPublisherConfigDto'
+    EventPublisherFilter:
+      type: object
+      description: |-
+        Event subscription filter for an [`EventPublisher`](super::aggregate::EventPublisher).
+
+        Field names match the `/v0/events` SSE query parameters (`types`, and in future extensions
+        `sources`, `subject`, etc.).
+      required:
+      - types
+      properties:
+        types:
+          type: array
+          items:
+            type: string
+          description: |-
+            CloudEvent `type` patterns to subscribe to (exact types, prefix globs like
+            `com.impierce.unicore.issuance.*`, or `*`).
+          example:
+          - com.impierce.unicore.issuance.credential.offered
+          - com.impierce.unicore.issuance.credential.issued
     EventPublisherList:
       type: array
       items:
@@ -5976,12 +5994,10 @@ components:
           type:
           - string
           - 'null'
-        events:
-          type:
-          - array
-          - 'null'
-          items:
-            type: string
+        filter:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/EventPublisherFilter'
         id:
           type: string
         name:

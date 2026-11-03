@@ -1,4 +1,4 @@
-use crate::domain::event_publisher::config::HttpPublisherConfig;
+use crate::domain::event_publisher::config::{EventPublisherFilter, HttpPublisherConfig};
 use reqwest::header::HeaderMap;
 use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
 use std::time::Duration;
@@ -26,23 +26,25 @@ impl HttpEventPublisherWorker {
     /// Subscribes immediately to `event_bus` upon creation so no events published after
     /// this call are missed.
     #[must_use]
-    pub fn new(id: String, events: Vec<String>, config: HttpPublisherConfig, event_bus: &EventBusHandle) -> Self {
-        Self::with_timeout(id, events, config, event_bus, DEFAULT_WEBHOOK_TIMEOUT)
+    pub fn new(
+        id: String,
+        filter: EventPublisherFilter,
+        config: HttpPublisherConfig,
+        event_bus: &EventBusHandle,
+    ) -> Self {
+        Self::with_timeout(id, filter, config, event_bus, DEFAULT_WEBHOOK_TIMEOUT)
     }
 
     /// Creates a new `HttpEventPublisherWorker` with a custom request timeout.
     #[must_use]
     pub fn with_timeout(
         id: String,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: HttpPublisherConfig,
         event_bus: &EventBusHandle,
         timeout: Duration,
     ) -> Self {
-        let filter = EventFilter {
-            event_types: events,
-            ..Default::default()
-        };
+        let filter = filter.to_event_filter();
         let stream = event_bus.subscribe(filter.clone());
         let headers = config.header_map();
 
@@ -178,7 +180,9 @@ mod tests {
         let event_bus = EventBusHandle::new(100);
         let worker = HttpEventPublisherWorker::new(
             "pub-1".to_string(),
-            vec!["com.impierce.unicore.credential.issued".to_string()],
+            EventPublisherFilter {
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
+            },
             config,
             &event_bus,
         );
@@ -228,7 +232,9 @@ mod tests {
         let event_bus = EventBusHandle::new(100);
         let worker = HttpEventPublisherWorker::with_timeout(
             "pub-err".to_string(),
-            vec!["test.error.event".to_string()],
+            EventPublisherFilter {
+                types: vec!["test.error.event".to_string()],
+            },
             config,
             &event_bus,
             Duration::from_millis(50),

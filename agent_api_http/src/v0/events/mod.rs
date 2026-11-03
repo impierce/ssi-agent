@@ -850,7 +850,9 @@ mod tests {
             .body(axum::body::Body::from(
                 serde_json::to_vec(&json!({
                     "name": "Bad Webhook",
-                    "events": ["com.impierce.unicore.issuance.credential.issued"],
+                    "filter": {
+                        "types": ["com.impierce.unicore.issuance.credential.issued"]
+                    },
                     "config": {
                         "publisherType": "http",
                         "targetUrl": "ftp://invalid.example.org"
@@ -871,7 +873,9 @@ mod tests {
                 serde_json::to_vec(&json!({
                     "name": "Live Webhook",
                     "description": "Initial",
-                    "events": ["com.impierce.unicore.issuance.credential.issued"],
+                    "filter": {
+                        "types": ["com.impierce.unicore.issuance.credential.issued"]
+                    },
                     "config": {
                         "publisherType": "http",
                         "targetUrl": "https://subscriber.example.org/events",
@@ -890,6 +894,10 @@ mod tests {
         let pub_id = created_json["id"].as_str().unwrap().to_string();
         assert_eq!(created_json["enabled"], true);
         assert_eq!(created_json["publisherType"], "http");
+        assert_eq!(
+            created_json["filter"]["types"],
+            json!(["com.impierce.unicore.issuance.credential.issued"])
+        );
         assert_eq!(created_json["config"]["headers"]["authorization"], "****");
 
         // 4. Get by ID and List
@@ -922,7 +930,9 @@ mod tests {
                     "id": pub_id,
                     "name": "Updated Webhook",
                     "description": "Updated",
-                    "events": ["com.impierce.unicore.issuance.*"],
+                    "filter": {
+                        "types": ["com.impierce.unicore.issuance.*"]
+                    },
                     "config": {
                         "publisherType": "http",
                         "targetUrl": "https://subscriber.example.org/v2/events"

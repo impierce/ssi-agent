@@ -458,7 +458,9 @@ pub mod tests {
 
             bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
                 "test-pub".to_string(),
-                vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
+                bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
+                    types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
+                },
                 bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
                     target_url,
                     headers: None,

@@ -1,6 +1,6 @@
 pub mod apply;
 
-use crate::domain::event_publisher::config::EventPublisherConfig;
+use crate::domain::event_publisher::config::{EventPublisherConfig, EventPublisherFilter};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shared_kernel::{
@@ -17,7 +17,7 @@ pub enum EventPublisherEvent {
         name: String,
         description: Option<String>,
         enabled: bool,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     },
@@ -26,13 +26,13 @@ pub enum EventPublisherEvent {
         name: String,
         description: Option<String>,
         enabled: bool,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     },
     EventPublisherActivated {
         id: String,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     },

@@ -1,5 +1,7 @@
 use crate::domain::event_publisher::{
-    aggregate::EventPublisher, config::EventPublisherConfig, error::EventPublisherError,
+    aggregate::EventPublisher,
+    config::{EventPublisherConfig, EventPublisherFilter},
+    error::EventPublisherError,
     event::EventPublisherEvent::EventPublisherCreated,
 };
 use chrono::Utc;
@@ -14,7 +16,7 @@ impl EventPublisher {
         name: String,
         description: Option<String>,
         enabled: bool,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
         service: &<EventPublisher as Aggregate>::Services,
         sink: &EventSink<Self>,
@@ -30,7 +32,7 @@ impl EventPublisher {
 
         let description = description.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
 
-        let events = service.known_event_types().validate_and_normalize(events)?;
+        let filter = service.known_event_types().validate_and_normalize_filter(filter)?;
         let config = config.normalized()?;
 
         info!(
@@ -46,7 +48,7 @@ impl EventPublisher {
                 name,
                 description,
                 enabled,
-                events,
+                filter,
                 config,
                 occurred_at: Utc::now(),
             },

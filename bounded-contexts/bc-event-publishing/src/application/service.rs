@@ -125,7 +125,7 @@ mod tests {
         application::builder::EventPublishingContextBuilder,
         domain::event_publisher::{
             command::EventPublisherCommand,
-            config::{EventPublisherConfig, HttpPublisherConfig, REDACTED_HEADER_VALUE},
+            config::{EventPublisherConfig, EventPublisherFilter, HttpPublisherConfig, REDACTED_HEADER_VALUE},
         },
     };
     use shared_kernel::{
@@ -173,7 +173,9 @@ mod tests {
                     name: "Live Webhook".to_string(),
                     description: Some("Initial description".to_string()),
                     enabled: true,
-                    events: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                    filter: EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                    },
                     config: EventPublisherConfig::Http(HttpPublisherConfig {
                         target_url: format!("{}/hook", mock_server.uri()),
                         headers: Some(headers),

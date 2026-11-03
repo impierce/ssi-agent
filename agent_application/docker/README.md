@@ -57,9 +57,11 @@ To integrate just-in-time data request events into your workflow, adhere to the 
    {
      "name": "Custom Credential Signing Webhook",
      "enabled": true,
-     "events": [
-       "com.impierce.unicore.issuance.credential.request_verified"
-     ],
+     "filter": {
+       "types": [
+         "com.impierce.unicore.issuance.credential.request_verified"
+       ]
+     },
      "config": {
        "publisherType": "http",
        "targetUrl": "https://my-domain.example.org/ssi-event-subscriber"

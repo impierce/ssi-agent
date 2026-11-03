@@ -1,6 +1,6 @@
 use crate::domain::event_publisher::{
     aggregate::{EventPublisher, EventPublisherInner},
-    config::EventPublisherConfig,
+    config::{EventPublisherConfig, EventPublisherFilter},
 };
 use chrono::{DateTime, Utc};
 
@@ -12,7 +12,7 @@ impl EventPublisher {
         name: String,
         description: Option<String>,
         enabled: bool,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     ) {
@@ -21,7 +21,7 @@ impl EventPublisher {
             name,
             description,
             enabled,
-            events,
+            filter,
             config,
             created_at: occurred_at,
             last_modified_at: occurred_at,
@@ -33,7 +33,7 @@ impl EventPublisher {
         name: String,
         description: Option<String>,
         enabled: bool,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     ) {
@@ -41,7 +41,7 @@ impl EventPublisher {
             inner.name = name;
             inner.description = description;
             inner.enabled = enabled;
-            inner.events = events;
+            inner.filter = filter;
             inner.config = config;
             inner.last_modified_at = occurred_at;
         }

@@ -12,11 +12,11 @@ impl EventPublisher {
         id: String,
         sink: &EventSink<Self>,
     ) -> Result<(), <EventPublisher as Aggregate>::Error> {
-        let (publisher_id, already_enabled, events, config) = match self {
+        let (publisher_id, already_enabled, filter, config) = match self {
             EventPublisher::Configured(inner) => (
                 inner.id.clone(),
                 inner.enabled,
-                inner.events.clone(),
+                inner.filter.clone(),
                 inner.config.clone(),
             ),
             EventPublisher::None => return Err(EventPublisherError::NotFound(id)),
@@ -31,7 +31,7 @@ impl EventPublisher {
         sink.write(
             EventPublisherActivated {
                 id: publisher_id,
-                events,
+                filter,
                 config,
                 occurred_at: Utc::now(),
             },

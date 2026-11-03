@@ -17,7 +17,10 @@ use bc_event_publishing::{
         query::EventPublishingQuery,
         views::{event_publisher::EventPublisherView, EventPublishingView},
     },
-    domain::event_publisher::{command::EventPublisherCommand, config::EventPublisherType},
+    domain::event_publisher::{
+        command::EventPublisherCommand,
+        config::{EventPublisherFilter, EventPublisherType},
+    },
 };
 use chrono::{DateTime, Utc};
 use http_api_problem::ApiError;
@@ -44,7 +47,7 @@ pub struct EventPublisherDto {
     pub enabled: bool,
     /// Repeats the `config` discriminator so listing and filtering needn't reach inside it.
     pub publisher_type: EventPublisherType,
-    pub events: Vec<String>,
+    pub filter: EventPublisherFilter,
     pub config: EventPublisherConfigDto,
     pub created_at: DateTime<Utc>,
     pub last_modified_at: DateTime<Utc>,
@@ -68,7 +71,7 @@ impl TryFrom<EventPublisherView> for EventPublisherDto {
             description: view.description,
             enabled: view.enabled,
             publisher_type: config.publisher_type(),
-            events: view.events,
+            filter: view.filter,
             config: config.into(),
             created_at: view.created_at,
             last_modified_at: view.last_modified_at,
@@ -133,8 +136,8 @@ pub struct CreateEventPublisherRequest {
     /// Whether the event publisher should start dispatching events immediately (defaults to `true`).
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    /// CloudEvent type patterns to subscribe to (exact types, prefix globs like `com.impierce.unicore.issuance.*`, or `*`).
-    pub events: Vec<String>,
+    /// Event subscription filter matching `/v0/events` query parameters (`types`).
+    pub filter: EventPublisherFilter,
     /// Transport-specific publisher configuration (`http` or `nats`).
     pub config: EventPublisherConfigDto,
 }
@@ -152,7 +155,7 @@ pub struct UpdateEventPublisherRequest {
     #[schema(value_type = Option<String>)]
     pub description: Option<Option<String>>,
     #[serde(default)]
-    pub events: Option<Vec<String>>,
+    pub filter: Option<EventPublisherFilter>,
     #[serde(default)]
     pub config: Option<EventPublisherConfigDto>,
 }
@@ -199,10 +202,12 @@ pub struct DeleteEventPublisherRequest {
             "name": "Production Issuance Webhook",
             "description": "Forwards issuance CloudEvents to the billing service",
             "enabled": true,
-            "events": [
-                "com.impierce.unicore.issuance.credential.offered",
-                "com.impierce.unicore.issuance.credential.issued"
-            ],
+            "filter": {
+                "types": [
+                    "com.impierce.unicore.issuance.credential.offered",
+                    "com.impierce.unicore.issuance.credential.issued"
+                ]
+            },
             "config": {
                 "publisherType": "http",
                 "targetUrl": "https://billing.example.org/webhooks/unicore",
@@ -241,7 +246,7 @@ pub async fn create_event_publisher(
                 name: payload.name,
                 description: payload.description,
                 enabled: payload.enabled,
-                events: payload.events,
+                filter: payload.filter,
                 config: payload.config.into(),
             }
             .into(),
@@ -257,7 +262,7 @@ pub async fn create_event_publisher(
 
 /// Update an Event Publisher
 ///
-/// Updates the name, description, subscribed event types, or transport configuration of an existing
+/// Updates the name, description, event subscription filter, or transport configuration of an existing
 /// event publisher. If the publisher is currently active, its background worker is replaced immediately.
 #[utoipa::path(
     post,
@@ -273,9 +278,11 @@ pub async fn create_event_publisher(
             "id": "f2202574-9a5b-5ecd-a1a3-df5ca8e87354",
             "name": "Production Issuance Webhook",
             "description": "Updated target URL and event filter",
-            "events": [
-                "com.impierce.unicore.issuance.*"
-            ],
+            "filter": {
+                "types": [
+                    "com.impierce.unicore.issuance.*"
+                ]
+            },
             "config": {
                 "publisherType": "http",
                 "targetUrl": "https://billing.example.org/v2/webhooks/unicore",
@@ -309,7 +316,7 @@ pub async fn update_event_publisher(
                 id,
                 name: payload.name,
                 description: payload.description,
-                events: payload.events,
+                filter: payload.filter,
                 config: payload.config.map(Into::into),
             }
             .into(),

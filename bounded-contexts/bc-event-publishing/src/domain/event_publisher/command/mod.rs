@@ -1,6 +1,6 @@
 pub mod handle;
 
-use crate::domain::event_publisher::config::EventPublisherConfig;
+use crate::domain::event_publisher::config::{EventPublisherConfig, EventPublisherFilter};
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::CommandOperation;
 
@@ -12,14 +12,14 @@ pub enum EventPublisherCommand {
         name: String,
         description: Option<String>,
         enabled: bool,
-        events: Vec<String>,
+        filter: EventPublisherFilter,
         config: EventPublisherConfig,
     },
     UpdateEventPublisher {
         id: String,
         name: Option<String>,
         description: Option<Option<String>>,
-        events: Option<Vec<String>>,
+        filter: Option<EventPublisherFilter>,
         config: Option<EventPublisherConfig>,
     },
     ActivateEventPublisher {

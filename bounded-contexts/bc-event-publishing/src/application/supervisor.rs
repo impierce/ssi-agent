@@ -1,6 +1,10 @@
 use crate::{
     application::views::event_publisher::EventPublisherView,
-    domain::event_publisher::{aggregate::EventPublisher, config::EventPublisherConfig, event::EventPublisherEvent},
+    domain::event_publisher::{
+        aggregate::EventPublisher,
+        config::{EventPublisherConfig, EventPublisherFilter},
+        event::EventPublisherEvent,
+    },
     infrastructure::{http::HttpEventPublisherWorker, nats::NatsEventPublisherWorker},
 };
 use shared_kernel::{
@@ -56,7 +60,7 @@ impl EventPublisherSupervisor {
         for view in views {
             if !view.is_deleted() && view.enabled {
                 if let Some(config) = view.config {
-                    self.start_or_replace_worker(view.id, view.events, config);
+                    self.start_or_replace_worker(view.id, view.filter, config);
                     hydrated_count += 1;
                 }
             }
@@ -80,7 +84,7 @@ impl EventPublisherSupervisor {
             .unwrap_or(false)
     }
 
-    fn start_or_replace_worker(&self, id: String, events: Vec<String>, config: EventPublisherConfig) {
+    fn start_or_replace_worker(&self, id: String, filter: EventPublisherFilter, config: EventPublisherConfig) {
         let Ok(mut guard) = self.registry.workers.lock() else {
             return;
         };
@@ -92,12 +96,12 @@ impl EventPublisherSupervisor {
 
         let abort_handle = match config {
             EventPublisherConfig::Http(http_config) => {
-                HttpEventPublisherWorker::new(id.clone(), events, http_config, &self.event_bus)
+                HttpEventPublisherWorker::new(id.clone(), filter, http_config, &self.event_bus)
                     .spawn()
                     .abort_handle()
             }
             EventPublisherConfig::Nats(nats_config) => {
-                NatsEventPublisherWorker::spawn_resilient(id.clone(), events, nats_config, &self.event_bus)
+                NatsEventPublisherWorker::spawn_resilient(id.clone(), filter, nats_config, &self.event_bus)
                     .abort_handle()
             }
         };
@@ -126,25 +130,25 @@ impl Query<EventPublisher> for EventPublisherSupervisor {
                 EventPublisherEvent::EventPublisherCreated {
                     id,
                     enabled,
-                    events,
+                    filter,
                     config,
                     ..
                 }
                 | EventPublisherEvent::EventPublisherUpdated {
                     id,
                     enabled,
-                    events,
+                    filter,
                     config,
                     ..
                 } => {
                     if *enabled {
-                        self.start_or_replace_worker(id.clone(), events.clone(), config.clone());
+                        self.start_or_replace_worker(id.clone(), filter.clone(), config.clone());
                     } else {
                         self.stop_worker(id);
                     }
                 }
-                EventPublisherEvent::EventPublisherActivated { id, events, config, .. } => {
-                    self.start_or_replace_worker(id.clone(), events.clone(), config.clone());
+                EventPublisherEvent::EventPublisherActivated { id, filter, config, .. } => {
+                    self.start_or_replace_worker(id.clone(), filter.clone(), config.clone());
                 }
                 EventPublisherEvent::EventPublisherDeactivated { id, .. }
                 | EventPublisherEvent::EventPublisherDeleted { id, .. } => {

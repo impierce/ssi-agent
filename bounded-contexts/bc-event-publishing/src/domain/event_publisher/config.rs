@@ -15,6 +15,31 @@ pub enum EventPublisherType {
     Nats,
 }
 
+/// Event subscription filter for an [`EventPublisher`](super::aggregate::EventPublisher).
+///
+/// Field names match the `/v0/events` SSE query parameters (`types`, and in future extensions
+/// `sources`, `subject`, etc.).
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct EventPublisherFilter {
+    /// CloudEvent `type` patterns to subscribe to (exact types, prefix globs like
+    /// `com.impierce.unicore.issuance.*`, or `*`).
+    #[schema(example = json!(["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.issued"]))]
+    pub types: Vec<String>,
+}
+
+impl EventPublisherFilter {
+    /// Converts this publisher filter into an [`EventFilter`](shared_kernel::event_bus::EventFilter)
+    /// for subscribing to the event bus.
+    #[must_use]
+    pub fn to_event_filter(&self) -> shared_kernel::event_bus::EventFilter {
+        shared_kernel::event_bus::EventFilter {
+            event_types: self.types.clone(),
+            ..Default::default()
+        }
+    }
+}
+
 /// Transport-specific configuration for an HTTP webhook event publisher.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]

@@ -1,3 +1,4 @@
+use crate::domain::event_publisher::config::EventPublisherFilter;
 use shared_kernel::{
     event_bus::EventFilter,
     integration_event::{collect_projector_docs, EventProjector},
@@ -10,7 +11,7 @@ use std::{
 /// Why a list of event type patterns was rejected.
 #[derive(Debug, thiserror::Error, PartialEq, Eq, Clone)]
 pub enum InvalidEventTypes {
-    #[error("At least one event trigger must be specified in `events`")]
+    #[error("At least one event trigger must be specified in `filter.types`")]
     EmptyEvents,
     #[error("Event trigger pattern must not be empty")]
     EmptyEventPattern,
@@ -138,6 +139,21 @@ impl KnownEventTypes {
         }
 
         Ok(normalized)
+    }
+
+    /// Validates and normalizes an [`EventPublisherFilter`] against the registered integration events.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidEventTypes`] if `filter.types` is empty, contains a blank entry, or contains a
+    /// pattern that does not match any registered integration event type.
+    pub fn validate_and_normalize_filter(
+        &self,
+        filter: EventPublisherFilter,
+    ) -> Result<EventPublisherFilter, InvalidEventTypes> {
+        Ok(EventPublisherFilter {
+            types: self.validate_and_normalize(filter.types)?,
+        })
     }
 }
 
