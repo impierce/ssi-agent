@@ -284,6 +284,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "cqrs-es",
+ "derive_more",
  "futures",
  "hickory-resolver",
  "identity-kit",

@@ -6,11 +6,12 @@ use url::Url;
 
 use super::aggregate::{LinkedVerifiablePresentation, ServiceResource};
 
-#[derive(Clone, Debug, Deserialize, Serialize, Display)]
+#[derive(Clone, Debug, Deserialize, Serialize, Display, derive_more::PartialEq)]
 pub enum ServiceEvent {
     LinkedDomainsAdded {
         service_id: String,
         service: DocumentService,
+        #[partial_eq(skip)]
         resource: ServiceResource,
         is_deleted: bool,
         /// Every origin linked after this event, sorted and deduplicated.
@@ -19,6 +20,7 @@ pub enum ServiceEvent {
     LinkedDomainsCredentialsRenewed {
         service_id: String,
         service: DocumentService,
+        #[partial_eq(skip)]
         resource: ServiceResource,
         is_deleted: bool,
         origins: Vec<Url>,
@@ -28,6 +30,7 @@ pub enum ServiceEvent {
     LinkedDomainsRemoved {
         service_id: String,
         service: Option<DocumentService>,
+        #[partial_eq(skip)]
         resource: Option<ServiceResource>,
         is_deleted: bool,
         origins: Vec<Url>,
@@ -40,91 +43,6 @@ pub enum ServiceEvent {
         service_id: String,
         presentation_ids: Vec<String>,
     },
-}
-
-/// Compares every field except `resource`.
-impl PartialEq for ServiceEvent {
-    fn eq(&self, other: &Self) -> bool {
-        use ServiceEvent::*;
-
-        match (self, other) {
-            (
-                LinkedDomainsAdded {
-                    service_id,
-                    service,
-                    resource: _,
-                    is_deleted,
-                    origins,
-                },
-                LinkedDomainsAdded {
-                    service_id: other_service_id,
-                    service: other_service,
-                    resource: _,
-                    is_deleted: other_is_deleted,
-                    origins: other_origins,
-                },
-            )
-            | (
-                LinkedDomainsCredentialsRenewed {
-                    service_id,
-                    service,
-                    resource: _,
-                    is_deleted,
-                    origins,
-                },
-                LinkedDomainsCredentialsRenewed {
-                    service_id: other_service_id,
-                    service: other_service,
-                    resource: _,
-                    is_deleted: other_is_deleted,
-                    origins: other_origins,
-                },
-            ) => {
-                (service_id, service, is_deleted, origins)
-                    == (other_service_id, other_service, other_is_deleted, other_origins)
-            }
-            (
-                LinkedDomainsRemoved {
-                    service_id,
-                    service,
-                    resource: _,
-                    is_deleted,
-                    origins,
-                },
-                LinkedDomainsRemoved {
-                    service_id: other_service_id,
-                    service: other_service,
-                    resource: _,
-                    is_deleted: other_is_deleted,
-                    origins: other_origins,
-                },
-            ) => {
-                (service_id, service, is_deleted, origins)
-                    == (other_service_id, other_service, other_is_deleted, other_origins)
-            }
-            (
-                LinkedVerifiablePresentationsAdded {
-                    service_id,
-                    presentations,
-                },
-                LinkedVerifiablePresentationsAdded {
-                    service_id: other_service_id,
-                    presentations: other_presentations,
-                },
-            ) => (service_id, presentations) == (other_service_id, other_presentations),
-            (
-                LinkedVerifiablePresentationsRemoved {
-                    service_id,
-                    presentation_ids,
-                },
-                LinkedVerifiablePresentationsRemoved {
-                    service_id: other_service_id,
-                    presentation_ids: other_presentation_ids,
-                },
-            ) => (service_id, presentation_ids) == (other_service_id, other_presentation_ids),
-            _ => false,
-        }
-    }
 }
 
 impl DomainEvent for ServiceEvent {

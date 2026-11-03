@@ -63,6 +63,7 @@ axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 cqrs-es = "0.5.0"
+derive_more = { version = "2.1", features = ["eq"] }
 flate2 = "1.1"
 futures = "0.3"
 hickory-resolver = "0.26"
