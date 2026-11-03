@@ -5089,9 +5089,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity-kit"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23e74f4cdbd2858b7a9f6364aca8c9f3f48142c51955be17cd2fc127e916549a"
+checksum = "4c0177e3809029676c2ada988c33fd81392fba76bc419947c67672ddb1ebb92c"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -7959,9 +7959,9 @@ dependencies = [
 
 [[package]]
 name = "oid4vc-core"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f22f7324572939d499284437179e11ca6fac08a7ddcae13318cd194c1ae9daab"
+checksum = "d804ff89bf5395b1c2842030c52218e6ab6b1417035d94e2741cf99fe11e95ba"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7987,9 +7987,9 @@ dependencies = [
 
 [[package]]
 name = "oid4vc-manager"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5fff411a3cffe2272888722b780c0ab82b50a468bea997aa66ffb9eb118c9b7"
+checksum = "4c337b90e22b59d7c1277448710e660e713558e0bd76b8c0fedaa8e09f8cfdee"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8017,9 +8017,9 @@ dependencies = [
 
 [[package]]
 name = "oid4vci"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adf5ab42614c2684eafd1dfa34eb90359af2fe264d2be7058126e321c9eb043b"
+checksum = "146d55a068c2e0b440aa6b7cf33c60004d5626f7b5283fab041d7286990a9dc0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8045,9 +8045,9 @@ dependencies = [
 
 [[package]]
 name = "oid4vp"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5c78b960d59d94a6135650d04549e050bd5761fe16fb0fce992293d34e90eb3"
+checksum = "f599fbaa4169b52df0706fec425c7a5d45da463b75ae6e3718b9ae2309e1a26d"
 dependencies = [
  "anyhow",
  "chrono",
@@ -10722,9 +10722,9 @@ checksum = "16e78919e05c9b8e123d435a4ad104b488ad1585631830e413830985c214086e"
 
 [[package]]
 name = "siopv2"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "831882ba64d32dfa779158e3a20fa955cbf0f3825db370ef98cd387a71de4558"
+checksum = "ddae34c5c4bdf333c906143ed07832d5dc5842ef7f51da16430c98a148059819"
 dependencies = [
  "anyhow",
  "async-trait",

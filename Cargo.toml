@@ -38,13 +38,13 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-oid4vc-core = "0.3"
-oid4vc-manager = "0.3"
-oid4vci = { version = "0.3", features = ["utoipa"] }
-oid4vp = "0.3"
-siopv2 = "0.3"
+oid4vc-core = "0.4"
+oid4vc-manager = "0.4"
+oid4vci = { version = "0.4", features = ["utoipa"] }
+oid4vp = "0.4"
+siopv2 = "0.4"
 
-identity-kit = { version = "0.3", default-features = false, features = [
+identity-kit = { version = "0.4", default-features = false, features = [
     "did-jwk",
     "did-key",
     "did-web",

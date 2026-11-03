@@ -27,7 +27,6 @@ pub enum Status {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct OfferCredential {
     pub holder_credential_id: String,
-    #[schema(value_type = String)]
     pub credential: SignedCredential,
 }
 
