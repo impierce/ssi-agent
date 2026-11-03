@@ -337,6 +337,12 @@ async fn accepting_an_offer_of_an_sd_jwt_credential_is_refused() {
 
     let (status, problem) = post(&app, &format!("/v0/holder/offers/{offer_id}/accept"), json!({})).await;
     assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{problem}");
+    assert!(
+        problem["type"]
+            .as_str()
+            .is_some_and(|problem_type| problem_type.ends_with("holder#unsupported-credential-format")),
+        "{problem}"
+    );
 
     let (_, offers) = get(&app, "/v0/holder/offers").await;
     let offer = offers
