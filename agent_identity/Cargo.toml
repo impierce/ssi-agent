@@ -19,7 +19,6 @@ chrono.workspace = true
 cqrs-es.workspace = true
 derivative.workspace = true
 hickory-resolver.workspace = true
-identity_core.workspace = true
 identity_document.workspace = true
 identity_storage.workspace = true
 identity_iota.workspace = true

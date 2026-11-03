@@ -10,88 +10,10 @@ use axum::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use identity_kit::sd_jwt_vc::{ClaimDisplay, ClaimMetadata, ClaimPath, DisplayMetadata, SdPolicy, TypeMetadata};
-use oid4vc_core::claim_path_pointer::ClaimPathPointer;
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay,
 };
 use std::sync::Arc;
-
-// OpenAPI representation of `identity_kit::sd_jwt_vc::TypeMetadata`.
-/// Type metadata of an SD-JWT VC credential type.
-///
-/// See [SD-JWT VC Type Metadata](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc#name-sd-jwt-vc-type-metadata).
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-#[schema(as = TypeMetadata)]
-pub(crate) struct TypeMetadataSchema {
-    /// The type described, the URL this metadata is retrieved from.
-    #[schema(format = Uri)]
-    vct: String,
-    /// A human-readable name for the type.
-    name: Option<String>,
-    /// A human-readable description for the type.
-    description: Option<String>,
-    /// A URI of another type that this type extends.
-    #[schema(format = Uri)]
-    extends: Option<String>,
-    /// Integrity metadata for the extended type.
-    #[serde(rename = "extends#integrity")]
-    extends_integrity: Option<String>,
-    #[serde(default)]
-    display: Vec<TypeMetadataDisplaySchema>,
-    #[serde(default)]
-    claims: Vec<TypeMetadataClaimSchema>,
-}
-
-/// Display information for an SD-JWT VC type.
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-#[schema(as = TypeMetadataDisplay)]
-pub(crate) struct TypeMetadataDisplaySchema {
-    /// A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
-    locale: String,
-    name: String,
-    description: Option<String>,
-    /// Rendering information, such as `simple` or `svg_templates`.
-    rendering: Option<serde_json::Map<String, serde_json::Value>>,
-}
-
-/// Information about particular claims of an SD-JWT VC type.
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-#[schema(as = TypeMetadataClaim)]
-pub(crate) struct TypeMetadataClaimSchema {
-    path: ClaimPathPointer,
-    #[serde(default)]
-    display: Vec<TypeMetadataClaimDisplaySchema>,
-    /// Whether the claim must be present in the issued credential.
-    mandatory: Option<bool>,
-    /// Whether the claim is selectively disclosable.
-    #[schema(inline)]
-    sd: Option<ClaimDisclosabilitySchema>,
-    /// The ID of the claim for reference in an SVG template.
-    svg_id: Option<String>,
-}
-
-/// Display information for a claim.
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-#[schema(as = TypeMetadataClaimDisplay)]
-pub(crate) struct TypeMetadataClaimDisplaySchema {
-    /// A language tag as defined in [RFC 5646](https://www.rfc-editor.org/rfc/rfc5646.txt).
-    locale: String,
-    label: String,
-    description: Option<String>,
-}
-
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum ClaimDisclosabilitySchema {
-    Always,
-    Allowed,
-    Never,
-}
 
 /// Get SD-JWT VC type metadata
 ///
@@ -111,7 +33,7 @@ pub(crate) enum ClaimDisclosabilitySchema {
         ("version" = String, Path, description = "Type version (currently ignored)"),
     ),
     responses(
-        (status = 200, description = "SD-JWT VC type metadata", body = TypeMetadataSchema),
+        (status = 200, description = "SD-JWT VC type metadata", body = TypeMetadata),
         (status = 404, description = "The credential configuration does not exist"),
     )
 )]
