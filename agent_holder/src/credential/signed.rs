@@ -4,10 +4,9 @@ use std::{fmt, str::FromStr};
 use thiserror::Error;
 
 /// A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.
-///
-/// It serializes as that string, so events that stored a credential as a plain string read
-/// unchanged.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// It serializes as that string, so events that stored a credential as a plain string read
+// unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(untagged)]
 pub enum SignedCredential {
     Jwt(Jwt),

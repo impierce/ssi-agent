@@ -5,7 +5,7 @@ use identity_kit::{
     did::DidUrl,
     resolver::{KeyReference, KeyResolver, KeyRole},
     status_list::{Status, StatusListToken},
-    vc::validation::{CredentialStatus, StatusCheck, StatusError},
+    vc::validation::{CredentialStatus, StatusCheck, StatusError, TimeOptions},
 };
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use reqwest::{header, redirect::Policy, Client};
@@ -139,9 +139,14 @@ impl CredentialStatusChecker {
             let status_list_token = decode_status_list_token(&status_list_jwt, &decoding_key)
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
-            // Checks that `sub` is the referenced URI, that the token hasn't expired and that the index is in range.
+            // Checks that `sub` is the referenced URI, that the token was issued by now and hasn't expired, each with
+            // the leeway, and that the index is in range.
             let status = status_list_token
-                .status_of(&status_list_ref, chrono::Utc::now() - CLOCK_SKEW_LEEWAY)
+                .status_of(
+                    &status_list_ref,
+                    TimeOptions::at(chrono::Utc::now())
+                        .with_leeway(CLOCK_SKEW_LEEWAY.to_std().expect("the clock skew leeway is positive")),
+                )
                 .map_err(|e| CredentialStatusCheckerError::FailedToGetCredentialStatus(e.to_string()))?;
 
             if status.is_valid() {
@@ -160,11 +165,7 @@ impl CredentialStatusChecker {
 /// [`CredentialStatusChecker::check_credential_status`].
 #[async_trait]
 impl StatusCheck for CredentialStatusChecker {
-    async fn check(
-        &self,
-        status: CredentialStatus<'_>,
-        _now: chrono::DateTime<chrono::Utc>,
-    ) -> Result<(), StatusError> {
+    async fn check(&self, status: CredentialStatus<'_>, _time: TimeOptions) -> Result<(), StatusError> {
         let CredentialStatus::StatusClaim(status) = status else {
             return Err(StatusError::Unsupported(status.mechanism()));
         };
@@ -364,14 +365,17 @@ mod tests {
         let result = checker()
             .check(
                 CredentialStatus::StatusClaim(&status(INVALID_INDEX)),
-                chrono::Utc::now(),
+                TimeOptions::at(chrono::Utc::now()),
             )
             .await;
 
         assert!(matches!(result, Err(StatusError::Invalid(_))), "{result:?}");
 
         let result = checker()
-            .check(CredentialStatus::StatusClaim(&status(2)), chrono::Utc::now())
+            .check(
+                CredentialStatus::StatusClaim(&status(2)),
+                TimeOptions::at(chrono::Utc::now()),
+            )
             .await;
 
         assert!(result.is_ok(), "{result:?}");

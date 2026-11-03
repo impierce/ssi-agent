@@ -2900,7 +2900,7 @@ components:
       - credential
       properties:
         credential:
-          type: string
+          $ref: '#/components/schemas/SignedCredential'
           description: Compact JWT-encoded verifiable credential to add to the holder.
     HolderType:
       type: string
@@ -3013,6 +3013,10 @@ components:
           type: string
           description: The y coordinate of an `EC` key.
       additionalProperties: true
+    Jwt:
+      type: string
+      description: A JWT (RFC 7519) in JWS compact serialization.
+      pattern: ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$
     KeyProvider:
       type: object
       description: A key provider this instance is connected to.
@@ -3270,7 +3274,7 @@ components:
       - credential
       properties:
         credential:
-          type: string
+          $ref: '#/components/schemas/SignedCredential'
         holder_credential_id:
           type: string
     OfferView:
@@ -3653,6 +3657,10 @@ components:
         path:
           type: string
           description: JSON pointer to the offending value within the claims; empty for the claims object itself.
+    SdJwt:
+      type: string
+      description: 'An SD-JWT (RFC 9901 §4) in compact serialization: the issuer-signed JWT, each disclosure followed by `~`, then an optional key binding JWT.'
+      pattern: ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*~([A-Za-z0-9_-]+~)*([A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?$
     Service:
       type: object
       description: 'A service (DID Core §5.4): a way of interacting with the DID subject.'
@@ -3730,6 +3738,11 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Service'
           - type: 'null'
+    SignedCredential:
+      oneOf:
+      - $ref: '#/components/schemas/Jwt'
+      - $ref: '#/components/schemas/SdJwt'
+      description: 'A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.'
     Source:
       type: string
       enum:
