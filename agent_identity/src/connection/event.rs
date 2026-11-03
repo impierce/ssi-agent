@@ -1,10 +1,10 @@
 use crate::connection::aggregate::{ConnectionDisplayProperties, PendingChanges, Validation};
 use chrono::{DateTime, Utc};
 use cqrs_es::DomainEvent;
-use identity_core::common::Url;
 use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
 use strum::Display;
+use url::Url;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum ConnectionEvent {

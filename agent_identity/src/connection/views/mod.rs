@@ -13,7 +13,7 @@ use shared_kernel::view_repository::SoftDeletable;
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
-    // `identity_core::common::url::Url` doesn't implement a `Default`, which is why we use `String`.
+    // `url::Url` doesn't implement a `Default`, which is why we use `String`.
     #[schema(value_type = url::Url)]
     pub url: String,
     #[schema(value_type = Vec<String>)]
