@@ -38,7 +38,7 @@ impl CredentialStatusChecker {
     // TODO: in the future it would be nice to have a flag every time it's called or only in the config to choose between strict validation also failing on operational errors or lenient validation as is currently.
     /// This function is basically a wrapper around `verify_status_claim` which allows us to differentiate between operational errors (unable to fetch or decode the status list token) and actual validation failures (credential status is invalid).
     ///
-    /// The status list token is judged at the current time, with `CLOCK_SKEW_LEEWAY`.
+    /// The status list token is checked against the current time, with `CLOCK_SKEW_LEEWAY`.
     pub async fn check_credential_status(
         &self,
         status_claim: serde_json::Value,
@@ -46,7 +46,7 @@ impl CredentialStatusChecker {
         self.check_credential_status_at(status_claim, chrono::Utc::now()).await
     }
 
-    /// [`CredentialStatusChecker::check_credential_status`], judging the status list token at `now` instead.
+    /// [`CredentialStatusChecker::check_credential_status`], checking the status list token against `now` instead.
     pub async fn check_credential_status_at(
         &self,
         status_claim: serde_json::Value,
@@ -180,7 +180,7 @@ impl CredentialStatusChecker {
 /// [`CredentialStatusChecker::check_credential_status`].
 #[async_trait]
 impl StatusCheck for CredentialStatusChecker {
-    /// Judges the status list token at the validation time of `time`. Its leeway is not used: the status list
+    /// Checks the status list token against the validation time of `time`. Its leeway is not used: the status list
     /// issuer's clock is tolerated with `CLOCK_SKEW_LEEWAY`, whatever the presentation's caller allows.
     async fn check(&self, status: CredentialStatus<'_>, time: TimeOptions) -> Result<(), StatusError> {
         let CredentialStatus::StatusClaim(status) = status else {
@@ -403,7 +403,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_status_check_judges_the_status_list_token_at_the_validation_time() {
+    async fn test_status_check_checks_the_status_list_token_against_the_validation_time() {
         let now = chrono::Utc::now();
         let validation_time = now - chrono::TimeDelta::seconds(600);
         let mock_server = MockServer::start().await;
@@ -492,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_status_list_token_judges_iat_at_the_given_time() {
+    fn test_decode_status_list_token_checks_iat_against_the_given_time() {
         let decoding_key = DecodingKey::from_ed_der(&TEST_PUBLIC_KEY);
         let validation_time = chrono::Utc::now() - chrono::TimeDelta::seconds(600);
 
