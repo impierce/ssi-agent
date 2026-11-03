@@ -17,13 +17,13 @@ indexmap.workspace = true
 serde.workspace = true
 strum.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 utoipa.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 agent_store = { path = "../agent_store" }
-
-tokio.workspace = true
 
 [features]
 test_utils = []
