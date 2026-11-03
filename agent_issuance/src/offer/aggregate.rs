@@ -480,6 +480,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     #[allow(clippy::too_many_arguments)]
+    #[tokio::test]
     async fn test_create_offer(
         offer_id: String,
         grant_types: Vec<GrantType>,
@@ -490,13 +491,14 @@ pub mod tests {
     ) {
         OfferTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(OfferCommand::CreateCredentialOffer {
+            .when_async(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
                 template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: None,
             })
+            .await
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -519,6 +521,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     #[allow(clippy::too_many_arguments)]
+    #[tokio::test]
     async fn test_create_offer_with_delivery_options(
         offer_id: String,
         grant_types: Vec<GrantType>,
@@ -530,13 +533,14 @@ pub mod tests {
     ) {
         OfferTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(OfferCommand::CreateCredentialOffer {
+            .when_async(OfferCommand::CreateCredentialOffer {
                 offer_id: offer_id.clone(),
                 template_ids: vec!["UniversityDegree".to_string()],
                 grant_types: grant_types.clone(),
                 tx_code_constraints: None,
                 delivery_options: Some(delivery_options.clone()),
             })
+            .await
             .then_expect_events(vec![
                 OfferEvent::CredentialOfferCreated {
                     offer_id: offer_id.clone(),
@@ -559,6 +563,7 @@ pub mod tests {
     #[rstest]
     #[serial_test::serial]
     #[allow(clippy::too_many_arguments)]
+    #[tokio::test]
     async fn test_add_credential(
         offer_id: String,
         grant_types: Vec<GrantType>,
@@ -578,11 +583,12 @@ pub mod tests {
                 tx_code: None,
                 delivery_options: None,
             }])
-            .when(OfferCommand::AddCredentials {
+            .when_async(OfferCommand::AddCredentials {
                 offer_id: offer_id.clone(),
                 credential_ids: vec!["credential-id".to_string()],
                 template_ids: vec!["UniversityDegree".to_string()],
             })
+            .await
             .then_expect_events(vec![
                 OfferEvent::CredentialsAdded {
                     offer_id: offer_id.clone(),
@@ -599,6 +605,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_adding_credentials_keeps_the_ones_already_in_the_offer(
         offer_id: String,
         #[future(awt)] credential_offer: CredentialOffer,
@@ -628,7 +635,11 @@ pub mod tests {
     #[serial_test::serial]
     fn test_verify_credential_response() {
         run_with_large_stack(move || {
-            async_std::task::block_on(async move {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build the test runtime")
+                .block_on(async move {
                 let offer_id = offer_id();
                 let grant_types = grant_types();
                 let static_issuer_url = static_issuer_url();
@@ -709,12 +720,13 @@ pub mod tests {
                             status: Status::Pending,
                         },
                     ])
-                    .when(OfferCommand::VerifyCredentialRequest {
+                    .when_async(OfferCommand::VerifyCredentialRequest {
                         offer_id: offer_id.clone(),
                         credential_issuer_metadata,
                         authorization_server_metadata,
                         credential_request: university_degree_credential_request,
                     })
+                    .await
                     .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                         offer_id,
                         subject_id: Some(subject_id),
@@ -726,6 +738,7 @@ pub mod tests {
     #[rstest]
     #[allow(clippy::too_many_arguments)]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_credential_response(
         offer_id: String,
         grant_types: Vec<GrantType>,
@@ -764,10 +777,11 @@ pub mod tests {
                     subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 },
             ])
-            .when(OfferCommand::CreateCredentialResponse {
+            .when_async(OfferCommand::CreateCredentialResponse {
                 offer_id: offer_id.clone(),
                 signed_credentials: vec![(json!(JWT_VC_JSON_OBV3_JWT), Some(notification_id.clone()))],
             })
+            .await
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
                 credential_response,
@@ -778,6 +792,7 @@ pub mod tests {
     #[rstest]
     #[allow(clippy::too_many_arguments)]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_just_in_time_credential_flow(
         offer_id: String,
         grant_types: Vec<GrantType>,
@@ -817,10 +832,11 @@ pub mod tests {
                     credential_offer: credential_offer.clone(),
                 },
             ])
-            .when(OfferCommand::CreateCredentialResponse {
+            .when_async(OfferCommand::CreateCredentialResponse {
                 offer_id: offer_id.clone(),
                 signed_credentials: vec![(json!(JWT_VC_JSON_OBV3_JWT), Some(notification_id.clone()))],
             })
+            .await
             .then_expect_events(vec![OfferEvent::CredentialResponseCreated {
                 offer_id: offer_id.clone(),
                 credential_response,

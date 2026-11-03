@@ -394,6 +394,7 @@ pub mod server_config_tests {
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
     #[rstest]
+    #[tokio::test]
     async fn test_load_server_metadata(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
@@ -402,12 +403,13 @@ pub mod server_config_tests {
     ) {
         ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(ServerConfigCommand::InitializeServerMetadata {
+            .when_async(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: authorization_server_metadata.clone(),
                 credential_issuer_metadata: credential_issuer_metadata.clone(),
                 cryptographic_binding_methods_supported: cryptographic_binding_methods_supported.clone(),
                 signing_algorithms_supported: signing_algorithms_supported.clone(),
             })
+            .await
             .then_expect_events(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
@@ -417,6 +419,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn test_add_credential_configuration(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
@@ -433,7 +436,7 @@ pub mod server_config_tests {
                 cryptographic_binding_methods_supported,
                 signing_algorithms_supported,
             }])
-            .when(ServerConfigCommand::UpdateCredentialConfiguration {
+            .when_async(ServerConfigCommand::UpdateCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
                     credential_configuration_id: credential_configuration_id.clone(),
                     format: "jwt_vc_json".to_string(),
@@ -460,6 +463,7 @@ pub mod server_config_tests {
                 },
                 provisioned: false,
             })
+            .await
             .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationUpdated {
                 credential_configuration_id,
                 credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
@@ -473,7 +477,8 @@ pub mod server_config_tests {
     ) -> Result<Vec<ServerConfigEvent>, ServerConfigError> {
         ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given(given)
-            .when(command)
+            .when_async(command)
+            .await
             .inspect_result()
     }
 
@@ -546,6 +551,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn updating_the_issuer_url_moves_every_endpoint() {
         let old_url = static_issuer_url();
         let new_url: url::Url = "https://new-domain.example.org/unicore/".parse().unwrap();
@@ -601,6 +607,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn updating_the_issuer_url_does_not_add_unsupported_endpoints() {
         let initialized = initialized(
             AuthorizationServerMetadata {
@@ -632,6 +639,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn updating_the_issuer_display() {
         let initialized = initialized(
             *authorization_server_metadata(static_issuer_url()),
@@ -657,6 +665,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn binding_methods_and_signing_algorithms_apply_to_every_credential_configuration() {
         let given = with_credential_configuration(false).await;
 
@@ -705,6 +714,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn sd_jwt_credential_configurations_are_supported() {
         let initialized = initialized(
             *authorization_server_metadata(static_issuer_url()),
@@ -739,6 +749,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn unsupported_credential_formats_are_rejected() {
         let result = handle(
             vec![initialized(
@@ -759,6 +770,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn provisioned_credential_configurations_cannot_be_changed_at_runtime() {
         let given = with_credential_configuration(true).await;
 
@@ -806,6 +818,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn runtime_credential_configurations_can_be_replaced_and_removed() {
         let given = with_credential_configuration(false).await;
 

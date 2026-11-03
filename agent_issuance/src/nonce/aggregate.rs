@@ -84,15 +84,17 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_nonce_generation() {
         let issuance_services = IssuanceServices::default().await;
         let nonce_value = "123-nonce-123".to_string();
 
         NonceTestFramework::with(issuance_services)
             .given_no_previous_events()
-            .when(NonceCommand::GenerateNonce {
+            .when_async(NonceCommand::GenerateNonce {
                 c_nonce: nonce_value.clone(),
             })
+            .await
             .then_expect_events(vec![NonceEvent::NonceGenerated {
                 c_nonce: nonce_value,
                 is_redeemed: false,
@@ -101,6 +103,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_nonce_redemption() {
         let issuance_services = IssuanceServices::default().await;
         let nonce_value = "123-nonce-123".to_string();
@@ -110,9 +113,10 @@ pub mod tests {
                 c_nonce: nonce_value.clone(),
                 is_redeemed: false,
             }])
-            .when(NonceCommand::RedeemNonce {
+            .when_async(NonceCommand::RedeemNonce {
                 c_nonce: nonce_value.clone(),
             })
+            .await
             .then_expect_events(vec![NonceEvent::NonceRedeemed {
                 c_nonce: nonce_value,
                 is_redeemed: true,

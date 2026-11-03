@@ -266,14 +266,16 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_catalog(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given_no_previous_events()
-            .when(CatalogCommand::CreateCatalog {
+            .when_async(CatalogCommand::CreateCatalog {
                 catalog_id: catalog_id.clone(),
                 display: display.clone(),
                 visibility: visibility.clone(),
             })
+            .await
             .then_expect_events(vec![CatalogEvent::CatalogCreated {
                 id: catalog_id,
                 display,
@@ -283,6 +285,7 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_update_display(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         let new_display = CatalogDisplay {
             name: "Updated Name".to_string(),
@@ -296,10 +299,11 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::ChangeCatalogAppearance {
+            .when_async(CatalogCommand::ChangeCatalogAppearance {
                 catalog_id: catalog_id.clone(),
                 display: new_display.clone(),
             })
+            .await
             .then_expect_events(vec![CatalogEvent::CatalogAppearanceChanged {
                 id: catalog_id,
                 display: new_display,
@@ -308,6 +312,7 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_update_visibility(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given(vec![CatalogEvent::CatalogCreated {
@@ -315,9 +320,10 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::MakeCatalogPublic {
+            .when_async(CatalogCommand::MakeCatalogPublic {
                 catalog_id: catalog_id.clone(),
             })
+            .await
             .then_expect_events(vec![CatalogEvent::CatalogMadePublic {
                 id: catalog_id,
                 visibility: CatalogVisibility::Public,
@@ -326,6 +332,7 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_template_ids(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         let template_ids = ["template-001".to_string(), "template-002".to_string()].to_vec();
 
@@ -335,10 +342,11 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::AddTemplateIds {
+            .when_async(CatalogCommand::AddTemplateIds {
                 catalog_id: catalog_id.clone(),
                 template_ids: template_ids.clone(),
             })
+            .await
             .then_expect_events(vec![CatalogEvent::TemplateIdsAdded {
                 id: catalog_id,
                 template_ids,
@@ -347,6 +355,7 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_template_id_already_present(
         catalog_id: String,
         display: CatalogDisplay,
@@ -366,15 +375,17 @@ pub mod catalog_tests {
                     template_ids: template_ids.clone(),
                 },
             ])
-            .when(CatalogCommand::AddTemplateIds {
+            .when_async(CatalogCommand::AddTemplateIds {
                 catalog_id,
                 template_ids,
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_template_id_not_found(
         catalog_id: String,
         display: CatalogDisplay,
@@ -388,15 +399,17 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::AddTemplateIds {
+            .when_async(CatalogCommand::AddTemplateIds {
                 catalog_id,
                 template_ids: template_ids.clone(),
             })
+            .await
             .then_expect_error_message(&format!("Template not found: {}", template_ids.join(", ")))
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_deleted_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         let template_view_repo = MemViewRepository::<TemplateView, Template>::default();
         for (template_id, status) in [("template-001", Status::Published), ("template-002", Status::Deleted)] {
@@ -419,15 +432,17 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::AddTemplateIds {
+            .when_async(CatalogCommand::AddTemplateIds {
                 catalog_id,
                 template_ids: vec!["template-001".to_string(), "template-002".to_string()],
             })
+            .await
             .then_expect_error_message(&CatalogError::TemplateNotFound("template-002".to_string()).to_string())
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_remove_template_id(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         let existing_templates = ["template-001".to_string(), "template-002".to_string()].to_vec();
         let to_remove = ["template-001".to_string()].to_vec();
@@ -444,10 +459,11 @@ pub mod catalog_tests {
                     template_ids: existing_templates.clone(),
                 },
             ])
-            .when(CatalogCommand::RemoveTemplateIds {
+            .when_async(CatalogCommand::RemoveTemplateIds {
                 catalog_id: catalog_id.clone(),
                 template_ids: to_remove.clone(),
             })
+            .await
             .then_expect_events(vec![CatalogEvent::TemplateIdsRemoved {
                 id: catalog_id,
                 template_ids: to_remove,
@@ -456,6 +472,7 @@ pub mod catalog_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_remove_template_id_not_in_catalog(
         catalog_id: String,
         display: CatalogDisplay,
@@ -469,15 +486,17 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::RemoveTemplateIds {
+            .when_async(CatalogCommand::RemoveTemplateIds {
                 catalog_id,
                 template_ids,
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_delete_catalog(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given(vec![CatalogEvent::CatalogCreated {
@@ -485,14 +504,16 @@ pub mod catalog_tests {
                 display,
                 visibility,
             }])
-            .when(CatalogCommand::DeleteCatalog {
+            .when_async(CatalogCommand::DeleteCatalog {
                 catalog_id: catalog_id.clone(),
             })
+            .await
             .then_expect_events(vec![CatalogEvent::CatalogDeleted { id: catalog_id }])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_delete_catalog_twice(catalog_id: String, display: CatalogDisplay, visibility: CatalogVisibility) {
         CatalogTestFramework::with(MockCatalogServices::successfully_finds_templates())
             .given(vec![
@@ -503,9 +524,10 @@ pub mod catalog_tests {
                 },
                 CatalogEvent::CatalogDeleted { id: catalog_id.clone() },
             ])
-            .when(CatalogCommand::DeleteCatalog {
+            .when_async(CatalogCommand::DeleteCatalog {
                 catalog_id: catalog_id.clone(),
             })
+            .await
             .then_expect_error_message(&CatalogError::CatalogNotFound(catalog_id).to_string())
     }
 }
