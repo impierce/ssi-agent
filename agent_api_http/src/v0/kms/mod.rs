@@ -84,7 +84,8 @@ mod tests {
         let body = if bytes.is_empty() {
             Value::Null
         } else {
-            serde_json::from_slice(&bytes).unwrap()
+            // Axum answers a body that does not match the schema in plain text.
+            serde_json::from_slice(&bytes).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into()))
         };
         (status, body)
     }
@@ -207,6 +208,17 @@ mod tests {
                 vec!["id", "providerType", "providerKeyId", "algorithm", "publicKey"]
             )
         );
+    }
+
+    #[tokio::test]
+    async fn creating_a_key_for_an_algorithm_keys_are_not_created_for_does_not_match_the_schema() {
+        let app = app_with_kms().await;
+        add(&app, "in_memory").await;
+
+        let body = json!({ "providerType": "in_memory", "algorithm": "ES384" });
+        let (status, _) = send(&app, "POST", "/v0/create-key", Some(body)).await;
+
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]

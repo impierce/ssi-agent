@@ -33,6 +33,11 @@ const MAX_RAW_MESSAGE: usize = 4096;
 #[error("{0}")]
 pub struct AwsKmsError(String);
 
+/// Why AWS KMS can't name keys under a deployment alias. The message is shown to the operator.
+#[derive(Debug, Error)]
+#[error("{0}")]
+pub struct InvalidDeploymentAlias(String);
+
 /// A key the store generated.
 pub(crate) struct Created {
     /// The key's id in the store: its label, or its ARN when it has no label.
@@ -408,6 +413,26 @@ fn names_one_key(key: &KeyId) -> bool {
     !id.starts_with("alias/") && (!id.starts_with("arn:") || !id.contains(":alias/"))
 }
 
+/// Checks that AWS KMS can name keys under `deployment_alias`, as `alias/<deployment alias>/<label>`, and tag them with
+/// it. Without `/`, no two deployments name a key alike, and `aws` is refused because AWS reserves `alias/aws/`.
+pub(crate) fn check_deployment_alias(deployment_alias: &str) -> Result<(), InvalidDeploymentAlias> {
+    // Leaves room for `alias/`, the `/` before the label and a label of one character.
+    let max_length = MAX_ALIAS_LENGTH - "alias/".len() - "/x".len();
+    let valid = !deployment_alias.is_empty()
+        && deployment_alias.len() <= max_length
+        && !deployment_alias.eq_ignore_ascii_case("aws")
+        && deployment_alias
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'));
+    if !valid {
+        return Err(InvalidDeploymentAlias(format!(
+            "`{deployment_alias}` can't be a deployment alias for AWS KMS: use at most {max_length} letters, digits, \
+             `_` and `-`, other than `aws`"
+        )));
+    }
+    Ok(())
+}
+
 /// The alias for a key generated with `label` for `deployment_alias`, if AWS KMS accepts it as an alias name.
 pub(crate) fn alias_for_label(deployment_alias: Option<&str>, label: &str) -> Result<String, InvalidLabel> {
     let alias = aws_key_id(deployment_alias, &KeyId::new(label));
@@ -593,6 +618,7 @@ mod tests {
 
         kms.provider()
             .with_deployment_alias("eridani")
+            .unwrap()
             .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
             .await
             .unwrap();
@@ -606,6 +632,7 @@ mod tests {
 
         kms.provider()
             .with_deployment_alias("eridani")
+            .unwrap()
             .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
             .await
             .unwrap();
@@ -762,6 +789,26 @@ mod tests {
                 "`{label}` can't be an AWS KMS alias name: use letters, digits, `/`, `_` and `-`, not an ARN or key ID"
             )
         );
+    }
+
+    #[test]
+    fn refuses_a_deployment_alias_with_a_slash() {
+        assert!(check_deployment_alias("team/service").is_err());
+    }
+
+    #[test]
+    fn refuses_a_deployment_alias_too_long_to_name_a_key_under() {
+        assert!(check_deployment_alias(&"a".repeat(249)).is_err());
+    }
+
+    #[test]
+    fn refuses_the_deployment_alias_aws_reserves() {
+        assert!(check_deployment_alias("aws").is_err());
+    }
+
+    #[test]
+    fn accepts_a_deployment_alias_of_letters_digits_underscores_and_hyphens() {
+        assert!(check_deployment_alias("eridani_2-eu").is_ok());
     }
 
     #[test]

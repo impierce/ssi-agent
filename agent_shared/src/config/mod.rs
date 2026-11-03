@@ -66,9 +66,11 @@ fn into_directory(url: Url) -> Url {
     convert_url(url, true)
 }
 
-/// Treats an empty value, such as an empty environment variable, as none.
+/// Trims a value and treats an empty one, such as an empty environment variable, as none.
 fn non_empty(value: Option<String>) -> Option<String> {
-    value.filter(|value| !value.trim().is_empty())
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 /// Converts a URL into a resource URL by removing the trailing slash if it has one.
@@ -1581,5 +1583,11 @@ mod tests {
     #[serial]
     fn reads_the_deployment_alias() {
         assert_eq!(deployment_alias(Some("eridani")), Some("eridani".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn trims_the_deployment_alias() {
+        assert_eq!(deployment_alias(Some(" eridani ")), Some("eridani".to_string()));
     }
 }

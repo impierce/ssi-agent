@@ -1052,7 +1052,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Key'
         '400':
-          description: The algorithm, or the label, is not supported by the provider
+          description: The provider does not support the algorithm or the label
         '404':
           description: No provider of this type has been added
         '409':
@@ -3374,6 +3374,12 @@ components:
           type: string
         originalCredentialId:
           type: string
+    CreateKeyAlgorithm:
+      type: string
+      description: The algorithms a key can be created for.
+      enum:
+      - ES256
+      - EdDSA
     CreateKeyRequest:
       type: object
       required:
@@ -3381,8 +3387,7 @@ components:
       - algorithm
       properties:
         algorithm:
-          $ref: '#/components/schemas/JwsAlgorithm'
-          description: '`ES256` or `EdDSA`.'
+          $ref: '#/components/schemas/CreateKeyAlgorithm'
         label:
           type:
           - string

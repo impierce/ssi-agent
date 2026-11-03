@@ -380,7 +380,9 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
 fn aws_kms_provider(deployment_alias: Option<String>) -> AwsKmsAmbientKeyProvider {
     let provider = AwsKmsAmbientKeyProvider::new();
     match deployment_alias {
-        Some(alias) => provider.with_deployment_alias(alias),
+        Some(alias) => provider
+            .with_deployment_alias(alias)
+            .unwrap_or_else(|error| panic!("`UNICORE__DEPLOYMENT_ALIAS` is invalid: {error}")),
         None => provider,
     }
 }

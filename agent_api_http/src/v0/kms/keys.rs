@@ -56,10 +56,25 @@ impl KeyDto {
 #[serde(rename_all = "camelCase")]
 pub struct CreateKeyRequest {
     pub provider_type: KeyProviderType,
-    /// `ES256` or `EdDSA`.
-    pub algorithm: JwsAlgorithm,
+    pub algorithm: CreateKeyAlgorithm,
     /// A name for the key in the provider, which then identifies it there. Without one, the provider names it.
     pub label: Option<String>,
+}
+
+/// The algorithms a key can be created for.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, utoipa::ToSchema)]
+pub enum CreateKeyAlgorithm {
+    ES256,
+    EdDSA,
+}
+
+impl From<CreateKeyAlgorithm> for JwsAlgorithm {
+    fn from(algorithm: CreateKeyAlgorithm) -> Self {
+        match algorithm {
+            CreateKeyAlgorithm::ES256 => JwsAlgorithm::ES256,
+            CreateKeyAlgorithm::EdDSA => JwsAlgorithm::EdDSA,
+        }
+    }
 }
 
 /// Create a key
@@ -74,7 +89,7 @@ pub struct CreateKeyRequest {
     request_body = CreateKeyRequest,
     responses(
         (status = 201, description = "Key created", body = KeyDto),
-        (status = 400, description = "The algorithm, or the label, is not supported by the provider"),
+        (status = 400, description = "The provider does not support the algorithm or the label"),
         (status = 404, description = "No provider of this type has been added"),
         (status = 409, description = "The provider already has a key with this label"),
         (status = 422, description = "Request body does not match the expected schema"),
@@ -91,7 +106,7 @@ pub(crate) async fn create_key(
         label,
     }): Json<CreateKeyRequest>,
 ) -> Result<Response, ApiError> {
-    let (id, reference) = create(&state, caller(actor), provider_type, algorithm, label)
+    let (id, reference) = create(&state, caller(actor), provider_type, algorithm.into(), label)
         .await
         .map_err(IntoApiErrorExt::into_api_error)?;
 

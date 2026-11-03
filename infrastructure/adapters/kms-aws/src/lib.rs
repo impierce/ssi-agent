@@ -35,7 +35,7 @@ const DESCRIBE_CONCURRENCY: usize = 8;
 
 mod key_store;
 use key_store::signing_algorithm;
-pub use key_store::AwsKmsError;
+pub use key_store::{AwsKmsError, InvalidDeploymentAlias};
 
 #[cfg(test)]
 mod fake_kms;
@@ -76,12 +76,18 @@ impl AwsKmsAmbientKeyProvider {
 
     /// Generates keys for the deployment `alias`: tagged `unitrust-alias = <alias>`, with the alias
     /// `alias/<alias>/<label>` for a label.
-    #[must_use]
-    pub fn with_deployment_alias(self, alias: impl Into<String>) -> Self {
-        Self {
-            deployment_alias: Some(alias.into()),
+    ///
+    /// # Errors
+    ///
+    /// Fails when AWS KMS can't name keys under `alias`, or `alias` would share its alias names with AWS or with
+    /// another deployment.
+    pub fn with_deployment_alias(self, alias: impl Into<String>) -> Result<Self, InvalidDeploymentAlias> {
+        let alias = alias.into();
+        key_store::check_deployment_alias(&alias)?;
+        Ok(Self {
+            deployment_alias: Some(alias),
             ..self
-        }
+        })
     }
 
     /// Replaces the upper bound for one whole request.
