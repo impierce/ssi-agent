@@ -58,7 +58,6 @@ identity-kit = { version = "0.4", default-features = false, features = [
 shared-kernel = { path = "shared-kernel" }
 
 anyhow = "1.0"
-async-std = { version = "1.5", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
 axum = "0.8"
 base64 = "0.22"

@@ -156,6 +156,7 @@ pub mod client_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_register_client(
         client_id: String,
         client_secret: Option<String>,
@@ -173,7 +174,7 @@ pub mod client_tests {
     ) {
         ClientTestFramework::with(())
             .given_no_previous_events()
-            .when(ClientCommand::RegisterClient {
+            .when_async(ClientCommand::RegisterClient {
                 client_id: client_id.clone(),
                 client_secret: client_secret.clone(),
                 client_name: client_name.clone(),
@@ -188,6 +189,7 @@ pub mod client_tests {
                 code_challenge_methods_supported: code_challenge_methods_supported.clone(),
                 require_pushed_authorization_request,
             })
+            .await
             .then_expect_events(vec![ClientEvent::ClientRegistered {
                 client_id,
                 client_secret,

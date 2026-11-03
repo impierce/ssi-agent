@@ -125,14 +125,16 @@ pub mod credential_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_credential(holder_credential_id: String, received_offer_id: String) {
         CredentialTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
-            .when(CredentialCommand::AddCredential {
+            .when_async(CredentialCommand::AddCredential {
                 holder_credential_id: holder_credential_id.clone(),
                 received_offer_id: Some(received_offer_id.clone()),
                 credential: JWT_VC_JSON_OBV3_JWT.parse().unwrap(),
             })
+            .await
             .then_expect_events(vec![CredentialEvent::CredentialAdded {
                 holder_credential_id,
                 received_offer_id: Some(received_offer_id),
@@ -146,14 +148,16 @@ pub mod credential_tests {
     /// Only JWT credentials are stored; an SD-JWT is refused as before.
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_sd_jwt_credential(holder_credential_id: String, received_offer_id: String) {
         CredentialTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
-            .when(CredentialCommand::AddCredential {
+            .when_async(CredentialCommand::AddCredential {
                 holder_credential_id,
                 received_offer_id: Some(received_offer_id),
                 credential: crate::credential::signed::SD_JWT.parse().unwrap(),
             })
+            .await
             .then_expect_error_message(&CredentialError::CredentialDecodingError.to_string())
     }
 }

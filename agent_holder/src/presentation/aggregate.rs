@@ -167,6 +167,7 @@ pub mod presentation_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_presentation(
         presentation_id: String,
         signed_credentials: Vec<OfferCredential>,
@@ -174,7 +175,7 @@ pub mod presentation_tests {
     ) {
         PresentationTestFramework::with(HolderServices::default().await)
             .given_no_previous_events()
-            .when(PresentationCommand::CreatePresentation {
+            .when_async(PresentationCommand::CreatePresentation {
                 presentation_id: presentation_id.clone(),
                 signed_credentials: signed_credentials
                     .into_iter()
@@ -184,6 +185,7 @@ pub mod presentation_tests {
                     })
                     .collect(),
             })
+            .await
             .then_expect_events(vec![PresentationEvent::PresentationCreated {
                 presentation_id,
                 signed_presentation,

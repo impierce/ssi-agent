@@ -1054,6 +1054,7 @@ pub mod credential_tests {
         UNSIGNED_ELM_CREDENTIAL.clone()
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_unsigned_credential(
         #[case] credential_subject: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
@@ -1064,7 +1065,7 @@ pub mod credential_tests {
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(CredentialCommand::CreateUnsignedCredential {
+            .when_async(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
                 data: Data {
                     raw: credential_subject,
@@ -1072,6 +1073,7 @@ pub mod credential_tests {
                 credential_configuration: Box::new(credential_configuration.clone()),
                 expires_at: CredentialExpiry::Never,
             })
+            .await
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
                 data: Data {
@@ -1101,6 +1103,7 @@ pub mod credential_tests {
         JWT_VC_JSON_ELM_JWT.to_string()
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_credential(
         #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
@@ -1130,7 +1133,7 @@ pub mod credential_tests {
                 created_at: Some(created_at),
                 expires_at: None,
             }])
-            .when(CredentialCommand::SignCredential {
+            .when_async(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
@@ -1138,6 +1141,7 @@ pub mod credential_tests {
                 status_list_id: TEST_STATUS_LIST_ID.to_string(),
                 index: TESTINDEX,
             })
+            .await
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
@@ -1169,6 +1173,7 @@ pub mod credential_tests {
     )]
     #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "vc+sd-jwt")]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_sd_jwt_credential(
         #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
@@ -1190,7 +1195,7 @@ pub mod credential_tests {
                 created_at: Some(created_at),
                 expires_at: None,
             }])
-            .when(CredentialCommand::SignCredential {
+            .when_async(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
@@ -1198,6 +1203,7 @@ pub mod credential_tests {
                 status_list_id: TEST_STATUS_LIST_ID.to_string(),
                 index: TESTINDEX,
             })
+            .await
             .inspect_result()
             .unwrap();
 
@@ -1270,6 +1276,7 @@ pub mod credential_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_credential_rejects_invalid_or_missing_jti_sources() {
         let services = IssuanceServices::default().await;
         let command = |credential_id: String| CredentialCommand::SignCredential {
@@ -1300,7 +1307,8 @@ pub mod credential_tests {
                 UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
                 DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
             )])
-            .when(command(invalid_id))
+            .when_async(command(invalid_id))
+            .await
             .then_expect_error_message(&InvalidCredentialDataError.to_string());
 
         let mut w3c_without_id = UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone();
@@ -1312,7 +1320,8 @@ pub mod credential_tests {
                 w3c_without_id,
                 VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
             )])
-            .when(command(credential_id))
+            .when_async(command(credential_id))
+            .await
             .then_expect_error_message(&InvalidCredentialDataError.to_string());
     }
 

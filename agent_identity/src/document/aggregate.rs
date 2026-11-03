@@ -341,14 +341,16 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_document(document_id: String, did_method: SupportedDidMethod, document: DidDocument) {
         DocumentTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(DocumentCommand::CreateDocument {
+            .when_async(DocumentCommand::CreateDocument {
                 document_id: document_id.clone(),
                 did_method,
                 with_fixed_algorithm: None,
             })
+            .await
             .then_expect_events(vec![DocumentEvent::DocumentCreated {
                 document_id,
                 did_method,
@@ -380,6 +382,7 @@ pub mod document_tests {
         "did:jwk:eyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2Iiwia2lkIjoib09ZMmRNVlU3R0s1YWwxcTdFQXh1b1lsb3hNUWx2NVpOWk9hdGlVWFFIZyIsImt0eSI6IkVDIiwieCI6IkZtazEzZ08yU0dMYnVYZUwyNHFKUEhDTm5jbkk2bEJ1NlpRTDJFVlp2NEUiLCJ5IjoiZnoyS3ZNaHVmelVwTWVMOS1LMnJlOWZ3QTNtemcxYnBmYmNlSVFTdWloWSJ9"
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_document_derives_the_did_from_the_issuer_key(
         document_id: String,
         #[case] did_method: SupportedDidMethod,
@@ -388,11 +391,12 @@ pub mod document_tests {
     ) {
         let events = DocumentTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(DocumentCommand::CreateDocument {
+            .when_async(DocumentCommand::CreateDocument {
                 document_id,
                 did_method,
                 with_fixed_algorithm: Some(algorithm),
             })
+            .await
             .inspect_result()
             .unwrap();
 
@@ -404,6 +408,7 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_set_public_key_jwks(
         document_id: String,
         did_method: SupportedDidMethod,
@@ -419,9 +424,10 @@ pub mod document_tests {
                 status: Status::SignAndValidate,
                 with_fixed_algorithm: None,
             }])
-            .when(DocumentCommand::UpdatePublicKeys {
+            .when_async(DocumentCommand::UpdatePublicKeys {
                 public_key_jwks: vec![],
             })
+            .await
             .then_expect_events(vec![
                 DocumentEvent::PublicKeyUpdated {
                     document_id: document_id.clone(),
@@ -436,6 +442,7 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_add_service(
         document_id: String,
         did_method: SupportedDidMethod,
@@ -458,10 +465,11 @@ pub mod document_tests {
                     document: document_with_multiple_verification_methods,
                 },
             ])
-            .when(DocumentCommand::AddService {
+            .when_async(DocumentCommand::AddService {
                 service: Box::new(linked_domains_service),
                 service_id: LINKED_DOMAINS_SERVICE_ID.to_string(),
             })
+            .await
             .then_expect_events(vec![DocumentEvent::ServiceAdded {
                 document_id: document_id.clone(),
                 document: document_with_linked_domains_service,
@@ -470,6 +478,7 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_set_status(
         document_id: String,
         did_method: SupportedDidMethod,
@@ -495,9 +504,10 @@ pub mod document_tests {
                     document: document_with_linked_domains_service,
                 },
             ])
-            .when(DocumentCommand::UpdateDocumentStatus {
+            .when_async(DocumentCommand::UpdateDocumentStatus {
                 status: Status::Disabled,
             })
+            .await
             .then_expect_events(vec![DocumentEvent::DocumentStatusUpdated {
                 document_id,
                 status: Status::Disabled,
@@ -506,14 +516,16 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn did_web_documents_keep_their_context(document_id: String) {
         let events = DocumentTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(DocumentCommand::CreateDocument {
+            .when_async(DocumentCommand::CreateDocument {
                 document_id,
                 did_method: SupportedDidMethod::Web,
                 with_fixed_algorithm: None,
             })
+            .await
             .inspect_result()
             .unwrap();
 
@@ -531,6 +543,7 @@ pub mod document_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn overwrite_rejects_an_authorization_for_another_did(
         document_id: String,
         did_method: SupportedDidMethod,
@@ -544,10 +557,11 @@ pub mod document_tests {
                 status: Status::SignAndValidate,
                 with_fixed_algorithm: None,
             }])
-            .when(DocumentCommand::OverwritePreviousDidWeb {
+            .when_async(DocumentCommand::OverwritePreviousDidWeb {
                 previous_did: "did:web:other.example".parse().unwrap(),
                 public_url: "https://new.example".parse().unwrap(),
             })
+            .await
             .then_expect_error_message(
                 "Invalid DID: Overwrite authorization for did:web:other.example does not match the current DID \
                  did:web:my-domain.example.org",

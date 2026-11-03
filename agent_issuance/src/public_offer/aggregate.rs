@@ -118,6 +118,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_public_offer() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -156,6 +157,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_duplicate_public_offer_fails() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -168,12 +170,14 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::Create { offer_id, template_id })
+            .when_async(PublicOfferCommand::Create { offer_id, template_id })
+            .await
             .then_expect_error(PublicOfferError::AlreadyExists);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_recreate_public_offer_after_delete_succeeds() {
         let offer_id = "public-offer-123".to_string();
         let original_template_id = "template-456".to_string();
@@ -222,6 +226,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_take_public_offer_offline() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -234,14 +239,16 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::TakeOffline {
+            .when_async(PublicOfferCommand::TakeOffline {
                 offer_id: offer_id.clone(),
             })
+            .await
             .then_expect_events(vec![PublicOfferEvent::TakenOffline { offer_id }]);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_take_public_offer_offline_idempotent() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -259,12 +266,14 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                 },
             ])
-            .when(PublicOfferCommand::TakeOffline { offer_id })
+            .when_async(PublicOfferCommand::TakeOffline { offer_id })
+            .await
             .then_expect_events(vec![]);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_take_public_offer_online() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -282,14 +291,16 @@ pub mod tests {
                     offer_id: offer_id.clone(),
                 },
             ])
-            .when(PublicOfferCommand::TakeOnline {
+            .when_async(PublicOfferCommand::TakeOnline {
                 offer_id: offer_id.clone(),
             })
+            .await
             .then_expect_events(vec![PublicOfferEvent::TakenOnline { offer_id }]);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_take_public_offer_online_idempotent() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -302,12 +313,14 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::TakeOnline { offer_id })
+            .when_async(PublicOfferCommand::TakeOnline { offer_id })
+            .await
             .then_expect_events(vec![]);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_delete_public_offer() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -320,53 +333,61 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::Delete {
+            .when_async(PublicOfferCommand::Delete {
                 offer_id: offer_id.clone(),
             })
+            .await
             .then_expect_events(vec![PublicOfferEvent::Deleted { offer_id }]);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_delete_nonexistent_public_offer_fails() {
         let issuance_services = IssuanceServices::default().await;
 
         PublicOfferTestFramework::with(issuance_services)
             .given_no_previous_events()
-            .when(PublicOfferCommand::Delete {
+            .when_async(PublicOfferCommand::Delete {
                 offer_id: "nonexistent".to_string(),
             })
+            .await
             .then_expect_error(PublicOfferError::NotFound);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_take_offline_nonexistent_public_offer_fails() {
         let issuance_services = IssuanceServices::default().await;
 
         PublicOfferTestFramework::with(issuance_services)
             .given_no_previous_events()
-            .when(PublicOfferCommand::TakeOffline {
+            .when_async(PublicOfferCommand::TakeOffline {
                 offer_id: "nonexistent".to_string(),
             })
+            .await
             .then_expect_error(PublicOfferError::NotFound);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_take_online_nonexistent_public_offer_fails() {
         let issuance_services = IssuanceServices::default().await;
 
         PublicOfferTestFramework::with(issuance_services)
             .given_no_previous_events()
-            .when(PublicOfferCommand::TakeOnline {
+            .when_async(PublicOfferCommand::TakeOnline {
                 offer_id: "nonexistent".to_string(),
             })
+            .await
             .then_expect_error(PublicOfferError::NotFound);
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_public_offer_state_transitions() {
         let offer_id = "public-offer-123".to_string();
         let template_id = "template-456".to_string();
@@ -379,7 +400,8 @@ pub mod tests {
                 template_id: template_id.clone(),
                 created_at: chrono::Utc::now(),
             }])
-            .when(PublicOfferCommand::TakeOffline { offer_id })
+            .when_async(PublicOfferCommand::TakeOffline { offer_id })
+            .await
             .then_expect_events(vec![PublicOfferEvent::TakenOffline {
                 offer_id: "public-offer-123".to_string(),
             }]);

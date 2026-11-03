@@ -33,8 +33,8 @@ rstest = { workspace = true, optional = true }
 agent_library = { path = ".", features = ["test_utils"] }
 shared-kernel = { workspace = true, features = ["test-utils"] }
 
-async-std.workspace = true
 serial_test = "3.0"
+tokio.workspace = true
 
 [features]
 test_utils = ["dep:rstest"]

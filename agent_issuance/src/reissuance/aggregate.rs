@@ -135,7 +135,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_records_relation() {
         let sink = EventSink::default();
         let services = IssuanceServices::default().await;
