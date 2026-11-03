@@ -67,6 +67,8 @@ struct State {
     aliases: BTreeMap<String, String>,
     created: u8,
     refused: BTreeSet<&'static str>,
+    /// Operations that take effect but answer with an error, as when a response is lost.
+    failing_after: BTreeSet<&'static str>,
     delayed: BTreeMap<&'static str, Duration>,
 }
 
@@ -149,6 +151,11 @@ impl FakeKms {
     /// Makes every request for `operation`, such as `CreateAlias`, fail.
     pub fn refuse(&self, operation: &'static str) {
         self.state.lock().unwrap().refused.insert(operation);
+    }
+
+    /// Makes every request for `operation` take effect but answer with an error, as when its response is lost.
+    pub fn fail_after(&self, operation: &'static str) {
+        self.state.lock().unwrap().failing_after.insert(operation);
     }
 
     /// Answers requests for `operation` again.
@@ -275,6 +282,9 @@ impl Responder {
                 return error("NotFoundException");
             };
             state.aliases.insert(alias, target);
+            if state.failing_after.contains(operation) {
+                return error("KMSInternalException");
+            }
             return ResponseTemplate::new(200).set_body_json(json!({}));
         }
 

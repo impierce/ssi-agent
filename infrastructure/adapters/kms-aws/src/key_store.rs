@@ -74,6 +74,10 @@ async fn create_named_key(
             .send()
             .await
         {
+            // The alias may have been created although the request failed, as when its response was lost.
+            if alias_targets(&client, &alias, key_id).await {
+                return Ok(metadata.arn().unwrap_or(key_id).to_string());
+            }
             // Don't leave a key behind that nothing names.
             if let Err(rollback) = client.schedule_key_deletion().key_id(key_id).send().await {
                 return Err(KeyStoreError::backend(AwsKmsError(format!(
@@ -90,6 +94,15 @@ async fn create_named_key(
     }
 
     Ok(metadata.arn().unwrap_or(key_id).to_string())
+}
+
+/// Whether `alias` names the key `key_id`.
+async fn alias_targets(client: &Client, alias: &str, key_id: &str) -> bool {
+    client.describe_key().key_id(alias).send().await.is_ok_and(|output| {
+        output
+            .key_metadata()
+            .is_some_and(|metadata| metadata.key_id() == key_id)
+    })
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -438,7 +451,7 @@ pub(crate) fn alias_for_label(deployment_alias: Option<&str>, label: &str) -> Re
     let alias = aws_key_id(deployment_alias, &KeyId::new(label));
     let valid = !label.is_empty()
         && alias.len() <= MAX_ALIAS_LENGTH
-        && !label.starts_with("aws/")
+        && !alias.starts_with("alias/aws/")
         && label
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-'));
@@ -546,6 +559,19 @@ mod tests {
             .await;
 
         assert_eq!(kms.key_states(), ["PendingDeletion"]);
+    }
+
+    #[tokio::test]
+    async fn keeps_a_key_whose_label_was_given_although_aws_answered_with_an_error() {
+        let kms = FakeKms::start().await;
+        kms.fail_after("CreateAlias");
+
+        let key = kms
+            .provider()
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await;
+
+        assert_eq!((key.unwrap().as_str(), kms.key_states()), ("issuer", vec!["Enabled"]));
     }
 
     #[tokio::test]
@@ -809,6 +835,14 @@ mod tests {
     #[test]
     fn accepts_a_deployment_alias_of_letters_digits_underscores_and_hyphens() {
         assert!(check_deployment_alias("eridani_2-eu").is_ok());
+    }
+
+    #[test]
+    fn names_a_label_starting_with_aws_under_the_deployment_alias() {
+        assert_eq!(
+            alias_for_label(Some("eridani"), "aws/issuer").unwrap(),
+            "alias/eridani/aws/issuer"
+        );
     }
 
     #[test]
