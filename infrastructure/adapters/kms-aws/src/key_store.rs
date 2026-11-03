@@ -668,11 +668,16 @@ mod tests {
         tokio::time::timeout(Duration::from_millis(50), store.generate(spec))
             .await
             .unwrap_err();
-        tokio::time::sleep(Duration::from_millis(400)).await;
 
-        let named = store.exists(&KeyId::new("issuer")).await.unwrap();
+        // The key is named in the background, so wait for it rather than for a fixed time.
+        let named = tokio::time::timeout(Duration::from_secs(10), async {
+            while !store.exists(&KeyId::new("issuer")).await.unwrap() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await;
 
-        assert!(named);
+        assert!(named.is_ok());
     }
 
     #[tokio::test]
