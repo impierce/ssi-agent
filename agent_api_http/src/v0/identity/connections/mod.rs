@@ -16,10 +16,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
-use identity_core::common::Url;
 use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::Caller;
+use url::Url;
 
 pub mod openapi;
 
@@ -131,7 +131,7 @@ pub(crate) async fn get_connections(
                 display
                     .as_ref()
                     .is_none_or(|display| connection.display.as_ref() == Some(display))
-                    && url.as_ref().is_none_or(|url| *url == connection.url)
+                    && url.as_ref().is_none_or(|url| url.as_str() == connection.url)
                     && did.as_ref().is_none_or(|did| connection.dids.contains(did))
             })
             .collect();
