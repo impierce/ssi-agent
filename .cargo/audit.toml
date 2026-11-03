@@ -1,40 +1,12 @@
 [advisories]
 ignore = [
-    # RUSTSEC-2023-0071: rsa (v0.8.2, v0.9.10) — Marvin Attack (RSA timing side-channel)
-    # No upstream patch is available. Both versions are transitive dependencies:
-    #   - rsa@0.8.2 via fastcrypto → IOTA identity SDK: deep internal SDK dependency.
-    #   - rsa@0.9.10 via stronghold_ext: backs `RS256` keys in agent_secret_manager's
-    #     `StrongholdKeyStore`. Used for RSASSA-PKCS1-v1_5 signing only, never for decryption,
-    #     which is the primary Marvin Attack vector.
+    # RUSTSEC-2023-0071: rsa v0.9.10 — Marvin Attack (RSA timing side-channel)
+    # No patched version of the rsa crate is available. It is a transitive dependency of:
+    #   - stronghold_ext: backs `RS256` keys in agent_secret_manager's `StrongholdKeyStore`.
+    #     Used for RSASSA-PKCS1-v1_5 signing only, never for decryption, which is the primary
+    #     Marvin Attack vector.
+    #   - jsonwebtoken (`rust_crypto` feature): used to verify RS256 signatures, a public-key
+    #     operation that does not involve a private key.
     # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
     "RUSTSEC-2023-0071",
-
-    # RUSTSEC-2026-0002: lru v0.12.5 — IterMut unsoundness (Stacked Borrows violation)
-    # The soundness issue is in the lru crate's IterMut iterator, which is used inside
-    # iota-package-resolver (a deep internal of the IOTA SDK). This code path is not
-    # reachable through any ssi-agent public API or normal operation of the identity module.
-    # TODO: revisit when the IOTA SDK updates its lru dependency to a patched version.
-    "RUSTSEC-2026-0002",
-
-    # RUSTSEC-2026-0097: rand v0.7.3 — Unsound when a custom logger calls rand::rng()
-    # Triggers aliased mutable references during ThreadRng reseeding only when all of these
-    # hold simultaneously: log+thread_rng features enabled, a custom logger defined that
-    # calls rand::rng(), and reseeding occurs during the log call. The ssi-agent uses the
-    # tracing crate with no custom logger that touches rand, so this condition is never met.
-    "RUSTSEC-2026-0097",
-
-    # RUSTSEC-2026-0194: quick-xml 0.39.4 — Quadratic run time in duplicate-attribute check
-    # Same crate and dependency chain as RUSTSEC-2026-0195 below: quick-xml is only pulled in
-    # through object_store inside the IOTA SDK. The ssi-agent never parses XML; the vulnerable
-    # attribute iteration only runs when object_store parses S3/Azure-style XML API responses,
-    # and no object-storage backend is configured or reachable from application code.
-    # TODO: revisit once the IOTA SDK upgrades quick-xml to >= 0.41.0.
-    "RUSTSEC-2026-0194",
-
-    # RUSTSEC-2026-0195: quick-xml 0.39.4 — Unbounded namespace-declaration allocation in NsReader
-    # The vulnerable quick-xml code is pulled in through object_store inside the IOTA SDK
-    # dependency chain. This workspace does not use object_store or any XML/object-storage
-    # client directly, so the NsReader path is not reachable from ssi-agent application code.
-    # TODO: revisit once the IOTA SDK upgrades quick-xml to >= 0.41.0.
-    "RUSTSEC-2026-0195",
 ]
