@@ -4,6 +4,7 @@ use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
 use cqrs_es::{event_sink::EventSink, Aggregate};
+use identity_kit::vc::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
 use oid4vci::credential_response::CredentialResponseType;
@@ -242,10 +243,13 @@ impl Aggregate for Offer {
                             .await
                             .map_err(|_| CredentialResponseError)?;
 
+                        // Only JWT credentials can be stored, so anything else is refused here, before
+                        // the offer is marked as having received its credentials.
                         let credential = match credential_response.credential {
                             CredentialResponseType::Immediate { credentials, .. } => credentials[0]
                                 .credential
-                                .parse::<SignedCredential>()
+                                .parse::<Jwt>()
+                                .map(SignedCredential::Jwt)
                                 .map_err(|_| UnsupportedCredentialFormatError)?,
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
