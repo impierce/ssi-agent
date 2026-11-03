@@ -116,7 +116,15 @@ impl Subject {
             return self.issuer_signer(algorithm).await;
         };
 
-        Ok(KeySigner::new(key_store, key_id, JwsAlgorithm::try_from(algorithm)?).await?)
+        // Signing with the configured issuer key instead would not help: the signature's `kid` already names this
+        // verification method.
+        KeySigner::new(key_store, key_id.clone(), JwsAlgorithm::try_from(algorithm)?)
+            .await
+            .map_err(|error| {
+                anyhow!(error).context(format!(
+                    "The key `{key_id}` of the verification method `{verification_method_id}` can't sign"
+                ))
+            })
     }
 
     /// Whether a key was inserted for the verification method `verification_method_id`.
@@ -423,6 +431,26 @@ mod tests {
             .unwrap();
 
         assert!(signed_by(&public_jwk, "message", &signature));
+    }
+
+    #[tokio::test]
+    async fn names_the_verification_method_whose_key_can_no_longer_sign() {
+        let subject = Subject::test_subject().await;
+        let (key, _) = in_memory_key().await;
+        key.key_store.delete(&key.key_id).await.unwrap();
+        let verification_method_id: DidUrl = "did:web:example.org#kms".parse().unwrap();
+        subject.insert_method_key(verification_method_id.clone(), key).await;
+
+        let error = subject
+            .method_signer(&verification_method_id, Algorithm::ES256)
+            .await
+            .err()
+            .unwrap();
+
+        assert!(
+            error.to_string().contains("`did:web:example.org#kms` can't sign"),
+            "{error}"
+        );
     }
 
     #[tokio::test]
