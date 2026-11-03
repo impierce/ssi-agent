@@ -69,6 +69,8 @@ struct State {
     refused: BTreeSet<&'static str>,
     /// Operations that take effect but answer with an error, as when a response is lost.
     failing_after: BTreeSet<&'static str>,
+    /// Operations answered this many more times before every request for them fails.
+    refused_after: BTreeMap<&'static str, usize>,
     delayed: BTreeMap<&'static str, Duration>,
 }
 
@@ -158,9 +160,17 @@ impl FakeKms {
         self.state.lock().unwrap().failing_after.insert(operation);
     }
 
+    /// Answers the next `answered` requests for `operation`, then makes every one fail.
+    pub fn refuse_after(&self, operation: &'static str, answered: usize) {
+        self.state.lock().unwrap().refused_after.insert(operation, answered);
+    }
+
     /// Answers requests for `operation` again.
     pub fn allow(&self, operation: &'static str) {
-        self.state.lock().unwrap().refused.remove(operation);
+        let mut state = self.state.lock().unwrap();
+        state.refused.remove(operation);
+        state.failing_after.remove(operation);
+        state.refused_after.remove(operation);
     }
 
     /// Answers every request for `operation` only after `delay`.
@@ -226,6 +236,11 @@ impl Respond for Responder {
         let operation = operation(request);
         let delay = self.0.lock().unwrap().delayed.get(operation.as_str()).copied();
         let response = self.answer(&operation, request);
+        let response = if self.0.lock().unwrap().failing_after.contains(operation.as_str()) {
+            error("KMSInternalException")
+        } else {
+            response
+        };
         match delay {
             Some(delay) => response.set_delay(delay),
             None => response,
@@ -240,6 +255,12 @@ impl Responder {
 
         if state.refused.contains(operation) {
             return error("LimitExceededException");
+        }
+        if let Some(answered) = state.refused_after.get_mut(operation) {
+            if *answered == 0 {
+                return error("LimitExceededException");
+            }
+            *answered -= 1;
         }
 
         if operation == "CreateKey" {
@@ -282,9 +303,6 @@ impl Responder {
                 return error("NotFoundException");
             };
             state.aliases.insert(alias, target);
-            if state.failing_after.contains(operation) {
-                return error("KMSInternalException");
-            }
             return ResponseTemplate::new(200).set_body_json(json!({}));
         }
 

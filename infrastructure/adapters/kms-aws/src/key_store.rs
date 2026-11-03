@@ -11,6 +11,7 @@ use agent_kms::adapter::InvalidLabel;
 use async_trait::async_trait;
 use aws_sdk_kms::{
     error::{ProvideErrorMetadata, SdkError},
+    operation::describe_key::DescribeKeyError,
     primitives::Blob,
     types::{KeyMetadata, KeySpec as AwsKeySpec, KeyState, KeyUsageType, MessageType, SigningAlgorithmSpec, Tag},
     Client,
@@ -74,9 +75,19 @@ async fn create_named_key(
             .send()
             .await
         {
-            // The alias may have been created although the request failed, as when its response was lost.
-            if alias_targets(&client, &alias, key_id).await {
-                return Ok(metadata.arn().unwrap_or(key_id).to_string());
+            // The alias may have been created although the request failed, as when its response was lost. When AWS KMS
+            // can't tell, the key is kept: it may be the one the label names.
+            match alias_names(&client, &alias, key_id).await {
+                Ok(true) => return Ok(metadata.arn().unwrap_or(key_id).to_string()),
+                Ok(false) => {}
+                Err(lookup) => {
+                    return Err(KeyStoreError::backend(AwsKmsError(format!(
+                        "AWS KMS created key {key_id} but could not name it `{label}` ({}) nor tell whether `{label}` \
+                         names it ({})",
+                        describe(&error),
+                        describe(&lookup)
+                    ))));
+                }
             }
             // Don't leave a key behind that nothing names.
             if let Err(rollback) = client.schedule_key_deletion().key_id(key_id).send().await {
@@ -96,13 +107,15 @@ async fn create_named_key(
     Ok(metadata.arn().unwrap_or(key_id).to_string())
 }
 
-/// Whether `alias` names the key `key_id`.
-async fn alias_targets(client: &Client, alias: &str, key_id: &str) -> bool {
-    client.describe_key().key_id(alias).send().await.is_ok_and(|output| {
-        output
+/// Whether `alias` names the key `key_id`; it doesn't when it names no key.
+async fn alias_names(client: &Client, alias: &str, key_id: &str) -> Result<bool, SdkError<DescribeKeyError>> {
+    match client.describe_key().key_id(alias).send().await {
+        Ok(output) => Ok(output
             .key_metadata()
-            .is_some_and(|metadata| metadata.key_id() == key_id)
-    })
+            .is_some_and(|metadata| metadata.key_id() == key_id)),
+        Err(error) if error.code() == Some("NotFoundException") => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -572,6 +585,47 @@ mod tests {
             .await;
 
         assert_eq!((key.unwrap().as_str(), kms.key_states()), ("issuer", vec!["Enabled"]));
+    }
+
+    #[tokio::test]
+    async fn keeps_a_key_it_cannot_tell_its_label_names() {
+        let kms = FakeKms::start().await;
+        kms.fail_after("CreateAlias");
+        // The first lookup checks that the label is free.
+        kms.refuse_after("DescribeKey", 1);
+
+        let error = kms
+            .provider()
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            (
+                error.to_string().contains("00000000-0000-0000-0000-000000000001"),
+                kms.key_states()
+            ),
+            (true, vec!["Enabled"])
+        );
+    }
+
+    #[tokio::test]
+    async fn deletes_the_new_key_when_its_label_names_another_key() {
+        let kms = FakeKms::start().await;
+        let store = kms.provider();
+        let other = store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        // A key pending deletion leaves its label free for a new key, but AWS KMS still holds the alias.
+        kms.point_alias("alias/issuer", other.as_str());
+        kms.set_key_state(other.as_str(), "PendingDeletion");
+
+        let _ = store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await;
+
+        assert_eq!(kms.key_states(), ["PendingDeletion", "PendingDeletion"]);
     }
 
     #[tokio::test]
