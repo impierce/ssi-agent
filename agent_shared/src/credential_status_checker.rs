@@ -491,6 +491,19 @@ mod tests {
         assert!(decode_status_list_token(&jwt, &decoding_key, now).is_err());
     }
 
+    #[test]
+    fn test_decode_status_list_token_judges_iat_at_the_given_time() {
+        let decoding_key = DecodingKey::from_ed_der(&TEST_PUBLIC_KEY);
+        let validation_time = chrono::Utc::now() - chrono::TimeDelta::seconds(600);
+
+        // Issued after the validation time beyond the leeway, but before the wall clock.
+        let jwt = sign(&status_list_token(
+            "https://example.org/status_list",
+            validation_time + chrono::TimeDelta::seconds(120),
+        ));
+        assert!(decode_status_list_token(&jwt, &decoding_key, validation_time).is_err());
+    }
+
     #[tokio::test]
     async fn test_status_list_token_tolerates_clock_skew_for_exp() {
         let now = chrono::Utc::now();
