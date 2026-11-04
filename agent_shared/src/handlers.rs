@@ -6,7 +6,7 @@ use shared_kernel::authorization::{
 use shared_kernel::view_repository::{load_by_id, DynViewRepository, SoftDeletable};
 use std::{collections::HashMap, sync::Arc};
 use time::format_description::well_known::Rfc3339;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use crate::application_state::CommandHandler;
 
@@ -19,16 +19,10 @@ where
     A: Aggregate,
     V: View<A>,
 {
-    match state.load(view_id).await {
-        Ok(view) => {
-            debug!("View: {:#?}\n", view);
-            Ok(view)
-        }
-        Err(err) => {
-            error!("Error: {:#?}\n", err);
-            Err(err)
-        }
-    }
+    state
+        .load(view_id)
+        .await
+        .inspect_err(|err| error!(error = %err, view_id, "Failed to load view"))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -73,7 +67,7 @@ where
     authorize_query::<V>(authorization_checker, caller, resource_id).await?;
 
     load_by_id(state, view_id).await.map_err(|err| {
-        error!("Error: {:#?}\n", err);
+        error!(error = %err, view_id, "Failed to load view");
         QueryHandlerError::Persistence(err)
     })
 }
@@ -128,7 +122,7 @@ pub async fn command_handler<A>(
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
+    <A as Aggregate>::Command: Send + Sync + CommandOperation,
 {
     authorize_command(authorization_checker.as_ref(), caller.clone(), aggregate_id, &command)
         .await
@@ -176,7 +170,7 @@ async fn command_handler_with_caller<A>(
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+    <A as Aggregate>::Command: Send + Sync + CommandOperation,
 {
     let mut metadata = HashMap::new();
     let timestamp = time::OffsetDateTime::now_utc()
@@ -197,12 +191,19 @@ where
         }
     }
 
-    info!("Executing command: {:?}", command);
+    debug!(aggregate_id, operation = command.operation_name(), "Executing command");
     state
         .execute_with_metadata(aggregate_id, command, metadata)
         .await
+        .inspect_err(|err| {
+            if let AggregateError::UserError(error) = err {
+                // Rejected by a business rule; reported to the caller as a client error.
+                debug!(aggregate_id, error = %error, "Command rejected");
+            } else {
+                error!(aggregate_id, error = %err, "Command failed");
+            }
+        })
         .map_err(CommandHandlerError::Aggregate)
-        .inspect_err(|err| error!("Error: {}", err.to_string()))
 }
 
 /// Executes a command on an aggregate for public, unauthenticated protocol endpoints.
@@ -224,7 +225,7 @@ pub async fn public_command_handler<A>(
 ) -> Result<(), CommandHandlerError<<A as Aggregate>::Error>>
 where
     A: Aggregate,
-    <A as Aggregate>::Command: Send + Sync + std::fmt::Debug,
+    <A as Aggregate>::Command: Send + Sync + CommandOperation,
 {
     command_handler_with_caller(aggregate_id, state, command, &Caller::Anonymous).await
 }

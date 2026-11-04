@@ -9,7 +9,7 @@ use oid4vci::credential_response::{CredentialResponse, CredentialResponseObject,
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 use crate::offer::command::OfferCommand;
@@ -93,8 +93,6 @@ impl Aggregate for Offer {
     ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateCredentialOffer {
@@ -370,8 +368,6 @@ impl Aggregate for Offer {
 
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialOfferCreated {

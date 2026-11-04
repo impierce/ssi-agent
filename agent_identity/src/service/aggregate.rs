@@ -13,7 +13,7 @@ use identity_kit::{
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr as _, sync::Arc};
-use tracing::{debug, info};
+use tracing::info;
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,8 +254,6 @@ impl Aggregate for Service {
         use ServiceError::*;
         use ServiceEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             AddLinkedDomains {
                 service_id,
@@ -439,8 +437,6 @@ impl Aggregate for Service {
 
     fn apply(&mut self, event: Self::Event) {
         use ServiceEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             LinkedDomainsAdded {

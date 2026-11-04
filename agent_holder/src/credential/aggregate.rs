@@ -9,7 +9,6 @@ use identity_kit::vc::Jwt;
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub struct Data {
@@ -44,8 +43,6 @@ impl Aggregate for Credential {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             AddCredential {
@@ -90,8 +87,6 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialAdded {
