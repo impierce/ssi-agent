@@ -2,7 +2,7 @@ use crate::event_verification::{EventVerificationError, EventVerificationReport,
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use async_trait::async_trait;
-use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
+use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
 use mongodb::bson::{self, doc, Document};
@@ -11,17 +11,20 @@ use shared_kernel::event_bus::{
     build_cloud_event, CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource, EventSourceStream,
     HistoryAscendingResult, Position, SourceEvent, SubscribePosition,
 };
+use shared_kernel::streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
-impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
+impl<A> AggregateHandler<A, StreamingEventStore<MongoEventRepository, A>>
 where
     A: Aggregate,
 {
     async fn new(client: Client, services: A::Services) -> Self {
-        let repo = new_event_repository(client).await;
-        let store = PersistedEventStore::new_event_store(repo);
+        let replay = new_event_repository(client.clone())
+            .await
+            .with_streaming_channel_size(REPLAY_BUFFER_EVENTS);
+        let store = StreamingEventStore::new(new_event_repository(client).await, replay);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
         }
