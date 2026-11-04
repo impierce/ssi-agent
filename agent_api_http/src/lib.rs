@@ -16,23 +16,29 @@ use agent_library::state::LibraryState;
 use agent_shared::config::config;
 use agent_verification::state::VerificationState;
 use axum::{
-    body::{Body, Bytes},
+    body::{Body, HttpBody as _},
     extract::{MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     Router,
 };
-use http::HeaderMap;
+use http::{
+    header::{AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, SET_COOKIE},
+    HeaderMap, HeaderName,
+};
 use http_api_problem::ApiError;
-use http_body_util::BodyExt as _;
+use http_body_util::{BodyExt as _, Collected};
 use hyper::StatusCode;
 use shared_kernel::authorization::{ActorExtractor, ToActor};
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Instant};
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
-use tracing::{debug, info, info_span, Span};
+use tower_http::{sensitive_headers::SetSensitiveHeadersLayer, trace::TraceLayer};
+use tracing::{debug, error, field, info, info_span, Span};
 
 pub const API_VERSION: &str = "/v0";
+
+/// Headers whose values are redacted wherever headers are printed.
+const SENSITIVE_HEADERS: [HeaderName; 4] = [AUTHORIZATION, PROXY_AUTHORIZATION, COOKIE, SET_COOKIE];
 
 pub const DOCUMENTATION_URL: &str = "https://beta.docs.impierce.com/unicore/";
 
@@ -121,23 +127,18 @@ where
                                 "HTTP Request",
                                 method = ?request.method(),
                                 path,
+                                "http.response.status_code" = field::Empty,
+                                "otel.status_code" = field::Empty,
                             )
                         })
-                        .on_request(|request: &Request<_>, _span: &Span| {
-                            info!("Received request");
-                            info!("Request Headers: {:?}", request.headers());
-                        })
-                        .on_response(|response: &Response, _latency: Duration, _span: &Span| {
-                            info!("Returning {}", response.status());
-                            info!("Response Headers: {:?}", response.headers());
-                        })
-                        .on_body_chunk(|chunk: &Bytes, _latency: Duration, _span: &Span| {
-                            if let Ok(response_body) = std::str::from_utf8(chunk) {
-                                info!("Response Body: {response_body}");
-                            }
-                        }),
+                        .on_request(())
+                        .on_response(())
+                        .on_body_chunk(())
+                        .on_eos(())
+                        .on_failure(()),
                 )
-                .layer(middleware::from_fn(log_request_body)),
+                .layer(middleware::from_fn(log_response))
+                .layer(middleware::from_fn(reject_null_bytes)),
         )
         // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
         .merge(events_state.map(v0::events::router).unwrap_or_default());
@@ -149,6 +150,7 @@ where
     };
     app.merge(well_known)
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
+        .layer(SetSensitiveHeadersLayer::new(SENSITIVE_HEADERS))
 }
 
 /// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
@@ -161,18 +163,83 @@ pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result
     Ok(next.run(request).await)
 }
 
-// This middleware logs the request body before passing it on.
-async fn log_request_body(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
-    let request = buffer_request_body(request).await?;
+/// Logs one line per request, at a level that follows the response status, and records the status
+/// on the request span: `debug` for success, `info` for client errors (with the problem type) and
+/// `error` for server errors, which also mark the span as failed. Headers and bodies are never
+/// logged.
+async fn log_response(request: Request, next: Next) -> Response {
+    let start = Instant::now();
+    let response = next.run(request).await;
+    let latency_ms = start.elapsed().as_millis();
+    let status = response.status();
 
-    Ok(next.run(request).await)
+    let span = Span::current();
+    span.record("http.response.status_code", status.as_u16());
+
+    if status.is_server_error() {
+        span.record("otel.status_code", "ERROR");
+        let (response, problem) = problem_summary(response).await;
+        error!(
+            status = status.as_u16(),
+            latency_ms,
+            problem_type = problem.type_url,
+            problem_title = problem.title,
+            "Request failed"
+        );
+        response
+    } else if status.is_client_error() {
+        let (response, problem) = problem_summary(response).await;
+        info!(
+            status = status.as_u16(),
+            latency_ms,
+            problem_type = problem.type_url,
+            problem_title = problem.title,
+            "Request rejected"
+        );
+        response
+    } else {
+        debug!(status = status.as_u16(), latency_ms, "Request completed");
+        response
+    }
 }
 
-// Buffer the request body so it can be logged.
-async fn buffer_request_body(request: Request) -> Result<Request, Response> {
-    let (parts, body) = request.into_parts();
+/// Type and title of a problem details response body (RFC 9457).
+#[derive(Default, serde::Deserialize)]
+struct ProblemSummary {
+    #[serde(rename = "type")]
+    type_url: Option<String>,
+    title: Option<String>,
+}
 
-    debug!("Path segments and query string: `{}`", parts.uri);
+/// Problem details bodies are small; a larger or streamed body is passed through unread.
+const MAX_PROBLEM_BODY_BYTES: u64 = 16 * 1024;
+
+/// Reads the type and title from a problem details response, leaving the body intact. Other
+/// responses are returned unread.
+async fn problem_summary(response: Response) -> (Response, ProblemSummary) {
+    let is_problem = response
+        .headers()
+        .get(http::header::CONTENT_TYPE)
+        .is_some_and(|content_type| content_type.as_bytes().starts_with(b"application/problem+json"));
+    let is_small = response
+        .body()
+        .size_hint()
+        .exact()
+        .is_some_and(|size| size <= MAX_PROBLEM_BODY_BYTES);
+    if !(is_problem && is_small) {
+        return (response, ProblemSummary::default());
+    }
+
+    let (parts, body) = response.into_parts();
+    let bytes = body.collect().await.map(Collected::to_bytes).unwrap_or_default();
+    let problem = serde_json::from_slice(&bytes).unwrap_or_default();
+    (Response::from_parts(parts, Body::from(bytes)), problem)
+}
+
+/// Buffers the request body to turn away requests carrying a `NUL` (see [`uri_contains_null_byte`]
+/// and [`body_contains_null_byte`]).
+async fn reject_null_bytes(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
+    let (parts, body) = request.into_parts();
 
     if uri_contains_null_byte(&parts.uri) {
         return Err(null_byte_rejection().into_axum_response());
@@ -189,11 +256,7 @@ async fn buffer_request_body(request: Request) -> Result<Request, Response> {
         return Err(null_byte_rejection().into_axum_response());
     }
 
-    let _ = serde_json::from_slice(&bytes)
-        .and_then(|json_value: serde_json::Value| serde_json::to_string_pretty(&json_value))
-        .map(|pretty_json| info!("Request Body: {}", pretty_json));
-
-    Ok(Request::from_parts(parts, Body::from(bytes)))
+    Ok(next.run(Request::from_parts(parts, Body::from(bytes))).await)
 }
 
 /// A `NUL` anywhere in a request eventually reaches the event store, which cannot hold one: Postgres
@@ -548,15 +611,13 @@ mod tests {
         assert!(frame.is_some());
 
         // Verify that absolutely nothing was logged for /events
-        assert!(!logs_contain("Received request"));
-        assert!(!logs_contain("Returning"));
-        assert!(!logs_contain("Response Body:"));
+        assert!(!logs_contain("Request completed"));
         assert!(!logs_contain("sensitive-data"));
     }
 
     #[tokio::test]
     #[tracing_test::traced_test]
-    async fn non_events_requests_are_logged_by_tracing_layer() {
+    async fn requests_are_logged_once_without_headers_or_bodies() {
         let library_state = library_state(&InMemory, &Default::default(), vec![]).await;
         let app = app_with_base_path(
             ApiState {
@@ -567,14 +628,108 @@ mod tests {
             "/",
         );
 
-        let _response = tower::ServiceExt::oneshot(
+        let response = tower::ServiceExt::oneshot(
             app,
-            Request::builder().uri("/public/templates").body(Body::empty()).unwrap(),
+            Request::builder()
+                .uri("/public/templates")
+                .header(AUTHORIZATION, "Bearer secret-token")
+                .header("x-api-key", "secret-api-key")
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
 
-        assert!(logs_contain("Received request"));
-        assert!(logs_contain("Returning"));
+        logs_assert(|lines: &[&str]| {
+            let request_lines: Vec<_> = lines.iter().filter(|line| line.contains("HTTP Request")).collect();
+            match request_lines.as_slice() {
+                [line]
+                    if line.contains("DEBUG") && line.contains("Request completed") && line.contains("status=200") =>
+                {
+                    Ok(())
+                }
+                other => Err(format!("expected one `Request completed` line, got {other:?}")),
+            }
+        });
+        assert!(!logs_contain("secret-token"));
+        assert!(!logs_contain("secret-api-key"));
+    }
+
+    fn problem_router(status: StatusCode) -> Router {
+        Router::new()
+            .route(
+                "/",
+                get(move || async move {
+                    ApiError::builder(status)
+                        .title("Some Problem")
+                        .type_url("https://docs.example.org/problem-details/some-problem")
+                        .message("detail with personal data")
+                        .finish()
+                }),
+            )
+            .layer(middleware::from_fn(log_response))
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn client_errors_are_logged_at_info_with_the_problem_type() {
+        let response = problem_router(StatusCode::CONFLICT)
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            error::tests::into_json_value(response).await["detail"],
+            json!("detail with personal data")
+        );
+        logs_assert(|lines: &[&str]| {
+            match lines
+                .iter()
+                .filter(|line| line.contains("Request rejected"))
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                [line]
+                    if line.contains("INFO")
+                        && line.contains("status=409")
+                        && line.contains("problem-details/some-problem")
+                        && line.contains("Some Problem") =>
+                {
+                    Ok(())
+                }
+                other => Err(format!("expected one `Request rejected` line at INFO, got {other:?}")),
+            }
+        });
+        assert!(!logs_contain("personal data"));
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn server_errors_are_logged_at_error_with_the_problem_type() {
+        let response = problem_router(StatusCode::INTERNAL_SERVER_ERROR)
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        logs_assert(|lines: &[&str]| {
+            match lines
+                .iter()
+                .filter(|line| line.contains("Request failed"))
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                [line]
+                    if line.contains("ERROR")
+                        && line.contains("status=500")
+                        && line.contains("problem-details/some-problem") =>
+                {
+                    Ok(())
+                }
+                other => Err(format!("expected one `Request failed` line at ERROR, got {other:?}")),
+            }
+        });
     }
 }
