@@ -316,11 +316,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
         };
 
-    info!("{:?}", config());
-
-    info!("Application url: {}", config().application_url);
-
-    info!("Public url: {}", config().public_url);
+    info!(configuration = %config().redacted(), "Configuration");
 
     agent_authorization::state::initialize(&authorization_state)
         .await
