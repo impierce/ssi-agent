@@ -1,4 +1,5 @@
 use crate::server_config::command::ServerConfigCommand;
+use crate::server_config::views::ServerConfigView;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::template::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Template};
 use agent_library::template::views::TemplateView;
@@ -61,22 +62,8 @@ impl CredentialConfigurationProjection {
                     self.remove_credential_configuration(template_id).await;
                     return;
                 }
-                let credential_configuration = credential_configuration_from_template(&template);
-                let command = ServerConfigCommand::UpdateCredentialConfiguration {
-                    credential_configuration,
-                    provisioned: false,
-                };
-                if let Err(e) = command_handler(
-                    self.issuance_state.authorization_checker.clone(),
-                    Caller::Internal,
-                    SERVER_CONFIG_ID,
-                    &self.issuance_state.command.server_config,
-                    command,
-                )
-                .await
-                {
-                    warn!("Failed to update credential configuration for template `{template_id}`: {e}");
-                }
+                self.update_credential_configuration(template_id, credential_configuration_from_template(&template))
+                    .await;
             }
             Ok(None) => {
                 warn!("Template `{template_id}` not found when trying to sync credential configuration");
@@ -87,8 +74,61 @@ impl CredentialConfigurationProjection {
         }
     }
 
+    /// Adds or replaces the credential configuration of a template, unless the server config already
+    /// holds exactly this configuration.
+    async fn update_credential_configuration(
+        &self,
+        template_id: &str,
+        credential_configuration: CredentialConfiguration,
+    ) {
+        if let Some(server_config) = self.server_config_view().await {
+            let unchanged = server_config
+                .with_credential_configuration(credential_configuration.clone(), false)
+                .is_ok_and(|credential_configurations| {
+                    credential_configurations == server_config.credential_configurations
+                });
+            if unchanged {
+                return;
+            }
+        }
+
+        let command = ServerConfigCommand::UpdateCredentialConfiguration {
+            credential_configuration,
+            provisioned: false,
+        };
+        if let Err(e) = command_handler(
+            self.issuance_state.authorization_checker.clone(),
+            Caller::Internal,
+            SERVER_CONFIG_ID,
+            &self.issuance_state.command.server_config,
+            command,
+        )
+        .await
+        {
+            warn!("Failed to update credential configuration for template `{template_id}`: {e}");
+        }
+    }
+
+    /// The server config read model. Commands on the server config are checked against it first,
+    /// since a command loads the aggregate, which replays every server config event, each carrying
+    /// all credential configurations.
+    async fn server_config_view(&self) -> Option<ServerConfigView> {
+        public_query_handler(SERVER_CONFIG_ID, &self.issuance_state.query.server_config)
+            .await
+            .ok()
+            .flatten()
+    }
+
     /// Removes the credential configuration associated with the given template ID.
     async fn remove_credential_configuration(&self, template_id: &str) {
+        if self
+            .server_config_view()
+            .await
+            .is_some_and(|server_config| !server_config.credential_configurations.contains_key(template_id))
+        {
+            return;
+        }
+
         let command = ServerConfigCommand::RemoveCredentialConfiguration {
             credential_configuration_id: template_id.to_string(),
             provisioned: false,
@@ -328,22 +368,11 @@ impl Query<Template> for CredentialConfigurationProjection {
                         holder_authorization: holder_authorization.clone(),
                     };
 
-                    let credential_configuration = credential_configuration_from_template(&template);
-                    let command = ServerConfigCommand::UpdateCredentialConfiguration {
-                        credential_configuration,
-                        provisioned: false,
-                    };
-                    if let Err(e) = command_handler(
-                        self.issuance_state.authorization_checker.clone(),
-                        Caller::Internal,
-                        SERVER_CONFIG_ID,
-                        &self.issuance_state.command.server_config,
-                        command,
+                    self.update_credential_configuration(
+                        template_id,
+                        credential_configuration_from_template(&template),
                     )
-                    .await
-                    {
-                        warn!("Failed to update credential configuration for template `{template_id}`: {e}");
-                    }
+                    .await;
                 }
 
                 // When the status changes to Deleted, remove the credential configuration;
