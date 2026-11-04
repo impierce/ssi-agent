@@ -1,4 +1,4 @@
-use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
+use crate::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use async_trait::async_trait;
@@ -70,17 +70,12 @@ impl MongoDB {
     }
     // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
 
+    /// Verifies all persisted events, one at a time as they are read: the event store can be far
+    /// larger than the memory available to the agent.
     pub async fn verify_events_with(
         &self,
         verifiers: &[EventVerifier],
     ) -> Result<EventVerificationReport, EventVerificationError> {
-        Ok(event_verification::verify_events_with(
-            self.load_raw_events().await?,
-            verifiers,
-        ))
-    }
-
-    async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {
         #[derive(serde::Deserialize)]
         struct RawStoredEventDocument {
             aggregate_type: String,
@@ -114,15 +109,15 @@ impl MongoDB {
             .build();
 
         let mut cursor = collection.find(doc! {}).with_options(options).await?;
-        let mut events = Vec::new();
+        let mut report = EventVerificationReport::default();
 
         while cursor.advance().await? {
             let document = cursor.deserialize_current()?;
             let event: RawStoredEventDocument = bson::from_document(document)?;
-            events.push(event.into());
+            report.verify(event.into(), verifiers);
         }
 
-        Ok(events)
+        Ok(report)
     }
 }
 
