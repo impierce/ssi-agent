@@ -21,7 +21,7 @@ use oid4vci::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::debug;
 
 #[derive(Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
 #[serde(untagged)]
@@ -66,7 +66,7 @@ pub(crate) async fn par(
 ) -> Result<Response, PublicError> {
     match authorization_request {
         AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => {
-            info!("Received interactive authorization request");
+            debug!("Received interactive authorization request");
 
             let interactive_authorization_response =
                 InteractiveAuthorizationService::handle_interactive_authorization_request(
@@ -82,7 +82,7 @@ pub(crate) async fn par(
             openid4vp_response,
             code_verifier,
         }) => {
-            info!("Received follow-up interactive authorization request for auth session: {auth_session}");
+            debug!("Received follow-up interactive authorization request");
 
             let interactive_authorization_follow_up_response =
                 InteractiveAuthorizationService::handle_interactive_authorization_request_follow_up(
@@ -96,10 +96,7 @@ pub(crate) async fn par(
             Ok((StatusCode::OK, Json(interactive_authorization_follow_up_response)).into_response())
         }
         AuthorizationRequestDto::PushedAuthorizationRequest(pushed_authorization_request) => {
-            info!(
-                "Received pushed authorization request with state: {:?}",
-                pushed_authorization_request.state
-            );
+            debug!("Received pushed authorization request");
 
             let authorization_response =
                 PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)

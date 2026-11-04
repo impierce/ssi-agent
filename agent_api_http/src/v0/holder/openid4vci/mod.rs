@@ -10,7 +10,6 @@ use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use serde::Deserialize;
 use std::sync::Arc;
-use tracing::info;
 
 /// A credential offer passed by value or by reference. Exactly one of the two parameters is expected.
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -59,8 +58,6 @@ pub(crate) async fn offers_params(
     };
 
     let received_offer_id = uuid::Uuid::new_v4().to_string();
-
-    info!("Credential Offer: {:#?}", credential_offer);
 
     let command = OfferCommand::ReceiveCredentialOffer {
         received_offer_id: received_offer_id.clone(),
