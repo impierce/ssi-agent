@@ -146,8 +146,6 @@ impl Aggregate for Offer {
                     _ => return Err(MissingPreAuthorizedCodeError),
                 };
 
-                info!("token_request: {:?}", token_request);
-
                 // Get an access token.
                 let token_response = wallet
                     .get_access_token(
@@ -158,8 +156,6 @@ impl Aggregate for Offer {
                     )
                     .await
                     .map_err(|_| TokenResponseError)?;
-
-                info!("token_response: {:?}", token_response);
 
                 Ok(vec![
                     CredentialOfferAccepted {
@@ -215,8 +211,6 @@ impl Aggregate for Offer {
                             None
                         };
 
-                        info!("nonce: {nonce:?}");
-
                         // Determine if anonymous access is supported.
                         // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-8.2.1.1-2.2.2.2
                         let with_anonymous_access = authorization_server_metadata
@@ -269,8 +263,6 @@ impl Aggregate for Offer {
                         return Err(BatchCredentialRequestError);
                     }
                 };
-
-                info!("credentials: {credentials:?}");
 
                 Ok(vec![CredentialResponseReceived {
                     received_offer_id,
