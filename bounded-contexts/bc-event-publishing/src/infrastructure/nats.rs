@@ -247,10 +247,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(150)).await;
 
         // 1. Non-matching event
-        event_bus.publish(CloudEvent::new("org.other.event", "https://example.com/other"));
+        event_bus.publish(CloudEvent::new("org.other.event", "https://example.test/other"));
 
         // 2. Matching event
-        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
+        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.test/issuer")
             .with_subject("sub-42")
             .with_caller(Some("caller-nats".to_string()), Some("api_key".to_string()))
             .with_data(serde_json::json!({ "status": "issued" }));

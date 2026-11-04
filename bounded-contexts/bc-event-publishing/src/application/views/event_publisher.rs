@@ -90,6 +90,7 @@ impl View<EventPublisher> for EventPublisherView {
             }
             EventPublisherEvent::EventPublisherDeleted { occurred_at, .. } => {
                 self.enabled = false;
+                self.config = None;
                 self.view_status = Status::None;
                 self.last_modified_at = *occurred_at;
             }

@@ -42,3 +42,40 @@ impl EventPublisher {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::event_publisher::{
+        aggregate::tests::{created_http_event, publisher_id},
+        command::EventPublisherCommand::ActivateEventPublisher,
+        event::EventPublisherEvent,
+        services::EventPublisherDomainServices,
+    };
+    use rstest::rstest;
+    use shared_kernel::cqrs_es::test::TestFramework;
+    use tracing_test::traced_test;
+
+    #[rstest]
+    #[traced_test]
+    fn activating_a_paused_publisher_emits_activated_event(
+        publisher_id: String,
+        created_http_event: EventPublisherEvent,
+    ) {
+        let deactivated = EventPublisherEvent::EventPublisherDeactivated {
+            id: publisher_id.clone(),
+            occurred_at: Utc::now(),
+        };
+
+        let activated = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
+            .given(vec![created_http_event, deactivated])
+            .when(ActivateEventPublisher { id: publisher_id })
+            .inspect_result()
+            .unwrap();
+        assert_eq!(activated.len(), 1);
+        assert!(matches!(
+            activated[0],
+            EventPublisherEvent::EventPublisherActivated { .. }
+        ));
+    }
+}

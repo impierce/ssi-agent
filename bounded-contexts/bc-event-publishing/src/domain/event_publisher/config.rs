@@ -20,7 +20,7 @@ pub enum EventPublisherType {
 /// Field names match the `/v0/events` SSE query parameters (`types`, and in future extensions
 /// `sources`, `subject`, etc.).
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EventPublisherFilter {
     /// CloudEvent `type` patterns to subscribe to (exact types, prefix globs like
     /// `com.impierce.unicore.issuance.*`, or `*`).
@@ -41,13 +41,12 @@ impl EventPublisherFilter {
 }
 
 /// Transport-specific configuration for an HTTP webhook event publisher.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, utoipa::ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpPublisherConfig {
     /// Destination HTTP or HTTPS URL that receives CloudEvents via `POST` with
     /// `Content-Type: application/cloudevents+json`.
-    #[serde(alias = "target_url")]
-    #[schema(example = "https://example.com/webhooks/unicore")]
+    #[schema(example = "https://example.test/webhooks/unicore")]
     pub target_url: String,
     /// Optional HTTP headers attached to every outgoing webhook request.
     /// Header values are redacted as `"****"` in query responses.
@@ -55,12 +54,26 @@ pub struct HttpPublisherConfig {
     pub headers: Option<BTreeMap<String, String>>,
 }
 
+impl std::fmt::Debug for HttpPublisherConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let redacted_headers: Option<BTreeMap<&str, &str>> = self.headers.as_ref().map(|headers| {
+            headers
+                .keys()
+                .map(|key| (key.as_str(), REDACTED_HEADER_VALUE))
+                .collect()
+        });
+        f.debug_struct("HttpPublisherConfig")
+            .field("target_url", &self.target_url)
+            .field("headers", &redacted_headers)
+            .finish()
+    }
+}
+
 /// Transport-specific configuration for a NATS event publisher.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NatsPublisherConfig {
     /// NATS server URL (`nats://host:port` or `tls://host:port`).
-    #[serde(alias = "nats_url")]
     #[schema(example = "nats://127.0.0.1:4222")]
     pub nats_url: String,
     /// NATS subject to which matching CloudEvents are published.
@@ -134,6 +147,12 @@ impl HttpPublisherConfig {
                             reason: err.to_string(),
                         }
                     })?;
+                    if value == REDACTED_HEADER_VALUE {
+                        return Err(InvalidPublisherConfig::InvalidHeaderValue {
+                            name: header_name.as_str().to_string(),
+                            reason: "header value cannot be the redacted placeholder `****` when no existing header value is present to preserve".to_string(),
+                        });
+                    }
                     HeaderValue::from_str(&value).map_err(|err| InvalidPublisherConfig::InvalidHeaderValue {
                         name: header_name.as_str().to_string(),
                         reason: err.to_string(),
@@ -251,6 +270,13 @@ impl NatsPublisherConfig {
             });
         }
 
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(InvalidPublisherConfig::InvalidNatsUrl {
+                url: "<redacted>".to_string(),
+                reason: "NATS URL must not contain embedded userinfo credentials".to_string(),
+            });
+        }
+
         let trimmed_subject = self.subject.trim().to_string();
         if trimmed_subject.is_empty() {
             return Err(InvalidPublisherConfig::EmptyNatsSubject);
@@ -330,13 +356,13 @@ mod tests {
         headers.insert("X-Custom-Header".to_string(), "value".to_string());
 
         let config = HttpPublisherConfig {
-            target_url: " https://example.com/webhook ".to_string(),
+            target_url: " https://example.test/webhook ".to_string(),
             headers: Some(headers),
         }
         .normalized()
         .unwrap();
 
-        assert_eq!(config.target_url, "https://example.com/webhook");
+        assert_eq!(config.target_url, "https://example.test/webhook");
         let normalized_headers = config.headers.as_ref().unwrap();
         assert_eq!(
             normalized_headers.get("authorization").map(String::as_str),
@@ -361,7 +387,7 @@ mod tests {
 
     #[test]
     fn http_config_rejects_invalid_urls_and_headers() {
-        for bad_url in ["not-a-url", "ftp://example.com/webhook", "http://"] {
+        for bad_url in ["not-a-url", "ftp://example.test/webhook", "http://"] {
             let err = HttpPublisherConfig {
                 target_url: bad_url.to_string(),
                 headers: None,
@@ -375,7 +401,7 @@ mod tests {
         bad_name.insert("bad header name".to_string(), "value".to_string());
         assert!(matches!(
             HttpPublisherConfig {
-                target_url: "https://example.com/webhook".to_string(),
+                target_url: "https://example.test/webhook".to_string(),
                 headers: Some(bad_name),
             }
             .normalized()
@@ -389,13 +415,13 @@ mod tests {
         let mut prev_headers = BTreeMap::new();
         prev_headers.insert("authorization".to_string(), "Bearer top-secret".to_string());
         let previous = HttpPublisherConfig {
-            target_url: "https://example.com/v1".to_string(),
+            target_url: "https://example.test/v1".to_string(),
             headers: Some(prev_headers),
         };
 
         // 1. Omitted headers (None) preserves previous headers
         let omitted = HttpPublisherConfig {
-            target_url: "https://example.com/v2".to_string(),
+            target_url: "https://example.test/v2".to_string(),
             headers: None,
         }
         .with_preserved_headers(&previous);
@@ -406,7 +432,7 @@ mod tests {
         updated_headers.insert("Authorization".to_string(), REDACTED_HEADER_VALUE.to_string());
         updated_headers.insert("x-new".to_string(), "new-val".to_string());
         let merged = HttpPublisherConfig {
-            target_url: "https://example.com/v2".to_string(),
+            target_url: "https://example.test/v2".to_string(),
             headers: Some(updated_headers),
         }
         .with_preserved_headers(&previous)
@@ -428,7 +454,7 @@ mod tests {
 
         // 3. Explicit empty map clears headers
         let cleared = HttpPublisherConfig {
-            target_url: "https://example.com/v2".to_string(),
+            target_url: "https://example.test/v2".to_string(),
             headers: Some(BTreeMap::new()),
         }
         .with_preserved_headers(&previous);
@@ -456,7 +482,13 @@ mod tests {
             .is_err());
         }
 
-        for bad_url in ["", "http://127.0.0.1:4222", "nats://"] {
+        for bad_url in [
+            "",
+            "http://127.0.0.1:4222",
+            "nats://",
+            "nats://user:password@127.0.0.1:4222",
+            "nats://secret-token@127.0.0.1:4222",
+        ] {
             assert!(NatsPublisherConfig {
                 nats_url: bad_url.to_string(),
                 subject: "unicore.events".to_string(),
@@ -464,5 +496,39 @@ mod tests {
             .normalized()
             .is_err());
         }
+    }
+
+    #[test]
+    fn http_config_debug_redacts_secret_header_values_and_rejects_unpreserved_placeholder() {
+        let mut headers = BTreeMap::new();
+        headers.insert("Authorization".to_string(), "Bearer super-secret-value".to_string());
+        let config = HttpPublisherConfig {
+            target_url: "https://example.test/webhook".to_string(),
+            headers: Some(headers),
+        };
+        let debug_output = format!("{config:?}");
+        assert!(!debug_output.contains("super-secret-value"));
+        assert!(debug_output.contains(REDACTED_HEADER_VALUE));
+
+        let mut placeholder_headers = BTreeMap::new();
+        placeholder_headers.insert("Authorization".to_string(), REDACTED_HEADER_VALUE.to_string());
+        assert!(matches!(
+            HttpPublisherConfig {
+                target_url: "https://example.test/webhook".to_string(),
+                headers: Some(placeholder_headers),
+            }
+            .normalized()
+            .unwrap_err(),
+            InvalidPublisherConfig::InvalidHeaderValue { .. }
+        ));
+    }
+
+    #[test]
+    fn filter_rejects_unknown_fields() {
+        let json = serde_json::json!({
+            "types": ["*"],
+            "sources": ["/services/issuance"]
+        });
+        assert!(serde_json::from_value::<EventPublisherFilter>(json).is_err());
     }
 }

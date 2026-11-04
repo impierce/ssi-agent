@@ -31,26 +31,7 @@ pub struct KnownEventTypes {
 
 impl Default for KnownEventTypes {
     fn default() -> Self {
-        Self::with_event_types([
-            "com.impierce.unicore.identity.connection.added",
-            "com.impierce.unicore.identity.document.published",
-            "com.impierce.unicore.identity.profile.updated",
-            "com.impierce.unicore.library.template.created",
-            "com.impierce.unicore.library.template.updated",
-            "com.impierce.unicore.library.template.deleted",
-            "com.impierce.unicore.issuance.credential.created",
-            "com.impierce.unicore.issuance.credential.signed",
-            "com.impierce.unicore.issuance.credential.issued",
-            "com.impierce.unicore.issuance.credential.status_updated",
-            "com.impierce.unicore.issuance.offer.created",
-            "com.impierce.unicore.issuance.offer.sent",
-            "com.impierce.unicore.issuance.offer.tx_code_generated",
-            "com.impierce.unicore.holder.credential.added",
-            "com.impierce.unicore.holder.offer.received",
-            "com.impierce.unicore.holder.presentation.created",
-            "com.impierce.unicore.verification.request.created",
-            "com.impierce.unicore.verification.presentation.verified",
-        ])
+        Self::empty()
     }
 }
 

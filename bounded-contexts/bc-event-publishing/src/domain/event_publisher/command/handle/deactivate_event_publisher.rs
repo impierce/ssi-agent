@@ -35,3 +35,35 @@ impl EventPublisher {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::event_publisher::{
+        aggregate::tests::{created_http_event, publisher_id},
+        command::EventPublisherCommand::DeactivateEventPublisher,
+        event::EventPublisherEvent,
+        services::EventPublisherDomainServices,
+    };
+    use rstest::rstest;
+    use shared_kernel::cqrs_es::test::TestFramework;
+    use tracing_test::traced_test;
+
+    #[rstest]
+    #[traced_test]
+    fn deactivating_an_active_publisher_emits_deactivated_event(
+        publisher_id: String,
+        created_http_event: EventPublisherEvent,
+    ) {
+        let deactivated = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
+            .given(vec![created_http_event])
+            .when(DeactivateEventPublisher { id: publisher_id })
+            .inspect_result()
+            .unwrap();
+        assert_eq!(deactivated.len(), 1);
+        assert!(matches!(
+            deactivated[0],
+            EventPublisherEvent::EventPublisherDeactivated { .. }
+        ));
+    }
+}

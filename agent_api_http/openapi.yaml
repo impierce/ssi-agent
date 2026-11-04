@@ -3074,6 +3074,7 @@ components:
           example:
           - com.impierce.unicore.issuance.credential.offered
           - com.impierce.unicore.issuance.credential.issued
+      additionalProperties: false
     EventPublisherList:
       type: array
       items:
@@ -3203,7 +3204,7 @@ components:
           description: |-
             Destination HTTP or HTTPS URL that receives CloudEvents via `POST` with
             `Content-Type: application/cloudevents+json`.
-          example: https://example.com/webhooks/unicore
+          example: https://example.test/webhooks/unicore
     Info:
       allOf:
       - $ref: '#/components/schemas/Version'

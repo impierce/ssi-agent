@@ -104,41 +104,36 @@ impl HttpEventPublisherWorker {
             }
 
             let req = req.json(&cloud_event).timeout(self.timeout);
-            let publisher_id = self.id.clone();
-            let event_id = cloud_event.id.clone();
-            let target_url = self.target_url.clone();
 
-            tokio::spawn(async move {
-                match req.send().await {
-                    Ok(res) => {
-                        if res.status().is_success() {
-                            info!(
-                                publisher_id = %publisher_id,
-                                event_id = %event_id,
-                                target_url = %target_url,
-                                "Successfully forwarded CloudEvent to HTTP webhook target"
-                            );
-                        } else {
-                            tracing::warn!(
-                                publisher_id = %publisher_id,
-                                event_id = %event_id,
-                                target_url = %target_url,
-                                status = %res.status(),
-                                "HTTP webhook target returned non-success status"
-                            );
-                        }
-                    }
-                    Err(err) => {
-                        tracing::error!(
-                            publisher_id = %publisher_id,
-                            event_id = %event_id,
-                            target_url = %target_url,
-                            error = ?err,
-                            "Failed to send CloudEvent to HTTP webhook target"
+            match req.send().await {
+                Ok(res) => {
+                    if res.status().is_success() {
+                        info!(
+                            publisher_id = %self.id,
+                            event_id = %cloud_event.id,
+                            target_url = %self.target_url,
+                            "Successfully forwarded CloudEvent to HTTP webhook target"
+                        );
+                    } else {
+                        tracing::warn!(
+                            publisher_id = %self.id,
+                            event_id = %cloud_event.id,
+                            target_url = %self.target_url,
+                            status = %res.status(),
+                            "HTTP webhook target returned non-success status"
                         );
                     }
                 }
-            });
+                Err(err) => {
+                    tracing::error!(
+                        publisher_id = %self.id,
+                        event_id = %cloud_event.id,
+                        target_url = %self.target_url,
+                        error = ?err,
+                        "Failed to send CloudEvent to HTTP webhook target"
+                    );
+                }
+            }
         }
     }
 
@@ -189,11 +184,11 @@ mod tests {
         let handle = worker.spawn();
 
         // 1. Non-matching event -> not forwarded
-        let non_matching = CloudEvent::new("com.other.domain.event", "https://example.com/other");
+        let non_matching = CloudEvent::new("com.other.domain.event", "https://example.test/other");
         event_bus.publish(non_matching);
 
         // 2. Matching event -> forwarded
-        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.com/issuer")
+        let matching = CloudEvent::new("com.impierce.unicore.credential.issued", "https://example.test/issuer")
             .with_subject("subject-42")
             .with_caller(Some("caller-abc".to_string()), Some("api_key".to_string()))
             .with_data(serde_json::json!({ "credential_id": "cred-99" }));
@@ -241,7 +236,7 @@ mod tests {
         );
         let handle = worker.spawn();
 
-        event_bus.publish(CloudEvent::new("test.error.event", "https://example.com/test"));
+        event_bus.publish(CloudEvent::new("test.error.event", "https://example.test/test"));
         tokio::time::sleep(Duration::from_millis(120)).await;
 
         assert!(!handle.is_finished());

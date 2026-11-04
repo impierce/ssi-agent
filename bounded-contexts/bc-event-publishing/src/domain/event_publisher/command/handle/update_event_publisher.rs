@@ -87,3 +87,84 @@ impl EventPublisher {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::event_publisher::{
+        aggregate::tests::{created_http_event, publisher_id},
+        command::EventPublisherCommand::UpdateEventPublisher,
+        config::{HttpPublisherConfig, REDACTED_HEADER_VALUE},
+        event::EventPublisherEvent,
+        services::EventPublisherDomainServices,
+    };
+    use rstest::rstest;
+    use shared_kernel::cqrs_es::test::TestFramework;
+    use std::collections::BTreeMap;
+    use tracing_test::traced_test;
+
+    #[rstest]
+    #[traced_test]
+    fn updating_preserves_redacted_headers_and_skips_unchanged_writes(
+        publisher_id: String,
+        created_http_event: EventPublisherEvent,
+    ) {
+        let mut redacted_headers = BTreeMap::new();
+        redacted_headers.insert("authorization".to_string(), REDACTED_HEADER_VALUE.to_string());
+
+        let events = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
+            .given(vec![created_http_event.clone()])
+            .when(UpdateEventPublisher {
+                id: publisher_id.clone(),
+                name: Some("Updated CRM Webhook".to_string()),
+                description: None,
+                filter: Some(EventPublisherFilter {
+                    types: vec!["com.impierce.unicore.issuance.*".to_string()],
+                }),
+                config: Some(EventPublisherConfig::Http(HttpPublisherConfig {
+                    target_url: "https://example.test/webhooks/v2".to_string(),
+                    headers: Some(redacted_headers),
+                })),
+            })
+            .inspect_result()
+            .unwrap();
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            EventPublisherEvent::EventPublisherUpdated {
+                name,
+                filter,
+                config: EventPublisherConfig::Http(http),
+                ..
+            } => {
+                assert_eq!(name, "Updated CRM Webhook");
+                assert_eq!(
+                    filter,
+                    &EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.*".to_string()],
+                    }
+                );
+                assert_eq!(http.target_url, "https://example.test/webhooks/v2");
+                assert_eq!(
+                    http.headers.as_ref().unwrap().get("authorization").map(String::as_str),
+                    Some("Bearer super-secret")
+                );
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
+
+        // Unchanged update emits no events
+        let no_events = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
+            .given(vec![created_http_event])
+            .when(UpdateEventPublisher {
+                id: publisher_id,
+                name: Some("CRM Webhook".to_string()),
+                description: None,
+                filter: None,
+                config: None,
+            })
+            .inspect_result()
+            .unwrap();
+        assert!(no_events.is_empty());
+    }
+}

@@ -53,3 +53,60 @@ Reconnect using `resume_after` as the `Last-Event-ID` to continue from that poin
 - These guarantees assume the default MongoDB event store. On other event stores the stream is best-effort and considerably more limited, and nothing in the response distinguishes them.
 
 Use it for an activity feed, a notification channel, or anything else that tolerates a missed event. Do not build a projection, a synchronisation process or an audit trail on it — those must reconcile against the REST API endpoints rather than treat this stream as complete.
+
+## Event Publisher Not Found
+
+This error occurs when a requested runtime event publisher ID does not exist or has already been deleted. The system returns a `404 Not Found` error.
+
+### Resolution
+
+Verify the event publisher ID via `GET /v0/get-event-publisher-list` and retry with a valid active or paused publisher ID.
+
+## Event Publisher Already Exists
+
+This error occurs when `POST /v0/create-event-publisher` is called with an explicit `id` that is already in use by an existing event publisher. The system returns a `409 Conflict` error.
+
+### Resolution
+
+Omit `id` to let UniCore generate a fresh UUID, or use `POST /v0/update-event-publisher` to update the existing publisher.
+
+## Invalid Event Publisher Name
+
+This error occurs when the `name` field for an event publisher is empty or contains only whitespace. The system returns a `400 Bad Request` error.
+
+### Resolution
+
+Provide a non-empty human-readable `name` for the event publisher.
+
+## Invalid Event Types
+
+This error occurs when `filter.types` is empty, contains a blank entry, or includes a pattern that does not match any registered integration event type. The system returns a `400 Bad Request` error.
+
+### Resolution
+
+Specify at least one valid CloudEvent `type` pattern in `filter.types` (an exact event type, a dot-bounded prefix wildcard such as `com.impierce.unicore.issuance.*`, or `*`).
+
+## Invalid Event Publisher Configuration
+
+This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS `targetUrl`, an invalid HTTP header name or unpreserved `"****"` placeholder value, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed NATS `subject`). The system returns a `400 Bad Request` error.
+
+### Resolution
+
+Correct the transport configuration fields (`targetUrl` / `headers` for `"http"`, or `natsUrl` / `subject` for `"nats"`) according to the error detail message.
+
+## Event Publishing Unavailable
+
+This error occurs when the runtime event publishing service is not initialized on the running node. The system returns a `503 Service Unavailable` error.
+
+### Resolution
+
+Ensure the application is started with the event publishing context wired and retry once initialization completes.
+
+## Event Publisher Missing Configuration
+
+This internal error occurs if a persisted event publisher read-model view is missing its transport configuration. The system returns a `500 Internal Server Error`.
+
+### Resolution
+
+Delete and recreate the affected event publisher, or inspect the read-model database for corrupted view documents.
+

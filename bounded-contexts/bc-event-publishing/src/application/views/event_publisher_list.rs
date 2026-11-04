@@ -1,5 +1,6 @@
 use crate::{
-    application::views::event_publisher::EventPublisherView, domain::event_publisher::aggregate::EventPublisher,
+    application::views::event_publisher::EventPublisherView,
+    domain::event_publisher::{aggregate::EventPublisher, event::EventPublisherEvent},
 };
 use serde::{Deserialize, Serialize};
 use shared_kernel::cqrs_es::{EventEnvelope, View};
@@ -12,7 +13,11 @@ pub struct EventPublisherListView(HashMap<String, EventPublisherView>);
 
 impl View<EventPublisher> for EventPublisherListView {
     fn update(&mut self, event: &EventEnvelope<EventPublisher>) {
-        self.0.entry(event.aggregate_id.clone()).or_default().update(event);
+        if matches!(event.payload, EventPublisherEvent::EventPublisherDeleted { .. }) {
+            self.0.remove(&event.aggregate_id);
+        } else {
+            self.0.entry(event.aggregate_id.clone()).or_default().update(event);
+        }
     }
 }
 
