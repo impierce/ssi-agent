@@ -2,6 +2,8 @@ openapi: 3.1.0
 info:
   title: UniCore HTTP API
   description: ''
+  contact:
+    name: Impierce Technologies
   license:
     name: Apache 2.0
   version: 0.0.0-semantically-released
