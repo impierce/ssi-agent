@@ -122,7 +122,8 @@ where
                                 .extensions()
                                 .get::<MatchedPath>()
                                 .map(MatchedPath::as_str)
-                                .unwrap_or_else(|| request.uri().path());
+                                // The raw path of an unmatched request is client input and may carry personal data.
+                                .unwrap_or("<unmatched>");
                             info_span!(
                                 "HTTP Request",
                                 method = ?request.method(),
@@ -654,6 +655,25 @@ mod tests {
         });
         assert!(!logs_contain("secret-token"));
         assert!(!logs_contain("secret-api-key"));
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn unmatched_paths_are_not_logged() {
+        let app = app_with_base_path(ApiState::default(), Arc::new(NoActorExtractor), "/");
+
+        let response = tower::ServiceExt::oneshot(
+            app,
+            Request::builder()
+                .uri("/v0/unknown/jane.doe@example.org")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(!logs_contain("jane.doe@example.org"));
     }
 
     fn problem_router(status: StatusCode) -> Router {
