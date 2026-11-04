@@ -46,6 +46,9 @@ tracing-opentelemetry = "0.32"
 tracing-subscriber.workspace = true
 utoipa.workspace = true
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6"
+
 [dev-dependencies]
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
