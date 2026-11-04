@@ -250,7 +250,7 @@ impl Aggregate for Offer {
                                 .as_str(),
                         );
 
-                        info!("Sending credential offer to: {}", target);
+                        debug!(%offer_id, %target_url, "Sending credential offer");
 
                         client
                             .get(target)
@@ -266,7 +266,7 @@ impl Aggregate for Offer {
                         }])
                     }
                     DeliveryMethod::Email { recipient_email } => {
-                        info!("Sending credential offer via email to: {}", recipient_email);
+                        debug!(%offer_id, "Sending credential offer via email");
 
                         // TODO: Remove this client-side logic.
                         let offer_link = config()
