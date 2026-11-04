@@ -410,7 +410,7 @@ impl ApplicationConfiguration {
 
     /// The serialized configuration with all secrets redacted, for logging. On top of the fields the
     /// serialization already redacts, the values of the HTTP event publishers' headers and the
-    /// passwords in URLs are redacted.
+    /// usernames, passwords and query values in URLs are redacted.
     pub fn redacted(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(self).unwrap_or_default();
 
@@ -427,22 +427,39 @@ impl ApplicationConfiguration {
             }
         }
 
-        redact_url_passwords(&mut value);
+        redact_url_credentials(&mut value);
         value
     }
 }
 
-fn redact_url_passwords(value: &mut serde_json::Value) {
+/// Redacts the userinfo (e.g. `nats://token@host`) and the query values (e.g. `?api_key=...`) of
+/// every URL, keeping the query parameter names.
+fn redact_url_credentials(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::String(text) => {
-            if let Ok(mut url) = Url::parse(text) {
-                if url.password().is_some() && url.set_password(Some("REDACTED")).is_ok() {
-                    *text = url.to_string();
-                }
+            let Ok(mut url) = Url::parse(text) else {
+                return;
+            };
+            let mut redacted = false;
+            if !url.username().is_empty() {
+                redacted |= url.set_username("REDACTED").is_ok();
+            }
+            if url.password().is_some() {
+                redacted |= url.set_password(Some("REDACTED")).is_ok();
+            }
+            if url.query().is_some() {
+                let names: Vec<String> = url.query_pairs().map(|(name, _)| name.into_owned()).collect();
+                url.query_pairs_mut()
+                    .clear()
+                    .extend_pairs(names.iter().map(|name| (name, "REDACTED")));
+                redacted = true;
+            }
+            if redacted {
+                *text = url.to_string();
             }
         }
-        serde_json::Value::Array(values) => values.iter_mut().for_each(redact_url_passwords),
-        serde_json::Value::Object(map) => map.values_mut().for_each(redact_url_passwords),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(redact_url_credentials),
+        serde_json::Value::Object(map) => map.values_mut().for_each(redact_url_credentials),
         _ => {}
     }
 }
@@ -1010,13 +1027,13 @@ mod tests {
                     event_publishers:
                         http:
                             - enabled: true
-                              target_url: "https://user:webhook-password@webhook.example.org/events"
+                              target_url: "https://webhook-user:webhook-password@webhook.example.org/events?api_key=webhook-api-key"
                               headers:
                                 authorization: "Bearer webhook-token"
                               events: {}
                         nats:
                             enabled: true
-                            nats_url: "nats://user:nats-password@localhost:4222"
+                            nats_url: "nats://nats-token@localhost:4222"
                 "#,
                 config::FileFormat::Yaml,
             ))
@@ -1030,9 +1047,11 @@ mod tests {
             "dev-api-key",
             "db-password",
             "stronghold-password",
+            "webhook-user",
             "webhook-password",
+            "webhook-api-key",
             "webhook-token",
-            "nats-password",
+            "nats-token",
         ] {
             assert!(!redacted.contains(secret), "`{secret}` in {redacted}");
         }
@@ -1043,9 +1062,16 @@ mod tests {
             Some(&json!({ "authorization": "<REDACTED>" }))
         );
         assert_eq!(
-            redacted.pointer("/event_publishers/nats/nats_url"),
-            Some(&json!("nats://user:REDACTED@localhost:4222"))
+            redacted.pointer("/event_publishers/http/0/target_url"),
+            Some(&json!(
+                "https://REDACTED:REDACTED@webhook.example.org/events?api_key=REDACTED"
+            ))
         );
+        assert_eq!(
+            redacted.pointer("/event_publishers/nats/nats_url"),
+            Some(&json!("nats://REDACTED@localhost:4222"))
+        );
+        assert_eq!(redacted["public_url"], json!(config.public_url.as_str()));
     }
 
     #[test]
