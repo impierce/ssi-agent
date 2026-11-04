@@ -420,6 +420,7 @@ pub mod tests {
                 schema: Box::new(None),
                 schema_properties_attributes: None,
                 holder_authorization: Authorization::default(),
+                origin: None,
             },
         )
         .await

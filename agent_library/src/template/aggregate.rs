@@ -10,7 +10,7 @@ pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
     ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
 };
-use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
+use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin};
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -206,6 +206,9 @@ pub struct Template {
     pub schema: Box<Option<serde_json::Value>>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     pub holder_authorization: Authorization,
+    /// Where the template was imported from. Unrelated to `source_template_id`.
+    #[serde(default)]
+    pub origin: Option<TemplateOrigin>,
 }
 
 impl Aggregate for Template {
@@ -244,6 +247,7 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
                 holder_authorization,
+                origin,
             } => {
                 // Only Draft and Published are allowed on creation.
                 if matches!(status, Status::Archived | Status::Deleted) {
@@ -265,6 +269,10 @@ impl Aggregate for Template {
                 // Validate the credential expiration value if provided.
                 let credential_expiration = credential_expiration.unwrap_or_default();
                 validate_expiration(&credential_expiration)?;
+
+                if let Some(ref origin) = origin {
+                    origin.validate()?;
+                }
 
                 // W3C VC 1.1 does not expose claim metadata and must not have
                 // schemaPropertiesAttributes.
@@ -353,6 +361,7 @@ impl Aggregate for Template {
                     schema,
                     schema_properties_attributes,
                     holder_authorization,
+                    origin,
                 }])
             }
             UpdateTitle { template_id, title } => {
@@ -619,6 +628,24 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
+            UpdateOrigin { template_id, origin } => {
+                ensure_template_editable(&self.status)?;
+
+                if let Some(ref origin) = origin {
+                    origin.validate()?;
+                }
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![OriginUpdated {
+                    template_id,
+                    origin,
+                    modified_at,
+                }])
+            }
         }?;
 
         for event in events {
@@ -651,6 +678,7 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
                 holder_authorization,
+                origin,
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
@@ -668,6 +696,7 @@ impl Aggregate for Template {
                 self.schema = schema;
                 self.schema_properties_attributes = schema_properties_attributes;
                 self.holder_authorization = holder_authorization;
+                self.origin = origin.map(|origin| *origin);
             }
             TitleUpdated {
                 template_id: _,
@@ -759,6 +788,14 @@ impl Aggregate for Template {
                 modified_at,
             } => {
                 self.holder_authorization = holder_authorization;
+                self.modified_at.replace(modified_at);
+            }
+            OriginUpdated {
+                template_id: _,
+                origin,
+                modified_at,
+            } => {
+                self.origin = origin;
                 self.modified_at.replace(modified_at);
             }
             TemplateDeleted { template_id } => {

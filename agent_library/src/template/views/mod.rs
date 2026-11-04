@@ -29,6 +29,7 @@ impl View<Template> for Template {
                 schema,
                 schema_properties_attributes,
                 holder_authorization,
+                origin,
             } => {
                 self.template_id.clone_from(template_id);
                 self.source_template_id.clone_from(source_template_id);
@@ -47,6 +48,7 @@ impl View<Template> for Template {
                 self.schema_properties_attributes
                     .clone_from(schema_properties_attributes);
                 self.holder_authorization = holder_authorization.clone();
+                self.origin = origin.as_deref().cloned();
             }
             TitleUpdated {
                 template_id: _,
@@ -141,6 +143,14 @@ impl View<Template> for Template {
                 self.holder_authorization = holder_authorization.clone();
                 self.modified_at.replace(modified_at.clone());
             }
+            OriginUpdated {
+                template_id: _,
+                origin,
+                modified_at,
+            } => {
+                self.origin.clone_from(origin);
+                self.modified_at.replace(modified_at.clone());
+            }
             TemplateDeleted { template_id: _ } => {
                 self.status = Status::Deleted;
             }
@@ -189,6 +199,7 @@ mod tests {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: agent_shared::config::Authorization::default(),
+            origin: None,
         })
     }
 

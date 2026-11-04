@@ -116,6 +116,11 @@ impl IntoApiErrorExt for TemplateError {
                 .message(format!("No Template found with id: `{template_id}`"))
                 .source(self)
                 .finish(),
+            TemplateError::InvalidOrigin(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Template Origin")
+                .type_url(type_url("library#invalid-template-origin"))
+                .source(self)
+                .finish(),
         }
     }
 }
