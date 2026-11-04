@@ -635,7 +635,8 @@ mod tests {
                 .uri("/public/templates")
                 .header(AUTHORIZATION, "Bearer secret-token")
                 .header("x-api-key", "secret-api-key")
-                .body(Body::empty())
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"secret": "secret-body"}"#))
                 .unwrap(),
         )
         .await
@@ -655,6 +656,7 @@ mod tests {
         });
         assert!(!logs_contain("secret-token"));
         assert!(!logs_contain("secret-api-key"));
+        assert!(!logs_contain("secret-body"));
     }
 
     #[tokio::test]
