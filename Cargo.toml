@@ -28,7 +28,9 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.95.0"
-license-file = "LICENSE"
+license = "Apache-2.0"
+repository = "https://github.com/impierce/ssi-agent"
+authors = ["Impierce Technologies"]
 publish = false
 
 [workspace.lints.clippy]
