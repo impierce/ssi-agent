@@ -352,12 +352,31 @@ impl EventBusHandle {
     }
 
     /// Sets the persistent history reader SPI implementation.
+    ///
+    /// History is then served from persistent storage only, so the in-memory ring buffer is
+    /// cleared and no longer filled: it would otherwise keep up to 500 full event payloads that are
+    /// never read.
     pub fn set_history_reader(&self, reader: Arc<dyn EventHistoryReader>) {
-        let mut lock = match self.history_reader.write() {
+        {
+            let mut lock = match self.history_reader.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            *lock = Some(reader);
+        }
+
+        let mut history = match self.history.write() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        *lock = Some(reader);
+        *history = VecDeque::new();
+    }
+
+    fn has_history_reader(&self) -> bool {
+        match self.history_reader.read() {
+            Ok(guard) => guard.is_some(),
+            Err(poisoned) => poisoned.into_inner().is_some(),
+        }
     }
 }
 
@@ -406,7 +425,7 @@ impl EventBusHandle {
             }
         }
 
-        {
+        if !self.has_history_reader() {
             let mut lock = match self.history.write() {
                 Ok(guard) => guard,
                 Err(poisoned) => poisoned.into_inner(),
@@ -941,6 +960,45 @@ mod tests {
         let filter = EventFilter::default();
         let result = handle.history_ascending(&filter, None, None).await;
         assert!(matches!(result, Err(EventBusError::Source(msg)) if msg == "connection timeout"));
+    }
+
+    #[tokio::test]
+    async fn in_memory_history_is_dropped_once_a_history_reader_is_set() {
+        struct EmptyReader;
+
+        #[async_trait]
+        impl EventHistoryReader for EmptyReader {
+            async fn history_ascending(
+                &self,
+                _filter: &EventFilter,
+                _last_event_id: Option<&str>,
+                _limit: Option<usize>,
+            ) -> Result<HistoryAscendingResult, EventBusError> {
+                Ok(HistoryAscendingResult::default())
+            }
+        }
+
+        let event = |sequence| {
+            build_cloud_event(
+                "offer",
+                "abc",
+                sequence,
+                "OfferCreated",
+                serde_json::json!({"id": "abc"}),
+                None,
+            )
+        };
+        let handle = EventBusHandle::new(16);
+        handle.publish(event(1));
+        assert_eq!(handle.history(&EventFilter::default(), 10).len(), 1);
+
+        handle.set_history_reader(Arc::new(EmptyReader));
+        assert!(handle.history(&EventFilter::default(), 10).is_empty());
+
+        let mut stream = handle.subscribe(EventFilter::default());
+        handle.publish(event(2));
+        assert!(handle.history(&EventFilter::default(), 10).is_empty());
+        assert_eq!(stream.next().await.unwrap().unwrap().id, event(2).id);
     }
 
     #[tokio::test]
