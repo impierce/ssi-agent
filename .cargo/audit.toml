@@ -17,7 +17,7 @@ ignore = [
     # into any binary. Its build script only extracts a zip archive on `*-windows-msvc` targets,
     # when building libsodium from source fails, and only after verifying the archive's minisign
     # signature against a public key hard-coded in the build script. UniCore is built for
-    # Linux (`rust:1-bookworm`), where this code never runs.
+    # Linux (`rust:1-trixie`), where this code never runs.
     # TODO: remove once libsodium-sys-stable depends on zip >= 9.0.0.
     "RUSTSEC-2026-0367",
     "RUSTSEC-2026-0368",
