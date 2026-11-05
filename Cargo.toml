@@ -76,7 +76,7 @@ lazy_static = "1.4"
 mime = { version = "0.3" }
 mongo-es = "0.4.1"
 once_cell = { version = "1.19" }
-opentelemetry = "0.31"
+opentelemetry = "0.33"
 percent-encoding = "2.3"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [

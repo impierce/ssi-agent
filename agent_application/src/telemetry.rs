@@ -135,6 +135,10 @@ pub fn init_telemetry(log_format: &LogFormat) -> TelemetryGuard {
     let mut otel_log_layer = None;
 
     if otel_export_enabled() {
+        // `identity-kit` builds `reqwest` without a TLS crypto provider, and the OTLP HTTP exporter shares that
+        // `reqwest` build, so a process-wide provider must be installed before the exporters are built.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let resource = resource();
 
         // Traces: `tracing` spans are bridged to OTel spans and exported via OTLP.
