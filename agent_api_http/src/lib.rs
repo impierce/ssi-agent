@@ -214,8 +214,10 @@ fn redact_urls(text: &str) -> String {
     let mut rest = text;
     while let Some(separator) = rest.find("://") {
         let start = rest[..separator]
-            .rfind(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
-            .map_or(0, |index| index + 1);
+            .char_indices()
+            .rev()
+            .find(|(_, c)| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+            .map_or(0, |(index, c)| index + c.len_utf8());
         let end = rest[separator..]
             .find(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '"' | '\'' | '<' | '>' | ','))
             .map_or(rest.len(), |index| separator + index);
@@ -748,6 +750,15 @@ mod tests {
             "see nats://REDACTED@nats.example:4222/x, then retry"
         );
         assert_eq!(redact_urls("no url here"), "no url here");
+    }
+
+    #[test]
+    fn urls_after_non_ascii_text_are_redacted() {
+        assert_eq!(
+            redact_urls("failed: \u{201c}https://user:pass@host.example/x"),
+            "failed: \u{201c}https://REDACTED@host.example/x"
+        );
+        assert_eq!(redact_urls("ü→https://h.example/?q=1"), "ü→https://h.example/?REDACTED");
     }
 
     #[tokio::test]
