@@ -166,9 +166,10 @@ pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result
 
 /// Logs one line per request, at a level that follows the response status, and records the status
 /// on the request span: `debug` for success, `info` for client errors (with the problem type) and
-/// `error` for server errors (with the problem type and the detail, which carries the cause, its
-/// URLs redacted), which also mark the span as failed. Headers and bodies are never logged; the
-/// detail of a client error can echo client input and stays out of the log.
+/// `error` for server errors (with the problem type), which also mark the span as failed. The detail
+/// of a server error carries the cause, which can contain personal data, so it gets its own `debug`
+/// line, its URLs redacted. Headers and bodies are never logged; the detail of a client error can
+/// echo client input and stays out of the log.
 async fn log_response(request: Request, next: Next) -> Response {
     let start = Instant::now();
     let response = next.run(request).await;
@@ -186,9 +187,11 @@ async fn log_response(request: Request, next: Next) -> Response {
             latency_ms,
             problem_type = problem.type_url,
             problem_title = problem.title,
-            problem_detail = problem.detail.as_deref().map(redact_urls),
             "Request failed"
         );
+        if let Some(detail) = problem.detail.as_deref() {
+            debug!(problem_detail = redact_urls(detail), "Request failure detail");
+        }
         response
     } else if status.is_client_error() {
         let (response, problem) = problem_summary(response).await;
@@ -829,7 +832,7 @@ mod tests {
 
     #[tokio::test]
     #[tracing_test::traced_test]
-    async fn server_errors_are_logged_at_error_with_the_problem_type_and_detail() {
+    async fn server_errors_are_logged_at_error_with_the_problem_type_and_the_detail_at_debug() {
         let response = problem_router(StatusCode::INTERNAL_SERVER_ERROR)
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
             .await
@@ -847,11 +850,22 @@ mod tests {
                     if line.contains("ERROR")
                         && line.contains("status=500")
                         && line.contains("problem-details/some-problem")
-                        && line.contains("detail with personal data") =>
+                        && !line.contains("personal data") =>
                 {
                     Ok(())
                 }
                 other => Err(format!("expected one `Request failed` line at ERROR, got {other:?}")),
+            }
+        });
+        logs_assert(|lines: &[&str]| {
+            match lines
+                .iter()
+                .filter(|line| line.contains("personal data"))
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                [line] if line.contains("DEBUG") && line.contains("Request failure detail") => Ok(()),
+                other => Err(format!("expected the detail on one DEBUG line, got {other:?}")),
             }
         });
     }
