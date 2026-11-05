@@ -231,10 +231,9 @@ fn redact_urls(text: &str) -> String {
 
 fn redact_url(candidate: &str) -> String {
     let Ok(mut url) = url::Url::parse(candidate) else {
-        // Unparsable: keep at most the part before a query.
-        return candidate
-            .split_once('?')
-            .map_or_else(|| candidate.to_owned(), |(base, _)| format!("{base}?REDACTED"));
+        // Unparsable: its parts are unknown, so only the scheme is kept.
+        let scheme = candidate.split_once("://").map_or("", |(scheme, _)| scheme);
+        return format!("{scheme}://REDACTED");
     };
     if !url.username().is_empty() || url.password().is_some() {
         let _ = url.set_username("REDACTED");
@@ -759,6 +758,14 @@ mod tests {
             "failed: \u{201c}https://REDACTED@host.example/x"
         );
         assert_eq!(redact_urls("ü→https://h.example/?q=1"), "ü→https://h.example/?REDACTED");
+    }
+
+    #[test]
+    fn unparsable_urls_are_redacted_to_their_scheme() {
+        assert_eq!(
+            redact_urls("see https://user:pass@host.example:99999/x#frag"),
+            "see https://REDACTED"
+        );
     }
 
     #[tokio::test]
