@@ -111,7 +111,8 @@ impl CredentialConfigurationProjection {
 
     /// The server config read model. Commands on the server config are checked against it first,
     /// since a command loads the aggregate, which replays every server config event, each carrying
-    /// all credential configurations.
+    /// all credential configurations. The aggregate records every command it gets, so a view that
+    /// lost a write is repaired by the next sync of the template.
     async fn server_config_view(&self) -> Option<ServerConfigView> {
         public_query_handler(SERVER_CONFIG_ID, &self.issuance_state.query.server_config)
             .await

@@ -87,6 +87,43 @@ async fn test_template_created_registers_credential_configuration() {
 }
 
 #[tokio::test]
+async fn test_unchanged_credential_configuration_repairs_a_server_config_view_that_lacks_it() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "my-template";
+    let event = || {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    projection.dispatch(template_id, &[event()]).await;
+
+    // A view write that lost against a concurrent one, while the aggregate holds the configuration.
+    let (mut view, context) = issuance
+        .query
+        .server_config
+        .load_with_context(SERVER_CONFIG_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    view.credential_configurations.remove(template_id);
+    issuance.query.server_config.update_view(view, context).await.unwrap();
+
+    projection.dispatch(template_id, &[event()]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
 async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
     let (issuance, _library, projection) = setup().await;
 
