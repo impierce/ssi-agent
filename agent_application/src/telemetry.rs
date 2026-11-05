@@ -1,5 +1,5 @@
 use agent_shared::config::LogFormat;
-use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::trace::{TraceContextExt as _, TracerProvider as _};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_sdk::{
     logs::SdkLoggerProvider, metrics::SdkMeterProvider, propagation::TraceContextPropagator, trace::SdkTracerProvider,
@@ -7,7 +7,6 @@ use opentelemetry_sdk::{
 };
 use std::fmt;
 use tracing::{Event, Subscriber};
-use tracing_opentelemetry::OtelData;
 use tracing_subscriber::{
     fmt::{
         format::{Format, Json, Writer},
@@ -251,7 +250,7 @@ where
     N: for<'a> FormatFields<'a> + 'static,
 {
     fn format_event(&self, ctx: &FmtContext<'_, S, N>, mut writer: Writer<'_>, event: &Event<'_>) -> fmt::Result {
-        let Some((trace_id, span_id)) = trace_context(ctx) else {
+        let Some((trace_id, span_id)) = trace_context() else {
             return self.json.format_event(ctx, writer, event);
         };
 
@@ -266,31 +265,22 @@ where
     }
 }
 
-/// The trace and span ID of the span the current event belongs to, if it is exported via
+/// The trace and span ID of the currently entered span, if it is exported via
 /// OpenTelemetry.
-fn trace_context<S, N>(ctx: &FmtContext<'_, S, N>) -> Option<(opentelemetry::TraceId, opentelemetry::SpanId)>
-where
-    S: Subscriber + for<'a> LookupSpan<'a>,
-    N: for<'a> FormatFields<'a> + 'static,
-{
-    let span = ctx.parent_span()?;
-    let extensions = span.extensions();
-    let otel_data = extensions.get::<OtelData>()?;
-    let span_id = otel_data.span_id()?;
-    // A span that was never entered has no context yet; its trace is the one of its root span.
-    let trace_id = otel_data.trace_id().or_else(|| {
-        span.scope()
-            .last()
-            .and_then(|root| root.extensions().get::<OtelData>().and_then(OtelData::trace_id))
-    })?;
+fn trace_context() -> Option<(opentelemetry::TraceId, opentelemetry::SpanId)> {
+    // `tracing-opentelemetry` activates the OpenTelemetry context of a span while it is entered.
+    let context = opentelemetry::Context::current();
+    let span = context.span();
+    let span_context = span.span_context();
 
-    Some((trace_id, span_id))
+    span_context
+        .is_valid()
+        .then(|| (span_context.trace_id(), span_context.span_id()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opentelemetry::trace::TraceContextExt as _;
     use std::{
         io,
         sync::{Arc, Mutex},
