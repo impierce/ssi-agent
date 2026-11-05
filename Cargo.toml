@@ -74,7 +74,7 @@ jsonschema = "0.46"
 jsonwebtoken = { version = "11.1", default-features = false, features = ["rust_crypto"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
-mongo-es = "0.4.1"
+mongo-es = "0.4.2"
 once_cell = { version = "1.19" }
 opentelemetry = "0.31"
 percent-encoding = "2.3"

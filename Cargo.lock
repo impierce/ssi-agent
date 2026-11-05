@@ -4231,9 +4231,9 @@ dependencies = [
 
 [[package]]
 name = "mongo-es"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d6354a3fbbbc3079c89597e87481de282c3b7bd6400f66999eabc5a5bcf8971"
+checksum = "7a059bf0f86261e0151019b24251bd3d0ef6f0ffe0f93f171ee9a8471d7b602e"
 dependencies = [
  "cqrs-es",
  "futures",

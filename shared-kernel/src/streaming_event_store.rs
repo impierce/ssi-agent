@@ -80,9 +80,9 @@ where
         let mut events = self.replay.stream_events::<A>(aggregate_id).await?;
         while let Some(envelope) = events.next::<A>(&[]).await {
             let envelope = envelope?;
-            // A replay stream may skip events it fails to read (`mongo-es` 0.4.1 logs and drops
-            // them, where `get_events` returns an error), which would leave the aggregate in a
-            // wrong state without any error.
+            // A repository whose stream skips events it fails to read, or returns them out of
+            // order, would otherwise leave the aggregate in a wrong state without any error
+            // (`mongo-es` before 0.4.2 did both).
             let expected = context.current_sequence + 1;
             if envelope.sequence != expected {
                 return Err(AggregateError::UnexpectedError(
