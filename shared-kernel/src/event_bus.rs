@@ -371,13 +371,6 @@ impl EventBusHandle {
         };
         *history = VecDeque::new();
     }
-
-    fn has_history_reader(&self) -> bool {
-        match self.history_reader.read() {
-            Ok(guard) => guard.is_some(),
-            Err(poisoned) => poisoned.into_inner().is_some(),
-        }
-    }
 }
 
 impl Default for EventBusHandle {
@@ -425,15 +418,22 @@ impl EventBusHandle {
             }
         }
 
-        if !self.has_history_reader() {
-            let mut lock = match self.history.write() {
+        {
+            // Held while appending, so that `set_history_reader` cannot clear the history in between.
+            let history_reader = match self.history_reader.read() {
                 Ok(guard) => guard,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            if lock.len() >= self.history_capacity {
-                lock.pop_front();
+            if history_reader.is_none() {
+                let mut lock = match self.history.write() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if lock.len() >= self.history_capacity {
+                    lock.pop_front();
+                }
+                lock.push_back(event.clone());
             }
-            lock.push_back(event.clone());
         }
 
         let _ = self.sender.send(Arc::new(event));
