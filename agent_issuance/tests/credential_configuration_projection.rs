@@ -124,6 +124,59 @@ async fn test_unchanged_credential_configuration_repairs_a_server_config_view_th
 }
 
 #[tokio::test]
+async fn test_archiving_removes_a_credential_configuration_that_the_server_config_view_lacks() {
+    let (issuance, _library, projection) = setup().await;
+
+    let published = |template_id: &str| {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    let template_id = "archived-right-after-publish";
+    projection.dispatch(template_id, &[published(template_id)]).await;
+
+    // The view write of the publish has not landed yet when the archive is handled.
+    let (mut view, context) = issuance
+        .query
+        .server_config
+        .load_with_context(SERVER_CONFIG_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    view.credential_configurations.remove(template_id);
+    issuance.query.server_config.update_view(view, context).await.unwrap();
+
+    let archive_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 2,
+        payload: TemplateEvent::StatusUpdated {
+            template_id: template_id.to_string(),
+            status: Status::Archived,
+            modified_at: "2024-01-01T00:01:00Z".to_string(),
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[archive_event]).await;
+
+    // Every server config event carries all credential configurations of the aggregate.
+    projection
+        .dispatch("other-template", &[published("other-template")])
+        .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key("other-template"));
+    assert!(!server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
 async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
     let (issuance, _library, projection) = setup().await;
 

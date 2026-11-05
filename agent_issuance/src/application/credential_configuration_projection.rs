@@ -57,14 +57,17 @@ impl CredentialConfigurationProjection {
             return;
         };
         match public_query_handler(template_id, view).await {
-            Ok(Some(template)) => {
-                if template.status != Status::Published {
-                    self.remove_credential_configuration(template_id).await;
-                    return;
-                }
-                self.update_credential_configuration(template_id, credential_configuration_from_template(&template))
+            Ok(Some(template)) => match template.status {
+                Status::Published => {
+                    self.update_credential_configuration(
+                        template_id,
+                        credential_configuration_from_template(&template),
+                    )
                     .await;
-            }
+                }
+                Status::Draft => self.remove_listed_credential_configuration(template_id).await,
+                Status::Archived | Status::Deleted => self.remove_credential_configuration(template_id).await,
+            },
             Ok(None) => {
                 warn!("Template `{template_id}` not found when trying to sync credential configuration");
             }
@@ -120,8 +123,10 @@ impl CredentialConfigurationProjection {
             .flatten()
     }
 
-    /// Removes the credential configuration associated with the given template ID.
-    async fn remove_credential_configuration(&self, template_id: &str) {
+    /// Removes the credential configuration of a draft template, unless the server config does not
+    /// list it. Drafts sync on every edit, and a draft was never published, so this skips a server
+    /// config command per edit.
+    async fn remove_listed_credential_configuration(&self, template_id: &str) {
         if self
             .server_config_view()
             .await
@@ -130,6 +135,15 @@ impl CredentialConfigurationProjection {
             return;
         }
 
+        self.remove_credential_configuration(template_id).await;
+    }
+
+    /// Removes the credential configuration associated with the given template ID.
+    ///
+    /// Archiving and deleting do not check the server config view: it can still lack the
+    /// configuration of a publish whose view write has not landed yet, and an archived or deleted
+    /// template gets no later sync that would remove it.
+    async fn remove_credential_configuration(&self, template_id: &str) {
         let command = ServerConfigCommand::RemoveCredentialConfiguration {
             credential_configuration_id: template_id.to_string(),
             provisioned: false,
@@ -376,12 +390,12 @@ impl Query<Template> for CredentialConfigurationProjection {
                     .await;
                 }
 
-                // When the status changes to Deleted, remove the credential configuration;
+                // When the status changes to Archived or Deleted, remove the credential configuration;
                 // for any other transition (e.g. Draft → Published) re-query and sync.
                 StatusUpdated {
                     template_id, status, ..
                 } => {
-                    if *status == Status::Deleted {
+                    if matches!(status, Status::Archived | Status::Deleted) {
                         self.remove_credential_configuration(template_id).await;
                         continue;
                     }
