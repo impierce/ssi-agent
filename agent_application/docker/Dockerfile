@@ -1,6 +1,6 @@
 # https://github.com/LukeMathWalker/cargo-chef
 
-FROM rust:1-bookworm AS chef
+FROM rust:1-trixie AS chef
 RUN cargo install cargo-chef
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin agent_application
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/agent_application /usr/local/bin/
