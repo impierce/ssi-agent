@@ -166,9 +166,9 @@ pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result
 
 /// Logs one line per request, at a level that follows the response status, and records the status
 /// on the request span: `debug` for success, `info` for client errors (with the problem type) and
-/// `error` for server errors (with the problem type and detail, which carries the cause), which
-/// also mark the span as failed. Headers and bodies are never logged; the detail of a client error
-/// can echo client input and stays out of the log.
+/// `error` for server errors (with the problem type and the detail, which carries the cause, its
+/// URLs redacted), which also mark the span as failed. Headers and bodies are never logged; the
+/// detail of a client error can echo client input and stays out of the log.
 async fn log_response(request: Request, next: Next) -> Response {
     let start = Instant::now();
     let response = next.run(request).await;
@@ -186,7 +186,7 @@ async fn log_response(request: Request, next: Next) -> Response {
             latency_ms,
             problem_type = problem.type_url,
             problem_title = problem.title,
-            problem_detail = problem.detail,
+            problem_detail = problem.detail.as_deref().map(redact_urls),
             "Request failed"
         );
         response
@@ -204,6 +204,45 @@ async fn log_response(request: Request, next: Next) -> Response {
         debug!(status = status.as_u16(), latency_ms, "Request completed");
         response
     }
+}
+
+/// Redacts the userinfo, query and fragment of every URL in `text`. The detail of a server error
+/// can quote a URL from an underlying error, e.g. a failed request that carried a credential offer,
+/// including its pre-authorized code, in its query.
+fn redact_urls(text: &str) -> String {
+    let mut redacted = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(separator) = rest.find("://") {
+        let start = rest[..separator]
+            .rfind(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+            .map_or(0, |index| index + 1);
+        let end = rest[separator..]
+            .find(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '"' | '\'' | '<' | '>' | ','))
+            .map_or(rest.len(), |index| separator + index);
+        redacted.push_str(&rest[..start]);
+        redacted.push_str(&redact_url(&rest[start..end]));
+        rest = &rest[end..];
+    }
+    redacted.push_str(rest);
+    redacted
+}
+
+fn redact_url(candidate: &str) -> String {
+    let Ok(mut url) = url::Url::parse(candidate) else {
+        // Unparsable: keep at most the part before a query.
+        return candidate
+            .split_once('?')
+            .map_or_else(|| candidate.to_owned(), |(base, _)| format!("{base}?REDACTED"));
+    };
+    if !url.username().is_empty() || url.password().is_some() {
+        let _ = url.set_username("REDACTED");
+        let _ = url.set_password(None);
+    }
+    if url.query().is_some() {
+        url.set_query(Some("REDACTED"));
+    }
+    url.set_fragment(None);
+    url.to_string()
 }
 
 /// Type, title and detail of a problem details response body (RFC 9457).
@@ -694,6 +733,46 @@ mod tests {
                 }),
             )
             .layer(middleware::from_fn(log_response))
+    }
+
+    #[test]
+    fn urls_in_problem_details_are_redacted() {
+        assert_eq!(
+            redact_urls(
+                "error sending request for url (https://wallet.example/credential_offer?credential_offer=%7B%22secret-code%22%7D): timeout"
+            ),
+            "error sending request for url (https://wallet.example/credential_offer?REDACTED): timeout"
+        );
+        assert_eq!(
+            redact_urls("see nats://token@nats.example:4222/x#frag, then retry"),
+            "see nats://REDACTED@nats.example:4222/x, then retry"
+        );
+        assert_eq!(redact_urls("no url here"), "no url here");
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn urls_in_server_error_details_are_logged_redacted() {
+        let router = Router::new()
+            .route(
+                "/",
+                get(|| async {
+                    ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                        .title("Send Credential Offer Error")
+                        .message("error sending request for url (https://wallet.example/credential_offer?credential_offer=secret-code)")
+                        .finish()
+                }),
+            )
+            .layer(middleware::from_fn(log_response));
+
+        let response = router
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(logs_contain("https://wallet.example/credential_offer?REDACTED"));
+        assert!(!logs_contain("secret-code"));
     }
 
     #[tokio::test]
