@@ -14,10 +14,11 @@ longer bursts; see [What memory grows with](#what-memory-grows-with).
 
 ## What memory grows with
 
-- **Concurrent commands on long-lived aggregates.** Loading an aggregate replays its events one at a time, so a single
-  load needs memory for one event and the aggregate state, not for the whole history. The server config is the largest
-  aggregate: each of its events carries every credential configuration, so it grows with the number of published
-  templates.
+- **Concurrent commands on long-lived aggregates.** With the MongoDB event store, loading an aggregate replays its events
+  one at a time, so a single load needs memory for one event and the aggregate state, not for the whole history. With
+  the PostgreSQL event store, a load holds the whole history of the aggregate in memory. The server config is the
+  largest aggregate: each of its events carries every credential configuration, so it grows with the number of
+  published templates.
 - **List views.** Lists such as all credentials or all offers are stored as one document each. Every command that
   changes an item of that list, and every request for the list, loads the whole document, so it grows with the number
   of credentials and offers issued.
