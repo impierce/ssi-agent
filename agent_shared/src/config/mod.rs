@@ -409,8 +409,9 @@ impl ApplicationConfiguration {
     }
 
     /// The serialized configuration with all secrets redacted, for logging. On top of the fields the
-    /// serialization already redacts, the values of the HTTP event publishers' headers and the
-    /// usernames, passwords and query values in URLs are redacted.
+    /// serialization already redacts, the HTTP event publishers' header values and target URL paths
+    /// (webhook services often put a token in the path), and the usernames, passwords and query
+    /// values in URLs are redacted.
     pub fn redacted(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(self).unwrap_or_default();
 
@@ -418,17 +419,32 @@ impl ApplicationConfiguration {
             .pointer_mut("/event_publishers/http")
             .and_then(serde_json::Value::as_array_mut)
         {
-            for headers in publishers
-                .iter_mut()
-                .filter_map(|publisher| publisher.get_mut("headers"))
-                .filter_map(serde_json::Value::as_object_mut)
-            {
-                headers.values_mut().for_each(|value| *value = json!(REDACTED));
+            for publisher in publishers.iter_mut() {
+                if let Some(headers) = publisher.get_mut("headers").and_then(serde_json::Value::as_object_mut) {
+                    headers.values_mut().for_each(|value| *value = json!(REDACTED));
+                }
+                if let Some(target_url) = publisher.get_mut("target_url") {
+                    redact_url_path(target_url);
+                }
             }
         }
 
         redact_url_credentials(&mut value);
         value
+    }
+}
+
+fn redact_url_path(value: &mut serde_json::Value) {
+    let Some(text) = value.as_str() else {
+        return;
+    };
+    let Ok(mut url) = Url::parse(text) else {
+        *value = json!(REDACTED);
+        return;
+    };
+    if url.path() != "/" && !url.path().is_empty() {
+        url.set_path("/REDACTED");
+        *value = json!(url.as_str());
     }
 }
 
@@ -1027,7 +1043,7 @@ mod tests {
                     event_publishers:
                         http:
                             - enabled: true
-                              target_url: "https://webhook-user:webhook-password@webhook.example.org/events?api_key=webhook-api-key"
+                              target_url: "https://webhook-user:webhook-password@webhook.example.org/services/webhook-path-token?api_key=webhook-api-key"
                               headers:
                                 authorization: "Bearer webhook-token"
                               events: {}
@@ -1050,6 +1066,7 @@ mod tests {
             "webhook-user",
             "webhook-password",
             "webhook-api-key",
+            "webhook-path-token",
             "webhook-token",
             "nats-token",
         ] {
@@ -1064,7 +1081,7 @@ mod tests {
         assert_eq!(
             redacted.pointer("/event_publishers/http/0/target_url"),
             Some(&json!(
-                "https://REDACTED:REDACTED@webhook.example.org/events?api_key=REDACTED"
+                "https://REDACTED:REDACTED@webhook.example.org/REDACTED?api_key=REDACTED"
             ))
         );
         assert_eq!(
