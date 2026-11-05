@@ -1,7 +1,7 @@
 # https://github.com/LukeMathWalker/cargo-chef
 
 FROM rust:1-trixie AS chef
-RUN cargo install cargo-chef
+RUN cargo install cargo-chef cargo-auditable
 WORKDIR /app
 
 FROM chef AS planner
@@ -22,7 +22,7 @@ ENV APP_RELEASE_CHANNEL=${APP_RELEASE_CHANNEL}
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin agent_application
+RUN cargo auditable build --release --bin agent_application
 
 FROM debian:trixie-slim AS runtime
 WORKDIR /app
