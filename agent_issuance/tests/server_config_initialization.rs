@@ -100,3 +100,31 @@ async fn reinitialization_restores_server_metadata_that_drifted_from_the_configu
     initialize(&state).await.unwrap();
     assert_eq!(server_config_json(&state).await, configured);
 }
+
+#[tokio::test]
+async fn reinitialization_restores_endpoints_that_point_to_a_previous_issuer_url() {
+    let state = initialized_state().await;
+    let configured = server_config_json(&state).await;
+
+    let mut drifted = server_config(&state).await;
+    drifted.authorization_server_metadata.token_endpoint =
+        Some("https://previous-domain.example.org/auth/token".parse().unwrap());
+    drifted.credential_issuer_metadata.nonce_endpoint =
+        Some("https://previous-domain.example.org/openid4vci/nonce".parse().unwrap());
+    public_command_handler(
+        SERVER_CONFIG_ID,
+        &state.command.server_config,
+        ServerConfigCommand::InitializeServerMetadata {
+            authorization_server_metadata: Box::new(drifted.authorization_server_metadata),
+            credential_issuer_metadata: Box::new(drifted.credential_issuer_metadata),
+            cryptographic_binding_methods_supported: drifted.cryptographic_binding_methods_supported,
+            signing_algorithms_supported: drifted.signing_algorithms_supported,
+        },
+    )
+    .await
+    .unwrap();
+    assert_ne!(server_config_json(&state).await, configured);
+
+    initialize(&state).await.unwrap();
+    assert_eq!(server_config_json(&state).await, configured);
+}

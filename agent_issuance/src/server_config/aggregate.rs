@@ -68,6 +68,42 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
+    /// The issuer metadata with the issuer and all endpoints moved to `url`. Also used on the view at
+    /// startup to tell whether the configured public URL changes anything.
+    pub fn with_issuer_url(&self, url: &url::Url) -> (AuthorizationServerMetadata, CredentialIssuerMetadata) {
+        let mut authorization_server_metadata = self.authorization_server_metadata.clone();
+        authorization_server_metadata.issuer = url.clone();
+        if authorization_server_metadata.authorization_endpoint.is_some() {
+            authorization_server_metadata.authorization_endpoint = Some(url.append_path_segment("auth/authorize"));
+        }
+        if authorization_server_metadata.token_endpoint.is_some() {
+            authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
+        }
+        if authorization_server_metadata
+            .pushed_authorization_request_endpoint
+            .is_some()
+        {
+            authorization_server_metadata.pushed_authorization_request_endpoint =
+                Some(url.append_path_segment("auth/par"));
+        }
+        if authorization_server_metadata
+            .interactive_authorization_endpoint
+            .is_some()
+        {
+            authorization_server_metadata.interactive_authorization_endpoint =
+                Some(url.append_path_segment("auth/par"));
+        }
+
+        let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
+        credential_issuer_metadata.credential_issuer = url.clone();
+        credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
+        if credential_issuer_metadata.nonce_endpoint.is_some() {
+            credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
+        }
+
+        (authorization_server_metadata, credential_issuer_metadata)
+    }
+
     /// The credential configurations with `credential_configuration` added or replaced. Also used on
     /// the view to tell whether an update would change anything, without loading the aggregate.
     pub fn with_credential_configuration(
@@ -182,36 +218,7 @@ impl Aggregate for ServerConfig {
                 signing_algorithms_supported,
             }]),
             UpdateIssuerUrl { url } => {
-                let mut authorization_server_metadata = self.authorization_server_metadata.clone();
-                authorization_server_metadata.issuer = url.clone();
-                if authorization_server_metadata.authorization_endpoint.is_some() {
-                    authorization_server_metadata.authorization_endpoint =
-                        Some(url.append_path_segment("auth/authorize"));
-                }
-                if authorization_server_metadata.token_endpoint.is_some() {
-                    authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
-                }
-                if authorization_server_metadata
-                    .pushed_authorization_request_endpoint
-                    .is_some()
-                {
-                    authorization_server_metadata.pushed_authorization_request_endpoint =
-                        Some(url.append_path_segment("auth/par"));
-                }
-                if authorization_server_metadata
-                    .interactive_authorization_endpoint
-                    .is_some()
-                {
-                    authorization_server_metadata.interactive_authorization_endpoint =
-                        Some(url.append_path_segment("auth/par"));
-                }
-
-                let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
-                credential_issuer_metadata.credential_issuer = url.clone();
-                credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
-                if credential_issuer_metadata.nonce_endpoint.is_some() {
-                    credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
-                }
+                let (authorization_server_metadata, credential_issuer_metadata) = self.with_issuer_url(&url);
 
                 // Sent on every startup; most of the time nothing changes.
                 if authorization_server_metadata == self.authorization_server_metadata

@@ -209,8 +209,10 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
         Some(server_config_view) => {
             // Checked on the view first: a command loads the aggregate, which replays every server
             // config event.
-            if server_config_view.authorization_server_metadata.issuer != public_url
-                || server_config_view.credential_issuer_metadata.credential_issuer != public_url
+            let (authorization_server_metadata, credential_issuer_metadata) =
+                server_config_view.with_issuer_url(&public_url);
+            if authorization_server_metadata != server_config_view.authorization_server_metadata
+                || credential_issuer_metadata != server_config_view.credential_issuer_metadata
             {
                 info!("Update Issuer URL in server metadata");
 
