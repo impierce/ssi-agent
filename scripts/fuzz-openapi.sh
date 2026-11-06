@@ -23,7 +23,8 @@
 #   FUZZ_SEED=12345 ./scripts/fuzz-openapi.sh     # reproduce a previous run
 #   FUZZ_KEEP_UP=1 ./scripts/fuzz-openapi.sh      # leave the stack running for inspection
 #
-# Reports are written to `reports/fuzz/` (JUnit XML, HAR, NDJSON, agent log, seeded identifiers).
+# Reports are written to `reports/fuzz/` (JUnit XML, agent log, seeded identifiers; HAR and NDJSON
+# unless `FUZZ_MAX_TIME` is set, see `FUZZ_TRAFFIC_REPORTS`).
 
 set -euo pipefail
 
@@ -57,6 +58,12 @@ FUZZ_MAX_EXAMPLES="${FUZZ_MAX_EXAMPLES:-50}"
 FUZZ_MAX_TIME="${FUZZ_MAX_TIME:-}"
 FUZZ_READY_TIMEOUT="${FUZZ_READY_TIMEOUT:-120}"
 FUZZ_KEEP_UP="${FUZZ_KEEP_UP:-0}"
+# The HAR and NDJSON reports record every request; a 30-minute run writes several gigabytes of them.
+if [ -n "$FUZZ_MAX_TIME" ]; then
+    FUZZ_TRAFFIC_REPORTS="${FUZZ_TRAFFIC_REPORTS:-0}"
+else
+    FUZZ_TRAFFIC_REPORTS="${FUZZ_TRAFFIC_REPORTS:-1}"
+fi
 
 if [ "$FUZZ_COMMAND" = "fuzz" ] && [ -z "$FUZZ_MAX_TIME" ]; then
     echo "Error: FUZZ_COMMAND=fuzz runs until stopped; set FUZZ_MAX_TIME." >&2
@@ -130,9 +137,11 @@ schemathesis_args=(
     --continue-on-failure
     # Explicit paths: the default report filenames are timestamped, and CI wants stable ones.
     --report-junit-path /reports/junit.xml
-    --report-har-path /reports/traffic.har
-    --report-ndjson-path /reports/events.ndjson
 )
+
+if [ "$FUZZ_TRAFFIC_REPORTS" = "1" ]; then
+    schemathesis_args+=(--report-har-path /reports/traffic.har --report-ndjson-path /reports/events.ndjson)
+fi
 
 if [ "$FUZZ_COMMAND" = "run" ]; then
     schemathesis_args+=(--max-examples "$FUZZ_MAX_EXAMPLES")

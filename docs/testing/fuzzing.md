@@ -52,6 +52,7 @@ development instance.
 | `FUZZ_KEEP_UP` | `0` | Leave the stack running afterwards for inspection |
 | `FUZZ_EXTRA_ARGS` | _(none)_ | Extra Schemathesis flags, e.g. `--include-path /v0/credentials` |
 | `FUZZ_READY_TIMEOUT` | `120` | Seconds to wait for `/readyz` before seeding |
+| `FUZZ_TRAFFIC_REPORTS` | `1`, or `0` with `FUZZ_MAX_TIME` | Write `traffic.har` and `events.ndjson`; they record every request, several gigabytes in a 30-minute run |
 | `FUZZ_AGENT_LOG_LEVEL` | `warn` | `RUST_LOG` of the agent, whose output is saved to `reports/fuzz/agent.log` |
 | `SCHEMATHESIS_VERSION` | `v4.33.1` | Pinned `schemathesis/schemathesis` image tag |
 
