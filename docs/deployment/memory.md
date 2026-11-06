@@ -43,9 +43,11 @@ db.events.aggregate([
 
 ## Allocator
 
-On Linux and macOS the agent uses [jemalloc](https://jemalloc.net) with a background thread that returns freed memory to
-the system after one second, so resident memory falls back after a burst instead of staying at its peak. The defaults
-can be overridden with the `_RJEM_MALLOC_CONF` environment variable, e.g. `_RJEM_MALLOC_CONF=dirty_decay_ms:5000`.
+The agent uses [jemalloc](https://jemalloc.net) on Linux and macOS. On Linux, including the Docker image, a background
+thread returns freed memory to the system after one second, so resident memory falls back after a burst instead of
+staying at its peak. The options can be overridden with the `_RJEM_MALLOC_CONF` environment variable, e.g.
+`_RJEM_MALLOC_CONF=dirty_decay_ms:5000`. Other platforms use jemalloc's defaults, since jemalloc supports the
+background thread only on Linux.
 
 ## Measurements
 
