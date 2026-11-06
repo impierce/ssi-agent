@@ -76,7 +76,7 @@ jsonschema = "0.46"
 jsonwebtoken = { version = "11.1", default-features = false, features = ["aws_lc_rs"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
-mongo-es = "0.4.1"
+mongo-es = "0.4.2"
 once_cell = { version = "1.19" }
 opentelemetry = "0.33"
 percent-encoding = "2.3"
