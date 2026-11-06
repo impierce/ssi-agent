@@ -862,7 +862,7 @@ pub struct PatchCredentialEndpointRequest {
         (status = 204, description = "Credential status updated successfully"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
-        (status = 409, description = "The credential has not been issued yet, so it has no status to update"),
+        (status = 409, description = "The credential has no status list entry: not issued yet, or signed outside UniCore"),
         (status = 422, description = "Request body does not match the expected schema, or the status list can't hold the status"),
     )
 )]
@@ -1439,7 +1439,7 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_patch_credential_refuses_credentials_that_were_not_issued() {
+    async fn test_patch_credential_refuses_credentials_without_status_list_entry() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
@@ -1468,7 +1468,7 @@ pub mod tests {
         assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["type"], type_url("issuance#credential-not-issued"));
+        assert_eq!(body["type"], type_url("issuance#no-status-list-entry"));
 
         let response = app
             .call(

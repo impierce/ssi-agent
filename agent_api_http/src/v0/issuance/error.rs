@@ -47,9 +47,9 @@ impl IntoApiErrorExt for CredentialError {
                 .type_url(type_url("issuance#invalid-expiration-date"))
                 .source(self)
                 .finish(),
-            CredentialNotIssued => ApiError::builder(StatusCode::CONFLICT)
-                .title("Credential Not Issued")
-                .type_url(type_url("issuance#credential-not-issued"))
+            NoStatusListEntry => ApiError::builder(StatusCode::CONFLICT)
+                .title("No Status List Entry")
+                .type_url(type_url("issuance#no-status-list-entry"))
                 .source(self)
                 .finish(),
             InvalidCredentialStatus => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
@@ -360,7 +360,7 @@ impl IntoPublicError for CredentialError {
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
             KeyIdError => PublicError::InternalServerError,
-            CredentialNotIssued => PublicError::InternalServerError,
+            NoStatusListEntry => PublicError::InternalServerError,
         }
     }
 }

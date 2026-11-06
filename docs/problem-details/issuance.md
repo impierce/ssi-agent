@@ -282,15 +282,17 @@ This error occurs when a template is used for a public offer but its schema cont
 - If the credential content must remain dynamic, use a regular offer flow instead of a public offer.
 
 
-## Credential Not Issued
+## No Status List Entry
 
-This error occurs when the status of a credential is updated (`PATCH /v0/credentials/{credential_id}`) before the
-holder has received it. A credential gets its entry in a status list when it is issued to the holder, so until then
-there is no status to change. The request leaves the credential unchanged.
+This error occurs when a status update (`PATCH /v0/credentials/{credential_id}`) finds no status list entry for the
+credential. UniCore assigns the entry when it signs the credential in the issuance flow, so a credential has none
+before it is issued, and credentials created already signed (`isSigned`) have none at all. The request leaves the
+credential unchanged.
 
 ### Resolution
 
-Update the status once the holder has accepted the Credential Offer and received the credential.
+Update the status once UniCore has issued the credential. The status of a credential signed outside UniCore is
+managed by its signer.
 
 ## Original Credential Not Found
 

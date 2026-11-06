@@ -208,6 +208,7 @@ impl IdentityServices {
             .get(url.as_str())
             .send()
             .await
+            .and_then(|response| response.error_for_status())
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))?
             .json()
             .await
