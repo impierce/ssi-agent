@@ -62,8 +62,8 @@ where
 /// instead of plain text, and requires the body to be a JSON object: `serde` would otherwise
 /// deserialize a struct from a JSON array of its fields in order (`[null, null]`).
 ///
-/// Status codes follow [`axum::Json`]: `415` without a JSON `Content-Type`, `400` for a body that is
-/// not valid JSON, `422` for valid JSON of the wrong shape.
+/// Status codes follow [`axum::Json`]: `415` without a JSON `Content-Type`, `413` for a body over the size limit, `400`
+/// for a body that is not valid JSON, `422` for valid JSON of the wrong shape.
 pub struct JsonBody<T>(pub T);
 
 impl<T, S> FromRequest<S> for JsonBody<T>
@@ -84,7 +84,14 @@ where
 
         let bytes = Bytes::from_request(request, state)
             .await
-            .map_err(|rejection| malformed_body(rejection.body_text()))?;
+            .map_err(|rejection| match rejection.status() {
+                StatusCode::PAYLOAD_TOO_LARGE => ApiError::builder(StatusCode::PAYLOAD_TOO_LARGE)
+                    .title("Request Body Too Large")
+                    .type_url(type_url("request#body-too-large"))
+                    .message(rejection.body_text())
+                    .finish(),
+                _ => malformed_body(rejection.body_text()),
+            })?;
 
         if bytes.trim_ascii_start().first() != Some(&b'{') {
             return Err(match serde_json::from_slice::<IgnoredAny>(&bytes) {
@@ -208,6 +215,16 @@ mod tests {
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let problem: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(problem["type"], type_url("request#invalid-query"));
+    }
+
+    #[tokio::test]
+    async fn body_over_the_size_limit_is_a_problem() {
+        let body = format!(r#"{{"first": "{}"}}"#, "a".repeat(3 * 1024 * 1024));
+
+        let (status, problem) = send(Some("application/json"), &body).await;
+
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(problem.unwrap()["type"], type_url("request#body-too-large"));
     }
 
     #[tokio::test]

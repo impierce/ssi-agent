@@ -46,6 +46,7 @@ impl Modify for RequestBodyRejections {
         for operation in operations.filter(|operation: &&mut Operation| operation.request_body.is_some()) {
             for (status, description) in [
                 ("400", "Malformed JSON request body"),
+                ("413", "Request body larger than 2 MB"),
                 (
                     "415",
                     "Missing or unsupported `Content-Type`; the request body must be `application/json`",

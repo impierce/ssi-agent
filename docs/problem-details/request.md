@@ -21,6 +21,14 @@ The operation takes a JSON request body, but the request carries no `Content-Typ
 
 Send the request body as JSON with the header `Content-Type: application/json`.
 
+## Body Too Large
+
+The request body exceeds the size limit of 2 MB. Returned with status `413 Content Too Large`.
+
+### Resolution
+
+Send a smaller request body, e.g. split a batch into several requests.
+
 ## Malformed Body
 
 The request body is not valid JSON. Returned with status `400 Bad Request`; the `detail` names the position of the

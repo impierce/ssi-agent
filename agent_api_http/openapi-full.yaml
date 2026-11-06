@@ -630,6 +630,8 @@ paths:
           description: Missing name, or a provider type that is not available in this profile
         '409':
           description: A provider of this type, or with this name, already exists
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -671,6 +673,8 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -700,6 +704,8 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -729,6 +735,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -774,6 +782,8 @@ paths:
                 type: string
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -827,6 +837,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -913,6 +925,8 @@ paths:
                 $ref: '#/components/schemas/Connection'
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -937,6 +951,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Connection not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -961,6 +977,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Connection not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -983,6 +1001,8 @@ paths:
           description: Connection synced
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1052,6 +1072,8 @@ paths:
           description: Missing `templateId`, empty batch, or batch exceeds size limit
         '404':
           description: Template or its credential configuration not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1083,6 +1105,8 @@ paths:
                 $ref: '#/components/schemas/Catalog'
         '400':
           description: Malformed JSON request body, or an empty catalog name
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1143,6 +1167,8 @@ paths:
                 $ref: '#/components/schemas/Template'
         '400':
           description: Malformed JSON request body, an empty `title`, or an invalid template definition
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1168,6 +1194,8 @@ paths:
           description: Template or offer not found
         '409':
           description: A public offer with this ID already exists
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1213,6 +1241,8 @@ paths:
           description: Missing or empty `templateId`
         '404':
           description: Template not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1268,6 +1298,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1293,6 +1325,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1316,6 +1350,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1343,6 +1379,8 @@ paths:
           description: Template not found
         '409':
           description: The template is published and must be archived first, or it is already deleted
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1425,6 +1463,8 @@ paths:
                 $ref: '#/components/schemas/Template'
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1683,6 +1723,8 @@ paths:
                 $ref: '#/components/schemas/CredentialView'
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1851,6 +1893,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1966,6 +2010,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1995,6 +2041,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2049,6 +2097,8 @@ paths:
                 type: string
         '400':
           description: Template IDs are missing or invalid
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2071,6 +2121,8 @@ paths:
           description: Offer sent successfully
         '400':
           description: The credential offer does not exist
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2093,6 +2145,8 @@ paths:
           description: Offer sent successfully
         '400':
           description: The credential offer does not exist
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2158,6 +2212,8 @@ paths:
           description: Malformed JSON request body
         '409':
           description: The profile was provisioned through configuration and cannot be modified at runtime
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2188,6 +2244,8 @@ paths:
           description: Original credential or credential configuration not found
         '409':
           description: A reissuance of the original credential already exists
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2212,6 +2270,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: No provider of this type has been added
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2253,6 +2313,8 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2281,6 +2343,8 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2310,6 +2374,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2372,6 +2438,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2395,6 +2463,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2425,6 +2495,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: No provider of this type has been added
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2452,6 +2524,8 @@ paths:
           description: Template not found
         '409':
           description: The template is deleted, or the requested status change is not allowed
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2488,6 +2562,8 @@ paths:
           description: Missing `templateId`, empty batch, or batch exceeds size limit
         '404':
           description: Template or its credential configuration not found
+        '413':
+          description: Request body larger than 2 MB
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
