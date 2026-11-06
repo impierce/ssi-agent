@@ -55,6 +55,7 @@ impl From<CatalogView> for CatalogDto {
 pub struct CreateCatalogRequest {
     pub display: CatalogDisplay,
     #[serde(default)]
+    #[schema(default = "Private")]
     pub visibility: CatalogVisibility,
 }
 

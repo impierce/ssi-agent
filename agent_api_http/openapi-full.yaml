@@ -1143,7 +1143,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Malformed JSON request body, or an invalid template definition
+          description: Malformed JSON request body, an empty `title`, or an invalid template definition
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -2442,7 +2442,7 @@ paths:
         '204':
           description: Template updated successfully
         '400':
-          description: Malformed JSON request body, or a missing template ID
+          description: Malformed JSON request body, a missing template ID, or an empty `title`
         '404':
           description: Template not found
         '415':
@@ -3094,14 +3094,8 @@ components:
       properties:
         catalogId:
           type: string
-          default: ''
         display:
           $ref: '#/components/schemas/CatalogDisplay'
-          description: Without it the catalog has no name, which is rejected.
-          default:
-            name: ''
-            description: ''
-            icon: null
     ClaimDescription:
       type: object
       description: Metadata describing a claim addressable through a Claim Path Pointer.
@@ -3397,11 +3391,6 @@ components:
       properties:
         display:
           $ref: '#/components/schemas/CatalogDisplay'
-          description: Without it the catalog has no name, which is rejected.
-          default:
-            name: ''
-            description: ''
-            icon: null
         visibility:
           $ref: '#/components/schemas/CatalogVisibility'
           default: Private
