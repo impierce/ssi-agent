@@ -10,6 +10,11 @@
 
 log_format: "text"
 
+# Serve every documented operation, including the ones behind switches.
+serve_openapi_enabled: true
+feature:
+  kms: true
+
 event_store:
   type: "postgres"
   # connection_string <== injected through `UNICORE__EVENT_STORE__CONNECTION_STRING`
