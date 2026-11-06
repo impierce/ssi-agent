@@ -8,15 +8,15 @@ use crate::v0::issuance::error::PublicError;
 use axum::extract::{rejection::JsonRejection, Json};
 use axum_auth::AuthBearer;
 
-/// Unwraps the bearer token and JSON body of a protocol request. Their rejections are reported in the OID4VC error
-/// format these endpoints document, with the endpoint's own invalid-request error code, rather than as the extractors'
-/// plain-text responses.
+/// Unwraps the bearer token and JSON body of a protocol request. Without a bearer token the response is a `401` bearer
+/// challenge (RFC 6750, section 3.1); body rejections are reported in the OID4VC error format these endpoints document,
+/// with the endpoint's own invalid-request error code, rather than as the extractors' plain-text responses.
 pub(crate) fn protocol_request<T>(
     bearer: Result<AuthBearer, axum_auth::Rejection>,
     body: Result<Json<T>, JsonRejection>,
     invalid_request: impl Fn() -> PublicError,
 ) -> Result<(String, T), PublicError> {
-    let AuthBearer(access_token) = bearer.map_err(|_| invalid_request())?;
+    let AuthBearer(access_token) = bearer.map_err(|_| PublicError::MissingAccessToken)?;
     let Json(body) = body.map_err(|rejection| match rejection {
         JsonRejection::MissingJsonContentType(_) => PublicError::UnsupportedMediaType,
         _ => invalid_request(),
@@ -43,13 +43,6 @@ mod tests {
         r#"{"notification_id":"n","event":"credential_accepted","credential_configuration_id":"c"}"#;
 
     #[rstest]
-    #[case::credential_without_authorization("/openid4vci/credential", None, VALID_BODY, "invalid_credential_request")]
-    #[case::credential_with_basic_authorization(
-        "/openid4vci/credential",
-        Some("Basic dXNlcjpwYXNz"),
-        VALID_BODY,
-        "invalid_credential_request"
-    )]
     #[case::credential_with_malformed_body(
         "/openid4vci/credential",
         Some("Bearer t"),
@@ -61,12 +54,6 @@ mod tests {
         Some("Bearer t"),
         r#"{"proofs":[]}"#,
         "invalid_credential_request"
-    )]
-    #[case::notification_without_authorization(
-        "/openid4vci/notification",
-        None,
-        VALID_BODY,
-        "invalid_notification_request"
     )]
     #[case::notification_with_malformed_body(
         "/openid4vci/notification",
@@ -91,6 +78,25 @@ mod tests {
             serde_json::from_slice::<Value>(&body).unwrap(),
             json!({ "error": error })
         );
+    }
+
+    #[rstest]
+    #[case::credential_without_authorization("/openid4vci/credential", None)]
+    #[case::credential_with_basic_authorization("/openid4vci/credential", Some("Basic dXNlcjpwYXNz"))]
+    #[case::notification_without_authorization("/openid4vci/notification", None)]
+    #[case::notification_with_basic_authorization("/openid4vci/notification", Some("Basic dXNlcjpwYXNz"))]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn protocol_requests_without_bearer_token_are_challenged(
+        #[case] uri: &str,
+        #[case] authorization: Option<&str>,
+    ) {
+        let response = send(uri, authorization, "application/json", VALID_BODY).await;
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()[header::WWW_AUTHENTICATE], "Bearer");
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert!(body.is_empty());
     }
 
     #[rstest]

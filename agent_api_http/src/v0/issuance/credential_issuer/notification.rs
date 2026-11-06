@@ -34,14 +34,14 @@ use tracing::debug;
         (status = 204, description = "Notification received"),
         (
             status = 400,
-            description = "The notification request or its `notification_id` is invalid, or the `Authorization` header is missing",
+            description = "The notification request or its `notification_id` is invalid",
             body = OID4VCError<NotificationErrorResponse>,
         ),
         (
             status = 401,
-            description = "The access token is invalid or expired",
+            description = "The access token is missing (`WWW-Authenticate: Bearer`, empty body), or invalid or expired",
             content_type = "application/json",
-            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            headers(("WWW-Authenticate" = String, description = "`Bearer` without an access token, otherwise `Bearer error=\"invalid_token\"`")),
             example = json!({"error": "invalid_token"}),
         ),
         (status = 415, description = "The request body is not `application/json`"),

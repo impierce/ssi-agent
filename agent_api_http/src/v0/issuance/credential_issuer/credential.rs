@@ -56,14 +56,14 @@ const POLLING_INTERVAL_MS: u64 = 100;
         (status = 200, description = "Credentials issued", body = CredentialResponse),
         (
             status = 400,
-            description = "The credential request is invalid, or the `Authorization` header is missing",
+            description = "The credential request is invalid",
             body = OID4VCError<CredentialErrorResponse>,
         ),
         (
             status = 401,
-            description = "The access token is invalid or expired",
+            description = "The access token is missing (`WWW-Authenticate: Bearer`, empty body), or invalid or expired",
             content_type = "application/json",
-            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            headers(("WWW-Authenticate" = String, description = "`Bearer` without an access token, otherwise `Bearer error=\"invalid_token\"`")),
             example = json!({"error": "invalid_token"}),
         ),
         (status = 415, description = "The request body is not `application/json`"),

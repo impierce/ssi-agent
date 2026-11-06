@@ -29,7 +29,7 @@ pub struct EmailOfferEndpointRequest {
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Offer sent successfully"),
-        (status = 400, description = "The credential offer does not exist"),
+        (status = 404, description = "The credential offer does not exist"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -78,7 +78,7 @@ pub struct TargetUrlOfferEndpointRequest {
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Offer sent successfully"),
-        (status = 400, description = "The credential offer does not exist"),
+        (status = 404, description = "The credential offer does not exist"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -263,7 +263,7 @@ mod tests {
                 json!({ "offerId": "unknown", "targetUrl": "https://wallet.example.com" }),
             ),
         ] {
-            assert_eq!(post(&app, path, body).await, StatusCode::BAD_REQUEST, "{path}");
+            assert_eq!(post(&app, path, body).await, StatusCode::NOT_FOUND, "{path}");
         }
 
         let (status, _) = get(&app, "/offers/unknown").await;
