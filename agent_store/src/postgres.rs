@@ -1,4 +1,4 @@
-use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
+use crate::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use cqrs_es::persist::PersistedEventStore;
@@ -7,6 +7,7 @@ use postgres_es::{default_postgress_pool, PostgresEventRepository, PostgresViewR
 use shared_kernel::view_repository::DynViewRepository;
 use sqlx::{Pool, Row};
 use std::sync::Arc;
+use tokio_stream::StreamExt as _;
 
 impl<A> AggregateHandler<A, PersistedEventStore<PostgresEventRepository, A>>
 where
@@ -33,36 +34,41 @@ impl Postgres {
     }
     // TODO: Run [Pool::close] during graceful shutdown to close all open connections.
 
+    /// Verifies all persisted events, one at a time as they are read: the event store can be far
+    /// larger than the memory available to the agent.
     pub async fn verify_events_with(
         &self,
         verifiers: &[EventVerifier],
     ) -> Result<EventVerificationReport, EventVerificationError> {
-        Ok(event_verification::verify_events_with(
-            self.load_raw_events().await?,
-            verifiers,
-        ))
+        let mut rows = sqlx::query(RAW_EVENTS_QUERY).fetch(&self.pool);
+        let mut report = EventVerificationReport::default();
+
+        while let Some(row) = rows.next().await {
+            report.verify(raw_stored_event(&row?), verifiers);
+        }
+
+        Ok(report)
     }
 
     pub async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {
-        let rows = sqlx::query(
-            "SELECT aggregate_type, aggregate_id, sequence, event_type, event_version, payload
-          FROM events
-          ORDER BY aggregate_type, aggregate_id, sequence",
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query(RAW_EVENTS_QUERY).fetch_all(&self.pool).await?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| RawStoredEvent {
-                aggregate_type: row.get("aggregate_type"),
-                aggregate_id: row.get("aggregate_id"),
-                sequence: row.get("sequence"),
-                event_type: row.get("event_type"),
-                event_version: row.get("event_version"),
-                payload: row.get("payload"),
-            })
-            .collect())
+        Ok(rows.iter().map(raw_stored_event).collect())
+    }
+}
+
+const RAW_EVENTS_QUERY: &str = "SELECT aggregate_type, aggregate_id, sequence, event_type, event_version, payload
+          FROM events
+          ORDER BY aggregate_type, aggregate_id, sequence";
+
+fn raw_stored_event(row: &sqlx::postgres::PgRow) -> RawStoredEvent {
+    RawStoredEvent {
+        aggregate_type: row.get("aggregate_type"),
+        aggregate_id: row.get("aggregate_id"),
+        sequence: row.get("sequence"),
+        event_type: row.get("event_type"),
+        event_version: row.get("event_version"),
+        payload: row.get("payload"),
     }
 }
 

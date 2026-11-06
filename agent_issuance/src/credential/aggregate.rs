@@ -28,7 +28,6 @@ use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
@@ -124,8 +123,6 @@ impl Aggregate for Credential {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
@@ -478,8 +475,6 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             UnsignedCredentialCreated {

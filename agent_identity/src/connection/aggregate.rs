@@ -6,7 +6,7 @@ use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMeta
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 use url::Url;
 use utoipa::openapi::{RefOr, Schema};
 use utoipa::{PartialSchema, ToSchema};
@@ -142,8 +142,6 @@ impl Aggregate for Connection {
         use ConnectionCommand::*;
         use ConnectionEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             AddConnection { connection_id, url } => {
                 let metadata = services.fetch_credential_issuer_metadata(&url).await?;
@@ -248,8 +246,6 @@ impl Aggregate for Connection {
 
     fn apply(&mut self, event: Self::Event) {
         use ConnectionEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ConnectionAdded {

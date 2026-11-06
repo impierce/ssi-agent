@@ -83,23 +83,28 @@ pub fn verify_events_with(
     verifiers: &[EventVerifier],
 ) -> EventVerificationReport {
     let mut report = EventVerificationReport::default();
-
     for event in events {
-        report.checked += 1;
+        report.verify(event, verifiers);
+    }
+    report
+}
+
+impl EventVerificationReport {
+    /// Verifies one event and records the result, so stores can verify events as they read them
+    /// instead of holding all of them in memory.
+    pub fn verify(&mut self, event: RawStoredEvent, verifiers: &[EventVerifier]) {
+        self.checked += 1;
 
         let Some(verifier) = event_verifier_for(verifiers, &event.aggregate_type) else {
-            report
-                .incompatible
+            self.incompatible
                 .push(incompatible_event(event, "unknown aggregate type"));
-            continue;
+            return;
         };
 
         if let Err(reason) = verifier.verify(&event) {
-            report.incompatible.push(incompatible_event(event, reason));
+            self.incompatible.push(incompatible_event(event, reason));
         }
     }
-
-    report
 }
 
 fn event_verifier_for<'a>(verifiers: &'a [EventVerifier], aggregate_type: &str) -> Option<&'a EventVerifier> {

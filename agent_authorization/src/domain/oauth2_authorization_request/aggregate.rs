@@ -8,7 +8,6 @@ use oid4vci::{
     authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod, InteractionType,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
@@ -65,8 +64,6 @@ impl Aggregate for OAuth2AuthorizationRequest {
         use OAuth2AuthorizationRequestCommand::*;
         use OAuth2AuthorizationRequestError::*;
         use OAuth2AuthorizationRequestEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateOAuth2AuthorizationRequest {
@@ -167,8 +164,6 @@ impl Aggregate for OAuth2AuthorizationRequest {
 
     fn apply(&mut self, event: Self::Event) {
         use OAuth2AuthorizationRequestEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             OAuth2AuthorizationRequestCreated {

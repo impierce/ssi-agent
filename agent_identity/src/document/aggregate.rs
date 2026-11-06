@@ -13,7 +13,6 @@ use identity_kit::methods::{jwk::DidJwk, key::DidKey};
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
 pub enum Status {
@@ -58,8 +57,6 @@ impl Aggregate for Document {
         use DocumentCommand::*;
         use DocumentError::*;
         use DocumentEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateDocument {
@@ -250,8 +247,6 @@ impl Aggregate for Document {
 
     fn apply(&mut self, event: Self::Event) {
         use DocumentEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             DocumentCreated {

@@ -76,7 +76,7 @@ jsonschema = "0.46"
 jsonwebtoken = { version = "11.1", default-features = false, features = ["aws_lc_rs"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
-mongo-es = "0.4.1"
+mongo-es = "0.4.2"
 once_cell = { version = "1.19" }
 opentelemetry = "0.33"
 percent-encoding = "2.3"
@@ -99,7 +99,7 @@ thiserror = "1.0"
 tokio = { version = "1.46", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.6", features = ["compression-gzip", "cors", "trace"] }
+tower-http = { version = "0.6", features = ["compression-gzip", "cors", "sensitive-headers", "trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }

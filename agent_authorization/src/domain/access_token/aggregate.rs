@@ -3,7 +3,6 @@ use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AccessToken {
@@ -34,8 +33,6 @@ impl Aggregate for AccessToken {
     ) -> Result<(), Self::Error> {
         use AccessTokenCommand::*;
         use AccessTokenEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             IssueAccessToken {
@@ -77,8 +74,6 @@ impl Aggregate for AccessToken {
 
     fn apply(&mut self, event: Self::Event) {
         use AccessTokenEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             AccessTokenIssued {

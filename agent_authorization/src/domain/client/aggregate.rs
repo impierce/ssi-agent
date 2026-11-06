@@ -4,7 +4,6 @@ use super::event::ClientEvent;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -60,8 +59,6 @@ impl Aggregate for Client {
         use ClientCommand::*;
         use ClientEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             RegisterClient {
                 client_id,
@@ -107,8 +104,6 @@ impl Aggregate for Client {
 
     fn apply(&mut self, event: Self::Event) {
         use ClientEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ClientRegistered {
