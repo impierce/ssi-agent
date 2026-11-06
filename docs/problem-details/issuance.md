@@ -121,7 +121,7 @@ Verify that a Credential Offer with the specified `offerId` exists before procee
 ## Send Credential Offer Error
 
 This error is raised when UniCore fails to send the Credential Offer to the specified target URL. It is triggered
-when the HTTP request does not complete successfully.
+when the HTTP request does not complete successfully, and is returned with status `502 Bad Gateway`.
 
 ### Resolution
 
@@ -281,6 +281,16 @@ This error occurs when a template is used for a public offer but its schema cont
 - Restrict the template schema to constant leaf values only.
 - If the credential content must remain dynamic, use a regular offer flow instead of a public offer.
 
+
+## Credential Not Issued
+
+This error occurs when the status of a credential is updated (`PATCH /v0/credentials/{credential_id}`) before the
+holder has received it. A credential gets its entry in a status list when it is issued to the holder, so until then
+there is no status to change. The request leaves the credential unchanged.
+
+### Resolution
+
+Update the status once the holder has accepted the Credential Offer and received the credential.
 
 ## Original Credential Not Found
 

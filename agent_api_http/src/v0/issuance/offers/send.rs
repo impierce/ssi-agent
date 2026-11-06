@@ -79,6 +79,7 @@ pub struct TargetUrlOfferEndpointRequest {
         (status = 200, description = "Offer sent successfully"),
         (status = 400, description = "The credential offer does not exist"),
         (status = 422, description = "Request body does not match the expected schema"),
+        (status = 502, description = "The target URL could not be reached or did not accept the offer"),
     )
 )]
 #[axum_macros::debug_handler]

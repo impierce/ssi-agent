@@ -22,4 +22,6 @@ pub enum CredentialError {
     InvalidIssuerDidError,
     #[error("Failed to get a key identifier for signing the credential")]
     KeyIdError,
+    #[error("The credential has not been issued yet, so it has no status to update")]
+    CredentialNotIssued,
 }

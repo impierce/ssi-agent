@@ -455,6 +455,11 @@ impl Aggregate for Credential {
                 credential_id,
                 notification,
             }]),
+            // The status list entry is assigned when the credential is signed for the holder; before
+            // that there is no entry whose status could change.
+            UpdateCredentialStatus { .. } if self.credential_status.status_list_url.is_empty() => {
+                Err(CredentialNotIssued)
+            }
             UpdateCredentialStatus {
                 credential_id,
                 credential_status,

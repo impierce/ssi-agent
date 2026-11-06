@@ -47,6 +47,11 @@ impl IntoApiErrorExt for CredentialError {
                 .type_url(type_url("issuance#invalid-expiration-date"))
                 .source(self)
                 .finish(),
+            CredentialNotIssued => ApiError::builder(StatusCode::CONFLICT)
+                .title("Credential Not Issued")
+                .type_url(type_url("issuance#credential-not-issued"))
+                .source(self)
+                .finish(),
             InvalidCredentialStatus => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(format!(
@@ -83,7 +88,7 @@ impl IntoApiErrorExt for OfferError {
                 .type_url(type_url("issuance#missing-credential-offer"))
                 .source(self)
                 .finish(),
-            SendCredentialOfferError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            SendCredentialOfferError(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
                 .title("Send Credential Offer Error")
                 .type_url(type_url("issuance#send-credential-offer-error"))
                 .source(self)
@@ -355,6 +360,7 @@ impl IntoPublicError for CredentialError {
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
             KeyIdError => PublicError::InternalServerError,
+            CredentialNotIssued => PublicError::InternalServerError,
         }
     }
 }
