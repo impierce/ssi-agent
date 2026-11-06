@@ -56,6 +56,7 @@ command/authorization tracking. That is a separate, legitimate namespace unrelat
 
 - If you think a TODO is no longer relevant or has been addressed, ask the user if it can be removed. If it is still relevant but not being addressed in the current PR, leave it in place.
 - Use comments only when necessary. Prefer self-explanatory code, but don't hesitate to add comments to clarify intent, especially for complex logic or non-obvious decisions.
+- Follow [docs/logging/README.md](./docs/logging/README.md) when adding or changing a log line: which level to use, and what never to log.
 
 ### Cargo.toml
 
