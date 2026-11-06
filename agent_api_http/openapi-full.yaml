@@ -125,7 +125,7 @@ paths:
                 type: string
               description: The consent page URI
         '400':
-          description: The query string is invalid, or the authorization request is unknown, expired, or for another client
+          description: The query string is invalid, the authorization request is unknown, expired, for another client or without a redirect URI (`invalid_request`), or the end-user denied consent (`access_denied`)
   /auth/consent:
     get:
       tags:
