@@ -43,6 +43,7 @@ fn create_test_event_template_created(
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
         metadata: HashMap::new(),
     }
@@ -215,6 +216,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -310,6 +312,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -362,6 +365,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -489,6 +493,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -575,6 +580,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -641,6 +647,7 @@ async fn test_status_updated_to_archived_removes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -723,6 +730,7 @@ async fn test_schema_updated_refreshes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -806,6 +814,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             schema: Box::new(Some(schema.clone())),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -831,6 +840,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
         metadata: HashMap::new(),
     };
@@ -909,6 +919,7 @@ async fn test_logo_first_draft_then_title_then_publish_uses_title_as_display_nam
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -1034,6 +1045,7 @@ async fn test_display_update_with_empty_name_then_title_update_uses_new_title() 
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await

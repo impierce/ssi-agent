@@ -106,6 +106,18 @@ _Avoid_: dry run, preview, validation-only mode
 The `openid-credential-offer://…` value a wallet consumes, which a QR code encodes.
 _Avoid_: offer link, offer URL, offer URI
 
+### Library
+
+**Template Origin**:
+Where a template was imported from: `source`, `sourceTemplateId` at that source, and `digest` of the
+public content at import time (`agent_library/src/template/origin.rs`). Not the same as
+`source_template_id`, which names the local template a local copy was made from.
+_Avoid_: source template, parent template
+
+**Public Content**:
+The fields of the public template projection without `modifiedAt`; the input of the origin digest
+(`PublicTemplateContent::digest` in `agent_library/src/template/public_content.rs`). See ADR 0010.
+
 ## When to Update This Guide
 
 Update when:
