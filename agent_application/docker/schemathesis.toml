@@ -2,6 +2,9 @@
 # counts, exclusions) stay on the command line in that script; this file holds what the CLI cannot
 # express.
 
+# Deserializers for response media types Schemathesis does not know.
+hooks = "/config/schemathesis_hooks.py"
+
 [generation]
 # The API rejects a NUL anywhere in a request on purpose (`request#unsupported-character`): the event
 # stores cannot hold one. Generating them would only hit that guard in front of every handler.
@@ -11,6 +14,12 @@ allow-x00 = false
 # Reproduction commands must show the request that was sent. The fuzz instance only holds throwaway
 # data and secrets.
 enabled = false
+
+[checks.positive_data_acceptance]
+# A schema-valid request can still be refused for what it refers to: a template that is not published, an identifier
+# that names no resource, a DCQL query that is not satisfiable. The API answers those with `422`, which a schema cannot
+# express. `400` stays a finding: it means the request did not match the documented schema after all.
+expected-statuses = ["2xx", "401", "403", "404", "409", "422"]
 
 # Identifiers of resources that `scripts/fuzz-seed.py` created before the run. Without them every
 # operation taking an identifier answers 404 and its handler logic is never reached.

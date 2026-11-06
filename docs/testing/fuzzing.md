@@ -95,12 +95,17 @@ need a remote issuer, wallet or agent.
 
 ## Configuration
 
-`agent_application/docker/schemathesis.toml` holds what the command line cannot express: the
-dictionaries above, and two generation settings:
+`agent_application/docker/schemathesis.toml` holds what the command line cannot express:
 
+- The dictionaries above.
 - No `NUL` characters: the API rejects them in front of every handler on purpose
   (`request#unsupported-character`), because the event stores cannot hold them.
 - No output sanitization: the fuzz instance only holds throwaway data and secrets.
+- `422` counts as an accepted answer to a schema-valid request (`positive_data_acceptance`): a request
+  can match the schema and still refer to a template that is not published or a resource that does
+  not exist, which the API answers with `422`. A `400` for schema-valid input stays a finding.
+- `agent_application/docker/schemathesis_hooks.py`: a deserializer for compact JWT responses
+  (`application/jwt`), which Schemathesis would otherwise parse as JSON.
 
 `agent_application/docker/fuzz.config.yaml` enables every switch that hides documented operations
 (`serve_openapi_enabled`, `feature.kms`), every DID method and signing algorithm that works without a
