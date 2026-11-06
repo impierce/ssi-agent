@@ -5,8 +5,9 @@ Used by the `Fuzz OpenAPI` workflow to fill in the job summary, and usable on it
 
     python3 scripts/fuzz-summary.py reports/fuzz/junit.xml
 
-Schemathesis packs every finding for an operation into a single `<failure>` message, one
-`- <check name>` bullet per finding, so the counts come from parsing those bullets.
+Schemathesis packs every finding for an operation into a single `<failure>` element, one
+`- <code> <check name>` bullet per finding in its text, so the counts come from parsing those
+bullets. The `message` attribute only lists the codes.
 """
 
 import re, sys, collections, xml.etree.ElementTree as ET
@@ -24,8 +25,8 @@ for suite in suites:
         problems = [c for c in case if c.tag in ("failure", "error")]
         if not problems:
             continue
-        text = "\n".join((p.get("message") or p.text or "") for p in problems)
-        checks = collections.Counter(re.findall(r"^- (.+)$", text, re.M))
+        text = "\n".join((p.text or p.get("message") or "") for p in problems)
+        checks = collections.Counter(re.findall(r"^- (ST\d+ .+)$", text, re.M))
         if not checks:
             checks = collections.Counter({problems[0].tag: len(problems)})
         totals.update(checks)
