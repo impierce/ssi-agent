@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
 use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq)]
@@ -54,8 +54,6 @@ impl Aggregate for Catalog {
     ) -> Result<(), Self::Error> {
         use CatalogCommand::*;
         use CatalogEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateCatalog {
@@ -180,7 +178,6 @@ impl Aggregate for Catalog {
 
     fn apply(&mut self, event: Self::Event) {
         use CatalogEvent::*;
-        debug!("Applying event: {:?}", event);
 
         match event {
             CatalogCreated {

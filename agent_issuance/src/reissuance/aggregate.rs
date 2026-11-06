@@ -3,7 +3,6 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 
 use crate::{
     reissuance::{
@@ -44,8 +43,6 @@ impl Aggregate for Reissuance {
         _services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
-        info!("Handling command: {:?}", command);
-
         let events = match command {
             ReissuanceCommand::CreateReissuance {
                 reissuance_id,
@@ -88,8 +85,6 @@ impl Aggregate for Reissuance {
     }
 
     fn apply(&mut self, event: Self::Event) {
-        debug!("Applying event: {:?}", event);
-
         match event {
             ReissuanceCreated {
                 reissuance_id,

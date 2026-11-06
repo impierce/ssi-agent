@@ -407,6 +407,77 @@ impl ApplicationConfiguration {
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
         self.secret_manager = config;
     }
+
+    /// The serialized configuration with all secrets redacted, for logging. On top of the fields the
+    /// serialization already redacts, the HTTP event publishers' header values and target URL paths
+    /// (webhook services often put a token in the path), and the usernames, passwords and query
+    /// values in URLs are redacted.
+    pub fn redacted(&self) -> serde_json::Value {
+        let mut value = serde_json::to_value(self).unwrap_or_default();
+
+        if let Some(publishers) = value
+            .pointer_mut("/event_publishers/http")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for publisher in publishers.iter_mut() {
+                if let Some(headers) = publisher.get_mut("headers").and_then(serde_json::Value::as_object_mut) {
+                    headers.values_mut().for_each(|value| *value = json!(REDACTED));
+                }
+                if let Some(target_url) = publisher.get_mut("target_url") {
+                    redact_url_path(target_url);
+                }
+            }
+        }
+
+        redact_url_credentials(&mut value);
+        value
+    }
+}
+
+fn redact_url_path(value: &mut serde_json::Value) {
+    let Some(text) = value.as_str() else {
+        return;
+    };
+    let Ok(mut url) = Url::parse(text) else {
+        *value = json!(REDACTED);
+        return;
+    };
+    if url.path() != "/" && !url.path().is_empty() {
+        url.set_path("/REDACTED");
+        *value = json!(url.as_str());
+    }
+}
+
+/// Redacts the userinfo (e.g. `nats://token@host`) and the query values (e.g. `?api_key=...`) of
+/// every URL, keeping the query parameter names.
+fn redact_url_credentials(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => {
+            let Ok(mut url) = Url::parse(text) else {
+                return;
+            };
+            let mut redacted = false;
+            if !url.username().is_empty() {
+                redacted |= url.set_username("REDACTED").is_ok();
+            }
+            if url.password().is_some() {
+                redacted |= url.set_password(Some("REDACTED")).is_ok();
+            }
+            if url.query().is_some() {
+                let names: Vec<String> = url.query_pairs().map(|(name, _)| name.into_owned()).collect();
+                url.query_pairs_mut()
+                    .clear()
+                    .extend_pairs(names.iter().map(|name| (name, "REDACTED")));
+                redacted = true;
+            }
+            if redacted {
+                *text = url.to_string();
+            }
+        }
+        serde_json::Value::Array(values) => values.iter_mut().for_each(redact_url_credentials),
+        serde_json::Value::Object(map) => map.values_mut().for_each(redact_url_credentials),
+        _ => {}
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
@@ -802,13 +873,13 @@ impl AlgorithmExt for jsonwebtoken::Algorithm {
 }
 
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
+const REDACTED: &str = "<REDACTED>";
+
 pub(crate) fn redact<S, T>(_str: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    let redacted_value = "<REDACTED>";
-    let redacted_value = redacted_value.to_string();
-    redacted_value.serialize(serializer)
+    REDACTED.serialize(serializer)
 }
 
 #[cfg(test)]
@@ -955,6 +1026,70 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    #[serial]
+    fn redacted_configuration_contains_no_secrets() {
+        let provisioned_config = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                    dev:
+                        api_key: "dev-api-key"
+                    event_store:
+                        type: "mongodb"
+                        connection_string: "mongodb://user:db-password@localhost:27017"
+                    secret_manager:
+                        stronghold_password: "stronghold-password"
+                    event_publishers:
+                        http:
+                            - enabled: true
+                              target_url: "https://webhook-user:webhook-password@webhook.example.org/services/webhook-path-token?api_key=webhook-api-key"
+                              headers:
+                                authorization: "Bearer webhook-token"
+                              events: {}
+                        nats:
+                            enabled: true
+                            nats_url: "nats://nats-token@localhost:4222"
+                "#,
+                config::FileFormat::Yaml,
+            ))
+            .build()
+            .unwrap();
+
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+        let redacted = config.redacted().to_string();
+
+        for secret in [
+            "dev-api-key",
+            "db-password",
+            "stronghold-password",
+            "webhook-user",
+            "webhook-password",
+            "webhook-api-key",
+            "webhook-path-token",
+            "webhook-token",
+            "nats-token",
+        ] {
+            assert!(!redacted.contains(secret), "`{secret}` in {redacted}");
+        }
+
+        let redacted = config.redacted();
+        assert_eq!(
+            redacted.pointer("/event_publishers/http/0/headers"),
+            Some(&json!({ "authorization": "<REDACTED>" }))
+        );
+        assert_eq!(
+            redacted.pointer("/event_publishers/http/0/target_url"),
+            Some(&json!(
+                "https://REDACTED:REDACTED@webhook.example.org/REDACTED?api_key=REDACTED"
+            ))
+        );
+        assert_eq!(
+            redacted.pointer("/event_publishers/nats/nats_url"),
+            Some(&json!("nats://REDACTED@localhost:4222"))
+        );
+        assert_eq!(redacted["public_url"], json!(config.public_url.as_str()));
     }
 
     #[test]

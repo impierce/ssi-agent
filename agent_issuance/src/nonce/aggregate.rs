@@ -5,7 +5,6 @@ use crate::services::IssuanceServices;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Nonce {
@@ -32,8 +31,6 @@ impl Aggregate for Nonce {
         // TODO: add proper errors within NonceError
         // use NonceError::*
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             GenerateNonce { c_nonce } => Ok(vec![NonceGenerated {
                 c_nonce,
@@ -54,8 +51,6 @@ impl Aggregate for Nonce {
 
     fn apply(&mut self, event: Self::Event) {
         use NonceEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             NonceGenerated { c_nonce, is_redeemed } => {
