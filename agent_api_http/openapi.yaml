@@ -705,6 +705,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '409':
+          description: The credential has not been issued yet, so it has no status to update
         '422':
           description: Request body does not match the expected schema, or the status list can't hold the status
   /v0/delete-catalog:
@@ -1504,6 +1506,8 @@ paths:
           description: The credential offer does not exist
         '422':
           description: Request body does not match the expected schema
+        '502':
+          description: The target URL could not be reached or did not accept the offer
   /v0/offers/{offer_id}:
     get:
       tags:

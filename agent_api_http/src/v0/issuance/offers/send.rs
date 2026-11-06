@@ -230,7 +230,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
     }
 
     #[serial_test::serial]
