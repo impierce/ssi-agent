@@ -52,6 +52,7 @@ development instance.
 | `FUZZ_KEEP_UP` | `0` | Leave the stack running afterwards for inspection |
 | `FUZZ_EXTRA_ARGS` | _(none)_ | Extra Schemathesis flags, e.g. `--include-path /v0/credentials` |
 | `FUZZ_READY_TIMEOUT` | `120` | Seconds to wait for `/readyz` before seeding |
+| `FUZZ_AGENT_LOG_LEVEL` | `warn` | `RUST_LOG` of the agent, whose output is saved to `reports/fuzz/agent.log` |
 | `SCHEMATHESIS_VERSION` | `v4.33.1` | Pinned `schemathesis/schemathesis` image tag |
 
 To narrow a run down to one operation while fixing a finding:
@@ -68,8 +69,8 @@ FUZZ_COMMAND=fuzz FUZZ_MAX_TIME=3600 ./scripts/fuzz-openapi.sh
 ```
 
 Reports land in `reports/fuzz/` (gitignored): `junit.xml` for the summary, `traffic.har` for the
-exact requests and responses, `events.ndjson` for the raw event stream, and `seed/` for the seeded
-identifiers. Schemathesis prints a reproducing `curl` command for every finding, and the run's seed,
+exact requests and responses, `events.ndjson` for the raw event stream, `agent.log` for the agent's
+warnings and errors (`FUZZ_AGENT_LOG_LEVEL`, default `warn`), and `seed/` for the seeded identifiers. Schemathesis prints a reproducing `curl` command for every finding, and the run's seed,
 so any failure can be replayed. Output sanitization is off, so the reproductions show the request
 that was actually sent.
 
@@ -104,8 +105,10 @@ need a remote issuer, wallet or agent.
 - `422` counts as an accepted answer to a schema-valid request (`positive_data_acceptance`): a request
   can match the schema and still refer to a template that is not published or a resource that does
   not exist, which the API answers with `422`. A `400` for schema-valid input stays a finding.
-- `agent_application/docker/schemathesis_hooks.py`: a deserializer for compact JWT responses
-  (`application/jwt`), which Schemathesis would otherwise parse as JSON.
+
+`agent_application/docker/schemathesis_hooks.py` registers a deserializer for compact JWT responses
+(`application/jwt`), which Schemathesis would otherwise parse as JSON. It is loaded through
+`SCHEMATHESIS_HOOKS`.
 
 `agent_application/docker/fuzz.config.yaml` enables every switch that hides documented operations
 (`serve_openapi_enabled`, `feature.kms`), every DID method and signing algorithm that works without a

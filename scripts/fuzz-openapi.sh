@@ -23,7 +23,7 @@
 #   FUZZ_SEED=12345 ./scripts/fuzz-openapi.sh     # reproduce a previous run
 #   FUZZ_KEEP_UP=1 ./scripts/fuzz-openapi.sh      # leave the stack running for inspection
 #
-# Reports are written to `reports/fuzz/` (JUnit XML, HAR, NDJSON, seeded identifiers).
+# Reports are written to `reports/fuzz/` (JUnit XML, HAR, NDJSON, agent log, seeded identifiers).
 
 set -euo pipefail
 
@@ -76,6 +76,8 @@ tool() {
 }
 
 teardown() {
+    compose logs --no-color ssi-agent > "$REPORTS_DIR/agent.log" 2>&1 || true
+
     if [ "$FUZZ_KEEP_UP" = "1" ]; then
         echo "==> FUZZ_KEEP_UP=1, leaving the stack running."
         echo "    The agent is only reachable inside the compose network, e.g.:"

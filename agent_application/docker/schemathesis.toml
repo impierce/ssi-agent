@@ -2,9 +2,6 @@
 # counts, exclusions) stay on the command line in that script; this file holds what the CLI cannot
 # express.
 
-# Deserializers for response media types Schemathesis does not know.
-hooks = "/config/schemathesis_hooks.py"
-
 [generation]
 # The API rejects a NUL anywhere in a request on purpose (`request#unsupported-character`): the event
 # stores cannot hold one. Generating them would only hit that guard in front of every handler.

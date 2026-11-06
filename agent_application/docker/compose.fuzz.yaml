@@ -48,6 +48,9 @@ services:
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://fuzz_user:fuzz_pass@fuzz-postgres:5432/fuzz
       # Throwaway instance, throwaway secret. Never reuse this value anywhere else.
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "fuzz-only-stronghold-password"
+      # Saved to `reports/fuzz/agent.log`. At `info`, every request body is logged, which a long run turns into
+      # gigabytes; warnings and errors are what explains a finding.
+      RUST_LOG: ${FUZZ_AGENT_LOG_LEVEL:-warn}
     volumes:
       - ./fuzz.config.yaml:/app/config.yaml:ro
 
@@ -65,5 +68,9 @@ services:
       - ./schemathesis_hooks.py:/config/schemathesis_hooks.py:ro
       - ../../scripts/fuzz-seed.py:/scripts/fuzz-seed.py:ro
       - ../../reports/fuzz:/reports
+    environment:
+      # Loaded before the command line is parsed. Through `hooks` in `schemathesis.toml`, the image's bundled
+      # coverage plugin fails to start (`KeyError: 'coverage_format'`).
+      SCHEMATHESIS_HOOKS: /config/schemathesis_hooks.py
     # The arguments come from `scripts/fuzz-openapi.sh`.
     entrypoint: ["schemathesis"]

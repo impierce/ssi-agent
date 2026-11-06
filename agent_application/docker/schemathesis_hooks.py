@@ -1,4 +1,4 @@
-"""Schemathesis hooks used by `scripts/fuzz-openapi.sh`, loaded through `hooks` in `schemathesis.toml`."""
+"""Schemathesis hooks used by `scripts/fuzz-openapi.sh`, loaded through `SCHEMATHESIS_HOOKS` (`compose.fuzz.yaml`)."""
 
 import schemathesis
 
