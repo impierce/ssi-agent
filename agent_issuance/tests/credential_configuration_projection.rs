@@ -1,5 +1,6 @@
 use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
 use agent_issuance::issuance_state;
+use agent_issuance::server_config::command::ServerConfigCommand;
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::library_state;
@@ -121,6 +122,63 @@ async fn test_unchanged_credential_configuration_repairs_a_server_config_view_th
         .unwrap()
         .unwrap();
     assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_unchanged_credential_configuration_repairs_metadata_replaced_by_a_late_initialization() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "my-template";
+    let event = || {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    projection.dispatch(template_id, &[event()]).await;
+
+    // A second instance starting on the same fresh event store initializes after the publish: the
+    // metadata no longer advertises the configuration, while the configurations still hold it.
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut credential_issuer_metadata = server_config.credential_issuer_metadata.clone();
+    credential_issuer_metadata.credential_configurations_supported.clear();
+    command_handler(
+        SERVER_CONFIG_ID,
+        &issuance.command.server_config,
+        ServerConfigCommand::InitializeServerMetadata {
+            authorization_server_metadata: Box::new(server_config.authorization_server_metadata.clone()),
+            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+            cryptographic_binding_methods_supported: server_config.cryptographic_binding_methods_supported.clone(),
+            signing_algorithms_supported: server_config.signing_algorithms_supported.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+    assert!(!server_config.advertises_credential_configurations());
+
+    projection.dispatch(template_id, &[event()]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config
+        .credential_issuer_metadata
+        .credential_configurations_supported
+        .contains_key(template_id));
+    assert!(server_config.advertises_credential_configurations());
 }
 
 #[tokio::test]

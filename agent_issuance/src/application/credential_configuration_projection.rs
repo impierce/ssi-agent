@@ -78,18 +78,19 @@ impl CredentialConfigurationProjection {
     }
 
     /// Adds or replaces the credential configuration of a template, unless the server config already
-    /// holds exactly this configuration.
+    /// holds and advertises exactly this configuration.
     async fn update_credential_configuration(
         &self,
         template_id: &str,
         credential_configuration: CredentialConfiguration,
     ) {
         if let Some(server_config) = self.server_config_view().await {
-            let unchanged = server_config
-                .with_credential_configuration(credential_configuration.clone(), false)
-                .is_ok_and(|credential_configurations| {
-                    credential_configurations == server_config.credential_configurations
-                });
+            let unchanged = server_config.advertises_credential_configurations()
+                && server_config
+                    .with_credential_configuration(credential_configuration.clone(), false)
+                    .is_ok_and(|credential_configurations| {
+                        credential_configurations == server_config.credential_configurations
+                    });
             if unchanged {
                 return;
             }
@@ -127,11 +128,10 @@ impl CredentialConfigurationProjection {
     /// list it. Drafts sync on every edit, and a draft was never published, so this skips a server
     /// config command per edit.
     async fn remove_listed_credential_configuration(&self, template_id: &str) {
-        if self
-            .server_config_view()
-            .await
-            .is_some_and(|server_config| !server_config.credential_configurations.contains_key(template_id))
-        {
+        if self.server_config_view().await.is_some_and(|server_config| {
+            server_config.advertises_credential_configurations()
+                && !server_config.credential_configurations.contains_key(template_id)
+        }) {
             return;
         }
 

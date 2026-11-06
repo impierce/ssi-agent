@@ -104,6 +104,14 @@ impl ServerConfig {
         (authorization_server_metadata, credential_issuer_metadata)
     }
 
+    /// Whether the advertised `credential_configurations_supported` are exactly the credential
+    /// configurations. `ServerMetadataInitialized` replaces the metadata but keeps the configurations, so
+    /// an initialization that lands after a credential configuration update leaves them apart.
+    pub fn advertises_credential_configurations(&self) -> bool {
+        self.credential_issuer_metadata.credential_configurations_supported
+            == into_credential_configurations_supported(&self.credential_configurations)
+    }
+
     /// The credential configurations with `credential_configuration` added or replaced. Also used on
     /// the view to tell whether an update would change anything, without loading the aggregate.
     pub fn with_credential_configuration(
