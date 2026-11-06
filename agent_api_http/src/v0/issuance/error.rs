@@ -304,6 +304,7 @@ pub enum PublicError {
     AccessTokenError(AccessTokenValidationError),
     InternalServerError,
     NotFoundError,
+    UnsupportedMediaType,
 }
 
 impl axum::response::IntoResponse for PublicError {
@@ -334,6 +335,7 @@ impl axum::response::IntoResponse for PublicError {
                 .into_response(),
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
+            PublicError::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
         }
     }
 }

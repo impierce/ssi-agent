@@ -434,8 +434,6 @@ paths:
                 error: invalid_token
         '415':
           description: The request body is not `application/json`
-        '422':
-          description: The request body is not a valid credential request
       security:
       - access_token: []
   /openid4vci/credential-offer/{offer_id}:

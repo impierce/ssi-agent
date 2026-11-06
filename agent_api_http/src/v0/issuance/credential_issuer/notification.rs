@@ -1,11 +1,12 @@
 use crate::handlers::{public_command_handler, public_query_handler};
+use crate::v0::issuance::credential_issuer::protocol_request;
 use crate::v0::issuance::error::{internal_server_error, PublicError};
 use crate::v0::openapi::PROTOCOL_TAG;
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use axum::response::{IntoResponse, Response};
 use axum::{
-    extract::{Json, State},
+    extract::{rejection::JsonRejection, Json, State},
     http::StatusCode,
 };
 use axum_auth::AuthBearer;
@@ -50,9 +51,12 @@ use tracing::info;
 #[axum_macros::debug_handler]
 pub async fn notification(
     State(state): State<Arc<IssuanceState>>,
-    AuthBearer(access_token): AuthBearer,
-    Json(raw_value): Json<serde_json::Value>,
+    bearer: Result<AuthBearer, axum_auth::Rejection>,
+    raw_value: Result<Json<serde_json::Value>, JsonRejection>,
 ) -> Result<Response, PublicError> {
+    let (access_token, raw_value) = protocol_request(bearer, raw_value, || {
+        NotificationErrorResponse::InvalidNotificationRequest.into()
+    })?;
     info!("Notification Request: {}", json!(raw_value));
 
     let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;

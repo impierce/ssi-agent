@@ -3,7 +3,10 @@ use std::time::{Duration, Instant};
 use crate::{
     handlers::{public_command_handler, public_query_handler},
     v0::{
-        issuance::error::{internal_server_error, PublicError},
+        issuance::{
+            credential_issuer::protocol_request,
+            error::{internal_server_error, PublicError},
+        },
         openapi::PROTOCOL_TAG,
     },
 };
@@ -20,7 +23,7 @@ use agent_issuance::{
 };
 use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use axum::{
-    extract::{Json, State},
+    extract::{rejection::JsonRejection, Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -64,15 +67,17 @@ const POLLING_INTERVAL_MS: u64 = 100;
             example = json!({"error": "invalid_token"}),
         ),
         (status = 415, description = "The request body is not `application/json`"),
-        (status = 422, description = "The request body is not a valid credential request"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
-    AuthBearer(access_token): AuthBearer,
-    Json(credential_request): Json<CredentialRequest>,
+    bearer: Result<AuthBearer, axum_auth::Rejection>,
+    credential_request: Result<Json<CredentialRequest>, JsonRejection>,
 ) -> Result<Response, PublicError> {
+    let (access_token, credential_request) = protocol_request(bearer, credential_request, || {
+        CredentialErrorResponse::InvalidCredentialRequest.into()
+    })?;
     let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
 
     // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
