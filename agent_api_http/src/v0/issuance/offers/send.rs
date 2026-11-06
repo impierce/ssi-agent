@@ -212,14 +212,18 @@ mod tests {
         assert_eq!(offers.as_array().unwrap().len(), 1);
     }
 
+    #[rstest::rstest]
+    #[case::server_error(500)]
+    #[case::not_found(404)]
+    #[case::not_modified(304)]
     #[serial_test::serial]
     #[tokio::test]
-    async fn an_offer_rejected_by_the_organization_fails() {
+    async fn an_offer_rejected_by_the_organization_fails(#[case] wallet_status: u16) {
         let app = app_with_offer().await;
         let wallet = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/credential_offer"))
-            .respond_with(ResponseTemplate::new(500))
+            .respond_with(ResponseTemplate::new(wallet_status))
             .mount(&wallet)
             .await;
 

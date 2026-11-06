@@ -204,12 +204,22 @@ impl IdentityServices {
         let path = url.path().trim_end_matches('/');
         url.set_path(&format!("/.well-known/openid-credential-issuer{path}"));
 
-        self.client
+        let response = self
+            .client
             .get(url.as_str())
             .send()
             .await
-            .and_then(|response| response.error_for_status())
-            .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))?
+            .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))?;
+
+        // Redirects are not followed by this client, so anything but a success is a failed fetch.
+        if !response.status().is_success() {
+            return Err(ConnectionError::CredentialIssuerMetadataFetchFailed(format!(
+                "credential issuer metadata endpoint answered with HTTP status {}",
+                response.status()
+            )));
+        }
+
+        response
             .json()
             .await
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))
@@ -1374,6 +1384,37 @@ mod tests {
                 if message.contains("Refused to fetch DID configuration")
         ));
         assert!(mock_server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn credential_issuer_metadata_is_only_read_from_successful_responses() {
+        for status in [302, 304, 500] {
+            let mock_server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .and(path("/.well-known/openid-credential-issuer"))
+                .respond_with(ResponseTemplate::new(status).set_body_json(serde_json::json!({
+                    "credential_issuer": mock_server.uri(),
+                    "credential_endpoint": format!("{}/credential", mock_server.uri()),
+                    "credential_configurations_supported": {}
+                })))
+                .mount(&mock_server)
+                .await;
+
+            let subject = Arc::new(Subject::new().await);
+            let mut services = IdentityServices::new(subject, mock_server.uri().parse().unwrap());
+            services.allow_local_network_outbound = true;
+
+            let error = services
+                .fetch_credential_issuer_metadata(&mock_server.uri().parse().unwrap())
+                .await
+                .unwrap_err();
+
+            assert!(
+                matches!(&error, ConnectionError::CredentialIssuerMetadataFetchFailed(message)
+                    if message.contains(&format!("HTTP status {status}"))),
+                "{status}: {error}"
+            );
+        }
     }
 
     #[tokio::test]

@@ -88,11 +88,13 @@ impl IntoApiErrorExt for OfferError {
                 .type_url(type_url("issuance#missing-credential-offer"))
                 .source(self)
                 .finish(),
-            SendCredentialOfferError(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
-                .title("Send Credential Offer Error")
-                .type_url(type_url("issuance#send-credential-offer-error"))
-                .source(self)
-                .finish(),
+            SendCredentialOfferError(_) | CredentialOfferNotAcceptedError(_) => {
+                ApiError::builder(StatusCode::BAD_GATEWAY)
+                    .title("Send Credential Offer Error")
+                    .type_url(type_url("issuance#send-credential-offer-error"))
+                    .source(self)
+                    .finish()
+            }
             InvalidCredentialOfferUriError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Unexpected Error")
                 .type_url(type_url("unexpected#unexpected-error"))
@@ -401,7 +403,7 @@ impl IntoPublicError for OfferError {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
             }
             // Internal errors that shouldn't reach the public API
-            SendCredentialOfferError(_) => PublicError::InternalServerError,
+            SendCredentialOfferError(_) | CredentialOfferNotAcceptedError(_) => PublicError::InternalServerError,
             UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
             InvalidCredentialOfferUriError(_) => PublicError::InternalServerError,
         }

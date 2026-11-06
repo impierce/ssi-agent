@@ -121,7 +121,8 @@ Verify that a Credential Offer with the specified `offerId` exists before procee
 ## Send Credential Offer Error
 
 This error is raised when UniCore fails to send the Credential Offer to the specified target URL. It is triggered
-when the HTTP request does not complete successfully, and is returned with status `502 Bad Gateway`.
+when the HTTP request fails or the target answers with anything but a `2xx` status (including redirects), and is
+returned with status `502 Bad Gateway`.
 
 ### Resolution
 
