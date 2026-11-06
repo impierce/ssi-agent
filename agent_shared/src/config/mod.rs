@@ -656,17 +656,14 @@ pub struct Events {
 /// Serialized as `did:jwk`, `did:key`, `did:web` (`Display`); `did_jwk` etc. are accepted as input too.
 #[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
-    #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
+    #[serde(rename = "did:jwk", alias = "did_jwk")]
     #[strum(serialize = "did:jwk")]
-    #[schema(rename = "did:jwk")]
     Jwk,
-    #[serde(alias = "did_key", alias = "did:key", rename = "did_key")]
+    #[serde(rename = "did:key", alias = "did_key")]
     #[strum(serialize = "did:key")]
-    #[schema(rename = "did:key")]
     Key,
-    #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
+    #[serde(rename = "did:web", alias = "did_web")]
     #[strum(serialize = "did:web")]
-    #[schema(rename = "did:web")]
     Web,
 }
 

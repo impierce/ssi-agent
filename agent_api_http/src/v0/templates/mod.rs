@@ -291,7 +291,7 @@ pub(crate) async fn duplicate_template(
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
-    #[schema(min_length = 1)]
+    #[schema(min_length = 1, required = true)]
     pub template_id: String,
     #[schema(min_length = 1)]
     pub title: Option<String>,
@@ -321,6 +321,7 @@ pub struct UpdateTemplateEndpointRequest {
         (status = 204, description = "Template updated successfully"),
         (status = 400, description = "Malformed JSON request body, a missing template ID, or an empty `title`"),
         (status = 404, description = "Template not found"),
+        (status = 409, description = "The template is deleted, or the requested status change is not allowed"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -620,6 +621,7 @@ pub struct DeleteTemplateEndpointRequest {
         (status = 204, description = "Template deleted successfully"),
         (status = 400, description = "Malformed JSON request body, or a missing template ID"),
         (status = 404, description = "Template not found"),
+        (status = 409, description = "The template is published and must be archived first, or it is already deleted"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]

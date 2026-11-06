@@ -869,6 +869,7 @@ paths:
         required: false
         schema:
           type: string
+          format: uri
       - name: did
         in: query
         description: Only connections that include this DID.
@@ -1165,6 +1166,8 @@ paths:
           description: Template schema invalid for public offers
         '404':
           description: Template or offer not found
+        '409':
+          description: A public offer with this ID already exists
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1338,6 +1341,8 @@ paths:
           description: Malformed JSON request body, or a missing template ID
         '404':
           description: Template not found
+        '409':
+          description: The template is published and must be archived first, or it is already deleted
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -1608,6 +1613,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderKeys'
+        '400':
+          description: Unknown key provider type
         '404':
           description: No provider of this type has been added
         '502':
@@ -2443,6 +2450,8 @@ paths:
           description: Malformed JSON request body, a missing template ID, or an empty `title`
         '404':
           description: Template not found
+        '409':
+          description: The template is deleted, or the requested status change is not allowed
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
@@ -5546,9 +5555,9 @@ components:
       type: string
       description: DID methods supported by UniCore
       enum:
-      - did_jwk
-      - did_key
-      - did_web
+      - did:jwk
+      - did:key
+      - did:web
     SyncConnectionRequest:
       type: object
       required:
@@ -5813,6 +5822,8 @@ components:
       additionalProperties: true
     UpdateTemplateEndpointRequest:
       type: object
+      required:
+      - id
       properties:
         credentialExpiration:
           oneOf:

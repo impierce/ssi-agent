@@ -93,7 +93,7 @@ pub(crate) async fn post_connection(
 pub struct GetConnectionsEndpointRequest {
     /// Only connections with this URL.
     #[serde(default)]
-    #[param(value_type = Option<String>)]
+    #[param(value_type = Option<String>, format = Uri)]
     pub url: Option<Url>,
     /// Only connections that include this DID.
     #[serde(default)]

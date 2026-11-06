@@ -184,6 +184,7 @@ pub(crate) async fn all_public_offers(
         (status = 201, description = "Public offer created successfully"),
         (status = 404, description = "Template or offer not found"),
         (status = 400, description = "Template schema invalid for public offers"),
+        (status = 409, description = "A public offer with this ID already exists"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]

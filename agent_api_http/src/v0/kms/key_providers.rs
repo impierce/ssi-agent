@@ -205,6 +205,7 @@ pub(crate) async fn test_key_provider_connection(
     params(("provider_type" = KeyProviderType, Path, description = "The type of the added key provider")),
     responses(
         (status = 200, description = "The keys this instance may use, and how many more it may not", body = ProviderKeys),
+        (status = 400, description = "Unknown key provider type"),
         (status = 404, description = "No provider of this type has been added"),
         (status = 502, description = "The provider could not be reached"),
     )
