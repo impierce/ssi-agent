@@ -251,7 +251,7 @@ impl Aggregate for Offer {
                         debug!(%offer_id, target_host = target_url.host_str(), "Sending credential offer");
 
                         let response = client.get(target).send().await.map_err(SendCredentialOfferError)?;
-                        // Redirects that are not followed (e.g. `304`) are not a delivery either.
+                        // Redirects are followed; a final `304` or other non-2xx response is not a delivery.
                         if !response.status().is_success() {
                             return Err(CredentialOfferNotAcceptedError(response.status().as_u16()));
                         }

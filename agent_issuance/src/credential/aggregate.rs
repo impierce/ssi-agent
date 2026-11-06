@@ -454,7 +454,12 @@ impl Aggregate for Credential {
             }]),
             // The status list entry is assigned when UniCore signs the credential for the holder. Before
             // that, and for credentials signed outside UniCore, there is no entry whose status could change.
-            UpdateCredentialStatus { .. } if self.credential_status.status_list_url.is_empty() => {
+            // A command naming another entry was built from a view read before the credential was signed.
+            UpdateCredentialStatus { credential_status, .. }
+                if self.credential_status.status_list_url.is_empty()
+                    || credential_status.status_list_url != self.credential_status.status_list_url
+                    || credential_status.index != self.credential_status.index =>
+            {
                 Err(NoStatusListEntry)
             }
             UpdateCredentialStatus {
@@ -1148,6 +1153,51 @@ pub mod credential_tests {
                 credential_status,
                 status: Status::Issued,
             }])
+    }
+
+    #[tokio::test]
+    async fn status_updates_must_name_the_current_status_list_entry() {
+        let credential_id = credential_id();
+        let signed_status = CredentialStatus {
+            index: TESTINDEX,
+            status_list_url: "https://example.com/status-lists/list".to_string(),
+            status: StatusType::VALID,
+        };
+        let signed = CredentialEvent::CredentialSigned {
+            credential_id: credential_id.clone(),
+            signed_credential: json!("signed"),
+            credential_status: signed_status.clone(),
+            status: Status::Issued,
+        };
+        let update = |credential_status: CredentialStatus| CredentialCommand::UpdateCredentialStatus {
+            credential_id: credential_id.clone(),
+            credential_status,
+        };
+
+        // Built from a view read before the credential was signed.
+        let stale = CredentialStatus {
+            index: 0,
+            status_list_url: String::new(),
+            status: StatusType::INVALID,
+        };
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![signed.clone()])
+            .when_async(update(stale))
+            .await
+            .then_expect_error_message(&NoStatusListEntry.to_string());
+
+        let revoked = CredentialStatus {
+            status: StatusType::INVALID,
+            ..signed_status
+        };
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![signed])
+            .when_async(update(revoked.clone()))
+            .await
+            .then_expect_events(vec![CredentialEvent::CredentialStatusUpdated {
+                credential_id: credential_id.clone(),
+                credential_status: revoked,
+            }]);
     }
 
     /// Decodes a base64url-encoded JSON segment of an SD-JWT.

@@ -212,6 +212,33 @@ mod tests {
         assert_eq!(offers.as_array().unwrap().len(), 1);
     }
 
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn an_offer_is_delivered_through_a_redirect() {
+        let app = app_with_offer().await;
+        let wallet = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/credential_offer"))
+            .respond_with(ResponseTemplate::new(302).insert_header("Location", format!("{}/moved", wallet.uri())))
+            .mount(&wallet)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/moved"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&wallet)
+            .await;
+
+        let status = post(
+            &app,
+            "/offers/send-offer-to-organization",
+            json!({ "offerId": OFFER_ID, "targetUrl": wallet.uri() }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+    }
+
     #[rstest::rstest]
     #[case::server_error(500)]
     #[case::not_found(404)]

@@ -165,7 +165,11 @@ impl IdentityServices {
             public_url,
             linkage_clock: Arc::new(Utc::now),
             cname_resolver: crate::dns::system_resolver(),
-            client: Client::new(),
+            // Credential issuer metadata is only read from the issuer's own `.well-known` URL.
+            client: Client::builder()
+                .redirect(redirect::Policy::none())
+                .build()
+                .expect("Failed to build the HTTP client"),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
             linked_verifiable_presentations: Arc::new(NoLinkedVerifiablePresentations),
         }
@@ -211,7 +215,7 @@ impl IdentityServices {
             .await
             .map_err(|e| ConnectionError::CredentialIssuerMetadataFetchFailed(e.to_string()))?;
 
-        // Redirects are not followed by this client, so anything but a success is a failed fetch.
+        // Redirects are not followed, so anything but a success is a failed fetch.
         if !response.status().is_success() {
             return Err(ConnectionError::CredentialIssuerMetadataFetchFailed(format!(
                 "credential issuer metadata endpoint answered with HTTP status {}",
@@ -1390,13 +1394,24 @@ mod tests {
     async fn credential_issuer_metadata_is_only_read_from_successful_responses() {
         for status in [302, 304, 500] {
             let mock_server = MockServer::start().await;
+            let metadata = serde_json::json!({
+                "credential_issuer": mock_server.uri(),
+                "credential_endpoint": format!("{}/credential", mock_server.uri()),
+                "credential_configurations_supported": {}
+            });
             Mock::given(method("GET"))
                 .and(path("/.well-known/openid-credential-issuer"))
-                .respond_with(ResponseTemplate::new(status).set_body_json(serde_json::json!({
-                    "credential_issuer": mock_server.uri(),
-                    "credential_endpoint": format!("{}/credential", mock_server.uri()),
-                    "credential_configurations_supported": {}
-                })))
+                .respond_with(
+                    ResponseTemplate::new(status)
+                        .insert_header("Location", format!("{}/redirected", mock_server.uri()))
+                        .set_body_json(metadata.clone()),
+                )
+                .mount(&mock_server)
+                .await;
+            // Valid metadata behind the redirect, which must not be followed.
+            Mock::given(method("GET"))
+                .and(path("/redirected"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(metadata))
                 .mount(&mock_server)
                 .await;
 

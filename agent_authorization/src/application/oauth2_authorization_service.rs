@@ -10,6 +10,7 @@ use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::error;
 use url::Url;
 
 #[derive(Deserialize, Serialize)]
@@ -90,9 +91,19 @@ impl OAuth2AuthorizationService {
                     expires_in: 600, // 10 minutes
                 };
 
-                public_command_handler(&authorization_code_id, &state.command.authorization_code, command)
-                    .await
-                    .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
+                // The redirect URI is validated, so the failure is reported to the client (RFC 6749, section 4.1.2.1).
+                if let Err(err) =
+                    public_command_handler(&authorization_code_id, &state.command.authorization_code, command).await
+                {
+                    error!(error = %err, "Failed to create authorization code");
+                    return Ok(OAuth2AuthorizationServiceResponse::RedirectToClient(
+                        redirect_to_client(
+                            redirect_uri,
+                            ("error", "server_error"),
+                            &oauth2_authorization_request.state,
+                        ),
+                    ));
+                }
 
                 Ok(OAuth2AuthorizationServiceResponse::RedirectToClient(
                     redirect_to_client(

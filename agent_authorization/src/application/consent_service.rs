@@ -1,8 +1,11 @@
 use crate::{
-    domain::oauth2_authorization_request::{aggregate::ConsentStatus, command::OAuth2AuthorizationRequestCommand},
+    domain::oauth2_authorization_request::{
+        aggregate::ConsentStatus, command::OAuth2AuthorizationRequestCommand, error::OAuth2AuthorizationRequestError,
+    },
     state::AuthorizationState,
 };
-use agent_shared::handlers::{public_command_handler, public_query_handler};
+use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
+use cqrs_es::AggregateError;
 use thiserror::Error;
 
 pub enum ConsentServiceResponse {
@@ -55,7 +58,10 @@ impl ConsentService {
             .map_err(|err| ConsentError::Internal(err.to_string()))?
             .ok_or(ConsentError::ClientNotFound)?;
 
-        if oauth_authorization_request.consent_status != ConsentStatus::Pending {
+        if matches!(
+            oauth_authorization_request.consent_status,
+            ConsentStatus::Granted | ConsentStatus::Rejected
+        ) {
             return Err(ConsentError::ConsentAlreadyDecided);
         }
 
@@ -65,13 +71,20 @@ impl ConsentService {
             OAuth2AuthorizationRequestCommand::RejectConsent
         };
 
+        // The aggregate refuses a second decision, so of two concurrent decisions only the first is recorded.
         public_command_handler(
             &oauth_authorization_request_id,
             &state.command.oauth2_authorization_request,
             command,
         )
         .await
-        .map_err(|err| ConsentError::Internal(err.to_string()))?;
+        .map_err(|err| match err {
+            CommandHandlerError::Aggregate(
+                AggregateError::UserError(OAuth2AuthorizationRequestError::ConsentAlreadyDecided)
+                | AggregateError::AggregateConflict,
+            ) => ConsentError::ConsentAlreadyDecided,
+            err => ConsentError::Internal(err.to_string()),
+        })?;
 
         Ok(ConsentServiceResponse::Found(format!(
             "/auth/authorize?client_id={}&request_uri={}",
