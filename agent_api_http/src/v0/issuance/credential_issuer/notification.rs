@@ -13,6 +13,7 @@ use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::errors::OID4VCError;
 use oid4vci::notification_request::NotificationRequest;
 use std::sync::Arc;
+use tracing::debug;
 
 /// Notify the credential issuer
 ///
@@ -55,6 +56,12 @@ pub async fn notification(
 
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
+
+    debug!(
+        notification_id = %notification_request.notification_id,
+        event = ?notification_request.event,
+        "Received notification"
+    );
 
     let credentials = match public_query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,

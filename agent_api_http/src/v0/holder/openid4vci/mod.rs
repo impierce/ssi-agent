@@ -10,6 +10,7 @@ use hyper::StatusCode;
 use oid4vci::credential_offer::CredentialOffer;
 use serde::Deserialize;
 use std::sync::Arc;
+use tracing::debug;
 
 /// A credential offer passed by value or by reference. Exactly one of the two parameters is expected.
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -57,6 +58,8 @@ pub(crate) async fn offers_params(
         Err(_) => return Err(ApiError::new(StatusCode::BAD_REQUEST)),
     };
 
+    log_credential_offer(&credential_offer);
+
     let received_offer_id = uuid::Uuid::new_v4().to_string();
 
     let command = OfferCommand::ReceiveCredentialOffer {
@@ -68,4 +71,75 @@ pub(crate) async fn offers_params(
     public_command_handler(&received_offer_id, &state.command.offer, command).await?;
 
     Ok(StatusCode::OK.into_response())
+}
+
+/// Logs what was offered, without the grant codes (`pre-authorized_code`, `issuer_state`) or the full
+/// `credential_offer_uri`, which works as a bearer reference to the offer.
+fn log_credential_offer(credential_offer: &CredentialOffer) {
+    match credential_offer {
+        CredentialOffer::CredentialOfferUri(uri) => {
+            debug!(host = uri.host_str(), "Received credential offer by reference");
+        }
+        CredentialOffer::CredentialOffer(parameters) => {
+            let grants = parameters.grants.as_ref();
+            debug!(
+                credential_issuer = %parameters.credential_issuer,
+                credential_configuration_ids = ?*parameters.credential_configuration_ids,
+                pre_authorized_code_grant = grants.is_some_and(|grants| grants.pre_authorized_code.is_some()),
+                authorization_code_grant = grants.is_some_and(|grants| grants.authorization_code.is_some()),
+                "Received credential offer"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn credential_offer_by_value_is_logged_without_grant_codes() {
+        let credential_offer: CredentialOffer = format!(
+            "openid-credential-offer://?credential_offer={}",
+            urlencoding::encode(
+                &serde_json::json!({
+                    "credential_issuer": "https://issuer.example",
+                    "credential_configuration_ids": ["badge"],
+                    "grants": {
+                        "authorization_code": { "issuer_state": "secret-issuer-state" },
+                        "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
+                            "pre-authorized_code": "secret-pre-authorized-code"
+                        }
+                    }
+                })
+                .to_string()
+            )
+        )
+        .parse()
+        .unwrap();
+
+        log_credential_offer(&credential_offer);
+
+        assert!(logs_contain("Received credential offer"));
+        assert!(logs_contain("https://issuer.example"));
+        assert!(logs_contain("badge"));
+        assert!(!logs_contain("secret-pre-authorized-code"));
+        assert!(!logs_contain("secret-issuer-state"));
+    }
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn credential_offer_by_reference_is_logged_with_host_only() {
+        let credential_offer: CredentialOffer =
+            "openid-credential-offer://?credential_offer_uri=https%3A%2F%2Fissuer.example%2Foffers%2Fsecret-offer-id"
+                .parse()
+                .unwrap();
+
+        log_credential_offer(&credential_offer);
+
+        assert!(logs_contain("Received credential offer by reference"));
+        assert!(logs_contain("issuer.example"));
+        assert!(!logs_contain("secret-offer-id"));
+    }
 }

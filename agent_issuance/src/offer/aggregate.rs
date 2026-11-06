@@ -248,7 +248,7 @@ impl Aggregate for Offer {
                                 .as_str(),
                         );
 
-                        debug!(%offer_id, %target_url, "Sending credential offer");
+                        debug!(%offer_id, target_host = target_url.host_str(), "Sending credential offer");
 
                         client
                             .get(target)

@@ -14,6 +14,7 @@ use axum::{
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::debug;
 
 /// Get the consent page
 ///
@@ -90,6 +91,8 @@ pub async fn post_consent(
 ) -> Result<Response, PublicError> {
     match ConsentService::handle_consent(&state, client_id, request_uri, consent_given).await? {
         ConsentServiceResponse::Found(location) => {
+            debug!(path = location.split('?').next(), "Redirecting after consent");
+
             Ok((StatusCode::FOUND, [(header::LOCATION, location)]).into_response())
         }
     }

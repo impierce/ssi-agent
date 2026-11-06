@@ -96,7 +96,10 @@ pub(crate) async fn par(
             Ok((StatusCode::OK, Json(interactive_authorization_follow_up_response)).into_response())
         }
         AuthorizationRequestDto::PushedAuthorizationRequest(pushed_authorization_request) => {
-            debug!("Received pushed authorization request");
+            debug!(
+                state = ?pushed_authorization_request.state,
+                "Received pushed authorization request"
+            );
 
             let authorization_response =
                 PushedAuthorizationService::handle_pushed_authorization_request(&state, pushed_authorization_request)
