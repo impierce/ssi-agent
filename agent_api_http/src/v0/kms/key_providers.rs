@@ -32,6 +32,7 @@ pub struct KeyProviderDto {
 pub struct AddKeyProviderRequest {
     pub provider_type: KeyProviderType,
     /// A name for the provider, unique among the providers this instance lists. It can't be changed later.
+    #[schema(min_length = 1)]
     pub name: String,
 }
 

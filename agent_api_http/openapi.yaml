@@ -2040,6 +2040,7 @@ components:
         name:
           type: string
           description: A name for the provider, unique among the providers this instance lists. It can't be changed later.
+          minLength: 1
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
     AddTemplatesRequest:
