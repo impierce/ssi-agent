@@ -1,12 +1,10 @@
 [advisories]
 ignore = [
     # RUSTSEC-2023-0071: rsa v0.9.10 — Marvin Attack (RSA timing side-channel)
-    # No patched version of the rsa crate is available. It is a transitive dependency of:
-    #   - stronghold_ext: backs `RS256` keys in agent_secret_manager's `StrongholdKeyStore`.
-    #     Used for RSASSA-PKCS1-v1_5 signing only, never for decryption, which is the primary
-    #     Marvin Attack vector.
-    #   - jsonwebtoken (`rust_crypto` feature): used to verify RS256 signatures, a public-key
-    #     operation that does not involve a private key.
+    # No patched version of the rsa crate is available. It is a transitive dependency of
+    # stronghold_ext, where it backs `RS256` keys in agent_secret_manager's `StrongholdKeyStore`.
+    # Used for RSASSA-PKCS1-v1_5 signing only, never for decryption, which is the primary Marvin
+    # Attack vector.
     # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
     "RUSTSEC-2023-0071",
 
@@ -17,10 +15,19 @@ ignore = [
     # into any binary. Its build script only extracts a zip archive on `*-windows-msvc` targets,
     # when building libsodium from source fails, and only after verifying the archive's minisign
     # signature against a public key hard-coded in the build script. UniCore is built for
-    # Linux (`rust:1-bookworm`), where this code never runs.
+    # Linux (`rust:1-trixie`), where this code never runs.
     # TODO: remove once libsodium-sys-stable depends on zip >= 9.0.0.
     "RUSTSEC-2026-0367",
     "RUSTSEC-2026-0368",
     "RUSTSEC-2026-0369",
     "RUSTSEC-2026-0429",
+
+    # RUSTSEC-2026-0387: crypto-bigint v0.5.5 — timing variability in operations intended to be
+    # constant-time. It affects arithmetic on secret integers. Patched in 0.7.6, which needs the
+    # `elliptic-curve` 0.14 generation of curve crates. Version 0.5.5 is still a transitive
+    # dependency of k256 v0.13 via iota-crypto (Stronghold): compiled because Stronghold enables
+    # iota-crypto's `secp256k1` feature, but never called; UniCore has no secp256k1 keys.
+    # UniCore signs ES256 through stronghold_ext, which uses p256 v0.14 and crypto-bigint >= 0.7.6.
+    # TODO: remove once Stronghold no longer pulls in iota-crypto with k256 v0.13.
+    "RUSTSEC-2026-0387",
 ]
