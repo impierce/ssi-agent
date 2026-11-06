@@ -1,8 +1,9 @@
+use crate::extractors::PathParams;
 use crate::extractors::RequestActor;
 use crate::handlers::command_handler;
 use agent_holder::{offer::command::OfferCommand, state::HolderState};
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
@@ -16,6 +17,7 @@ use std::sync::Arc;
     post,
     path = "/holder/offers/{offer_id}/reject",
     operation_id = "reject_credential_offer",
+    params(("offer_id" = String, Path, description = "Received offer ID")),
     tags = ["Identity", "Holder"],
     responses(
         (status = 204, description = "Credential offer rejected successfully"),
@@ -28,7 +30,7 @@ use std::sync::Arc;
 pub(crate) async fn reject(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(received_offer_id): Path<String>,
+    PathParams(received_offer_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::RejectCredentialOffer {
         received_offer_id: received_offer_id.clone(),

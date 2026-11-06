@@ -1,12 +1,13 @@
 use agent_holder::{presentation::aggregate::Presentation, state::HolderState};
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use std::sync::Arc;
 
+use crate::extractors::PathParams;
 use crate::{extractors::RequestActor, handlers::query_handler};
 
 /// Get a signed credential presentation
@@ -32,7 +33,7 @@ use crate::{extractors::RequestActor, handlers::query_handler};
 pub(crate) async fn presentation_signed(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(presentation_id): Path<String>,
+    PathParams(presentation_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     match query_handler(
         state.authorization_checker.clone(),

@@ -25,6 +25,7 @@ pub struct Catalog {
 #[derive(Debug, Clone, Deserialize, Default, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogDisplay {
+    #[schema(min_length = 1)]
     pub name: String,
     pub description: String,
     pub icon: Option<String>,

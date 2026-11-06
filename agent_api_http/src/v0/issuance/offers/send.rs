@@ -1,10 +1,9 @@
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::command_handler;
 use agent_issuance::{offer::aggregate::DeliveryMethod, offer::command::OfferCommand, state::IssuanceState};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
-    Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -25,11 +24,12 @@ pub struct EmailOfferEndpointRequest {
 #[utoipa::path(
     post,
     path = "/offers/send-offer-to-individual",
+    request_body = EmailOfferEndpointRequest,
     operation_id = "send_offer_to_individual",
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Offer sent successfully"),
-        (status = 400, description = "The credential offer does not exist"),
+        (status = 404, description = "The credential offer does not exist"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -37,10 +37,10 @@ pub struct EmailOfferEndpointRequest {
 pub(crate) async fn individual_offer(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(EmailOfferEndpointRequest {
+    JsonBody(EmailOfferEndpointRequest {
         offer_id,
         recipient_email,
-    }): Json<EmailOfferEndpointRequest>,
+    }): JsonBody<EmailOfferEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::SendCredentialOffer {
         offer_id: offer_id.clone(),
@@ -73,11 +73,12 @@ pub struct TargetUrlOfferEndpointRequest {
 #[utoipa::path(
     post,
     path = "/offers/send-offer-to-organization",
+    request_body = TargetUrlOfferEndpointRequest,
     operation_id = "send_offer_to_organization",
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Offer sent successfully"),
-        (status = 400, description = "The credential offer does not exist"),
+        (status = 404, description = "The credential offer does not exist"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -85,7 +86,7 @@ pub struct TargetUrlOfferEndpointRequest {
 pub(crate) async fn organization_offer(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(TargetUrlOfferEndpointRequest { offer_id, target_url }): Json<TargetUrlOfferEndpointRequest>,
+    JsonBody(TargetUrlOfferEndpointRequest { offer_id, target_url }): JsonBody<TargetUrlOfferEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let command = OfferCommand::SendCredentialOffer {
         offer_id: offer_id.clone(),
@@ -262,7 +263,7 @@ mod tests {
                 json!({ "offerId": "unknown", "targetUrl": "https://wallet.example.com" }),
             ),
         ] {
-            assert_eq!(post(&app, path, body).await, StatusCode::BAD_REQUEST, "{path}");
+            assert_eq!(post(&app, path, body).await, StatusCode::NOT_FOUND, "{path}");
         }
 
         let (status, _) = get(&app, "/offers/unknown").await;

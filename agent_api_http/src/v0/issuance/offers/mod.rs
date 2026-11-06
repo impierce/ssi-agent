@@ -1,6 +1,6 @@
 pub mod send;
 
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::{
     error::{type_url, IntoApiErrorExt},
     handlers::{caller, command_handler, query_handler},
@@ -15,7 +15,7 @@ use agent_library::{
     template::aggregate::{Status as TemplateStatus, Template},
 };
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Extension,
@@ -35,6 +35,7 @@ pub struct OffersEndpointRequest {
     ///
     /// At least one template ID is required. These IDs select the credential types a wallet may
     /// request; they do not identify credential instances or provide credential claim data.
+    #[schema(min_items = 1)]
     pub template_ids: Vec<String>,
     /// Optional delivery settings associated with the offer.
     #[serde(default)]
@@ -80,11 +81,11 @@ pub(crate) async fn offers(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(OffersEndpointRequest {
+    JsonBody(OffersEndpointRequest {
         offer_id,
         template_ids,
         delivery_options,
-    }): Json<OffersEndpointRequest>,
+    }): JsonBody<OffersEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_ids.is_empty() || template_ids.iter().any(|id| id.is_empty()) {
         return Err(ApiError::builder(StatusCode::BAD_REQUEST)
@@ -227,6 +228,7 @@ pub(crate) async fn all_offers(
     get,
     path = "/offers/{offer_id}",
     operation_id = "get_offer_by_id",
+    params(("offer_id" = String, Path, description = "Offer ID")),
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Offer retrieved successfully", body = OfferView),
@@ -238,7 +240,7 @@ pub(crate) async fn all_offers(
 pub(crate) async fn offer(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Path(offer_id): Path<String>,
+    PathParams(offer_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
