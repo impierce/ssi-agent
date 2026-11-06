@@ -6768,16 +6768,16 @@ dependencies = [
 [[package]]
 name = "stronghold_ext"
 version = "0.1.0"
-source = "git+https://github.com/impierce/stronghold_ext.git?rev=64f2f52#64f2f52758eb0defa3b549751ae6b58bd8cdfff2"
+source = "git+https://github.com/impierce/stronghold_ext.git?rev=a38bf86#a38bf8634574596fd64c7f939d0b29efc447e8a4"
 dependencies = [
- "ecdsa 0.16.9",
+ "ecdsa 0.17.0",
  "iota_stronghold",
- "p256 0.13.2",
+ "p256 0.14.0",
  "rand 0.8.8",
  "rsa",
  "serde",
- "sha2 0.10.9",
- "signature 2.2.0",
+ "sha2 0.11.1",
+ "signature 3.0.0",
  "stronghold-utils",
  "stronghold_engine",
  "thiserror 1.0.69",
