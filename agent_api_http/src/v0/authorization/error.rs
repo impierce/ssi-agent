@@ -85,7 +85,7 @@ impl IntoPublicError for OAuth2AuthorizationError {
             ExpiredAuthorizationRequestError => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
             InvalidClientIdError => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
             MissingRedirectUriError => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
-            AccessDenied => PublicError::from(AuthorizationErrorResponse::AccessDenied),
+            UnauthorizedClient => PublicError::from(AuthorizationErrorResponse::UnauthorizedClient),
             Internal(_) => PublicError::InternalServerError,
         }
     }
@@ -122,6 +122,7 @@ impl IntoPublicError for ConsentError {
             RequestNotFound => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
             // Pushed authorization requests of unregistered clients are accepted, see `PushedAuthorizationService`.
             ClientNotFound => PublicError::from(AuthorizationErrorResponse::UnauthorizedClient),
+            ClientMismatch | ConsentAlreadyDecided => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
             Internal(_) => PublicError::InternalServerError,
         }
     }
@@ -248,9 +249,9 @@ mod tests {
                 INVALID_REQUEST,
             ),
             (
-                OAuth2AuthorizationError::AccessDenied,
+                OAuth2AuthorizationError::UnauthorizedClient,
                 StatusCode::BAD_REQUEST,
-                Some("access_denied"),
+                Some("unauthorized_client"),
             ),
             (
                 OAuth2AuthorizationError::Internal("error".to_string()),

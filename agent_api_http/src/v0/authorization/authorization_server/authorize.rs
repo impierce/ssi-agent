@@ -29,7 +29,7 @@ use std::sync::Arc;
     responses(
         (
             status = 302,
-            description = "Redirect to the client's redirect URI",
+            description = "Redirect to the client's registered redirect URI, with `code` once consent is granted or `error=access_denied` once it is denied, and `state`",
             headers(("Location" = String, description = "The client's redirect URI")),
         ),
         (
@@ -37,7 +37,7 @@ use std::sync::Arc;
             description = "Redirect to the consent page",
             headers(("Location" = String, description = "The consent page URI")),
         ),
-        (status = 400, description = "The query string is invalid, the authorization request is unknown, expired, for another client or without a redirect URI (`invalid_request`), or the end-user denied consent (`access_denied`)"),
+        (status = 400, description = "The query string is invalid, the authorization request is unknown, expired, for another client or without a redirect URI (`invalid_request`), or its client is not registered or the redirect URI is not registered for it (`unauthorized_client`)"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -181,7 +181,7 @@ pub mod tests {
 
     #[serial_test::serial]
     #[tokio::test]
-    async fn authorization_after_denied_consent_is_access_denied() {
+    async fn denied_consent_redirects_to_the_client_with_access_denied() {
         let issuance_state =
             Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
@@ -209,9 +209,110 @@ pub mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response.status(), StatusCode::FOUND);
+        assert_eq!(
+            response.headers()[header::LOCATION],
+            "unime://callback?error=access_denied&state=test_state"
+        );
+    }
+
+    async fn app() -> Router {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        authorization::router((authorization_state, issuance_state))
+    }
+
+    async fn submit_consent(app: &mut Router, client_id: &str, request_uri: &str) -> (StatusCode, serde_json::Value) {
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/consent")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(
+                        serde_urlencoded::to_string([
+                            ("client_id", client_id),
+                            ("request_uri", request_uri),
+                            ("consent_given", "true"),
+                        ])
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["error"], "access_denied");
+        (status, serde_json::from_slice(&body).unwrap_or_default())
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn consent_requires_a_registered_client() {
+        let mut app = app().await;
+
+        // Pushed authorization requests of unregistered clients are accepted, with any redirect URI.
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/par")
+                    .header(
+                        http::header::CONTENT_TYPE,
+                        mime::APPLICATION_WWW_FORM_URLENCODED.as_ref(),
+                    )
+                    .body(Body::from(
+                        "response_type=code&client_id=unregistered&redirect_uri=https%3A%2F%2Fattacker.example%2Fcb",
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let request_uri = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["request_uri"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let (status, body) = submit_consent(&mut app, "unregistered", &request_uri).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "unauthorized_client");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn consent_is_given_once_by_the_requesting_client() {
+        let mut app = app().await;
+        let request_uri = par(&mut app, "issuer-state".to_string()).await;
+
+        let (status, body) = submit_consent(&mut app, "another-client", &request_uri).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "invalid_request");
+
+        post_consent(&mut app, UNIME_CLIENT_ID.to_string(), request_uri.clone(), true).await;
+
+        let (status, body) = submit_consent(&mut app, UNIME_CLIENT_ID, &request_uri).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "invalid_request");
     }
 }
