@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{caller, query_handler};
 use agent_issuance::{
     credential::aggregate::CredentialExpiry,
@@ -48,10 +48,16 @@ pub struct CreateCredentialReissuanceResponse {
 #[utoipa::path(
     post,
     path = "/reissue-credential",
+    request_body = CreateCredentialReissuanceRequest,
     operation_id = "reissue_credential",
     tags = ["Issuance"],
     responses(
-        (status = 201, description = "Credential reissuance prepared successfully", body = CreateCredentialReissuanceResponse)
+        (status = 201, description = "Credential reissuance prepared successfully", body = CreateCredentialReissuanceResponse),
+        (status = 400, description = "Malformed JSON request body, the original credential has not been issued, or the credential payload or configuration does not fit the original credential"),
+        (status = 403, description = "The reissuance policy does not allow this reissuance"),
+        (status = 404, description = "Original credential or credential configuration not found"),
+        (status = 409, description = "A reissuance of the original credential already exists"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -59,7 +65,7 @@ pub(crate) async fn credential_reissuances(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(CreateCredentialReissuanceRequest {
+    JsonBody(CreateCredentialReissuanceRequest {
         original_credential_id,
         credential_configuration_id,
         credential,
@@ -67,7 +73,7 @@ pub(crate) async fn credential_reissuances(
         reason,
         trigger_type,
         triggered_by,
-    }): Json<CreateCredentialReissuanceRequest>,
+    }): JsonBody<CreateCredentialReissuanceRequest>,
 ) -> Result<Response, ApiError> {
     let service = ReissuanceService::default();
 

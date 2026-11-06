@@ -1,5 +1,8 @@
 use crate::v0::events::openapi::Webhooks;
-use utoipa::OpenApi;
+use utoipa::{
+    openapi::{path::Operation, Response},
+    Modify, OpenApi,
+};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -11,7 +14,7 @@ use utoipa::OpenApi;
     servers(
         (url = "http://localhost:3033", description = "Local development")
     ),
-    modifiers(&Webhooks),
+    modifiers(&Webhooks, &RequestBodyRejections),
     nest(
         (path = "/v0", api = crate::v0::configuration::ConfigurationApi),
         (path = "/v0", api = crate::v0::holder::openapi::HolderApi),
@@ -27,6 +30,37 @@ use utoipa::OpenApi;
     )
 )]
 pub struct ApiDoc;
+
+/// Documents the rejections of [`JsonBody`](crate::extractors::JsonBody) on every operation that takes a request body,
+/// unless the operation describes them itself.
+struct RequestBodyRejections;
+
+impl Modify for RequestBodyRejections {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let operations = openapi.paths.paths.values_mut().flat_map(|path_item| {
+            [&mut path_item.post, &mut path_item.put, &mut path_item.patch]
+                .into_iter()
+                .flatten()
+        });
+
+        for operation in operations.filter(|operation: &&mut Operation| operation.request_body.is_some()) {
+            for (status, description) in [
+                ("400", "Malformed JSON request body"),
+                (
+                    "415",
+                    "Missing or unsupported `Content-Type`; the request body must be `application/json`",
+                ),
+                ("422", "Request body does not match the expected schema"),
+            ] {
+                operation
+                    .responses
+                    .responses
+                    .entry(status.to_string())
+                    .or_insert_with(|| Response::new(description).into());
+            }
+        }
+    }
+}
 
 /// The tag that every operation of [`ProtocolApi`] carries after the tag of its standard, since client generators
 /// group operations by their first tag.

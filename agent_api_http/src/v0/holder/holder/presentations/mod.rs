@@ -1,6 +1,6 @@
 pub mod presentation_signed;
 
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::queries::HolderCredentialView,
@@ -106,7 +106,7 @@ pub struct PresentationsEndpointRequest {
 pub(crate) async fn post_presentations(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Json(PresentationsEndpointRequest { credential_ids }): Json<PresentationsEndpointRequest>,
+    JsonBody(PresentationsEndpointRequest { credential_ids }): JsonBody<PresentationsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let mut credentials = vec![];
 

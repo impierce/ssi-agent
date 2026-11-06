@@ -1,5 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{
     authorize_command, caller, command_handler, internal_command_handler, internal_query_handler, query_handler,
 };
@@ -79,6 +79,7 @@ pub(crate) async fn credential(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CredentialsEndpointRequest {
+    #[schema(min_length = 1)]
     pub template_id: String,
     pub offer_id: String,
     pub credential: Value,
@@ -104,11 +105,13 @@ pub struct BatchCredentialRow {
 #[serde(rename_all = "camelCase")]
 pub struct BatchCredentialsRequest {
     /// The published template every row is validated against and issued from.
+    #[schema(min_length = 1)]
     pub template_id: String,
     /// Expiry applied to every credential; defaults to the template's credential expiration.
     #[serde(default)]
     pub expires_at: Option<CredentialExpiry>,
     /// One row per holder.
+    #[schema(min_items = 1, max_items = 1000)]
     pub credentials: Vec<BatchCredentialRow>,
 }
 
@@ -212,7 +215,9 @@ pub struct BatchFailedProblem {
     pub title: String,
     pub status: u16,
     pub detail: String,
-    /// The outcome of every row, in request order.
+    /// The outcome of every row, in request order. Absent when the request is rejected before any row is attempted
+    /// (template not published).
+    #[schema(required = false)]
     pub results: Vec<BatchItemResult>,
 }
 
@@ -475,6 +480,7 @@ async fn execute(
 #[utoipa::path(
     post,
     path = "/credentials",
+    request_body = CredentialsEndpointRequest,
     operation_id = "create_credential",
     tags = ["Credentials", "Issuance"],
     responses(
@@ -491,7 +497,7 @@ pub(crate) async fn credentials(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(request): Json<CredentialsEndpointRequest>,
+    JsonBody(request): JsonBody<CredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let is_signed = request.is_signed;
 
@@ -568,7 +574,7 @@ pub(crate) async fn verify_credentials_batch(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(request): Json<BatchCredentialsRequest>,
+    JsonBody(request): JsonBody<BatchCredentialsRequest>,
 ) -> Result<Response, ApiError> {
     let (validated, mut results) = validate_batch(&state, &actor, &library_state, &request).await?;
 
@@ -608,7 +614,7 @@ pub(crate) async fn create_credentials_batch(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(request): Json<BatchCredentialsRequest>,
+    JsonBody(request): JsonBody<BatchCredentialsRequest>,
 ) -> Result<Response, ApiError> {
     let (validated, mut results) = validate_batch(&state, &actor, &library_state, &request).await?;
 
@@ -869,9 +875,9 @@ pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Path(credential_id): Path<String>,
-    Json(PatchCredentialEndpointRequest {
+    JsonBody(PatchCredentialEndpointRequest {
         credential_status: status,
-    }): Json<PatchCredentialEndpointRequest>,
+    }): JsonBody<PatchCredentialEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let max_status = (1u16 << BITS_PER_STATUS) - 1;
     if u16::from(status.0) > max_status {

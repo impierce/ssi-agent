@@ -1,18 +1,18 @@
 use std::sync::Arc;
 
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, QueryParams, RequestActor};
 use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
-    connection::{aggregate::ConnectionDisplayProperties, command::ConnectionCommand, views::ConnectionView},
+    connection::{command::ConnectionCommand, views::ConnectionView},
     queries,
     state::IdentityState,
 };
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},
-    Form, Json,
+    Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
@@ -35,6 +35,7 @@ pub struct AddConnectionEndpointRequest {
 #[utoipa::path(
     post,
     path = "/connections",
+    request_body = AddConnectionEndpointRequest,
     operation_id = "add_connection",
     tags = ["Connections"],
     responses(
@@ -50,7 +51,7 @@ pub struct AddConnectionEndpointRequest {
 pub(crate) async fn post_connection(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(AddConnectionEndpointRequest { url }): Json<AddConnectionEndpointRequest>,
+    JsonBody(AddConnectionEndpointRequest { url }): JsonBody<AddConnectionEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let connection_id = uuid::Uuid::new_v4().to_string();
 
@@ -85,16 +86,18 @@ pub(crate) async fn post_connection(
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-#[derive(Deserialize, Serialize, utoipa::ToSchema)]
+/// Filters of `GET /v0/connections`, read from the query string.
+#[derive(Deserialize, Serialize, utoipa::IntoParams)]
 #[serde(rename_all = "camelCase")]
+#[into_params(parameter_in = Query)]
 pub struct GetConnectionsEndpointRequest {
+    /// Only connections with this URL.
     #[serde(default)]
-    pub display: Option<ConnectionDisplayProperties>,
-    #[serde(default)]
-    #[schema(value_type = Option<String>)]
+    #[param(value_type = Option<String>)]
     pub url: Option<Url>,
+    /// Only connections that include this DID.
     #[serde(default)]
-    #[schema(value_type = Option<String>)]
+    #[param(value_type = Option<String>)]
     pub did: Option<Did>,
 }
 
@@ -106,6 +109,7 @@ pub struct GetConnectionsEndpointRequest {
     path = "/connections",
     operation_id = "get_all_connections",
     tags = ["Connections"],
+    params(GetConnectionsEndpointRequest),
     responses(
         (status = 200, description = "All connections retrieved successfully", body = [ConnectionView]),
         (status = 400, description = "Invalid query parameter"),
@@ -115,7 +119,7 @@ pub struct GetConnectionsEndpointRequest {
 pub(crate) async fn get_connections(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Form(GetConnectionsEndpointRequest { display, url, did }): Form<GetConnectionsEndpointRequest>,
+    QueryParams(GetConnectionsEndpointRequest { url, did }): QueryParams<GetConnectionsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let filtered_connections = query_handler(
         state.authorization_checker.clone(),
@@ -128,10 +132,7 @@ pub(crate) async fn get_connections(
     .map(|all_connections_view| {
         let filtered_connections: Vec<_> = crate::utils::newest_first(all_connections_view.connections)
             .filter(|connection| {
-                display
-                    .as_ref()
-                    .is_none_or(|display| connection.display.as_ref() == Some(display))
-                    && url.as_ref().is_none_or(|url| url.as_str() == connection.url)
+                url.as_ref().is_none_or(|url| url.as_str() == connection.url)
                     && did.as_ref().is_none_or(|did| connection.dids.contains(did))
             })
             .collect();
@@ -182,6 +183,7 @@ pub struct SyncConnectionRequest {
 #[utoipa::path(
     post,
     path = "/connections/sync-connection",
+    request_body = SyncConnectionRequest,
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
@@ -193,7 +195,7 @@ pub struct SyncConnectionRequest {
 pub(crate) async fn sync_connection(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(SyncConnectionRequest { id }): Json<SyncConnectionRequest>,
+    JsonBody(SyncConnectionRequest { id }): JsonBody<SyncConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::SyncConnection {
         connection_id: id.clone(),
@@ -221,6 +223,7 @@ pub struct AcceptConnectionChangesRequest {
 #[utoipa::path(
     post,
     path = "/connections/accept-pending-changes",
+    request_body = AcceptConnectionChangesRequest,
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
@@ -233,7 +236,7 @@ pub struct AcceptConnectionChangesRequest {
 pub(crate) async fn accept_connection_changes(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(AcceptConnectionChangesRequest { id }): Json<AcceptConnectionChangesRequest>,
+    JsonBody(AcceptConnectionChangesRequest { id }): JsonBody<AcceptConnectionChangesRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::AcceptConnectionChanges {
         connection_id: id.clone(),
@@ -261,6 +264,7 @@ pub struct RemoveConnectionRequest {
 #[utoipa::path(
     post,
     path = "/connections/remove-connection",
+    request_body = RemoveConnectionRequest,
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
@@ -273,7 +277,7 @@ pub struct RemoveConnectionRequest {
 pub(crate) async fn remove_connection(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(RemoveConnectionRequest { id }): Json<RemoveConnectionRequest>,
+    JsonBody(RemoveConnectionRequest { id }): JsonBody<RemoveConnectionRequest>,
 ) -> Result<Response, ApiError> {
     let command = ConnectionCommand::RemoveConnection {
         connection_id: id.clone(),

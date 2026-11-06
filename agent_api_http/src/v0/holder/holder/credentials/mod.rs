@@ -1,4 +1,4 @@
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand, signed::SignedCredential},
@@ -72,7 +72,7 @@ pub struct HolderCredentialsEndpointRequest {
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
+    JsonBody(HolderCredentialsEndpointRequest { credential }): JsonBody<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
 

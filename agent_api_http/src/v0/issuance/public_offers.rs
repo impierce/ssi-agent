@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{caller, command_handler, public_query_handler, query_handler};
 use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
@@ -192,7 +192,7 @@ pub(crate) async fn create_public_offer(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
+    JsonBody(CreatePublicOfferRequest { offer_id, template_id }): JsonBody<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     if query_handler(
         issuance_state.authorization_checker.clone(),
@@ -250,7 +250,7 @@ pub(crate) async fn create_public_offer(
 pub(crate) async fn take_public_offer_offline(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
+    JsonBody(TakePublicOfferOfflineRequest { offer_id }): JsonBody<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
         offer_id: offer_id.clone(),
@@ -286,7 +286,7 @@ pub(crate) async fn take_public_offer_offline(
 pub(crate) async fn take_public_offer_online(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
+    JsonBody(TakePublicOfferOnlineRequest { offer_id }): JsonBody<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
         offer_id: offer_id.clone(),
@@ -322,7 +322,7 @@ pub(crate) async fn take_public_offer_online(
 pub(crate) async fn delete_public_offer(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
+    JsonBody(DeletePublicOfferRequest { offer_id }): JsonBody<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
         offer_id: offer_id.clone(),

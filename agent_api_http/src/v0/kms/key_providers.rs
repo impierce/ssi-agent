@@ -1,5 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{caller, command_handler};
 use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
@@ -72,7 +72,7 @@ pub struct ConnectionTestResult {
 pub(crate) async fn add_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(AddKeyProviderRequest { provider_type, name }): Json<AddKeyProviderRequest>,
+    JsonBody(AddKeyProviderRequest { provider_type, name }): JsonBody<AddKeyProviderRequest>,
 ) -> Result<Response, ApiError> {
     let name = KeyProviders::normalize_name(&name);
     command_handler(
@@ -139,7 +139,7 @@ pub(crate) async fn get_all_key_providers(
 pub(crate) async fn remove_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(KeyProviderTypeRequest { provider_type }): Json<KeyProviderTypeRequest>,
+    JsonBody(KeyProviderTypeRequest { provider_type }): JsonBody<KeyProviderTypeRequest>,
 ) -> Result<Response, ApiError> {
     command_handler(
         state.authorization_checker.clone(),
@@ -173,7 +173,7 @@ pub(crate) async fn remove_key_provider(
 pub(crate) async fn test_key_provider_connection(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(KeyProviderTypeRequest { provider_type }): Json<KeyProviderTypeRequest>,
+    JsonBody(KeyProviderTypeRequest { provider_type }): JsonBody<KeyProviderTypeRequest>,
 ) -> Result<Response, ApiError> {
     let result = match test_connection(&state, caller(actor), provider_type)
         .await
