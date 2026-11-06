@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::error::IntoApiErrorExt;
-use crate::extractors::{JsonBody, QueryParams, RequestActor};
+use crate::extractors::{JsonBody, PathParams, QueryParams, RequestActor};
 use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
 use agent_identity::{
@@ -10,7 +10,7 @@ use agent_identity::{
     state::IdentityState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -151,6 +151,7 @@ pub(crate) async fn get_connections(
     get,
     path = "/connections/{connection_id}",
     operation_id = "get_connection_by_id",
+    params(("connection_id" = String, Path, description = "Connection ID")),
     tags = ["Connections"],
     responses(
         (status = 200, description = "Connection retrieved successfully", body = ConnectionView),
@@ -162,7 +163,7 @@ pub(crate) async fn get_connections(
 pub(crate) async fn get_connection(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Path(id): Path<String>,
+    PathParams(id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     queries::get_connection(&state, caller(actor), &id)
         .await
@@ -393,7 +394,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let response = get_connection(State(state), RequestActor(None), Path(connection_id.to_string()))
+        let response = get_connection(State(state), RequestActor(None), PathParams(connection_id.to_string()))
             .await
             .unwrap_err()
             .into_response();

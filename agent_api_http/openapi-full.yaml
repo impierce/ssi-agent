@@ -416,18 +416,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/CredentialResponse'
         '400':
-          description: The credential request is invalid, or the `Authorization` header is missing
+          description: The credential request is invalid
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OID4VCError_CredentialErrorResponse'
         '401':
-          description: The access token is invalid or expired
+          description: 'The access token is missing (`WWW-Authenticate: Bearer`, empty body), or invalid or expired'
           headers:
             WWW-Authenticate:
               schema:
                 type: string
-              description: '`Bearer error="invalid_token"`'
+              description: '`Bearer` without an access token, otherwise `Bearer error="invalid_token"`'
           content:
             application/json:
               example:
@@ -507,18 +507,18 @@ paths:
         '204':
           description: Notification received
         '400':
-          description: The notification request or its `notification_id` is invalid, or the `Authorization` header is missing
+          description: The notification request or its `notification_id` is invalid
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OID4VCError_NotificationErrorResponse'
         '401':
-          description: The access token is invalid or expired
+          description: 'The access token is missing (`WWW-Authenticate: Bearer`, empty body), or invalid or expired'
           headers:
             WWW-Authenticate:
               schema:
                 type: string
-              description: '`Bearer error="invalid_token"`'
+              description: '`Bearer` without an access token, otherwise `Bearer error="invalid_token"`'
           content:
             application/json:
               example:
@@ -1017,6 +1017,7 @@ paths:
       parameters:
       - name: connection_id
         in: path
+        description: Connection ID
         required: true
         schema:
           type: string
@@ -1257,6 +1258,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Credential ID
         required: true
         schema:
           type: string
@@ -1280,6 +1282,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Credential ID
         required: true
         schema:
           type: string
@@ -1419,6 +1422,7 @@ paths:
       parameters:
       - name: document_id
         in: path
+        description: Document ID
         required: true
         schema:
           type: string
@@ -1596,6 +1600,7 @@ paths:
       parameters:
       - name: catalog_id
         in: path
+        description: Catalog ID
         required: true
         schema:
           type: string
@@ -1618,6 +1623,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: Reissuance ID
         required: true
         schema:
           type: string
@@ -1670,6 +1676,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: Template ID
         required: true
         schema:
           type: string
@@ -1740,6 +1747,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Holder credential ID
         required: true
         schema:
           type: string
@@ -1782,6 +1790,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1807,6 +1816,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1840,6 +1850,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1910,6 +1921,7 @@ paths:
       parameters:
       - name: presentation_id
         in: path
+        description: Presentation ID
         required: true
         schema:
           type: string
@@ -2120,6 +2132,8 @@ paths:
         '200':
           description: Offer sent successfully
         '400':
+          description: Malformed JSON request body
+        '404':
           description: The credential offer does not exist
         '413':
           description: Request body larger than 2 MB
@@ -2144,6 +2158,8 @@ paths:
         '200':
           description: Offer sent successfully
         '400':
+          description: Malformed JSON request body
+        '404':
           description: The credential offer does not exist
         '413':
           description: Request body larger than 2 MB
@@ -2161,6 +2177,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Offer ID
         required: true
         schema:
           type: string

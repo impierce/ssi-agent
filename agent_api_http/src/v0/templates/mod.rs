@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::queries;
@@ -11,7 +11,7 @@ use agent_library::template::command::TemplateCommand;
 use agent_library::template::error::TemplateError;
 use agent_shared::config::Authorization;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -580,6 +580,7 @@ pub(crate) async fn get_templates(
     get,
     path = "/get-template-by-id/{id}",
     operation_id = "get_template_by_id",
+    params(("id" = String, Path, description = "Template ID")),
     tags = ["Library", "Templates"],
     responses(
         (status = 200, description = "Template retrieved successfully", body = TemplateDto),
@@ -591,7 +592,7 @@ pub(crate) async fn get_templates(
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Path(template_id): Path<String>,
+    PathParams(template_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     queries::get_template(&state, caller(actor), &template_id)
         .await
@@ -1398,10 +1399,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        let response = get_template(State(state), RequestActor(None), Path("template-to-delete".to_string()))
-            .await
-            .unwrap_err()
-            .into_response();
+        let response = get_template(
+            State(state),
+            RequestActor(None),
+            PathParams("template-to-delete".to_string()),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
@@ -1454,7 +1459,7 @@ mod tests {
         let created: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let template_id = created["id"].as_str().unwrap().to_string();
 
-        let response = get_template(State(state), RequestActor(None), Path(template_id))
+        let response = get_template(State(state), RequestActor(None), PathParams(template_id))
             .await
             .unwrap();
 

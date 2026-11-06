@@ -1,11 +1,11 @@
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::{aggregate::Credential, command::CredentialCommand, signed::SignedCredential},
     state::HolderState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -110,6 +110,7 @@ pub(crate) async fn post_credentials(
     get,
     path = "/holder/credentials/{credential_id}",
     operation_id = "get_holder_credential_by_id",
+    params(("credential_id" = String, Path, description = "Holder credential ID")),
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Credential retrieved successfully", body = Credential),
@@ -121,7 +122,7 @@ pub(crate) async fn post_credentials(
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(holder_credential_id): Path<String>,
+    PathParams(holder_credential_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),

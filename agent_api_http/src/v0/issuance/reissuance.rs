@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, query_handler};
 use agent_issuance::{
     credential::aggregate::CredentialExpiry,
@@ -12,7 +12,7 @@ use agent_issuance::{
 use agent_library::state::LibraryState;
 use axum::Extension;
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
@@ -141,6 +141,7 @@ pub(crate) async fn all_credential_reissuances(
     get,
     path = "/get-credential-reissuance/{id}",
     operation_id = "get_credential_reissuance",
+    params(("id" = String, Path, description = "Reissuance ID")),
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Credential reissuance relation retrieved successfully", body = ReissuanceView),
@@ -151,7 +152,7 @@ pub(crate) async fn all_credential_reissuances(
 pub(crate) async fn credential_reissuance(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Path(reissuance_id): Path<String>,
+    PathParams(reissuance_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),

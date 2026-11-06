@@ -1,5 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{
     authorize_command, caller, command_handler, internal_command_handler, internal_query_handler, query_handler,
 };
@@ -28,7 +28,7 @@ use agent_shared::config::{Authorization, BITS_PER_STATUS};
 use agent_shared::signed_credential_format::{detect_signed_credential_format, SignedCredentialFormat};
 use axum::Extension;
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -51,6 +51,7 @@ use std::sync::Arc;
     get,
     path = "/credentials/{credential_id}",
     operation_id = "get_credential_by_id",
+    params(("credential_id" = String, Path, description = "Credential ID")),
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Successfully retrieved credential", body = Credential),
@@ -62,7 +63,7 @@ use std::sync::Arc;
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Path(credential_id): Path<String>,
+    PathParams(credential_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
@@ -859,6 +860,7 @@ pub struct PatchCredentialEndpointRequest {
     patch,
     path = "/credentials/{credential_id}",
     operation_id = "update_credential_status",
+    params(("credential_id" = String, Path, description = "Credential ID")),
     tags = ["Issuance"],
     request_body(
         content = PatchCredentialEndpointRequest,
@@ -874,7 +876,7 @@ pub struct PatchCredentialEndpointRequest {
 pub async fn patch_credential(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Path(credential_id): Path<String>,
+    PathParams(credential_id): PathParams<String>,
     JsonBody(PatchCredentialEndpointRequest {
         credential_status: status,
     }): JsonBody<PatchCredentialEndpointRequest>,

@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use crate::error::type_url;
 use axum::{
     body::Bytes,
-    extract::{rejection::JsonRejection, FromRequest, FromRequestParts, Query, Request},
+    extract::{rejection::JsonRejection, FromRequest, FromRequestParts, Path, Query, Request},
     Json,
 };
 use http::StatusCode;
@@ -50,6 +50,34 @@ where
                 ApiError::builder(StatusCode::BAD_REQUEST)
                     .title("Invalid Query Parameters")
                     .type_url(type_url("request#invalid-query"))
+                    .message(rejection.body_text())
+                    .finish()
+            })
+    }
+}
+
+/// Path parameters of a UniCore API operation.
+///
+/// Wraps [`axum::extract::Path`] so that a path segment that does not fit the parameter (an unknown enum value, or
+/// percent-encoding that is not UTF-8) is rejected with an RFC 9457 problem (`400`, `application/problem+json`) instead
+/// of plain text.
+pub struct PathParams<T>(pub T);
+
+impl<T, S> FromRequestParts<S> for PathParams<T>
+where
+    T: DeserializeOwned + Send,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut http::request::Parts, state: &S) -> Result<Self, Self::Rejection> {
+        Path::<T>::from_request_parts(parts, state)
+            .await
+            .map(|Path(params)| PathParams(params))
+            .map_err(|rejection| {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Path Parameter")
+                    .type_url(type_url("request#invalid-path"))
                     .message(rejection.body_text())
                     .finish()
             })
@@ -215,6 +243,34 @@ mod tests {
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let problem: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(problem["type"], type_url("request#invalid-query"));
+    }
+
+    #[tokio::test]
+    async fn path_rejection_is_a_problem() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        enum Kind {
+            Known,
+        }
+
+        let app = Router::new().route(
+            "/{kind}",
+            axum::routing::get(|PathParams(_): PathParams<Kind>| async { StatusCode::NO_CONTENT }),
+        );
+        let request = |uri: &str| Request::builder().uri(uri).body(Body::empty()).unwrap();
+
+        let response = app.clone().oneshot(request("/known")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let response = app.oneshot(request("/unknown")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(problem["type"], type_url("request#invalid-path"));
     }
 
     #[tokio::test]

@@ -1,4 +1,4 @@
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::{
     handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler},
     API_VERSION,
@@ -10,7 +10,7 @@ use agent_verification::{
     state::VerificationState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -103,7 +103,7 @@ pub(crate) async fn all_authorization_requests(
 pub(crate) async fn authorization_request(
     State(state): State<Arc<VerificationState>>,
     RequestActor(actor): RequestActor,
-    Path(authorization_request_id): Path<String>,
+    PathParams(authorization_request_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),

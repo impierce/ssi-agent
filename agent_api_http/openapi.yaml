@@ -495,6 +495,7 @@ paths:
       parameters:
       - name: connection_id
         in: path
+        description: Connection ID
         required: true
         schema:
           type: string
@@ -735,6 +736,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Credential ID
         required: true
         schema:
           type: string
@@ -758,6 +760,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Credential ID
         required: true
         schema:
           type: string
@@ -897,6 +900,7 @@ paths:
       parameters:
       - name: document_id
         in: path
+        description: Document ID
         required: true
         schema:
           type: string
@@ -1074,6 +1078,7 @@ paths:
       parameters:
       - name: catalog_id
         in: path
+        description: Catalog ID
         required: true
         schema:
           type: string
@@ -1096,6 +1101,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: Reissuance ID
         required: true
         schema:
           type: string
@@ -1148,6 +1154,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: Template ID
         required: true
         schema:
           type: string
@@ -1218,6 +1225,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Holder credential ID
         required: true
         schema:
           type: string
@@ -1260,6 +1268,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1285,6 +1294,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1318,6 +1328,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1388,6 +1399,7 @@ paths:
       parameters:
       - name: presentation_id
         in: path
+        description: Presentation ID
         required: true
         schema:
           type: string
@@ -1598,6 +1610,8 @@ paths:
         '200':
           description: Offer sent successfully
         '400':
+          description: Malformed JSON request body
+        '404':
           description: The credential offer does not exist
         '413':
           description: Request body larger than 2 MB
@@ -1622,6 +1636,8 @@ paths:
         '200':
           description: Offer sent successfully
         '400':
+          description: Malformed JSON request body
+        '404':
           description: The credential offer does not exist
         '413':
           description: Request body larger than 2 MB
@@ -1639,6 +1655,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Offer ID
         required: true
         schema:
           type: string

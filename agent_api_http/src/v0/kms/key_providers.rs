@@ -1,5 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, command_handler};
 use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
@@ -9,7 +9,7 @@ use agent_kms::key_provider::{
 use agent_kms::state::{get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection};
 use agent_kms::KmsState;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -214,7 +214,7 @@ pub(crate) async fn test_key_provider_connection(
 pub(crate) async fn get_key_provider_keys(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Path(provider_type): Path<KeyProviderType>,
+    PathParams(provider_type): PathParams<KeyProviderType>,
 ) -> Result<Response, ApiError> {
     let keys = list_key_provider_keys(&state, caller(actor), provider_type)
         .await

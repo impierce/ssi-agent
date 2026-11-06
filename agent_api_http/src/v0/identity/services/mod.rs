@@ -2,6 +2,7 @@ pub mod linked_domains;
 pub mod linked_vp;
 
 use crate::error::IntoApiErrorExt;
+use crate::extractors::PathParams;
 use crate::extractors::RequestActor;
 use crate::handlers::caller;
 use agent_identity::{
@@ -10,7 +11,7 @@ use agent_identity::{
     state::IdentityState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -101,7 +102,7 @@ pub(crate) async fn services(
 pub(crate) async fn service(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Path(service_id): Path<String>,
+    PathParams(service_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     queries::get_service(&state, caller(actor), &service_id)
         .await

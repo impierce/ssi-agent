@@ -1,6 +1,6 @@
 pub mod send;
 
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::{
     error::{type_url, IntoApiErrorExt},
     handlers::{caller, command_handler, query_handler},
@@ -15,7 +15,7 @@ use agent_library::{
     template::aggregate::{Status as TemplateStatus, Template},
 };
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Extension,
@@ -228,6 +228,7 @@ pub(crate) async fn all_offers(
     get,
     path = "/offers/{offer_id}",
     operation_id = "get_offer_by_id",
+    params(("offer_id" = String, Path, description = "Offer ID")),
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Offer retrieved successfully", body = OfferView),
@@ -239,7 +240,7 @@ pub(crate) async fn all_offers(
 pub(crate) async fn offer(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Path(offer_id): Path<String>,
+    PathParams(offer_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),

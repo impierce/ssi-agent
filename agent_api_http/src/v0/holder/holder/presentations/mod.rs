@@ -1,6 +1,6 @@
 pub mod presentation_signed;
 
-use crate::extractors::{JsonBody, RequestActor};
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::queries::HolderCredentialView,
@@ -8,7 +8,7 @@ use agent_holder::{
     state::HolderState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -55,6 +55,7 @@ pub(crate) async fn get_presentations(
     get,
     path = "/holder/presentations/{presentation_id}",
     operation_id = "get_holder_presentation_by_id",
+    params(("presentation_id" = String, Path, description = "Presentation ID")),
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Presentation retrieved successfully", body = Presentation),
@@ -66,7 +67,7 @@ pub(crate) async fn get_presentations(
 pub(crate) async fn presentation(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(presentation_id): Path<String>,
+    PathParams(presentation_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
