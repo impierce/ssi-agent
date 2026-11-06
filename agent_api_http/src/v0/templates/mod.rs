@@ -133,7 +133,7 @@ fn status_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
     ),
     responses(
         (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
-        (status = 400, description = "Malformed JSON request body, or an invalid template definition"),
+        (status = 400, description = "Malformed JSON request body, an empty `title`, or an invalid template definition"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -319,7 +319,7 @@ pub struct UpdateTemplateEndpointRequest {
     tags = ["Library", "Templates"],
     responses(
         (status = 204, description = "Template updated successfully"),
-        (status = 400, description = "Malformed JSON request body, or a missing template ID"),
+        (status = 400, description = "Malformed JSON request body, a missing template ID, or an empty `title`"),
         (status = 404, description = "Template not found"),
         (status = 422, description = "Request body does not match the expected schema"),
     )

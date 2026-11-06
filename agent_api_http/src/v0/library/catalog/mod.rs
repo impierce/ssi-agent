@@ -51,11 +51,10 @@ impl From<CatalogView> for CatalogDto {
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CreateCatalogRequest {
-    /// Without it the catalog has no name, which is rejected.
-    #[schema(required = true)]
     pub display: CatalogDisplay,
+    #[serde(default)]
     pub visibility: CatalogVisibility,
 }
 
@@ -240,11 +239,10 @@ pub(crate) async fn remove_templates_from_catalog(
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ChangeCatalogAppearanceRequest {
+    #[serde(default)]
     pub catalog_id: String,
-    /// Without it the catalog has no name, which is rejected.
-    #[schema(required = true)]
     pub display: CatalogDisplay,
 }
 

@@ -2,12 +2,13 @@ use std::convert::Infallible;
 
 use crate::error::type_url;
 use axum::{
+    body::Bytes,
     extract::{rejection::JsonRejection, FromRequest, FromRequestParts, Query, Request},
     Json,
 };
 use http::StatusCode;
 use http_api_problem::ApiError;
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use shared_kernel::authorization::Actor;
 
 /// Optional actor extracted from request extensions.
@@ -73,34 +74,53 @@ where
     type Rejection = ApiError;
 
     async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let Json(value) = Json::<serde_json::Value>::from_request(request, state)
-            .await
-            .map_err(json_rejection)?;
-
-        if !value.is_object() {
-            return Err(invalid_body("The request body must be a JSON object."));
+        if !has_json_content_type(request.headers()) {
+            return Err(ApiError::builder(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+                .title("Unsupported Media Type")
+                .type_url(type_url("request#unsupported-media-type"))
+                .message("The request body must be sent with `Content-Type: application/json`.")
+                .finish());
         }
 
-        serde_json::from_value(value)
-            .map(JsonBody)
-            .map_err(|error| invalid_body(error.to_string()))
+        let bytes = Bytes::from_request(request, state)
+            .await
+            .map_err(|rejection| malformed_body(rejection.body_text()))?;
+
+        if bytes.trim_ascii_start().first() != Some(&b'{') {
+            return Err(match serde_json::from_slice::<IgnoredAny>(&bytes) {
+                Ok(_) => invalid_body("The request body must be a JSON object."),
+                Err(error) => malformed_body(error.to_string()),
+            });
+        }
+
+        // Deserialized from the bytes rather than an intermediate `Value`, which would keep only the last of
+        // duplicate fields instead of rejecting them.
+        Json::<T>::from_bytes(&bytes)
+            .map(|Json(value)| JsonBody(value))
+            .map_err(|rejection| match rejection {
+                JsonRejection::JsonDataError(error) => invalid_body(error.body_text()),
+                rejection => malformed_body(rejection.body_text()),
+            })
     }
 }
 
-fn json_rejection(rejection: JsonRejection) -> ApiError {
-    match rejection {
-        JsonRejection::MissingJsonContentType(_) => ApiError::builder(StatusCode::UNSUPPORTED_MEDIA_TYPE)
-            .title("Unsupported Media Type")
-            .type_url(type_url("request#unsupported-media-type"))
-            .message("The request body must be sent with `Content-Type: application/json`.")
-            .finish(),
-        JsonRejection::JsonDataError(error) => invalid_body(error.body_text()),
-        rejection => ApiError::builder(StatusCode::BAD_REQUEST)
-            .title("Malformed Request Body")
-            .type_url(type_url("request#malformed-body"))
-            .message(rejection.body_text())
-            .finish(),
-    }
+/// `application/json` or any `application/*+json`, like [`axum::Json`].
+fn has_json_content_type(headers: &http::HeaderMap) -> bool {
+    headers
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.split(';').next().unwrap_or_default().trim().to_ascii_lowercase())
+        .is_some_and(|essence| {
+            essence == "application/json" || (essence.starts_with("application/") && essence.ends_with("+json"))
+        })
+}
+
+fn malformed_body(message: impl Into<String>) -> ApiError {
+    ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Malformed Request Body")
+        .type_url(type_url("request#malformed-body"))
+        .message(message.into())
+        .finish()
 }
 
 fn invalid_body(message: impl Into<String>) -> ApiError {
@@ -153,8 +173,41 @@ mod tests {
 
     #[tokio::test]
     async fn accepts_a_json_object() {
-        let (status, _) = send(Some("application/json"), r#"{"first": "a"}"#).await;
-        assert_eq!(status, StatusCode::NO_CONTENT);
+        for content_type in [
+            "application/json",
+            "application/json; charset=utf-8",
+            "application/merge-patch+json",
+        ] {
+            let (status, _) = send(Some(content_type), r#"{"first": "a"}"#).await;
+            assert_eq!(status, StatusCode::NO_CONTENT, "{content_type}");
+        }
+    }
+
+    #[tokio::test]
+    async fn query_rejection_is_a_problem() {
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct Params {
+            limit: Option<u8>,
+        }
+
+        let app = Router::new().route(
+            "/",
+            axum::routing::get(|QueryParams(_): QueryParams<Params>| async { StatusCode::NO_CONTENT }),
+        );
+        let response = app
+            .oneshot(Request::builder().uri("/?limit=many").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(problem["type"], type_url("request#invalid-query"));
     }
 
     #[tokio::test]
