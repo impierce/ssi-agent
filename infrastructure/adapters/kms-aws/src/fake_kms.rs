@@ -30,6 +30,8 @@ struct FakeKey {
     /// `None` for a key spec the fake does not sign with.
     signing_key: Option<SigningKey>,
     state: &'static str,
+    /// The tags it was created with, as key and value.
+    tags: Vec<(String, String)>,
 }
 
 impl FakeKey {
@@ -65,6 +67,10 @@ struct State {
     aliases: BTreeMap<String, String>,
     created: u8,
     refused: BTreeSet<&'static str>,
+    /// Operations that take effect but answer with an error, as when a response is lost.
+    failing_after: BTreeSet<&'static str>,
+    /// Operations answered this many more times before every request for them fails.
+    refused_after: BTreeMap<&'static str, usize>,
     delayed: BTreeMap<&'static str, Duration>,
 }
 
@@ -97,6 +103,7 @@ impl State {
                 spec,
                 signing_key,
                 state: "Enabled",
+                tags: Vec::new(),
             },
         );
         id
@@ -148,9 +155,22 @@ impl FakeKms {
         self.state.lock().unwrap().refused.insert(operation);
     }
 
+    /// Makes every request for `operation` take effect but answer with an error, as when its response is lost.
+    pub fn fail_after(&self, operation: &'static str) {
+        self.state.lock().unwrap().failing_after.insert(operation);
+    }
+
+    /// Answers the next `answered` requests for `operation`, then makes every one fail.
+    pub fn refuse_after(&self, operation: &'static str, answered: usize) {
+        self.state.lock().unwrap().refused_after.insert(operation, answered);
+    }
+
     /// Answers requests for `operation` again.
     pub fn allow(&self, operation: &'static str) {
-        self.state.lock().unwrap().refused.remove(operation);
+        let mut state = self.state.lock().unwrap();
+        state.refused.remove(operation);
+        state.failing_after.remove(operation);
+        state.refused_after.remove(operation);
     }
 
     /// Answers every request for `operation` only after `delay`.
@@ -163,6 +183,22 @@ impl FakeKms {
         let mut state = self.state.lock().unwrap();
         let target = state.resolve(id).unwrap();
         state.aliases.insert(alias.to_string(), target);
+    }
+
+    /// Every alias, in order.
+    pub fn aliases(&self) -> Vec<String> {
+        self.state.lock().unwrap().aliases.keys().cloned().collect()
+    }
+
+    /// The tags of every key, in the order they were created.
+    pub fn key_tags(&self) -> Vec<Vec<(String, String)>> {
+        self.state
+            .lock()
+            .unwrap()
+            .keys
+            .values()
+            .map(|key| key.tags.clone())
+            .collect()
     }
 
     /// The state of every key, in the order they were created.
@@ -200,6 +236,11 @@ impl Respond for Responder {
         let operation = operation(request);
         let delay = self.0.lock().unwrap().delayed.get(operation.as_str()).copied();
         let response = self.answer(&operation, request);
+        let response = if self.0.lock().unwrap().failing_after.contains(operation.as_str()) {
+            error("KMSInternalException")
+        } else {
+            response
+        };
         match delay {
             Some(delay) => response.set_delay(delay),
             None => response,
@@ -214,6 +255,12 @@ impl Responder {
 
         if state.refused.contains(operation) {
             return error("LimitExceededException");
+        }
+        if let Some(answered) = state.refused_after.get_mut(operation) {
+            if *answered == 0 {
+                return error("LimitExceededException");
+            }
+            *answered -= 1;
         }
 
         if operation == "CreateKey" {
@@ -231,6 +278,19 @@ impl Responder {
                 _ => return error("ValidationException"),
             };
             let id = state.insert(spec, Some(signing_key));
+            if let Some(key) = state.keys.get_mut(&id) {
+                key.tags = body["Tags"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|tag| {
+                        (
+                            tag["TagKey"].as_str().unwrap_or_default().to_string(),
+                            tag["TagValue"].as_str().unwrap_or_default().to_string(),
+                        )
+                    })
+                    .collect();
+            }
             return ResponseTemplate::new(200).set_body_json(json!({ "KeyMetadata": state.metadata(&id) }));
         }
 
