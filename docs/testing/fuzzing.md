@@ -106,9 +106,12 @@ need a remote issuer, wallet or agent.
 - `422` counts as an accepted answer to a schema-valid request (`positive_data_acceptance`): a request
   can match the schema and still refer to a template that is not published or a resource that does
   not exist, which the API answers with `422`. A `400` for schema-valid input stays a finding.
+- On the protocol endpoints (tag `Protocol`), `400` and redirects count as accepted too: OAuth 2.0 and
+  OpenID4VC answer well-formed requests with wrong values (an unknown code, an expired `request_uri`)
+  with `400` and an error code, and finish authorization with a redirect.
 
-`agent_application/docker/schemathesis_hooks.py` registers a deserializer for compact JWT responses
-(`application/jwt`), which Schemathesis would otherwise parse as JSON. It is loaded through
+`agent_application/docker/schemathesis_hooks.py` replaces the JSON deserializer so that compact JWT
+responses (`application/jwt`), which Schemathesis counts as JSON, are checked as text. It is loaded through
 `SCHEMATHESIS_HOOKS`.
 
 `agent_application/docker/fuzz.config.yaml` enables every switch that hides documented operations

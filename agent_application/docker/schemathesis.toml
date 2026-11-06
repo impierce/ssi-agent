@@ -62,3 +62,10 @@ parameters = { "path.offer_id" = { dictionary = "offers", probability = 0.5 } }
 [[operations]]
 include-operation-id-regex = "^(get_credential_by_id|update_credential_status)$"
 parameters = { "path.credential_id" = { dictionary = "credentials", probability = 0.5 } }
+
+# OAuth 2.0 and OpenID4VC answer well-formed requests with wrong values (an unknown code, an expired `request_uri`, an
+# unregistered client) with `400` and an error code, and finish authorization with a redirect: both are part of those
+# protocols' contracts rather than findings.
+[[operations]]
+include-tag = "Protocol"
+checks.positive_data_acceptance.expected-statuses = ["2xx", "3xx", "400", "401", "403", "404", "409", "422"]
