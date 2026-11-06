@@ -32,6 +32,8 @@ pub enum OAuth2AuthorizationError {
     InvalidClientIdError,
     #[error("Missing redirect URI")]
     MissingRedirectUriError,
+    #[error("The end-user denied the authorization request")]
+    AccessDenied,
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -105,9 +107,7 @@ impl OAuth2AuthorizationService {
             }
             ConsentStatus::Rejected => {
                 // TODO: where to redirect the user?
-                Err(OAuth2AuthorizationError::Internal(
-                    "Consent was rejected, but no redirect URI is specified".to_string(),
-                ))
+                Err(OAuth2AuthorizationError::AccessDenied)
             }
         }
     }

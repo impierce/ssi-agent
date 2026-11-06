@@ -37,7 +37,7 @@ use std::sync::Arc;
             description = "Redirect to the consent page",
             headers(("Location" = String, description = "The consent page URI")),
         ),
-        (status = 400, description = "The query string is invalid, or the authorization request is unknown, expired, or for another client"),
+        (status = 400, description = "The query string is invalid, the authorization request is unknown, expired, for another client or without a redirect URI (`invalid_request`), or the end-user denied consent (`access_denied`)"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -177,5 +177,41 @@ pub mod tests {
         let see_other_location = post_consent(&mut app, UNIME_CLIENT_ID.to_string(), request_uri, true).await;
 
         let _code = authorize_after_consent(&mut app, see_other_location).await;
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn authorization_after_denied_consent_is_access_denied() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+
+        let mut app = authorization::router((authorization_state, issuance_state));
+
+        let request_uri = par(&mut app, "issuer-state".to_string()).await;
+        let see_other_location = post_consent(&mut app, UNIME_CLIENT_ID.to_string(), request_uri, false).await;
+
+        let response = app
+            .call(Request::builder().uri(see_other_location).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "access_denied");
     }
 }

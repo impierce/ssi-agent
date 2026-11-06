@@ -84,7 +84,8 @@ impl IntoPublicError for OAuth2AuthorizationError {
             RequestNotFound => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
             ExpiredAuthorizationRequestError => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
             InvalidClientIdError => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
-            MissingRedirectUriError => PublicError::InternalServerError,
+            MissingRedirectUriError => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
+            AccessDenied => PublicError::from(AuthorizationErrorResponse::AccessDenied),
             Internal(_) => PublicError::InternalServerError,
         }
     }
@@ -101,7 +102,8 @@ impl IntoPublicError for ConsentQueryError {
         use ConsentQueryError::*;
         match self {
             RequestNotFound => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
-            ClientNotFound => PublicError::InternalServerError,
+            // Pushed authorization requests of unregistered clients are accepted, see `PushedAuthorizationService`.
+            ClientNotFound => PublicError::from(AuthorizationErrorResponse::UnauthorizedClient),
             Internal(_) => PublicError::InternalServerError,
         }
     }
@@ -118,7 +120,8 @@ impl IntoPublicError for ConsentError {
         use ConsentError::*;
         match self {
             RequestNotFound => PublicError::from(AuthorizationErrorResponse::InvalidRequest),
-            ClientNotFound => PublicError::InternalServerError,
+            // Pushed authorization requests of unregistered clients are accepted, see `PushedAuthorizationService`.
+            ClientNotFound => PublicError::from(AuthorizationErrorResponse::UnauthorizedClient),
             Internal(_) => PublicError::InternalServerError,
         }
     }
@@ -241,8 +244,13 @@ mod tests {
             ),
             (
                 OAuth2AuthorizationError::MissingRedirectUriError,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                None,
+                StatusCode::BAD_REQUEST,
+                INVALID_REQUEST,
+            ),
+            (
+                OAuth2AuthorizationError::AccessDenied,
+                StatusCode::BAD_REQUEST,
+                Some("access_denied"),
             ),
             (
                 OAuth2AuthorizationError::Internal("error".to_string()),
@@ -260,8 +268,8 @@ mod tests {
             ),
             (
                 ConsentQueryError::ClientNotFound,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                None,
+                StatusCode::BAD_REQUEST,
+                Some("unauthorized_client"),
             ),
             (
                 ConsentQueryError::Internal("error".to_string()),
@@ -273,7 +281,11 @@ mod tests {
 
         assert_public_errors(vec![
             (ConsentError::RequestNotFound, StatusCode::BAD_REQUEST, INVALID_REQUEST),
-            (ConsentError::ClientNotFound, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                ConsentError::ClientNotFound,
+                StatusCode::BAD_REQUEST,
+                Some("unauthorized_client"),
+            ),
             (
                 ConsentError::Internal("error".to_string()),
                 StatusCode::INTERNAL_SERVER_ERROR,
