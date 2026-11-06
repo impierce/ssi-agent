@@ -73,8 +73,8 @@ pub(crate) async fn offers_params(
     Ok(StatusCode::OK.into_response())
 }
 
-/// Logs what was offered, without the grant codes (`pre-authorized_code`, `issuer_state`) or the full
-/// `credential_offer_uri`, which works as a bearer reference to the offer.
+/// Logs what was offered, without the grant codes (`pre-authorized_code`, `issuer_state`) or full URLs: the
+/// `credential_offer_uri` works as a bearer reference to the offer, and either URL may carry credentials.
 fn log_credential_offer(credential_offer: &CredentialOffer) {
     match credential_offer {
         CredentialOffer::CredentialOfferUri(uri) => {
@@ -83,7 +83,7 @@ fn log_credential_offer(credential_offer: &CredentialOffer) {
         CredentialOffer::CredentialOffer(parameters) => {
             let grants = parameters.grants.as_ref();
             debug!(
-                credential_issuer = %parameters.credential_issuer,
+                credential_issuer_host = parameters.credential_issuer.host_str(),
                 credential_configuration_ids = ?*parameters.credential_configuration_ids,
                 pre_authorized_code_grant = grants.is_some_and(|grants| grants.pre_authorized_code.is_some()),
                 authorization_code_grant = grants.is_some_and(|grants| grants.authorization_code.is_some()),
@@ -104,7 +104,7 @@ mod tests {
             "openid-credential-offer://?credential_offer={}",
             urlencoding::encode(
                 &serde_json::json!({
-                    "credential_issuer": "https://issuer.example",
+                    "credential_issuer": "https://issuer.example/tenant?api_key=secret-api-key",
                     "credential_configuration_ids": ["badge"],
                     "grants": {
                         "authorization_code": { "issuer_state": "secret-issuer-state" },
@@ -122,8 +122,9 @@ mod tests {
         log_credential_offer(&credential_offer);
 
         assert!(logs_contain("Received credential offer"));
-        assert!(logs_contain("https://issuer.example"));
+        assert!(logs_contain("issuer.example"));
         assert!(logs_contain("badge"));
+        assert!(!logs_contain("secret-api-key"));
         assert!(!logs_contain("secret-pre-authorized-code"));
         assert!(!logs_contain("secret-issuer-state"));
     }
