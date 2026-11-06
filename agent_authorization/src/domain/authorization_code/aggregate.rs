@@ -4,7 +4,6 @@ use super::event::AuthorizationCodeEvent;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{authorization_request::CodeChallengeMethod, pkce};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -37,8 +36,6 @@ impl Aggregate for AuthorizationCode {
         use AuthorizationCodeCommand::*;
         use AuthorizationCodeError::*;
         use AuthorizationCodeEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateAuthorizationCode {
@@ -122,8 +119,6 @@ impl Aggregate for AuthorizationCode {
 
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationCodeEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             AuthorizationCodeCreated {

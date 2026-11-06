@@ -15,7 +15,6 @@ use oid4vci::proof::{KeyProofMetadata, ProofType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info};
 
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
@@ -211,8 +210,6 @@ impl Aggregate for ServerConfig {
         use ServerConfigError::*;
         use ServerConfigEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             InitializeServerMetadata {
                 authorization_server_metadata,
@@ -342,8 +339,6 @@ impl Aggregate for ServerConfig {
 
     fn apply(&mut self, event: Self::Event) {
         use ServerConfigEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ServerMetadataInitialized {
