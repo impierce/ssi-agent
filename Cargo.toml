@@ -73,7 +73,6 @@ mockall = "0.14"
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
-# `aws-lc-rs` is already the `rustls` backend; `rust_crypto` would add p256/p384 0.13 and rsa.
 jsonwebtoken = { version = "11.1", default-features = false, features = ["aws_lc_rs"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
