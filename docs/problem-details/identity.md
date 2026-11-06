@@ -4,7 +4,7 @@ This error occurs when a request references a connection_id which does not match
 
 ## Credential Issuer Metadata Fetch Failed
 
-This error occurs when the system is unable to retrieve credential issuer metadata from the connection's `/.well-known/openid-credential-issuer` endpoint. This may be caused by the remote server being unreachable, the URL being incorrect, or the endpoint not returning a valid metadata response.
+This error occurs when the system is unable to retrieve credential issuer metadata from the connection's `/.well-known/openid-credential-issuer` endpoint. This may be caused by the remote server being unreachable, the URL being incorrect, or the endpoint not returning a valid metadata response. It is returned with status `502 Bad Gateway`.
 
 ## Missing Domain
 
