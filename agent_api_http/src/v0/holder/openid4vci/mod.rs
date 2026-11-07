@@ -1,6 +1,7 @@
 use crate::handlers::public_command_handler;
 use crate::v0::openapi::PROTOCOL_TAG;
 use agent_holder::{offer::command::OfferCommand, state::HolderState};
+use agent_shared::sensitive::{sensitive, sensitive_debug};
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Response},
@@ -78,7 +79,11 @@ pub(crate) async fn offers_params(
 fn log_credential_offer(credential_offer: &CredentialOffer) {
     match credential_offer {
         CredentialOffer::CredentialOfferUri(uri) => {
-            debug!(host = uri.host_str(), "Received credential offer by reference");
+            debug!(
+                host = uri.host_str(),
+                credential_offer_uri = sensitive(uri),
+                "Received credential offer by reference"
+            );
         }
         CredentialOffer::CredentialOffer(parameters) => {
             let grants = parameters.grants.as_ref();
@@ -87,6 +92,7 @@ fn log_credential_offer(credential_offer: &CredentialOffer) {
                 credential_configuration_ids = ?*parameters.credential_configuration_ids,
                 pre_authorized_code_grant = grants.is_some_and(|grants| grants.pre_authorized_code.is_some()),
                 authorization_code_grant = grants.is_some_and(|grants| grants.authorization_code.is_some()),
+                credential_offer = sensitive_debug(parameters),
                 "Received credential offer"
             );
         }
@@ -96,11 +102,10 @@ fn log_credential_offer(credential_offer: &CredentialOffer) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_shared::sensitive::SensitiveValuesLogged;
 
-    #[test]
-    #[tracing_test::traced_test]
-    fn credential_offer_by_value_is_logged_without_grant_codes() {
-        let credential_offer: CredentialOffer = format!(
+    fn credential_offer_by_value() -> CredentialOffer {
+        format!(
             "openid-credential-offer://?credential_offer={}",
             urlencoding::encode(
                 &serde_json::json!({
@@ -117,9 +122,14 @@ mod tests {
             )
         )
         .parse()
-        .unwrap();
+        .unwrap()
+    }
 
-        log_credential_offer(&credential_offer);
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn credential_offer_by_value_is_logged_without_grant_codes() {
+        log_credential_offer(&credential_offer_by_value());
 
         assert!(logs_contain("Received credential offer"));
         assert!(logs_contain("issuer.example"));
@@ -130,6 +140,19 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn credential_offer_is_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = SensitiveValuesLogged::enable();
+
+        log_credential_offer(&credential_offer_by_value());
+
+        assert!(logs_contain("secret-pre-authorized-code"));
+        assert!(logs_contain("secret-issuer-state"));
+    }
+
+    #[test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     fn credential_offer_by_reference_is_logged_with_host_only() {
         let credential_offer: CredentialOffer =

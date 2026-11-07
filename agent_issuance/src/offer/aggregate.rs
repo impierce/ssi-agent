@@ -1,4 +1,5 @@
 use agent_shared::config::config;
+use agent_shared::sensitive::sensitive;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
@@ -248,7 +249,12 @@ impl Aggregate for Offer {
                                 .as_str(),
                         );
 
-                        debug!(%offer_id, target_host = target_url.host_str(), "Sending credential offer");
+                        debug!(
+                            %offer_id,
+                            target_host = target_url.host_str(),
+                            target = sensitive(&target),
+                            "Sending credential offer"
+                        );
 
                         client
                             .get(target)
@@ -264,7 +270,11 @@ impl Aggregate for Offer {
                         }])
                     }
                     DeliveryMethod::Email { recipient_email } => {
-                        debug!(%offer_id, "Sending credential offer via email");
+                        debug!(
+                            %offer_id,
+                            recipient_email = sensitive(&recipient_email),
+                            "Sending credential offer via email"
+                        );
 
                         // TODO: Remove this client-side logic.
                         let offer_link = config()
