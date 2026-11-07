@@ -290,7 +290,9 @@ The event store is used to persist events and serves as UniCore's persistence la
 
 - `mongodb` _(default)_
 - `postgres`
-- `in_memory`
+- `in_memory`: only with the `development` [profile](./profiles.md), where it is the default; the `production` profile
+  refuses to start with it. Events are lost on restart, and concurrent commands on the same aggregate are not detected
+  as conflicts, unlike with `mongodb` and `postgres`.
 
 ##### `connection_string`
 
