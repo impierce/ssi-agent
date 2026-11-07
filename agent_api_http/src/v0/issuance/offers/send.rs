@@ -79,6 +79,7 @@ pub struct TargetUrlOfferEndpointRequest {
         (status = 200, description = "Offer sent successfully"),
         (status = 400, description = "The credential offer does not exist"),
         (status = 422, description = "Request body does not match the expected schema"),
+        (status = 502, description = "The target URL could not be reached or did not accept the offer"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -213,12 +214,18 @@ mod tests {
 
     #[serial_test::serial]
     #[tokio::test]
-    async fn an_offer_rejected_by_the_organization_fails() {
+    async fn an_offer_is_delivered_through_a_redirect() {
         let app = app_with_offer().await;
         let wallet = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/credential_offer"))
-            .respond_with(ResponseTemplate::new(500))
+            .respond_with(ResponseTemplate::new(302).insert_header("Location", format!("{}/moved", wallet.uri())))
+            .mount(&wallet)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/moved"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
             .mount(&wallet)
             .await;
 
@@ -229,7 +236,32 @@ mod tests {
         )
         .await;
 
-        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    #[rstest::rstest]
+    #[case::server_error(500)]
+    #[case::not_found(404)]
+    #[case::not_modified(304)]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn an_offer_rejected_by_the_organization_fails(#[case] wallet_status: u16) {
+        let app = app_with_offer().await;
+        let wallet = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/credential_offer"))
+            .respond_with(ResponseTemplate::new(wallet_status))
+            .mount(&wallet)
+            .await;
+
+        let status = post(
+            &app,
+            "/offers/send-offer-to-organization",
+            json!({ "offerId": OFFER_ID, "targetUrl": wallet.uri() }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
     }
 
     #[serial_test::serial]

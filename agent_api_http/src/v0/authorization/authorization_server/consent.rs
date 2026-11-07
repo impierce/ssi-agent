@@ -76,7 +76,7 @@ pub struct ConsentForm {
             description = "Redirect to the client's redirect URI",
             headers(("Location" = String, description = "The client's redirect URI")),
         ),
-        (status = 400, description = "The `request_uri` does not refer to a pending authorization request"),
+        (status = 400, description = "The `request_uri` does not refer to a pending authorization request of the given client, or consent was already given or denied (`invalid_request`), or the client is not registered (`unauthorized_client`)"),
         (status = 415, description = "The request body is not `application/x-www-form-urlencoded`"),
         (status = 422, description = "The request body is not a valid consent form"),
     )

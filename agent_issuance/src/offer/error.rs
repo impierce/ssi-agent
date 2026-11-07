@@ -6,6 +6,8 @@ pub enum OfferError {
     MissingCredentialOfferError,
     #[error("Failed to send the Credential Offer to the `target_url`: {0}")]
     SendCredentialOfferError(#[source] reqwest::Error),
+    #[error("The `target_url` did not accept the Credential Offer: HTTP status {0}")]
+    CredentialOfferNotAcceptedError(u16),
     #[error("Credential is missing")]
     MissingCredentialError,
     #[error("Missing `Proof` in Credential Request")]
