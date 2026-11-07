@@ -13,7 +13,7 @@ use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
 use agent_kms::KmsState;
 use agent_library::state::LibraryState;
-use agent_shared::config::config;
+use agent_shared::config::{config, log_sensitive_values};
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, HttpBody as _},
@@ -190,7 +190,12 @@ async fn log_response(request: Request, next: Next) -> Response {
             "Request failed"
         );
         if let Some(detail) = problem.detail.as_deref() {
-            debug!(problem_detail = redact_urls(detail), "Request failure detail");
+            let detail = if log_sensitive_values() {
+                detail.to_string()
+            } else {
+                redact_urls(detail)
+            };
+            debug!(problem_detail = detail, "Request failure detail");
         }
         response
     } else if status.is_client_error() {
@@ -202,6 +207,10 @@ async fn log_response(request: Request, next: Next) -> Response {
             problem_title = problem.title,
             "Request rejected"
         );
+        // The detail can echo client input, including personal data.
+        if let Some(detail) = problem.detail.as_deref().filter(|_| log_sensitive_values()) {
+            debug!(problem_detail = detail, "Request rejection detail");
+        }
         response
     } else {
         debug!(status = status.as_u16(), latency_ms, "Request completed");
@@ -772,6 +781,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn urls_in_server_error_details_are_logged_redacted() {
         let router = Router::new()
@@ -797,6 +807,36 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    async fn error_details_are_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = agent_shared::sensitive::SensitiveValuesLogged::enable();
+        let server_error = Router::new()
+            .route(
+                "/",
+                get(|| async {
+                    ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                        .title("Send Credential Offer Error")
+                        .message("error sending request for url (https://wallet.example/credential_offer?credential_offer=secret-code)")
+                        .finish()
+                }),
+            )
+            .layer(middleware::from_fn(log_response));
+
+        for router in [server_error, problem_router(StatusCode::CONFLICT)] {
+            router
+                .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+        }
+
+        assert!(logs_contain("credential_offer=secret-code"));
+        assert!(logs_contain("Request rejection detail"));
+        assert!(logs_contain("detail with personal data"));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn client_errors_are_logged_at_info_with_the_problem_type() {
         let response = problem_router(StatusCode::CONFLICT)
@@ -831,6 +871,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn server_errors_are_logged_at_error_with_the_problem_type_and_the_detail_at_debug() {
         let response = problem_router(StatusCode::INTERNAL_SERVER_ERROR)

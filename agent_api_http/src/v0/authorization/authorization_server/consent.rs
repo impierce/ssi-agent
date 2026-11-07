@@ -6,6 +6,7 @@ use agent_authorization::application::consent_query_service::{ConsentPageViewMod
 use agent_authorization::application::consent_service::{ConsentService, ConsentServiceResponse};
 use agent_authorization::application::oauth2_authorization_service::GetConsentQuery;
 use agent_authorization::state::AuthorizationState;
+use agent_shared::sensitive::sensitive;
 use axum::Form;
 use axum::{
     extract::State,
@@ -91,7 +92,11 @@ pub async fn post_consent(
 ) -> Result<Response, PublicError> {
     match ConsentService::handle_consent(&state, client_id, request_uri, consent_given).await? {
         ConsentServiceResponse::Found(location) => {
-            debug!(path = location.split('?').next(), "Redirecting after consent");
+            debug!(
+                path = location.split('?').next(),
+                location = sensitive(&location),
+                "Redirecting after consent"
+            );
 
             Ok((StatusCode::FOUND, [(header::LOCATION, location)]).into_response())
         }

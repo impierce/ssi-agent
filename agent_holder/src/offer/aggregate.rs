@@ -3,6 +3,7 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
+use agent_shared::sensitive::sensitive_debug;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::vc::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
@@ -144,7 +145,11 @@ impl Aggregate for Offer {
                     _ => return Err(MissingPreAuthorizedCodeError),
                 };
 
-                debug!(grant_type = "pre-authorized_code", "Requesting access token");
+                debug!(
+                    grant_type = "pre-authorized_code",
+                    token_request = sensitive_debug(&token_request),
+                    "Requesting access token"
+                );
 
                 // Get an access token.
                 let token_response = wallet
@@ -271,6 +276,7 @@ impl Aggregate for Offer {
                 debug!(
                     count = credentials.len(),
                     holder_credential_ids = ?credentials.iter().map(|credential| &credential.holder_credential_id).collect::<Vec<_>>(),
+                    credentials = sensitive_debug(&credentials),
                     "Received credentials"
                 );
 
@@ -337,12 +343,13 @@ impl Aggregate for Offer {
     }
 }
 
-/// Logs the token response without the access and refresh tokens, which are bearer credentials.
+/// Logs the token response; the access and refresh tokens, which are bearer credentials, only as sensitive values.
 fn log_token_response(token_response: &TokenResponse) {
     debug!(
         token_type = %token_response.token_type,
         expires_in = ?token_response.expires_in,
         refresh_token = token_response.refresh_token.is_some(),
+        response = sensitive_debug(token_response),
         "Received token response"
     );
 }
@@ -711,22 +718,39 @@ pub mod tests {
             .then_expect_error_message(&OfferError::MissingCredentialOfferError.to_string());
     }
 
-    #[test]
-    #[tracing_test::traced_test]
-    fn token_response_is_logged_without_tokens() {
-        log_token_response(&TokenResponse {
+    fn token_response() -> TokenResponse {
+        TokenResponse {
             access_token: "secret-access-token".to_string(),
             token_type: "Bearer".to_string(),
             expires_in: Some(300),
             refresh_token: Some("secret-refresh-token".to_string()),
             scope: None,
             authorization_details: None,
-        });
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_without_tokens() {
+        log_token_response(&token_response());
 
         assert!(logs_contain("Received token response"));
         assert!(logs_contain("Bearer"));
         assert!(!logs_contain("secret-access-token"));
         assert!(!logs_contain("secret-refresh-token"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = agent_shared::sensitive::SensitiveValuesLogged::enable();
+
+        log_token_response(&token_response());
+
+        assert!(logs_contain("secret-access-token"));
+        assert!(logs_contain("secret-refresh-token"));
     }
 }
 

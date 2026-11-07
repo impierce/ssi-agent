@@ -80,6 +80,15 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
     CONFIG.write().unwrap()
 }
 
+/// Whether `dev.log_sensitive_values` is enabled, which is only possible with the `development` profile. Reads without
+/// blocking, so that logging while the configuration is being written cannot deadlock; reports `false` meanwhile.
+pub fn log_sensitive_values() -> bool {
+    CONFIG
+        .try_read()
+        .map(|config| config.dev.log_sensitive_values)
+        .unwrap_or(false)
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Config)]
 pub struct ApplicationConfiguration {
@@ -484,11 +493,15 @@ fn redact_url_credentials(value: &mut serde_json::Value) {
 pub struct DevConfig {
     #[serde(serialize_with = "redact")]
     pub api_key: Option<String>,
+    /// Logs tokens, codes, credential offers and personal data at `debug` that are redacted otherwise. Like every
+    /// `dev` setting, ignored with the `production` profile.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub log_sensitive_values: bool,
 }
 
 impl DevConfig {
     fn is_empty(&self) -> bool {
-        self.api_key.is_none()
+        self.api_key.is_none() && !self.log_sensitive_values
     }
 }
 
@@ -1154,6 +1167,44 @@ mod tests {
 
                 assert!(config.dev.api_key.is_none());
                 assert!(config.get_provisioned_config().get("dev").is_none());
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_log_sensitive_values_only_with_development_profile() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__DEV__LOG_SENSITIVE_VALUES", Some("true")),
+            ],
+            || {
+                let provisioned_config = || {
+                    config::Config::builder()
+                        .add_source(config::File::from_str(
+                            r#"
+                                application_url: "http://localhost"
+                                event_store:
+                                    type: "postgres"
+                                    connection_string: "postgresql://:test:"
+                                display:
+                                    - name: "UniCore"
+                            "#,
+                            config::FileFormat::Yaml,
+                        ))
+                        .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                        .build()
+                        .unwrap()
+                };
+
+                let development =
+                    ApplicationConfiguration::load(provisioned_config(), ApplicationProfile::Development).unwrap();
+                assert!(development.dev.log_sensitive_values);
+
+                let production =
+                    ApplicationConfiguration::load(provisioned_config(), ApplicationProfile::Production).unwrap();
+                assert!(!production.dev.log_sensitive_values);
             },
         );
     }

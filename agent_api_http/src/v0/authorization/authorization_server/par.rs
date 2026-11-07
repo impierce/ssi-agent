@@ -7,6 +7,7 @@ use agent_authorization::application::{
     pushed_authorization_service::PushedAuthorizationService,
 };
 use agent_authorization::state::AuthorizationState;
+use agent_shared::sensitive::{sensitive, sensitive_debug};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -66,7 +67,10 @@ pub(crate) async fn par(
 ) -> Result<Response, PublicError> {
     match authorization_request {
         AuthorizationRequestDto::InteractiveAuthorizationRequest(interactive_authorization_request) => {
-            debug!("Received interactive authorization request");
+            debug!(
+                request = sensitive_debug(&interactive_authorization_request),
+                "Received interactive authorization request"
+            );
 
             let interactive_authorization_response =
                 InteractiveAuthorizationService::handle_interactive_authorization_request(
@@ -82,7 +86,11 @@ pub(crate) async fn par(
             openid4vp_response,
             code_verifier,
         }) => {
-            debug!("Received follow-up interactive authorization request");
+            debug!(
+                auth_session = sensitive(&auth_session),
+                openid4vp_response = sensitive_debug(&openid4vp_response),
+                "Received follow-up interactive authorization request"
+            );
 
             let interactive_authorization_follow_up_response =
                 InteractiveAuthorizationService::handle_interactive_authorization_request_follow_up(
@@ -98,6 +106,7 @@ pub(crate) async fn par(
         AuthorizationRequestDto::PushedAuthorizationRequest(pushed_authorization_request) => {
             debug!(
                 state = ?pushed_authorization_request.state,
+                request = sensitive_debug(&pushed_authorization_request),
                 "Received pushed authorization request"
             );
 
