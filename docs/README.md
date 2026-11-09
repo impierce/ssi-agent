@@ -29,5 +29,6 @@ These markdown files are used as input for generating the official documentation
 - **[Architecture Decision Records](./adr/)** - Why certain design choices were made
 - **[Deployment](./deployment/)** - Production deployment guides
 - **[Metrics](./metrics/README.md)** - OpenTelemetry metrics export and how to add new metrics
+- **[Logging](./logging/README.md)** - Log levels and what never to log
 - **[Fuzzing](./testing/fuzzing.md)** - Property-based fuzzing of the HTTP API against its OpenAPI specification
 - **[Problem Details](./problem-details/)** - Troubleshooting and error handling
