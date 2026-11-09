@@ -127,7 +127,7 @@ where
         .layer(sensitive_headers())
 }
 
-/// Logs the requests to `router` the way UniCore logs its own, for routers that are served next to UniCore's:
+/// Logs the requests to `router`. Used for the built-in routes and exported for custom routes:
 /// - every request gets a span named after its route template (never its raw path), which records the response status;
 /// - every response gets one line ([`log_response`]): `debug` for success, `info` for client errors and `error` for
 ///   server errors, with the problem type and title but without headers or bodies;
@@ -756,7 +756,7 @@ mod tests {
 
     #[tokio::test]
     #[tracing_test::traced_test]
-    async fn routers_served_next_to_unicore_are_logged_like_its_own() {
+    async fn custom_routers_are_logged_like_built_in_routes() {
         #[derive(Clone)]
         struct ItemState;
 
