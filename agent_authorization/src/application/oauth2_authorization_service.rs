@@ -114,7 +114,6 @@ impl OAuth2AuthorizationService {
                 ))
             }
             ConsentStatus::Rejected => {
-                // TODO: where to redirect the user?
                 let redirect_uri = registered_redirect_uri(state, &oauth2_authorization_request).await?;
 
                 Ok(OAuth2AuthorizationServiceResponse::RedirectToClient(

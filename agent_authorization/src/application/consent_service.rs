@@ -10,7 +10,6 @@ use thiserror::Error;
 
 pub enum ConsentServiceResponse {
     Found(String),
-    // TODO: where to redirect to if consent is not given?
 }
 
 // TODO: improve error handling
