@@ -3,7 +3,7 @@ use crate::v0::issuance::error::{internal_server_error, PublicError};
 use crate::v0::openapi::PROTOCOL_TAG;
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
-use agent_shared::sensitive::sensitive_debug;
+use agent_shared::sensitive_logging::sensitive_debug;
 use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},

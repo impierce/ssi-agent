@@ -1,5 +1,5 @@
 use agent_shared::config::config;
-use agent_shared::sensitive::sensitive;
+use agent_shared::sensitive_logging::sensitive;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;

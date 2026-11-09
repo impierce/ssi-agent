@@ -6,7 +6,7 @@ pub mod error;
 pub mod generic_query;
 pub mod handlers;
 pub mod profile;
-pub mod sensitive;
+pub mod sensitive_logging;
 pub mod serde_json_value_ext;
 pub mod signed_credential_format;
 pub mod url_utils;

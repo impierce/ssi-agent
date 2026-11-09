@@ -865,7 +865,7 @@ mod tests {
     #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn error_details_are_logged_in_full_when_sensitive_values_are_logged() {
-        let _enabled = agent_shared::sensitive::SensitiveValuesLogged::enable();
+        let _enabled = agent_shared::sensitive_logging::SensitiveValuesLogged::enable();
         let server_error = Router::new()
             .route(
                 "/",

@@ -3,7 +3,7 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
-use agent_shared::sensitive::sensitive_debug;
+use agent_shared::sensitive_logging::sensitive_debug;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::vc::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
@@ -745,7 +745,7 @@ pub mod tests {
     #[serial_test::serial]
     #[tracing_test::traced_test]
     fn token_response_is_logged_in_full_when_sensitive_values_are_logged() {
-        let _enabled = agent_shared::sensitive::SensitiveValuesLogged::enable();
+        let _enabled = agent_shared::sensitive_logging::SensitiveValuesLogged::enable();
 
         log_token_response(&token_response());
 

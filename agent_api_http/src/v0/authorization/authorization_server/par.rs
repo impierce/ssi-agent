@@ -7,7 +7,7 @@ use agent_authorization::application::{
     pushed_authorization_service::PushedAuthorizationService,
 };
 use agent_authorization::state::AuthorizationState;
-use agent_shared::sensitive::{sensitive, sensitive_debug};
+use agent_shared::sensitive_logging::{sensitive, sensitive_debug};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
