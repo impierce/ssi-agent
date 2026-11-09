@@ -39,8 +39,29 @@ and agent reviewers alike.
 These are fine: identifiers (aggregate IDs, DIDs and Entity Identifiers of organisations), types and operation names,
 counts, sequence numbers, hosts, status codes and durations.
 
+Offer IDs are an exception for now. An offer ID is part of the offer's `credential_offer_uri` and is its `issuer_state`,
+so it gives access to the offer ([#508](https://github.com/impierce/ssi-agent/issues/508)). Don't add new log lines
+with one.
+
 When a value has to be shown, show its shape rather than its content, for example `count = items.len()` or
 `target_host = url.host_str()`.
+
+### Development only: `dev.log_sensitive_values`
+
+To debug a flow locally, a value from the list above may be added to a `debug` line through `sensitive` or
+`sensitive_debug` from `agent_shared::sensitive_logging`:
+
+```rust
+debug!(
+    path = location.split('?').next(),
+    location = sensitive(&location),
+    "Redirecting after consent"
+);
+```
+
+The field is left out of the event unless `dev.log_sensitive_values` is enabled, which only the `development` profile
+allows (see [Profiles](../configuration/profiles.md)). This is the only way such a value may reach a log line, and only
+at `debug`.
 
 ## Structured fields
 
@@ -50,7 +71,7 @@ Prefer fields over interpolation. Fields can be filtered and indexed, and they k
 // Avoid
 info!("Sending credential offer to: {}", target);
 // Prefer
-debug!(%offer_id, target_host = target_url.host_str(), "Sending credential offer");
+debug!(target_host = target_url.host_str(), "Sending credential offer");
 ```
 
 Use `%` (`Display`) for identifiers. A `?` (`Debug`) field on a domain type is almost always a dump of its content.
@@ -66,11 +87,13 @@ Use `%` (`Display`) for identifiers. A `?` (`Debug`) field on a domain type is a
 
 ## What already protects you
 
-- `SetSensitiveHeadersLayer` marks `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie` as sensitive
-  wherever headers are printed.
-- The `log_response` middleware in `agent_api_http` logs one line per request without headers or bodies. It logs the
-  detail of a server error separately at `debug`, with its URLs redacted.
-- The SSE events router is merged outside the trace layer, so event payloads are not logged.
+- `sensitive_headers()` in `agent_api_http` marks `Authorization`, `Proxy-Authorization`, `Cookie` and `Set-Cookie`
+  as sensitive wherever headers are printed. `app` applies it as the outermost layer.
+- `with_request_logging` in `agent_api_http` gives each request a span named after its route template, and logs one
+  line per response (`log_response`) without headers or bodies. It logs the detail of a server error separately at
+  `debug`, with its URLs redacted. With `dev.log_sensitive_values`, that detail is logged in full, and so is the detail
+  of a client error. `app` applies it to the built-in routes; apply it to custom routes as well.
+- The SSE events router is merged after `with_request_logging`, so event payloads are not logged.
 - Secret configuration fields are serialized as `<REDACTED>` (`#[serde(serialize_with = "redact")]`), and
   `ApplicationConfiguration::redacted()` also redacts URL credentials and webhook paths. Log the configuration only
   through `redacted()`.
