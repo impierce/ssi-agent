@@ -1,7 +1,7 @@
 use crate::handlers::public_command_handler;
 use crate::v0::openapi::PROTOCOL_TAG;
 use agent_holder::{offer::command::OfferCommand, state::HolderState};
-use agent_shared::sensitive::{sensitive, sensitive_debug};
+use agent_shared::sensitive_logging::{sensitive, sensitive_debug};
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Response},
@@ -102,7 +102,7 @@ fn log_credential_offer(credential_offer: &CredentialOffer) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_shared::sensitive::SensitiveValuesLogged;
+    use agent_shared::sensitive_logging::SensitiveValuesLogged;
 
     fn credential_offer_by_value() -> CredentialOffer {
         format!(

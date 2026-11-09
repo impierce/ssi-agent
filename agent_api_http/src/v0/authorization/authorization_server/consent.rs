@@ -6,7 +6,7 @@ use agent_authorization::application::consent_query_service::{ConsentPageViewMod
 use agent_authorization::application::consent_service::{ConsentService, ConsentServiceResponse};
 use agent_authorization::application::oauth2_authorization_service::GetConsentQuery;
 use agent_authorization::state::AuthorizationState;
-use agent_shared::sensitive::sensitive;
+use agent_shared::sensitive_logging::sensitive;
 use axum::Form;
 use axum::{
     extract::State,
