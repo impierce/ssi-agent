@@ -30,4 +30,13 @@ ignore = [
     # UniCore signs ES256 through stronghold_ext, which uses p256 v0.14 and crypto-bigint >= 0.7.6.
     # TODO: remove once Stronghold no longer pulls in iota-crypto with k256 v0.13.
     "RUSTSEC-2026-0387",
+
+    # RUSTSEC-2026-0459: libsqlite3-sys v0.30.1 — the bundled C SQLite is affected by CVE-2026-119375.
+    # libsqlite3-sys is only an entry in `Cargo.lock`: `sqlx` 0.8 lists its SQLite driver
+    # (`sqlx-sqlite`) as an optional dependency, which Cargo records even though no crate enables
+    # it. UniCore uses `sqlx` with PostgreSQL only, so SQLite is never compiled or linked
+    # (`cargo tree -i libsqlite3-sys --all-features --target all` prints nothing). Patched in 0.39.0,
+    # which needs a `sqlx` release that depends on it.
+    # TODO: remove once `sqlx` depends on libsqlite3-sys >= 0.39.0.
+    "RUSTSEC-2026-0459",
 ]
