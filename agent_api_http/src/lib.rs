@@ -90,59 +90,32 @@ where
         .clone()
         .map(v0::identity::well_known_router)
         .unwrap_or_default();
-    let app = Router::new()
-        .merge(identity_state.map(v0::identity::router).unwrap_or_default())
-        .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
-        .merge(
-            authorization_state
-                // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
-                // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
-                // the Issuance Bounded Context.
-                .zip(issuance_state.clone())
-                .map(v0::authorization::router)
-                .unwrap_or_default(),
-        )
-        .merge(
-            issuance_state
-                .zip(library_state.clone())
-                .map(v0::issuance::router)
-                .unwrap_or_default(),
-        )
-        .merge(holder_state.map(v0::holder::router).unwrap_or_default())
-        .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(kms_state.map(v0::kms::router).unwrap_or_default())
-        .merge(public::router(library_state))
-        // Trace layers
-        .layer(
-            ServiceBuilder::new()
-                .layer(
-                    TraceLayer::new_for_http()
-                        .make_span_with(|request: &Request<_>| {
-                            let path = request
-                                .extensions()
-                                .get::<MatchedPath>()
-                                .map(MatchedPath::as_str)
-                                // The raw path of an unmatched request is client input and may carry personal data.
-                                .unwrap_or("<unmatched>");
-                            info_span!(
-                                "HTTP Request",
-                                method = ?request.method(),
-                                path,
-                                "http.response.status_code" = field::Empty,
-                                "otel.status_code" = field::Empty,
-                            )
-                        })
-                        .on_request(())
-                        .on_response(())
-                        .on_body_chunk(())
-                        .on_eos(())
-                        .on_failure(()),
-                )
-                .layer(middleware::from_fn(log_response))
-                .layer(middleware::from_fn(reject_null_bytes)),
-        )
-        // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
-        .merge(events_state.map(v0::events::router).unwrap_or_default());
+    let app = with_request_logging(
+        Router::new()
+            .merge(identity_state.map(v0::identity::router).unwrap_or_default())
+            .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
+            .merge(
+                authorization_state
+                    // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
+                    // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
+                    // the Issuance Bounded Context.
+                    .zip(issuance_state.clone())
+                    .map(v0::authorization::router)
+                    .unwrap_or_default(),
+            )
+            .merge(
+                issuance_state
+                    .zip(library_state.clone())
+                    .map(v0::issuance::router)
+                    .unwrap_or_default(),
+            )
+            .merge(holder_state.map(v0::holder::router).unwrap_or_default())
+            .merge(verification_state.map(v0::verification::router).unwrap_or_default())
+            .merge(kms_state.map(v0::kms::router).unwrap_or_default())
+            .merge(public::router(library_state)),
+    )
+    // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
+    .merge(events_state.map(v0::events::router).unwrap_or_default());
 
     let app = if application_base_path == "/" {
         app
@@ -151,7 +124,55 @@ where
     };
     app.merge(well_known)
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
-        .layer(SetSensitiveHeadersLayer::new(SENSITIVE_HEADERS))
+        .layer(sensitive_headers())
+}
+
+/// Logs the requests to `router` the way UniCore logs its own, for routers that are served next to UniCore's:
+/// - every request gets a span named after its route template (never its raw path), which records the response status;
+/// - every response gets one line ([`log_response`]): `debug` for success, `info` for client errors and `error` for
+///   server errors, with the problem type and title but without headers or bodies;
+/// - requests carrying a `NUL` are turned away ([`reject_null_bytes`]), since the event store cannot hold one.
+///
+/// Merge routes whose traffic must not be logged, such as event streams, after calling this.
+pub fn with_request_logging<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router.layer(
+        ServiceBuilder::new()
+            .layer(
+                TraceLayer::new_for_http()
+                    .make_span_with(|request: &Request<Body>| {
+                        let path = request
+                            .extensions()
+                            .get::<MatchedPath>()
+                            .map(MatchedPath::as_str)
+                            // The raw path of an unmatched request is client input and may carry personal data.
+                            .unwrap_or("<unmatched>");
+                        info_span!(
+                            "HTTP Request",
+                            method = ?request.method(),
+                            path,
+                            "http.response.status_code" = field::Empty,
+                            "otel.status_code" = field::Empty,
+                        )
+                    })
+                    .on_request(())
+                    .on_response(())
+                    .on_body_chunk(())
+                    .on_eos(())
+                    .on_failure(()),
+            )
+            .layer(middleware::from_fn(log_response))
+            .layer(middleware::from_fn(reject_null_bytes)),
+    )
+}
+
+/// Marks the headers that carry credentials as sensitive, so that their values are redacted wherever headers are
+/// printed. Apply it as the outermost layer.
+#[must_use]
+pub fn sensitive_headers() -> SetSensitiveHeadersLayer {
+    SetSensitiveHeadersLayer::new(SENSITIVE_HEADERS)
 }
 
 /// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
@@ -731,6 +752,40 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert!(!logs_contain("jane.doe@example.org"));
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn routers_served_next_to_unicore_are_logged_like_its_own() {
+        #[derive(Clone)]
+        struct ItemState;
+
+        let router = with_request_logging(Router::<ItemState>::new().route(
+            "/items/{item_id}",
+            get(|State(ItemState)| async {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Item Error")
+                    .finish()
+            }),
+        ))
+        .with_state(ItemState);
+
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri("/items/42").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(logs_contain("Request failed"));
+        assert!(logs_contain("Item Error"));
+        assert!(logs_contain("/items/{item_id}"));
+        assert!(!logs_contain("/items/42"));
+
+        let response = router
+            .oneshot(Request::builder().uri("/items/a%00b").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     fn problem_router(status: StatusCode) -> Router {
