@@ -35,7 +35,7 @@ use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::sync::Arc;
 use tokio::io;
 use tower_http::cors::CorsLayer;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use verification_authorization::VerificationAuthorizationAdapter;
 
 // Re-export states
@@ -317,6 +317,9 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         };
 
     info!(configuration = %config().redacted(), "Configuration");
+    if agent_shared::config::log_sensitive_values() {
+        warn!("`dev.log_sensitive_values` is enabled: tokens, codes, credential offers and personal data are logged at `debug`");
+    }
 
     agent_authorization::state::initialize(&authorization_state)
         .await
