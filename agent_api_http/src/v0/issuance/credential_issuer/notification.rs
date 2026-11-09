@@ -3,6 +3,7 @@ use crate::v0::issuance::error::{internal_server_error, PublicError};
 use crate::v0::openapi::PROTOCOL_TAG;
 use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
+use agent_shared::sensitive_logging::sensitive_debug;
 use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Json, State},
@@ -12,10 +13,9 @@ use axum_auth::AuthBearer;
 use oid4vci::errors::NotificationErrorResponse;
 use oid4vci::errors::OID4VCError;
 use oid4vci::notification_request::NotificationRequest;
-use serde_json::json;
 use std::sync::Arc;
+use tracing::debug;
 
-use tracing::info;
 /// Notify the credential issuer
 ///
 /// Receives a notification about the outcome of a credential issuance, as defined by
@@ -53,12 +53,17 @@ pub async fn notification(
     AuthBearer(access_token): AuthBearer,
     Json(raw_value): Json<serde_json::Value>,
 ) -> Result<Response, PublicError> {
-    info!("Notification Request: {}", json!(raw_value));
-
     let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
 
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
+
+    debug!(
+        notification_id = %notification_request.notification_id,
+        event = ?notification_request.event,
+        request = sensitive_debug(&notification_request),
+        "Received notification"
+    );
 
     let credentials = match public_query_handler("all_credentials", &state.query.all_credentials).await? {
         Some(all_credentials) => all_credentials.credentials,

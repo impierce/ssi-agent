@@ -3,6 +3,7 @@ use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
+use agent_shared::sensitive_logging::sensitive_debug;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::vc::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
@@ -13,7 +14,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
 pub enum Status {
@@ -69,8 +70,6 @@ impl Aggregate for Offer {
         use OfferCommand::*;
         use OfferError::*;
         use OfferEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             ReceiveCredentialOffer {
@@ -146,7 +145,11 @@ impl Aggregate for Offer {
                     _ => return Err(MissingPreAuthorizedCodeError),
                 };
 
-                info!("token_request: {:?}", token_request);
+                debug!(
+                    grant_type = "pre-authorized_code",
+                    token_request = sensitive_debug(&token_request),
+                    "Requesting access token"
+                );
 
                 // Get an access token.
                 let token_response = wallet
@@ -159,7 +162,7 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|_| TokenResponseError)?;
 
-                info!("token_response: {:?}", token_response);
+                log_token_response(&token_response);
 
                 Ok(vec![
                     CredentialOfferAccepted {
@@ -215,7 +218,7 @@ impl Aggregate for Offer {
                             None
                         };
 
-                        info!("nonce: {nonce:?}");
+                        debug!(nonce = ?nonce, "Requested nonce");
 
                         // Determine if anonymous access is supported.
                         // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-8.2.1.1-2.2.2.2
@@ -270,7 +273,12 @@ impl Aggregate for Offer {
                     }
                 };
 
-                info!("credentials: {credentials:?}");
+                debug!(
+                    count = credentials.len(),
+                    holder_credential_ids = ?credentials.iter().map(|credential| &credential.holder_credential_id).collect::<Vec<_>>(),
+                    credentials = sensitive_debug(&credentials),
+                    "Received credentials"
+                );
 
                 Ok(vec![CredentialResponseReceived {
                     received_offer_id,
@@ -307,8 +315,6 @@ impl Aggregate for Offer {
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             CredentialOfferReceived {
                 credential_offer,
@@ -335,6 +341,17 @@ impl Aggregate for Offer {
             }
         }
     }
+}
+
+/// Logs the token response; the access and refresh tokens, which are bearer credentials, only as sensitive values.
+fn log_token_response(token_response: &TokenResponse) {
+    debug!(
+        token_type = %token_response.token_type,
+        expires_in = ?token_response.expires_in,
+        refresh_token = token_response.refresh_token.is_some(),
+        response = sensitive_debug(token_response),
+        "Received token response"
+    );
 }
 
 #[cfg(test)]
@@ -700,6 +717,41 @@ pub mod tests {
             .when_async(OfferCommand::RejectCredentialOffer { received_offer_id })
             .await
             .then_expect_error_message(&OfferError::MissingCredentialOfferError.to_string());
+    }
+
+    fn token_response() -> TokenResponse {
+        TokenResponse {
+            access_token: "secret-access-token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: Some(300),
+            refresh_token: Some("secret-refresh-token".to_string()),
+            scope: None,
+            authorization_details: None,
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_without_tokens() {
+        log_token_response(&token_response());
+
+        assert!(logs_contain("Received token response"));
+        assert!(logs_contain("Bearer"));
+        assert!(!logs_contain("secret-access-token"));
+        assert!(!logs_contain("secret-refresh-token"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = agent_shared::sensitive_logging::SensitiveValuesLogged::enable();
+
+        log_token_response(&token_response());
+
+        assert!(logs_contain("secret-access-token"));
+        assert!(logs_contain("secret-refresh-token"));
     }
 }
 

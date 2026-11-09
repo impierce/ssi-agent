@@ -1,5 +1,6 @@
 use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
 use agent_issuance::issuance_state;
+use agent_issuance::server_config::command::ServerConfigCommand;
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::library_state;
@@ -85,6 +86,153 @@ async fn test_template_created_registers_credential_configuration() {
         .unwrap()
         .unwrap();
     assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_unchanged_credential_configuration_repairs_a_server_config_view_that_lacks_it() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "my-template";
+    let event = || {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    projection.dispatch(template_id, &[event()]).await;
+
+    // A view write that lost against a concurrent one, while the aggregate holds the configuration.
+    let (mut view, context) = issuance
+        .query
+        .server_config
+        .load_with_context(SERVER_CONFIG_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    view.credential_configurations.remove(template_id);
+    issuance.query.server_config.update_view(view, context).await.unwrap();
+
+    projection.dispatch(template_id, &[event()]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_unchanged_credential_configuration_repairs_metadata_replaced_by_a_late_initialization() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "my-template";
+    let event = || {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    projection.dispatch(template_id, &[event()]).await;
+
+    // A second instance starting on the same fresh event store initializes after the publish: the
+    // metadata no longer advertises the configuration, while the configurations still hold it.
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut credential_issuer_metadata = server_config.credential_issuer_metadata.clone();
+    credential_issuer_metadata.credential_configurations_supported.clear();
+    command_handler(
+        SERVER_CONFIG_ID,
+        &issuance.command.server_config,
+        ServerConfigCommand::InitializeServerMetadata {
+            authorization_server_metadata: Box::new(server_config.authorization_server_metadata.clone()),
+            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+            cryptographic_binding_methods_supported: server_config.cryptographic_binding_methods_supported.clone(),
+            signing_algorithms_supported: server_config.signing_algorithms_supported.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+    assert!(!server_config.advertises_credential_configurations());
+
+    projection.dispatch(template_id, &[event()]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config
+        .credential_issuer_metadata
+        .credential_configurations_supported
+        .contains_key(template_id));
+    assert!(server_config.advertises_credential_configurations());
+}
+
+#[tokio::test]
+async fn test_archiving_removes_a_credential_configuration_that_the_server_config_view_lacks() {
+    let (issuance, _library, projection) = setup().await;
+
+    let published = |template_id: &str| {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    let template_id = "archived-right-after-publish";
+    projection.dispatch(template_id, &[published(template_id)]).await;
+
+    // The view write of the publish has not landed yet when the archive is handled.
+    let (mut view, context) = issuance
+        .query
+        .server_config
+        .load_with_context(SERVER_CONFIG_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    view.credential_configurations.remove(template_id);
+    issuance.query.server_config.update_view(view, context).await.unwrap();
+
+    let archive_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 2,
+        payload: TemplateEvent::StatusUpdated {
+            template_id: template_id.to_string(),
+            status: Status::Archived,
+            modified_at: "2024-01-01T00:01:00Z".to_string(),
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[archive_event]).await;
+
+    // Every server config event carries all credential configurations of the aggregate.
+    projection
+        .dispatch("other-template", &[published("other-template")])
+        .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key("other-template"));
+    assert!(!server_config.credential_configurations.contains_key(template_id));
 }
 
 #[tokio::test]

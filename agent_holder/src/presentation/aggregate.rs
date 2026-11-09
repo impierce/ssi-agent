@@ -11,7 +11,6 @@ use jsonwebtoken::Header;
 use oid4vc_core::{Sign as _, Subject as _};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[schema(as = PresentationView)]
@@ -39,8 +38,6 @@ impl Aggregate for Presentation {
         use PresentationCommand::*;
         use PresentationError::*;
         use PresentationEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreatePresentation {
@@ -135,8 +132,6 @@ impl Aggregate for Presentation {
 
     fn apply(&mut self, event: Self::Event) {
         use PresentationEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             PresentationCreated {

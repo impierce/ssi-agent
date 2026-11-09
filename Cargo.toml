@@ -28,7 +28,9 @@ members = [
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.95.0"
-license-file = "LICENSE"
+license = "Apache-2.0"
+repository = "https://github.com/impierce/ssi-agent"
+authors = ["Impierce Technologies B.V."]
 publish = false
 
 [workspace.lints.clippy]
@@ -38,11 +40,11 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-oid4vc-core = "0.4"
-oid4vc-manager = "0.4"
-oid4vci = { version = "0.4", features = ["utoipa"] }
-oid4vp = "0.4"
-siopv2 = "0.4"
+oid4vc-core = "0.5"
+oid4vc-manager = "0.5"
+oid4vci = { version = "0.5", features = ["utoipa"] }
+oid4vp = "0.5"
+siopv2 = "0.5"
 
 identity-kit = { version = "0.4", default-features = false, features = [
     "did-jwk",
@@ -71,12 +73,12 @@ mockall = "0.14"
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
 jsonschema = "0.46"
-jsonwebtoken = { version = "11.1", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "11.1", default-features = false, features = ["aws_lc_rs"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
-mongo-es = "0.4.1"
+mongo-es = "0.4.2"
 once_cell = { version = "1.19" }
-opentelemetry = "0.31"
+opentelemetry = "0.33"
 percent-encoding = "2.3"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = [
@@ -99,7 +101,7 @@ thiserror = "1.0"
 tokio = { version = "1.46", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.6", features = ["compression-gzip", "cors", "trace"] }
+tower-http = { version = "0.6", features = ["compression-gzip", "cors", "sensitive-headers", "trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-test = { version = "0.2" }

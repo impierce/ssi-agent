@@ -6,7 +6,6 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use strum::{Display, EnumString};
-use tracing::info;
 use utoipa::ToSchema;
 
 /// The kinds of key providers an instance can connect to. An instance connects to at most one provider of each type,
@@ -80,8 +79,6 @@ impl Aggregate for KeyProviders {
     ) -> Result<(), Self::Error> {
         use KeyProviderCommand::{AddKeyProvider, RemoveKeyProvider};
         use KeyProviderEvent::{KeyProviderAdded, KeyProviderRemoved};
-
-        info!("Handling command: {:?}", command);
 
         let events = match command {
             AddKeyProvider { provider_type, name } => {

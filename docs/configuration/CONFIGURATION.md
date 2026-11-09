@@ -267,6 +267,8 @@ The format of the log output.
 - `json` _(default)_
 - `text`
 
+When traces are exported via OpenTelemetry, `json` log lines written within a span carry its `trace_id` and `span_id`.
+
 #### Example
 
 ```yaml

@@ -4,7 +4,6 @@ use agent_shared::config::Authorization;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use tracing::{debug, info};
 
 pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
@@ -227,8 +226,6 @@ impl Aggregate for Template {
     ) -> Result<(), Self::Error> {
         use TemplateCommand::*;
         use TemplateEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateNewTemplate {
@@ -657,8 +654,6 @@ impl Aggregate for Template {
 
     fn apply(&mut self, event: Self::Event) {
         use TemplateEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             TemplateCreated {

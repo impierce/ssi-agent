@@ -5,6 +5,11 @@ event_store:
   # connection_string: "" <== Should be injected through the env variable `UNICORE__EVENT_STORE__CONNECTION_STRING`
 application_url: "https://ssi-agent.example.org"
 
+# Only with the `development` profile; ignored with the `production` profile.
+dev:
+  # Logs tokens, codes, credential offers and personal data at `debug` that are redacted otherwise.
+  log_sensitive_values: false
+
 did_methods:
   did_jwk:
     enabled: true
