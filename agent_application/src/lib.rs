@@ -364,7 +364,7 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
         ),
         (
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(AwsKmsAmbientKeyProvider::new()),
+            Arc::new(aws_kms_provider(config().deployment_alias.clone())),
         ),
     ]
     .into();
@@ -373,6 +373,17 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
     Some(Arc::new(
         kms_state(builder, event_bus, development_providers_allowed, adapters).await,
     ))
+}
+
+/// The AWS KMS provider, generating keys for the deployment `deployment_alias`, if any.
+fn aws_kms_provider(deployment_alias: Option<String>) -> AwsKmsAmbientKeyProvider {
+    let provider = AwsKmsAmbientKeyProvider::new();
+    match deployment_alias {
+        Some(alias) => provider
+            .with_deployment_alias(alias)
+            .unwrap_or_else(|error| panic!("`UNICORE__DEPLOYMENT_ALIAS` is invalid: {error}")),
+        None => provider,
+    }
 }
 
 /// Builds the full core SSI agent Router (app + metadata + probes).
