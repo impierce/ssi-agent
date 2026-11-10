@@ -13,7 +13,7 @@ pub const DELETE_PUBLISHER_OPERATION: &str = "event_publishing.publishers.delete
 #[must_use]
 pub fn command_operation_name(command: &EventPublishingCommand) -> &'static str {
     match command {
-        EventPublishingCommand::EventPublisher { command, .. } => event_publisher_command_operation(command),
+        EventPublishingCommand::EventPublisher(command) => event_publisher_command_operation(command),
     }
 }
 

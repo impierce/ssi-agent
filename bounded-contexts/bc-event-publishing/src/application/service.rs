@@ -62,7 +62,7 @@ impl ApplicationContext for EventPublishingContext {
         caller: &Caller,
     ) -> Result<String, Self::CommandError> {
         match command {
-            EventPublishingCommand::EventPublisher { actor: _, command } => {
+            EventPublishingCommand::EventPublisher(command) => {
                 command_handler::dispatch_with_caller(&self.event_publisher, aggregate_id, command, caller).await?;
             }
         }

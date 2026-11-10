@@ -1,24 +1,14 @@
 use crate::domain::event_publisher::{command::EventPublisherCommand, error::EventPublisherError};
-use shared_kernel::{authorization::Actor, cqrs_es::AggregateError};
+use shared_kernel::cqrs_es::AggregateError;
 
 #[derive(Debug)]
 pub enum EventPublishingCommand {
-    EventPublisher {
-        actor: Option<Actor>,
-        command: EventPublisherCommand,
-    },
-}
-
-impl EventPublishingCommand {
-    #[must_use]
-    pub fn event_publisher(actor: Option<Actor>, command: EventPublisherCommand) -> Self {
-        Self::EventPublisher { actor, command }
-    }
+    EventPublisher(EventPublisherCommand),
 }
 
 impl From<EventPublisherCommand> for EventPublishingCommand {
     fn from(command: EventPublisherCommand) -> Self {
-        Self::event_publisher(None, command)
+        Self::EventPublisher(command)
     }
 }
 
