@@ -3020,6 +3020,7 @@ fn origin(digest_byte: char) -> TemplateOrigin {
         source: "https://issuer.example".to_string(),
         source_template_id: "0b7c".to_string(),
         digest: format!("sha256-{}", digest_byte.to_string().repeat(64)),
+        check_for_updates: true,
     }
 }
 
@@ -3140,6 +3141,68 @@ async fn test_update_origin_replaces_origin(template_id: String) {
             origin: Some(origin('b')),
             modified_at: test_utils::modified_at(),
         }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_turns_update_checks_off_and_on(template_id: String) {
+    let opted_out = TemplateOrigin {
+        check_for_updates: false,
+        ..origin('a')
+    };
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(opted_out.clone()),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id: template_id.clone(),
+            origin: Some(opted_out.clone()),
+            modified_at: test_utils::modified_at(),
+        }]);
+
+    TemplateTestFramework::with(())
+        .given(vec![
+            template_created_event_with_origin(&template_id, Some(origin('a'))),
+            TemplateEvent::OriginUpdated {
+                template_id: template_id.clone(),
+                origin: Some(opted_out),
+                modified_at: test_utils::modified_at(),
+            },
+        ])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('a')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+/// Whether the importer checks for updates is about the copy, not its content, so it never changes the digest.
+#[test]
+fn update_checks_never_change_the_digest() {
+    let mut template = Template {
+        origin: Some(origin('a')),
+        ..Template::default()
+    };
+    let digest = template.public_content().digest();
+
+    template.origin = Some(TemplateOrigin {
+        check_for_updates: false,
+        ..origin('a')
+    });
+
+    assert_eq!(template.public_content().digest(), digest);
 }
 
 #[rstest]

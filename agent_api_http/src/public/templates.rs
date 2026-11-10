@@ -281,6 +281,7 @@ mod tests {
                 source: "https://issuer.example".to_string(),
                 source_template_id: "0b7c".to_string(),
                 digest: format!("sha256-{}", "a".repeat(64)),
+                check_for_updates: true,
             }),
             holder_authorization: agent_shared::config::Authorization {
                 pre_authorized: false,

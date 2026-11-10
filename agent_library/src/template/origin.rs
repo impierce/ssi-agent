@@ -18,6 +18,16 @@ pub struct TemplateOrigin {
     /// Digest of the template's public content at import time: `sha256-` followed by 64 lowercase
     /// hexadecimal digits.
     pub digest: String,
+    /// Whether the importer wants to hear about changes at the source. Off for a copy that is meant to be taken once
+    /// and maintained locally. Not part of the template's public content, so it never changes its digest. Absent means
+    /// `true`.
+    #[serde(default = "check_for_updates_by_default")]
+    #[schema(default = true)]
+    pub check_for_updates: bool,
+}
+
+fn check_for_updates_by_default() -> bool {
+    true
 }
 
 impl TemplateOrigin {
@@ -71,6 +81,7 @@ mod tests {
             source: source.to_string(),
             source_template_id: source_template_id.to_string(),
             digest: digest.to_string(),
+            check_for_updates: true,
         }
     }
 
@@ -127,7 +138,26 @@ mod tests {
                 "source": "https://issuer.example",
                 "sourceTemplateId": "0b7c",
                 "digest": DIGEST,
+                "checkForUpdates": true,
             })
         );
+    }
+
+    #[test]
+    fn checks_for_updates_unless_told_otherwise() {
+        let stored: TemplateOrigin = serde_json::from_value(serde_json::json!({
+            "source": "https://issuer.example",
+            "sourceTemplateId": "0b7c",
+            "digest": DIGEST,
+        }))
+        .unwrap();
+        assert!(stored.check_for_updates);
+
+        let opted_out = TemplateOrigin {
+            check_for_updates: false,
+            ..origin("https://issuer.example", "0b7c", DIGEST)
+        };
+        let round_trip: TemplateOrigin = serde_json::from_value(serde_json::to_value(&opted_out).unwrap()).unwrap();
+        assert_eq!(round_trip, opted_out);
     }
 }

@@ -5577,6 +5577,13 @@ components:
       - sourceTemplateId
       - digest
       properties:
+        checkForUpdates:
+          type: boolean
+          description: |-
+            Whether the importer wants to hear about changes at the source. Off for a copy that is meant to be taken once
+            and maintained locally. Not part of the template's public content, so it never changes its digest. Absent means
+            `true`.
+          default: true
         digest:
           type: string
           description: |-

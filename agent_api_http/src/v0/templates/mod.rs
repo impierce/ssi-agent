@@ -1563,7 +1563,12 @@ mod tests {
         )
         .await;
 
-        assert_eq!(created["origin"], origin_json(&digest_of('a')));
+        let mut stored = origin_json(&digest_of('a'));
+        stored["checkForUpdates"] = json!(true);
+        assert_eq!(
+            created["origin"], stored,
+            "an origin given without `checkForUpdates` checks for updates"
+        );
     }
 
     #[tokio::test]
