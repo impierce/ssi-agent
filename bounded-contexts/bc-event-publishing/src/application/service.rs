@@ -224,7 +224,7 @@ mod tests {
         context
             .handle_command(
                 &pub_id,
-                EventPublisherCommand::DeactivateEventPublisher { id: pub_id.clone() }.into(),
+                EventPublisherCommand::DeactivateEventPublisher.into(),
                 &Caller::Internal,
             )
             .await
@@ -242,7 +242,7 @@ mod tests {
         context
             .handle_command(
                 &pub_id,
-                EventPublisherCommand::ActivateEventPublisher { id: pub_id.clone() }.into(),
+                EventPublisherCommand::ActivateEventPublisher.into(),
                 &Caller::Internal,
             )
             .await
@@ -271,7 +271,7 @@ mod tests {
         context
             .handle_command(
                 &pub_id,
-                EventPublisherCommand::DeleteEventPublisher { id: pub_id.clone() }.into(),
+                EventPublisherCommand::DeleteEventPublisher.into(),
                 &Caller::Internal,
             )
             .await

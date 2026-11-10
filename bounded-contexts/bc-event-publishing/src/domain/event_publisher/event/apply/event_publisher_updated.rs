@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use tracing::debug;
 
 impl EventPublisher {
-    pub(crate) fn event_publisher_updated(
+    pub fn event_publisher_updated(
         &mut self,
         name: String,
         description: Option<String>,

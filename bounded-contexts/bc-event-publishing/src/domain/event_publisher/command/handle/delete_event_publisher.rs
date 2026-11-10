@@ -9,18 +9,16 @@ impl EventPublisher {
     /// Removes an event publisher, stopping any active background delivery task.
     pub(crate) async fn delete_event_publisher(
         &mut self,
-        id: String,
         sink: &EventSink<Self>,
     ) -> Result<(), <EventPublisher as Aggregate>::Error> {
         let publisher_id = match self {
             EventPublisher::Configured(inner) => inner.id.clone(),
-            EventPublisher::None => return Err(EventPublisherError::NotFound(id)),
+            EventPublisher::None => return Err(EventPublisherError::EventPublisherNotFound),
         };
 
         info!(publisher_id = %publisher_id, "Deleting event publisher");
         sink.write(
             EventPublisherDeleted {
-                id: publisher_id,
                 occurred_at: Utc::now(),
             },
             self,
@@ -35,9 +33,8 @@ impl EventPublisher {
 mod tests {
     use super::*;
     use crate::domain::event_publisher::{
-        aggregate::tests::{created_http_event, publisher_id},
         command::EventPublisherCommand::{ActivateEventPublisher, DeleteEventPublisher},
-        event::EventPublisherEvent,
+        event::{apply::event_publisher_created::tests::created_http_event, EventPublisherEvent},
         services::EventPublisherDomainServices,
     };
     use rstest::rstest;
@@ -46,15 +43,10 @@ mod tests {
 
     #[rstest]
     #[traced_test]
-    fn deleting_a_publisher_emits_deleted_and_rejects_subsequent_commands(
-        publisher_id: String,
-        created_http_event: EventPublisherEvent,
-    ) {
+    fn deleting_a_publisher_emits_deleted_and_rejects_subsequent_commands(created_http_event: EventPublisherEvent) {
         let deleted = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
             .given(vec![created_http_event.clone()])
-            .when(DeleteEventPublisher {
-                id: publisher_id.clone(),
-            })
+            .when(DeleteEventPublisher)
             .inspect_result()
             .unwrap();
         assert_eq!(deleted.len(), 1);
@@ -64,9 +56,7 @@ mod tests {
         history.extend(deleted);
         TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
             .given(history)
-            .when(ActivateEventPublisher {
-                id: publisher_id.clone(),
-            })
-            .then_expect_error(EventPublisherError::NotFound(publisher_id));
+            .when(ActivateEventPublisher)
+            .then_expect_error(EventPublisherError::EventPublisherNotFound);
     }
 }

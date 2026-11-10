@@ -1,7 +1,12 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use bc_event_publishing::{
     application::{command::EventPublishingCommandError, query::EventPublishingQueryError},
-    domain::event_publisher::error::EventPublisherError,
+    domain::event_publisher::{
+        command::handle::{
+            create_event_publisher::CreateEventPublisherError, update_event_publisher::UpdateEventPublisherError,
+        },
+        error::EventPublisherError,
+    },
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -10,31 +15,42 @@ impl IntoApiErrorExt for EventPublisherError {
     fn into_api_error(self) -> ApiError {
         let message = self.to_string();
         match self {
-            EventPublisherError::NotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
+            EventPublisherError::EventPublisherNotFound => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Event Publisher Not Found")
                 .type_url(type_url("events#event-publisher-not-found"))
                 .message(message)
                 .finish(),
-            EventPublisherError::AlreadyExists(_) => ApiError::builder(StatusCode::CONFLICT)
-                .title("Event Publisher Already Exists")
-                .type_url(type_url("events#event-publisher-already-exists"))
-                .message(message)
-                .finish(),
-            EventPublisherError::EmptyName => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Event Publisher Name")
-                .type_url(type_url("events#invalid-event-publisher-name"))
-                .message(message)
-                .finish(),
-            EventPublisherError::InvalidEvents(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Event Types")
-                .type_url(type_url("events#invalid-event-types"))
-                .message(message)
-                .finish(),
-            EventPublisherError::InvalidConfiguration(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Event Publisher Configuration")
-                .type_url(type_url("events#invalid-event-publisher-configuration"))
-                .message(message)
-                .finish(),
+            EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::AlreadyExists(_)) => {
+                ApiError::builder(StatusCode::CONFLICT)
+                    .title("Event Publisher Already Exists")
+                    .type_url(type_url("events#event-publisher-already-exists"))
+                    .message(message)
+                    .finish()
+            }
+            EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::EmptyName)
+            | EventPublisherError::UpdateEventPublisherError(UpdateEventPublisherError::EmptyName) => {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Event Publisher Name")
+                    .type_url(type_url("events#invalid-event-publisher-name"))
+                    .message(message)
+                    .finish()
+            }
+            EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::InvalidEvents(_))
+            | EventPublisherError::UpdateEventPublisherError(UpdateEventPublisherError::InvalidEvents(_)) => {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Event Types")
+                    .type_url(type_url("events#invalid-event-types"))
+                    .message(message)
+                    .finish()
+            }
+            EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::InvalidConfiguration(_))
+            | EventPublisherError::UpdateEventPublisherError(UpdateEventPublisherError::InvalidConfiguration(_)) => {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Event Publisher Configuration")
+                    .type_url(type_url("events#invalid-event-publisher-configuration"))
+                    .message(message)
+                    .finish()
+            }
         }
     }
 }
@@ -70,30 +86,31 @@ mod tests {
     fn event_publisher_errors_map_to_expected_problem_details() {
         assert_problems([
             (
-                EventPublisherError::NotFound("pub-1".to_string()),
+                EventPublisherError::EventPublisherNotFound,
                 StatusCode::NOT_FOUND,
                 Some("events#event-publisher-not-found"),
             ),
             (
-                EventPublisherError::AlreadyExists("pub-1".to_string()),
+                CreateEventPublisherError::AlreadyExists("pub-1".to_string()).into(),
                 StatusCode::CONFLICT,
                 Some("events#event-publisher-already-exists"),
             ),
             (
-                EventPublisherError::EmptyName,
+                CreateEventPublisherError::EmptyName.into(),
                 StatusCode::BAD_REQUEST,
                 Some("events#invalid-event-publisher-name"),
             ),
             (
-                EventPublisherError::InvalidEvents(InvalidEventTypes::EmptyEvents),
+                CreateEventPublisherError::InvalidEvents(InvalidEventTypes::EmptyEvents).into(),
                 StatusCode::BAD_REQUEST,
                 Some("events#invalid-event-types"),
             ),
             (
-                EventPublisherError::InvalidConfiguration(InvalidPublisherConfig::InvalidTargetUrl {
+                UpdateEventPublisherError::InvalidConfiguration(InvalidPublisherConfig::InvalidTargetUrl {
                     url: "bad".to_string(),
                     reason: "invalid".to_string(),
-                }),
+                })
+                .into(),
                 StatusCode::BAD_REQUEST,
                 Some("events#invalid-event-publisher-configuration"),
             ),

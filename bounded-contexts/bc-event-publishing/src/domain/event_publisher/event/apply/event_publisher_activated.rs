@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use tracing::debug;
 
 impl EventPublisher {
-    pub(crate) fn event_publisher_activated(&mut self, occurred_at: DateTime<Utc>) {
+    pub fn event_publisher_activated(&mut self, occurred_at: DateTime<Utc>) {
         if let EventPublisher::Configured(inner) = self {
             debug!(id = %inner.id, "Applying EventPublisherActivated event");
             inner.enabled = true;

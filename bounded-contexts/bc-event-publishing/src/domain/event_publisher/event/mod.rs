@@ -13,6 +13,7 @@ use shared_kernel::{
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum EventPublisherEvent {
     EventPublisherCreated {
+        /// Equal to the aggregate id.
         id: String,
         name: String,
         description: Option<String>,
@@ -22,7 +23,6 @@ pub enum EventPublisherEvent {
         occurred_at: DateTime<Utc>,
     },
     EventPublisherUpdated {
-        id: String,
         name: String,
         description: Option<String>,
         enabled: bool,
@@ -31,17 +31,14 @@ pub enum EventPublisherEvent {
         occurred_at: DateTime<Utc>,
     },
     EventPublisherActivated {
-        id: String,
         filter: EventPublisherFilter,
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     },
     EventPublisherDeactivated {
-        id: String,
         occurred_at: DateTime<Utc>,
     },
     EventPublisherDeleted {
-        id: String,
         occurred_at: DateTime<Utc>,
     },
 }

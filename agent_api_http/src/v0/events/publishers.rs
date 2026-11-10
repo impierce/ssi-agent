@@ -311,9 +311,8 @@ pub async fn update_event_publisher(
     let id = state
         .dispatch_command(
             caller,
-            id.clone(),
+            id,
             EventPublisherCommand::UpdateEventPublisher {
-                id,
                 name: payload.name,
                 description: payload.description,
                 filter: payload.filter,
@@ -358,13 +357,12 @@ pub async fn activate_event_publisher(
     Json(payload): Json<ActivateEventPublisherRequest>,
 ) -> Result<(StatusCode, String), ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
-    let id = payload.id;
 
     let id = state
         .dispatch_command(
             caller,
-            id.clone(),
-            EventPublisherCommand::ActivateEventPublisher { id }.into(),
+            payload.id,
+            EventPublisherCommand::ActivateEventPublisher.into(),
         )
         .await?;
 
@@ -399,13 +397,12 @@ pub async fn deactivate_event_publisher(
     Json(payload): Json<DeactivateEventPublisherRequest>,
 ) -> Result<(StatusCode, String), ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
-    let id = payload.id;
 
     let id = state
         .dispatch_command(
             caller,
-            id.clone(),
-            EventPublisherCommand::DeactivateEventPublisher { id }.into(),
+            payload.id,
+            EventPublisherCommand::DeactivateEventPublisher.into(),
         )
         .await?;
 
@@ -440,13 +437,12 @@ pub async fn delete_event_publisher(
     Json(payload): Json<DeleteEventPublisherRequest>,
 ) -> Result<(StatusCode, String), ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
-    let id = payload.id;
 
     let id = state
         .dispatch_command(
             caller,
-            id.clone(),
-            EventPublisherCommand::DeleteEventPublisher { id }.into(),
+            payload.id,
+            EventPublisherCommand::DeleteEventPublisher.into(),
         )
         .await?;
 

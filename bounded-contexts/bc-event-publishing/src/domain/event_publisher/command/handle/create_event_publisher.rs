@@ -1,12 +1,24 @@
 use crate::domain::event_publisher::{
     aggregate::EventPublisher,
-    config::{EventPublisherConfig, EventPublisherFilter},
-    error::EventPublisherError,
+    config::{EventPublisherConfig, EventPublisherFilter, InvalidPublisherConfig},
     event::EventPublisherEvent::EventPublisherCreated,
+    services::InvalidEventTypes,
 };
 use chrono::Utc;
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
 use tracing::info;
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CreateEventPublisherError {
+    #[error("Event publisher with ID `{0}` already exists")]
+    AlreadyExists(String),
+    #[error("Event publisher name must not be empty")]
+    EmptyName,
+    #[error(transparent)]
+    InvalidEvents(#[from] InvalidEventTypes),
+    #[error(transparent)]
+    InvalidConfiguration(#[from] InvalidPublisherConfig),
+}
 
 impl EventPublisher {
     #[allow(clippy::too_many_arguments)]
@@ -20,14 +32,14 @@ impl EventPublisher {
         config: EventPublisherConfig,
         service: &<EventPublisher as Aggregate>::Services,
         sink: &EventSink<Self>,
-    ) -> Result<(), EventPublisherError> {
+    ) -> Result<(), CreateEventPublisherError> {
         if !self.is_none() {
-            return Err(EventPublisherError::AlreadyExists(id));
+            return Err(CreateEventPublisherError::AlreadyExists(id));
         }
 
         let name = name.trim().to_string();
         if name.is_empty() {
-            return Err(EventPublisherError::EmptyName);
+            return Err(CreateEventPublisherError::EmptyName);
         }
 
         let description = description.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
@@ -138,10 +150,10 @@ mod tests {
                 }),
             })
             .then_expect_error(
-                InvalidPublisherConfig::InvalidTargetUrl {
+                CreateEventPublisherError::from(InvalidPublisherConfig::InvalidTargetUrl {
                     url: "ftp://bad.example.test".to_string(),
                     reason: "scheme must be `http` or `https`".to_string(),
-                }
+                })
                 .into(),
             );
 
@@ -160,6 +172,11 @@ mod tests {
                 },
                 config: http_config,
             })
-            .then_expect_error(InvalidEventTypes::UnknownEventType("com.unknown.event.type".to_string()).into());
+            .then_expect_error(
+                CreateEventPublisherError::from(InvalidEventTypes::UnknownEventType(
+                    "com.unknown.event.type".to_string(),
+                ))
+                .into(),
+            );
     }
 }

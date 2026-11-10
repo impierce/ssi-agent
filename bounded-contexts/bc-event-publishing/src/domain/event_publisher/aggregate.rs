@@ -14,7 +14,7 @@ use crate::domain::event_publisher::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct EventPublisherInner {
@@ -63,24 +63,27 @@ impl Aggregate for EventPublisher {
                 self.create_event_publisher(id, name, description, enabled, filter, config, service, sink)
                     .await?;
             }
+            _ if self.is_none() => {
+                warn!("Command rejected: event publisher does not exist");
+                return Err(EventPublisherError::EventPublisherNotFound);
+            }
             UpdateEventPublisher {
-                id,
                 name,
                 description,
                 filter,
                 config,
             } => {
-                self.update_event_publisher(id, name, description, filter, config, service, sink)
+                self.update_event_publisher(name, description, filter, config, service, sink)
                     .await?;
             }
-            ActivateEventPublisher { id } => {
-                self.activate_event_publisher(id, sink).await?;
+            ActivateEventPublisher => {
+                self.activate_event_publisher(sink).await?;
             }
-            DeactivateEventPublisher { id } => {
-                self.deactivate_event_publisher(id, sink).await?;
+            DeactivateEventPublisher => {
+                self.deactivate_event_publisher(sink).await?;
             }
-            DeleteEventPublisher { id } => {
-                self.delete_event_publisher(id, sink).await?;
+            DeleteEventPublisher => {
+                self.delete_event_publisher(sink).await?;
             }
         }
 
@@ -102,7 +105,6 @@ impl Aggregate for EventPublisher {
                 self.event_publisher_created(id, name, description, enabled, filter, config, occurred_at);
             }
             EventPublisherUpdated {
-                id: _,
                 name,
                 description,
                 enabled,
@@ -115,7 +117,7 @@ impl Aggregate for EventPublisher {
             EventPublisherActivated { occurred_at, .. } => {
                 self.event_publisher_activated(occurred_at);
             }
-            EventPublisherDeactivated { occurred_at, .. } => {
+            EventPublisherDeactivated { occurred_at } => {
                 self.event_publisher_deactivated(occurred_at);
             }
             EventPublisherDeleted { .. } => {
@@ -165,20 +167,5 @@ pub mod tests {
             nats_url: "nats://127.0.0.1:4222".to_string(),
             subject: "unicore.events".to_string(),
         })
-    }
-
-    #[fixture]
-    pub fn created_http_event(publisher_id: String, http_config: EventPublisherConfig) -> EventPublisherEvent {
-        EventPublisherEvent::EventPublisherCreated {
-            id: publisher_id,
-            name: "CRM Webhook".to_string(),
-            description: Some("Forwards issuance events".to_string()),
-            enabled: true,
-            filter: EventPublisherFilter {
-                types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
-            },
-            config: http_config,
-            occurred_at: Utc::now(),
-        }
     }
 }

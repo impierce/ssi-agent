@@ -15,19 +15,12 @@ pub enum EventPublisherCommand {
         config: EventPublisherConfig,
     },
     UpdateEventPublisher {
-        id: String,
         name: Option<String>,
         description: Option<Option<String>>,
         filter: Option<EventPublisherFilter>,
         config: Option<EventPublisherConfig>,
     },
-    ActivateEventPublisher {
-        id: String,
-    },
-    DeactivateEventPublisher {
-        id: String,
-    },
-    DeleteEventPublisher {
-        id: String,
-    },
+    ActivateEventPublisher,
+    DeactivateEventPublisher,
+    DeleteEventPublisher,
 }

@@ -65,7 +65,6 @@ impl View<EventPublisher> for EventPublisherView {
                 self.last_modified_at = *occurred_at;
             }
             EventPublisherEvent::EventPublisherUpdated {
-                id: _,
                 name,
                 description,
                 enabled,

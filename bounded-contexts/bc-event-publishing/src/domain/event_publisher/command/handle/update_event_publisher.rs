@@ -1,18 +1,28 @@
 use crate::domain::event_publisher::{
     aggregate::EventPublisher,
-    config::{EventPublisherConfig, EventPublisherFilter},
+    config::{EventPublisherConfig, EventPublisherFilter, InvalidPublisherConfig},
     error::EventPublisherError,
     event::EventPublisherEvent::EventPublisherUpdated,
+    services::InvalidEventTypes,
 };
 use chrono::Utc;
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
 use tracing::info;
 
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum UpdateEventPublisherError {
+    #[error("Event publisher name must not be empty")]
+    EmptyName,
+    #[error(transparent)]
+    InvalidEvents(#[from] InvalidEventTypes),
+    #[error(transparent)]
+    InvalidConfiguration(#[from] InvalidPublisherConfig),
+}
+
 impl EventPublisher {
     #[allow(clippy::too_many_arguments, clippy::option_option)]
     pub(crate) async fn update_event_publisher(
         &mut self,
-        id: String,
         name: Option<String>,
         description: Option<Option<String>>,
         filter: Option<EventPublisherFilter>,
@@ -22,14 +32,14 @@ impl EventPublisher {
     ) -> Result<(), EventPublisherError> {
         let current = match self {
             EventPublisher::Configured(inner) => inner.clone(),
-            EventPublisher::None => return Err(EventPublisherError::NotFound(id)),
+            EventPublisher::None => return Err(EventPublisherError::EventPublisherNotFound),
         };
 
         let updated_name = match name {
             Some(name) => {
                 let trimmed = name.trim().to_string();
                 if trimmed.is_empty() {
-                    return Err(EventPublisherError::EmptyName);
+                    return Err(UpdateEventPublisherError::EmptyName.into());
                 }
                 trimmed
             }
@@ -46,12 +56,18 @@ impl EventPublisher {
         };
 
         let updated_filter = match filter {
-            Some(filter) => service.known_event_types().validate_and_normalize_filter(filter)?,
+            Some(filter) => service
+                .known_event_types()
+                .validate_and_normalize_filter(filter)
+                .map_err(UpdateEventPublisherError::from)?,
             None => current.filter.clone(),
         };
 
         let updated_config = match config {
-            Some(config) => config.with_preserved_secrets(&current.config).normalized()?,
+            Some(config) => config
+                .with_preserved_secrets(&current.config)
+                .normalized()
+                .map_err(UpdateEventPublisherError::from)?,
             None => current.config.clone(),
         };
 
@@ -72,7 +88,6 @@ impl EventPublisher {
 
         sink.write(
             EventPublisherUpdated {
-                id: current.id,
                 name: updated_name,
                 description: updated_description,
                 enabled: current.enabled,
@@ -92,10 +107,9 @@ impl EventPublisher {
 mod tests {
     use super::*;
     use crate::domain::event_publisher::{
-        aggregate::tests::{created_http_event, publisher_id},
         command::EventPublisherCommand::UpdateEventPublisher,
         config::{HttpPublisherConfig, REDACTED_HEADER_VALUE},
-        event::EventPublisherEvent,
+        event::{apply::event_publisher_created::tests::created_http_event, EventPublisherEvent},
         services::EventPublisherDomainServices,
     };
     use rstest::rstest;
@@ -105,17 +119,13 @@ mod tests {
 
     #[rstest]
     #[traced_test]
-    fn updating_preserves_redacted_headers_and_skips_unchanged_writes(
-        publisher_id: String,
-        created_http_event: EventPublisherEvent,
-    ) {
+    fn updating_preserves_redacted_headers_and_skips_unchanged_writes(created_http_event: EventPublisherEvent) {
         let mut redacted_headers = BTreeMap::new();
         redacted_headers.insert("authorization".to_string(), REDACTED_HEADER_VALUE.to_string());
 
         let events = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
             .given(vec![created_http_event.clone()])
             .when(UpdateEventPublisher {
-                id: publisher_id.clone(),
                 name: Some("Updated CRM Webhook".to_string()),
                 description: None,
                 filter: Some(EventPublisherFilter {
@@ -157,7 +167,6 @@ mod tests {
         let no_events = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
             .given(vec![created_http_event])
             .when(UpdateEventPublisher {
-                id: publisher_id,
                 name: Some("CRM Webhook".to_string()),
                 description: None,
                 filter: None,

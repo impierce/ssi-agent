@@ -123,35 +123,33 @@ impl EventPublisherSupervisor {
 
 #[async_trait]
 impl Query<EventPublisher> for EventPublisherSupervisor {
-    async fn dispatch(&self, _aggregate_id: &str, events: &[EventEnvelope<EventPublisher>]) {
+    async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<EventPublisher>]) {
         for event in events {
             match &event.payload {
                 EventPublisherEvent::EventPublisherCreated {
-                    id,
                     enabled,
                     filter,
                     config,
                     ..
                 }
                 | EventPublisherEvent::EventPublisherUpdated {
-                    id,
                     enabled,
                     filter,
                     config,
                     ..
                 } => {
                     if *enabled {
-                        self.start_or_replace_worker(id.clone(), filter, config.clone());
+                        self.start_or_replace_worker(aggregate_id.to_string(), filter, config.clone());
                     } else {
-                        self.stop_worker(id);
+                        self.stop_worker(aggregate_id);
                     }
                 }
-                EventPublisherEvent::EventPublisherActivated { id, filter, config, .. } => {
-                    self.start_or_replace_worker(id.clone(), filter, config.clone());
+                EventPublisherEvent::EventPublisherActivated { filter, config, .. } => {
+                    self.start_or_replace_worker(aggregate_id.to_string(), filter, config.clone());
                 }
-                EventPublisherEvent::EventPublisherDeactivated { id, .. }
-                | EventPublisherEvent::EventPublisherDeleted { id, .. } => {
-                    self.stop_worker(id);
+                EventPublisherEvent::EventPublisherDeactivated { .. }
+                | EventPublisherEvent::EventPublisherDeleted { .. } => {
+                    self.stop_worker(aggregate_id);
                 }
             }
         }

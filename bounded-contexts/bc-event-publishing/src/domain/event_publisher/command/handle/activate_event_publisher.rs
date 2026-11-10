@@ -9,7 +9,6 @@ impl EventPublisher {
     /// Idempotent activation of an event publisher.
     pub(crate) async fn activate_event_publisher(
         &mut self,
-        id: String,
         sink: &EventSink<Self>,
     ) -> Result<(), <EventPublisher as Aggregate>::Error> {
         let (publisher_id, already_enabled, filter, config) = match self {
@@ -19,7 +18,7 @@ impl EventPublisher {
                 inner.filter.clone(),
                 inner.config.clone(),
             ),
-            EventPublisher::None => return Err(EventPublisherError::NotFound(id)),
+            EventPublisher::None => return Err(EventPublisherError::EventPublisherNotFound),
         };
 
         if already_enabled {
@@ -30,7 +29,6 @@ impl EventPublisher {
         info!(publisher_id = %publisher_id, "Activating event publisher");
         sink.write(
             EventPublisherActivated {
-                id: publisher_id,
                 filter,
                 config,
                 occurred_at: Utc::now(),
@@ -47,9 +45,8 @@ impl EventPublisher {
 mod tests {
     use super::*;
     use crate::domain::event_publisher::{
-        aggregate::tests::{created_http_event, publisher_id},
         command::EventPublisherCommand::ActivateEventPublisher,
-        event::EventPublisherEvent,
+        event::{apply::event_publisher_created::tests::created_http_event, EventPublisherEvent},
         services::EventPublisherDomainServices,
     };
     use rstest::rstest;
@@ -58,18 +55,14 @@ mod tests {
 
     #[rstest]
     #[traced_test]
-    fn activating_a_paused_publisher_emits_activated_event(
-        publisher_id: String,
-        created_http_event: EventPublisherEvent,
-    ) {
+    fn activating_a_paused_publisher_emits_activated_event(created_http_event: EventPublisherEvent) {
         let deactivated = EventPublisherEvent::EventPublisherDeactivated {
-            id: publisher_id.clone(),
             occurred_at: Utc::now(),
         };
 
         let activated = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
             .given(vec![created_http_event, deactivated])
-            .when(ActivateEventPublisher { id: publisher_id })
+            .when(ActivateEventPublisher)
             .inspect_result()
             .unwrap();
         assert_eq!(activated.len(), 1);

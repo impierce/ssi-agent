@@ -21,9 +21,9 @@ fn event_publisher_command_operation(command: &EventPublisherCommand) -> &'stati
     match command {
         EventPublisherCommand::CreateEventPublisher { .. } => CREATE_PUBLISHER_OPERATION,
         EventPublisherCommand::UpdateEventPublisher { .. } => UPDATE_PUBLISHER_OPERATION,
-        EventPublisherCommand::ActivateEventPublisher { .. } => ACTIVATE_PUBLISHER_OPERATION,
-        EventPublisherCommand::DeactivateEventPublisher { .. } => DEACTIVATE_PUBLISHER_OPERATION,
-        EventPublisherCommand::DeleteEventPublisher { .. } => DELETE_PUBLISHER_OPERATION,
+        EventPublisherCommand::ActivateEventPublisher => ACTIVATE_PUBLISHER_OPERATION,
+        EventPublisherCommand::DeactivateEventPublisher => DEACTIVATE_PUBLISHER_OPERATION,
+        EventPublisherCommand::DeleteEventPublisher => DELETE_PUBLISHER_OPERATION,
     }
 }
 

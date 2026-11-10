@@ -9,12 +9,11 @@ impl EventPublisher {
     /// Idempotent deactivation of an event publisher.
     pub(crate) async fn deactivate_event_publisher(
         &mut self,
-        id: String,
         sink: &EventSink<Self>,
     ) -> Result<(), <EventPublisher as Aggregate>::Error> {
         let (publisher_id, already_disabled) = match self {
             EventPublisher::Configured(inner) => (inner.id.clone(), !inner.enabled),
-            EventPublisher::None => return Err(EventPublisherError::NotFound(id)),
+            EventPublisher::None => return Err(EventPublisherError::EventPublisherNotFound),
         };
 
         if already_disabled {
@@ -25,7 +24,6 @@ impl EventPublisher {
         info!(publisher_id = %publisher_id, "Deactivating event publisher");
         sink.write(
             EventPublisherDeactivated {
-                id: publisher_id,
                 occurred_at: Utc::now(),
             },
             self,
@@ -40,9 +38,8 @@ impl EventPublisher {
 mod tests {
     use super::*;
     use crate::domain::event_publisher::{
-        aggregate::tests::{created_http_event, publisher_id},
         command::EventPublisherCommand::DeactivateEventPublisher,
-        event::EventPublisherEvent,
+        event::{apply::event_publisher_created::tests::created_http_event, EventPublisherEvent},
         services::EventPublisherDomainServices,
     };
     use rstest::rstest;
@@ -51,13 +48,10 @@ mod tests {
 
     #[rstest]
     #[traced_test]
-    fn deactivating_an_active_publisher_emits_deactivated_event(
-        publisher_id: String,
-        created_http_event: EventPublisherEvent,
-    ) {
+    fn deactivating_an_active_publisher_emits_deactivated_event(created_http_event: EventPublisherEvent) {
         let deactivated = TestFramework::<EventPublisher>::with(EventPublisherDomainServices::default())
             .given(vec![created_http_event])
-            .when(DeactivateEventPublisher { id: publisher_id })
+            .when(DeactivateEventPublisher)
             .inspect_result()
             .unwrap();
         assert_eq!(deactivated.len(), 1);
