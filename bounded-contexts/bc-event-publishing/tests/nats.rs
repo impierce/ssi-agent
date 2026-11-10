@@ -27,23 +27,8 @@ async fn configured_offer_events_are_published_as_cloud_events() {
 
     let event_bus = EventBusHandle::new(100);
 
-    // An unreachable server fails connecting directly.
-    assert!(NatsEventPublisherWorker::connect(
-        "nats-unreachable".to_string(),
-        &EventPublisherFilter {
-            types: vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
-        },
-        NatsPublisherConfig {
-            nats_url: "nats://127.0.0.1:1".to_string(),
-            subject: SUBJECT.to_string(),
-        },
-        &event_bus,
-    )
-    .await
-    .is_err());
-
-    // Connect the publisher worker against the running NATS container
-    let publisher = NatsEventPublisherWorker::connect(
+    // Spawn the resilient publisher worker against the running NATS container
+    let publisher_handle = NatsEventPublisherWorker::spawn_resilient(
         "nats-offers".to_string(),
         &EventPublisherFilter {
             types: vec!["com.impierce.unicore.issuance.offer.tx_code_generated".to_string()],
@@ -53,10 +38,7 @@ async fn configured_offer_events_are_published_as_cloud_events() {
             subject: SUBJECT.to_string(),
         },
         &event_bus,
-    )
-    .await
-    .expect("publisher worker should connect to running NATS container");
-    let publisher_handle = publisher.spawn();
+    );
 
     // Subscribe to NATS subject
     let client = async_nats::connect(&nats_url).await.unwrap();

@@ -17,41 +17,6 @@ pub struct NatsEventPublisherWorker {
 }
 
 impl NatsEventPublisherWorker {
-    /// Connects to the NATS server in `config` and creates a `NatsEventPublisherWorker`.
-    ///
-    /// Subscribes immediately to `event_bus` before connecting so no events published
-    /// during connection establishment are lost.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`async_nats::ConnectError`] if connecting to `config.nats_url` fails.
-    pub async fn connect(
-        id: String,
-        filter: &EventPublisherFilter,
-        config: NatsPublisherConfig,
-        event_bus: &EventBusHandle,
-    ) -> Result<Self, async_nats::ConnectError> {
-        let filter = filter.to_event_filter();
-        let stream = event_bus.subscribe(filter.clone());
-
-        info!(
-            publisher_id = %id,
-            nats_url = %config.nats_url,
-            subject = %config.subject,
-            "Connecting NATS event publisher worker"
-        );
-        let client = async_nats::connect(&config.nats_url).await?;
-        info!(publisher_id = %id, "NATS event publisher worker connected successfully");
-
-        Ok(Self {
-            id,
-            client,
-            subject: config.subject,
-            filter,
-            stream,
-        })
-    }
-
     /// Spawns a resilient NATS worker task that subscribes immediately to `event_bus` and
     /// connects to `config.nats_url` in the background (retrying with exponential backoff
     /// if the broker is temporarily unreachable) so runtime commands and startup hydration
@@ -105,7 +70,7 @@ impl NatsEventPublisherWorker {
     }
 
     /// Runs the NATS event publisher loop until the stream closes or the task is aborted.
-    pub async fn run(mut self) {
+    async fn run(mut self) {
         while let Some(item) = self.stream.next().await {
             let cloud_event = match item {
                 Ok(event) => event,
@@ -161,12 +126,6 @@ impl NatsEventPublisherWorker {
             }
         }
     }
-
-    /// Spawns the connected NATS event publisher worker on the Tokio runtime.
-    #[must_use]
-    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(self.run())
-    }
 }
 
 #[cfg(test)]
@@ -177,23 +136,28 @@ mod tests {
     use tokio::net::TcpListener;
 
     #[tokio::test]
-    async fn nats_worker_connection_failure_returns_err() {
+    async fn nats_worker_unreachable_broker_retries_without_panicking() {
         let event_bus = EventBusHandle::new(100);
         let config = NatsPublisherConfig {
             nats_url: "127.0.0.1:1".to_string(),
             subject: "test.subject".to_string(),
         };
 
-        let res = NatsEventPublisherWorker::connect(
+        let handle = NatsEventPublisherWorker::spawn_resilient(
             "nats-1".to_string(),
             &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.issuance.credential.offered".to_string()],
             },
             config,
             &event_bus,
-        )
-        .await;
-        assert!(res.is_err(), "Expected connection to fail when server is unreachable");
+        );
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !handle.is_finished(),
+            "Resilient worker should stay alive retrying when broker is unreachable"
+        );
+        handle.abort();
     }
 
     #[tokio::test]
@@ -233,17 +197,14 @@ mod tests {
         };
 
         let event_bus = EventBusHandle::new(100);
-        let worker = NatsEventPublisherWorker::connect(
+        let handle = NatsEventPublisherWorker::spawn_resilient(
             "nats-1".to_string(),
             &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.credential.issued".to_string()],
             },
             config,
             &event_bus,
-        )
-        .await
-        .unwrap();
-        let handle = worker.spawn();
+        );
 
         tokio::time::sleep(Duration::from_millis(150)).await;
 
