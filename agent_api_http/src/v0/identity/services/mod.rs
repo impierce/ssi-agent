@@ -4,9 +4,7 @@ pub mod linked_vp;
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
 use crate::handlers::caller;
-use crate::v0::identity::well_known::did_configuration::DomainLinkageConfigurationSchema;
 use agent_identity::{
-    document::openapi::DidService,
     queries,
     service::aggregate::{LinkedVerifiablePresentation, Service, ServiceResource},
     state::IdentityState,
@@ -18,7 +16,7 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use identity_document::service::Service as DocumentService;
+use identity_kit::{did::Service as DidService, domain_linkage::DomainLinkageConfiguration};
 use serde::Serialize;
 use std::sync::Arc;
 use url::Url;
@@ -27,8 +25,7 @@ use url::Url;
 struct ServiceResponse {
     #[serde(rename = "id")]
     service_id: String,
-    #[schema(value_type = Option<DidService>)]
-    service: Option<DocumentService>,
+    service: Option<DidService>,
     presentations: Vec<LinkedVerifiablePresentation>,
     #[schema(value_type = Option<ServiceResourceSchema>)]
     resource: Option<ServiceResource>,
@@ -45,7 +42,7 @@ struct ServiceResponse {
 #[derive(utoipa::ToSchema)]
 #[schema(as = ServiceResource)]
 enum ServiceResourceSchema {
-    LinkedDomains(DomainLinkageConfigurationSchema),
+    LinkedDomains(DomainLinkageConfiguration),
 }
 
 impl From<Service> for ServiceResponse {
@@ -130,19 +127,19 @@ mod tests {
         Router,
     };
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-    use identity_core::{
-        common::{Object, Timestamp, Url as IdentityUrl},
-        convert::ToJson,
+    use identity_kit::{
+        did::{Did, DidDocument, DidUrl, Uri},
+        domain_linkage::{DomainLinkageConfiguration, DomainLinkageValidator},
+        jose::{DefaultVerifier, Jwk},
+        linked_vp::LinkedPresentationBuilder,
+        resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
+        vc::{
+            validation::{CredentialValidationOptions, TimeOptions},
+            Credential, Jwt, Subject as CredentialSubject,
+        },
     };
-    use identity_credential::{
-        credential::{CredentialBuilder, Jwt, Subject as CredentialSubject},
-        domain_linkage::{DomainLinkageConfiguration, JwtDomainLinkageValidator},
-        presentation::{JwtPresentationOptions, PresentationBuilder},
-        validator::JwtCredentialValidationOptions,
-    };
-    use identity_document::document::CoreDocument;
-    use jsonwebtoken::{Algorithm, Header};
-    use oid4vc_core::{verifier::SignatureVerifier, Sign as _, Subject as _};
+    use jsonwebtoken::Algorithm;
+    use oid4vc_core::{Sign as _, Subject as _};
     use serde_json::{json, Value};
     use shared_kernel::authorization::{
         Actor, ActorExtractor, AuthorizationChecker, AuthorizationError, AuthorizationOperation, AuthorizationRequest,
@@ -163,13 +160,13 @@ mod tests {
         use agent_identity::service::aggregate::ServiceResource;
         use utoipa::PartialSchema as _;
 
-        let resource = ServiceResource::LinkedDomains(DomainLinkageConfiguration::new(vec![Jwt::from(
-            "header.payload.signature".to_string(),
-        )]));
+        let resource = ServiceResource::LinkedDomains(
+            DomainLinkageConfiguration::new().with_credential("eyJhbGciOiJFZERTQSJ9.e30.c2lnbmF0dXJl".parse().unwrap()),
+        );
         let serialized = serde_json::to_value(resource).unwrap();
         assert_eq!(
             serialized["LinkedDomains"]["linked_dids"],
-            json!(["header.payload.signature"])
+            json!(["eyJhbGciOiJFZERTQSJ9.e30.c2lnbmF0dXJl"])
         );
 
         let schema = serde_json::to_value(super::ServiceResourceSchema::schema()).unwrap();
@@ -178,6 +175,24 @@ mod tests {
             "#/components/schemas/DomainLinkageConfiguration",
             "unexpected schema: {schema}"
         );
+    }
+
+    /// Resolves keys from one DID document, as an external verifier that fetched it would.
+    struct DocumentKeys(DidDocument);
+
+    #[async_trait::async_trait]
+    impl KeyResolver for DocumentKeys {
+        async fn resolve_key(&self, key: &KeyReference, role: KeyRole) -> Result<Jwk, KeyResolutionError> {
+            let KeyReference::DidUrl(id) = key else {
+                return Err(KeyResolutionError::unsupported(key));
+            };
+            self.0
+                .resolve_verification_method(id, Some(role.relationship()))
+                .map_err(KeyResolutionError::new)?
+                .public_key_jwk()
+                .cloned()
+                .ok_or_else(|| KeyResolutionError::msg(format!("`{id}` has no JWK")))
+        }
     }
 
     #[derive(Default)]
@@ -267,20 +282,19 @@ mod tests {
                 },
             )]
             .into();
-            let clock = Arc::new(AtomicI64::new(Timestamp::now_utc().to_unix()));
+            let clock = Arc::new(AtomicI64::new(chrono::Utc::now().timestamp()));
             let cname = Arc::new(StubCnameResolver::default());
             let presentations = Arc::new(TestLinkedVerifiablePresentationSource::default());
             let mut services = IdentityServices::new(
-                Arc::new(Subject::test_subject().await),
+                Arc::new(Subject::test_subject().await.with_local_network_resolver()),
                 configuration.public_url.clone(),
-                configuration.iota_sponsoring_service_url.is_some(),
             );
             services.allow_local_network_outbound = true;
             services.cname_resolver = cname.clone();
             services.linked_verifiable_presentations = presentations.clone();
             services.linkage_clock = {
                 let clock = clock.clone();
-                Arc::new(move || Timestamp::from_unix(clock.load(Ordering::SeqCst)).unwrap())
+                Arc::new(move || chrono::DateTime::from_timestamp(clock.load(Ordering::SeqCst), 0).unwrap())
             };
             let event_bus = shared_kernel::EventBusHandle::default();
             let mut state =
@@ -327,49 +341,25 @@ mod tests {
         async fn create_presentation_for(&self, presentation_id: &str, credential_subjects: &[&str]) {
             let method = SupportedDidMethod::Web.to_string();
             let algorithm = Algorithm::EdDSA;
-            let holder = self
-                .state
-                .services
-                .subject
-                .identifier(&method, algorithm)
-                .await
-                .unwrap();
-            let mut presentation = PresentationBuilder::new(IdentityUrl::parse(&holder).unwrap(), Object::new());
+            let subject = &self.state.services.subject;
+            let holder: Did = subject.identifier(&method, algorithm).await.unwrap().parse().unwrap();
+            let mut presentation = LinkedPresentationBuilder::new(holder.clone());
             for credential_subject in credential_subjects {
-                let credential = CredentialBuilder::new(Object::new())
-                    .issuer(IdentityUrl::parse(holder.as_str()).unwrap())
-                    .subject(CredentialSubject::with_id(
-                        IdentityUrl::parse(*credential_subject).unwrap(),
-                    ))
-                    .build()
-                    .unwrap()
-                    .serialize_jwt(Default::default())
-                    .unwrap();
-                let unsigned_credential = format!("e30.{}.signature", URL_SAFE_NO_PAD.encode(credential.as_bytes()));
-                presentation = presentation.credential(Jwt::from(unsigned_credential));
+                let credential = Credential::new(
+                    holder.clone(),
+                    chrono::Utc::now(),
+                    CredentialSubject::new(credential_subject.parse::<Uri>().unwrap()),
+                );
+                let claims = serde_json::to_vec(&credential.to_jwt_claims().unwrap()).unwrap();
+                let unsigned_credential =
+                    format!("eyJhbGciOiJFZERTQSJ9.{}.c2lnbmF0dXJl", URL_SAFE_NO_PAD.encode(claims));
+                presentation = presentation.with_credential(unsigned_credential.parse().unwrap());
             }
-            let presentation = presentation.build().unwrap();
-            let payload = presentation.serialize_jwt(&JwtPresentationOptions::default()).unwrap();
-            let kid = self.state.services.subject.key_id(&method, algorithm).await.unwrap();
-            let header = Header {
-                alg: algorithm,
-                typ: Some("JWT".into()),
-                kid: Some(kid),
-                ..Default::default()
-            };
-            let message = [
-                URL_SAFE_NO_PAD.encode(header.to_json_vec().unwrap()),
-                URL_SAFE_NO_PAD.encode(payload.as_bytes()),
-            ]
-            .join(".");
-            let signature = self
-                .state
-                .services
-                .subject
-                .sign(&message, &method, algorithm)
+            let kid: DidUrl = subject.key_id(&method, algorithm).await.unwrap().parse().unwrap();
+            let signed_presentation = presentation
+                .sign(&kid, &subject.issuer_signer(algorithm).await.unwrap())
                 .await
                 .unwrap();
-            let signed_presentation = Jwt::from(format!("{message}.{}", URL_SAFE_NO_PAD.encode(signature)));
             self.presentations
                 .presentations
                 .lock()
@@ -477,28 +467,29 @@ mod tests {
         /// origin it is given, so checking only the origins that should pass would not catch a
         /// configuration that quietly covers the wrong domains.
         async fn validate(&self, origins: &[&str]) {
-            let document: CoreDocument = serde_json::from_slice(&self.did().await).unwrap();
+            let document: DidDocument = serde_json::from_slice(&self.did().await).unwrap();
             let configuration: DomainLinkageConfiguration = serde_json::from_slice(&self.linkage().await).unwrap();
-            let now = Timestamp::from_unix(self.clock.load(Ordering::SeqCst)).unwrap();
-            let options = JwtCredentialValidationOptions::default()
-                .latest_issuance_date(now)
-                .earliest_expiry_date(now);
-            let validator = JwtDomainLinkageValidator::with_signature_verifier(SignatureVerifier);
+            let now = chrono::DateTime::from_timestamp(self.clock.load(Ordering::SeqCst), 0).unwrap();
+            let options = CredentialValidationOptions::new().with_time(TimeOptions::at(now));
+            let did = document.id.clone();
+            let validator = DomainLinkageValidator::new(DocumentKeys(document), DefaultVerifier);
 
             for origin in origins {
                 validator
-                    .validate_linkage(&document, &configuration, &origin.parse().unwrap(), &options)
+                    .validate_linkage(&configuration, &did, &origin.parse().unwrap(), &options)
+                    .await
                     .unwrap_or_else(|error| panic!("expected '{origin}' to be linked: {error}"));
             }
 
             assert!(
                 validator
                     .validate_linkage(
-                        &document,
                         &configuration,
+                        &did,
                         &"https://never-linked.example".parse().unwrap(),
                         &options,
                     )
+                    .await
                     .is_err(),
                 "an origin that was never linked must not validate"
             );
@@ -1078,7 +1069,7 @@ mod tests {
             .await;
         let documents: Vec<Document> =
             serde_json::from_slice(&fixture.request("GET", "/unicore/v0/documents", None).await.1).unwrap();
-        assert!(documents[0].document.as_ref().unwrap().service().is_empty());
+        assert!(documents[0].document.as_ref().unwrap().service.is_empty());
         fixture.link_own_origin(400).await;
     }
 
@@ -1219,7 +1210,7 @@ mod tests {
         // Both origins are named by the service entry, in the array form.
         let mut published = fixture.published_origins().await;
         published.sort();
-        let mut expected = vec![format!("{first}/"), format!("{second}/")];
+        let mut expected = vec![first.clone(), second.clone()];
         expected.sort();
         assert_eq!(published, expected);
 
@@ -1265,7 +1256,7 @@ mod tests {
 
         // Unlinking one leaves the other verifiable and returns the endpoint to the flattened form.
         fixture.remove_linked_domains(&[&second], 204).await;
-        assert_eq!(fixture.published_origins().await, vec![format!("{first}/")]);
+        assert_eq!(fixture.published_origins().await, vec![first.clone()]);
         fixture.validate(&[&first]).await;
 
         let result = fixture.verify().await;

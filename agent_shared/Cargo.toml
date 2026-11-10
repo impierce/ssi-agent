@@ -3,6 +3,9 @@ name = "agent_shared"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
@@ -16,12 +19,9 @@ chrono.workspace = true
 config = { version = "0.14" }
 cqrs-es.workspace = true
 dotenvy = { version = "0.15" }
-# TODO: replace all identity_* with identity_iota?
-identity_core.workspace = true
-identity_iota.workspace = true
-identity_jose.workspace = true
+flate2.workspace = true
+identity-kit.workspace = true
 jsonwebtoken.workspace = true
-oauth_tsl.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
 oid4vp.workspace = true

@@ -1,3 +1,4 @@
+use crate::v0::events::openapi::Webhooks;
 use utoipa::OpenApi;
 
 #[derive(OpenApi)]
@@ -10,6 +11,7 @@ use utoipa::OpenApi;
     servers(
         (url = "http://localhost:3033", description = "Local development")
     ),
+    modifiers(&Webhooks),
     nest(
         (path = "/v0", api = crate::v0::configuration::ConfigurationApi),
         (path = "/v0", api = crate::v0::holder::openapi::HolderApi),
@@ -19,6 +21,7 @@ use utoipa::OpenApi;
         (path = "/v0", api = crate::v0::issuance::openapi::IssuanceApi),
         (path = "/v0", api = crate::v0::templates::openapi::TemplatesApi),
         (path = "/v0", api = crate::v0::library::catalog::openapi::CatalogsApi),
+        (path = "/v0", api = crate::v0::kms::openapi::KmsApi),
         (path = "/v0", api = crate::v0::verification::openapi::VerificationApi),
         (path = "/public", api = crate::public::openapi::PublicApi),
     )
@@ -75,6 +78,7 @@ mod tests {
             crate::v0::issuance::openapi::IssuanceApi::openapi(),
             crate::v0::templates::openapi::TemplatesApi::openapi(),
             crate::v0::library::catalog::openapi::CatalogsApi::openapi(),
+            crate::v0::kms::openapi::KmsApi::openapi(),
             crate::v0::verification::openapi::VerificationApi::openapi(),
             crate::public::openapi::PublicApi::openapi(),
             ProtocolApi::openapi(),

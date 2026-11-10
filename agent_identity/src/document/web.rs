@@ -1,5 +1,5 @@
 use super::error::DocumentError;
-use identity_did::CoreDID;
+use identity_kit::did::Did;
 use url::{Host, Origin, Url};
 
 /// Rejects origins that cannot identify a public domain: IP-addressed hosts and opaque origins
@@ -15,7 +15,7 @@ fn validate_public_origin(url: &Url) -> Result<(), DocumentError> {
 }
 
 /// A deployment DID identifies the public origin, independently of the application's base path.
-pub fn did_web(public_url: &Url) -> Result<CoreDID, DocumentError> {
+pub fn did_web(public_url: &Url) -> Result<Did, DocumentError> {
     validate_public_origin(public_url)?;
     let Origin::Tuple(_, host, _) = public_url.origin() else {
         unreachable!("validated above");
@@ -26,7 +26,7 @@ pub fn did_web(public_url: &Url) -> Result<CoreDID, DocumentError> {
     };
     format!("did:web:{authority}")
         .parse()
-        .map_err(|err: identity_did::Error| DocumentError::InvalidDidError(err.to_string()))
+        .map_err(|err: identity_kit::did::DidError| DocumentError::InvalidDidError(err.to_string()))
 }
 
 /// Normalizes user-supplied domain or origin input (e.g. from a runtime configuration request) into

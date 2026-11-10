@@ -3,25 +3,17 @@ use crate::{
     services::{validate_linked_verifiable_presentation, IdentityServices},
     state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use chrono::{DateTime, TimeDelta, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::{
-    common::{Duration, OrderedSet, Timestamp},
-    convert::{FromJson, ToJson},
+use identity_kit::{
+    did::{DidUrl, Service as DocumentService, VerificationMethod},
+    domain_linkage::{self, DomainLinkageConfiguration, DomainLinkageCredentialBuilder},
+    linked_vp,
 };
-use identity_credential::{
-    credential::Jwt,
-    domain_linkage::{DomainLinkageConfiguration, DomainLinkageCredentialBuilder},
-};
-use identity_did::DIDUrl;
-use identity_document::service::{Service as DocumentService, ServiceEndpoint};
-use identity_iota::verification::VerificationMethod;
-use jsonwebtoken::{Algorithm, Header};
-use oid4vc_core::Sign as _;
+use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{str::FromStr as _, sync::Arc};
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,20 +52,20 @@ impl Service {
         !self.is_deleted && (self.service.is_some() || !self.presentations.is_empty())
     }
 
-    pub fn needs_renewal(&self, now: Timestamp) -> bool {
+    pub fn needs_renewal(&self, now: DateTime<Utc>) -> bool {
         if !self.is_active() {
             return false;
         }
         let Some(ServiceResource::LinkedDomains(configuration)) = &self.resource else {
             return false;
         };
-        let threshold = now.to_unix() + LINKED_DOMAINS_RENEWAL_WINDOW_DAYS * 86400;
-        configuration.linked_dids().is_empty()
-            || configuration.linked_dids().iter().any(|jwt| {
-                let expiration = credential_claims(jwt)
-                    .as_ref()
-                    .and_then(|claims| claims.get("exp").and_then(serde_json::Value::as_i64));
-                expiration.is_none_or(|expiration| expiration <= threshold)
+        let threshold = now + TimeDelta::days(LINKED_DOMAINS_RENEWAL_WINDOW_DAYS);
+        configuration.linked_dids.is_empty()
+            || configuration.entries().any(|(_, linkage)| {
+                linkage
+                    .ok()
+                    .and_then(|linkage| linkage.expires)
+                    .is_none_or(|expiration| expiration <= threshold)
             })
     }
 
@@ -131,45 +123,11 @@ pub(crate) fn linked_verifiable_presentation_service(
     if presentations.is_empty() {
         return Err(EmptyPresentationIds);
     }
-    let endpoints = presentations
-        .iter()
-        .map(|presentation| presentation.url.as_str().parse::<identity_core::common::Url>())
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| InvalidUrlError(error.to_string()))?;
-    let service_endpoint = ServiceEndpoint::from(OrderedSet::from_iter(endpoints));
+    let id =
+        DidUrl::parse(&format!("{document_did}#{service_id}")).map_err(|error| InvalidDidError(error.to_string()))?;
 
-    DocumentService::builder(Default::default())
-        .id(format!("{document_did}#{service_id}")
-            .parse::<DIDUrl>()
-            .map_err(|error| InvalidDidError(error.to_string()))?)
-        .type_("LinkedVerifiablePresentation")
-        .service_endpoint(service_endpoint)
-        .build()
+    linked_vp::service(id, presentations.iter().map(|presentation| presentation.url.clone()))
         .map_err(|error| ServiceBuilderError(error.to_string()))
-}
-
-/// Decodes a Domain Linkage Credential JWT's claims **without verifying its signature**.
-///
-/// Only ever used to read back claims UniCore itself signed and persisted, so the signature adds
-/// nothing here; the credentials are served to verifiers intact.
-fn credential_claims(jwt: &Jwt) -> Option<serde_json::Value> {
-    jwt.as_str()
-        .split('.')
-        .nth(1)
-        .and_then(|payload| URL_SAFE_NO_PAD.decode(payload).ok())
-        .and_then(|payload| serde_json::from_slice(&payload).ok())
-}
-
-/// The origin a Domain Linkage Credential claims, used to tell one origin's credentials from
-/// another's when unlinking a domain.
-pub(crate) fn credential_origin(jwt: &Jwt) -> Option<Url> {
-    credential_claims(jwt)?
-        .get("vc")?
-        .get("credentialSubject")?
-        .get("origin")?
-        .as_str()?
-        .parse()
-        .ok()
 }
 
 /// Reduces a URL to its origin: scheme, host and non-default port, with no path.
@@ -193,42 +151,22 @@ fn normalized(origins: Vec<Url>) -> Result<Vec<Url>, ServiceError> {
     Ok(origins)
 }
 
-/// Renders an origin the way a Domain Linkage Credential must claim it.
-fn credential_origin_url(origin: &Url) -> Result<identity_core::common::Url, ServiceError> {
-    identity_core::common::Url::parse(canonical_origin(origin)?.as_str())
-        .map_err(|err| ServiceError::InvalidUrlError(err.to_string()))
-}
-
 /// Builds the `LinkedDomains` service entry for `origins`.
 ///
 /// The DID Configuration specification allows a `serviceEndpoint` to be *either* a bare origin string
 /// or an object with an `origins` array, so a single linked domain is written in the simpler string
 /// form and only multiple domains use the array.
 fn linked_domains_service(service_id: &str, origins: &[Url]) -> Result<DocumentService, ServiceError> {
-    use ServiceError::*;
+    if origins.is_empty() {
+        return Err(ServiceError::EmptyOriginsError);
+    }
+    // This service is DID method-agnostic. When added to an enabled DID Document, its placeholder
+    // value is replaced with the appropriate DID method-specific identifier.
+    let id = DidUrl::parse(&format!("did:place:holder#{service_id}"))
+        .map_err(|err| ServiceError::InvalidDidError(err.to_string()))?;
 
-    let origins = origins
-        .iter()
-        .map(credential_origin_url)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let service_endpoint = match origins.as_slice() {
-        [] => return Err(EmptyOriginsError),
-        [single] => ServiceEndpoint::One(single.clone()),
-        many => ServiceEndpoint::from_json_value(json!({ "origins": many }))
-            .map_err(|err| InvalidServiceEndpointError(err.to_string()))?,
-    };
-
-    DocumentService::builder(Default::default())
-        // This service is DID method-agnostic. When added to an enabled DID Document, its
-        // placeholder value is replaced with the appropriate DID method-specific identifier.
-        .id(format!("did:place:holder#{service_id}")
-            .parse::<DIDUrl>()
-            .map_err(|err| InvalidDidError(err.to_string()))?)
-        .type_("LinkedDomains")
-        .service_endpoint(service_endpoint)
-        .build()
-        .map_err(|err| ServiceBuilderError(err.to_string()))
+    domain_linkage::service(id, origins.iter().cloned())
+        .map_err(|err| ServiceError::ServiceBuilderError(err.to_string()))
 }
 
 /// Issues one Domain Linkage Credential per (origin, verification method) pair — each credential
@@ -242,81 +180,55 @@ async fn issue_linked_domains(
     service_id: &str,
     verification_methods: Vec<VerificationMethod>,
     origins: &[Url],
-    issuance_date: Timestamp,
+    issuance_date: DateTime<Utc>,
 ) -> Result<(DocumentService, ServiceResource), ServiceError> {
     use ServiceError::*;
 
     let subject = &services.subject;
     let expiration_date = issuance_date
         // TODO: make this configurable
-        .checked_add(Duration::days(LINKED_DOMAINS_VALIDITY_DAYS))
+        .checked_add_signed(TimeDelta::days(LINKED_DOMAINS_VALIDITY_DAYS.into()))
         .ok_or(InvalidTimestampError)?;
 
-    let mut linked_dids = vec![];
+    let mut configuration = DomainLinkageConfiguration::new();
 
     for origin in origins {
-        let origin = credential_origin_url(origin)?;
-
         for verification_method in &verification_methods {
-            let subject_did = verification_method.id().did();
-
-            let verification_method_id = verification_method.id();
+            let verification_method_id = &verification_method.id;
             let alg = verification_method
-                .data()
                 .public_key_jwk()
                 .and_then(|jwk| jwk.alg())
                 .ok_or_else(|| MissingVerificationMethodAlgorithm(verification_method_id.to_string()))?;
             let algorithm =
                 Algorithm::from_str(alg).map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
 
-            let domain_linkage_credential = DomainLinkageCredentialBuilder::new()
-                .issuer(subject_did.clone())
-                .origin(origin.clone())
-                .issuance_date(issuance_date)
-                .expiration_date(expiration_date)
-                .build()
-                .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
-                .serialize_jwt(Default::default())
-                .map_err(|err| SerializationError(err.to_string()))?;
-
-            // Compose JWT
-            let header = Header {
-                alg: algorithm,
-                typ: None,
-                kid: Some(verification_method.id().to_string()),
-                ..Default::default()
-            };
-
-            let linked_did = [
-                URL_SAFE_NO_PAD.encode(
-                    header
-                        .to_json_vec()
-                        .map_err(|err| SerializationError(err.to_string()))?,
-                ),
-                URL_SAFE_NO_PAD.encode(domain_linkage_credential.as_bytes()),
-            ]
-            .join(".");
-
-            let proof_value = subject
-                // TODO: Currently UniCore always uses the same keys for signing regardless of the DID method.
-                // Once we implement DID method-specific keys, then we should supply the appropriate
-                // `subject_syntax_type` here instead of this `placeholder` value.
-                .sign(linked_did.as_str(), "placeholder", algorithm)
+            // TODO: Currently UniCore always uses the same keys for signing regardless of the DID method.
+            // Once we implement DID method-specific keys, then we should use the key of the verification
+            // method's DID method here.
+            let signer = subject
+                .issuer_signer(algorithm)
                 .await
                 .map_err(|err| SigningError(err.to_string()))?;
-            let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
-            let linked_did = [linked_did, signature].join(".");
+            let credential = DomainLinkageCredentialBuilder::new(
+                verification_method_id.did().clone(),
+                origin,
+                issuance_date,
+                expiration_date,
+            )
+            .map_err(|err| DomainLinkageCredentialBuilderError(err.to_string()))?
+            .sign(verification_method_id, &signer)
+            .await
+            .map_err(|err| SigningError(err.to_string()))?;
 
-            linked_dids.push(Jwt::from(linked_did))
+            configuration = configuration.with_credential(credential);
         }
     }
 
-    if linked_dids.is_empty() {
+    if configuration.linked_dids.is_empty() {
         return Err(EmptyLinkedDidsError);
     }
 
-    let configuration = DomainLinkageConfiguration::new(linked_dids);
-    info!("Configuration Resource: {configuration:#}");
+    debug!("Configuration Resource: {configuration:#}");
 
     Ok((
         linked_domains_service(service_id, origins)?,
@@ -341,8 +253,6 @@ impl Aggregate for Service {
         use ServiceCommand::*;
         use ServiceError::*;
         use ServiceEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             AddLinkedDomains {
@@ -437,18 +347,18 @@ impl Aggregate for Service {
                     let Some(ServiceResource::LinkedDomains(configuration)) = &self.resource else {
                         return Err(NotFound);
                     };
-                    let kept: Vec<Jwt> = configuration
-                        .linked_dids()
-                        .iter()
-                        .filter(|jwt| credential_origin(jwt).is_some_and(|origin| !removed.contains(&origin)))
-                        .cloned()
-                        .collect();
-                    if kept.is_empty() {
+                    let mut configuration = configuration.clone();
+                    for origin in &removed {
+                        configuration
+                            .remove_origin(origin)
+                            .map_err(|err| InvalidUrlError(err.to_string()))?;
+                    }
+                    if configuration.linked_dids.is_empty() {
                         return Err(EmptyLinkedDidsError);
                     }
                     (
                         Some(linked_domains_service(&service_id, &remaining)?),
-                        Some(ServiceResource::LinkedDomains(DomainLinkageConfiguration::new(kept))),
+                        Some(ServiceResource::LinkedDomains(configuration)),
                     )
                 };
 
@@ -481,7 +391,8 @@ impl Aggregate for Service {
                         &presentation_id,
                         signed_presentations.get(&presentation_id),
                         &linkable_documents,
-                    )?;
+                    )
+                    .await?;
                     added.push(LinkedVerifiablePresentation {
                         url: linked_verifiable_presentation_url(&services.public_url, &presentation_id)?,
                         presentation_id,
@@ -526,8 +437,6 @@ impl Aggregate for Service {
 
     fn apply(&mut self, event: Self::Event) {
         use ServiceEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             LinkedDomainsAdded {
@@ -583,13 +492,20 @@ pub mod service_tests {
         linked_domains_resource, linked_domains_service, linked_domains_service_entry, linked_domains_service_id,
         linked_verifiable_presentation_service_id,
     };
-    use crate::document::aggregate::test_utils::both_verification_methods;
     use agent_shared::config::set_config;
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use cqrs_es::test::TestFramework;
-    use identity_iota::verification::VerificationMethod;
-    use rstest::rstest;
+    use identity_kit::{did::ServiceEndpoint, domain_linkage::UnverifiedLinkage, vc::Jwt};
+    use rstest::{fixture, rstest};
+    use serde_json::json;
 
     type ServiceTestFramework = TestFramework<Service>;
+
+    /// The verification methods of the document fixtures, as the service commands take them.
+    #[fixture]
+    fn both_verification_methods() -> Vec<VerificationMethod> {
+        crate::document::aggregate::test_utils::both_verification_methods::default()
+    }
 
     fn web_did_method() {
         set_config().set_preferred_did_method(agent_shared::config::SupportedDidMethod::Web);
@@ -605,27 +521,36 @@ pub mod service_tests {
     /// lets it keep the remaining credentials without re-issuing them — so a synthetic credential is
     /// exactly what these tests need.
     fn credential(origin: &Url) -> Jwt {
-        let payload = json!({
-            "iss": "did:web:my-domain.example.org",
-            "sub": "did:web:my-domain.example.org",
-            "vc": { "credentialSubject": { "origin": origin.as_str() } },
-        });
-        Jwt::from(format!(
-            "e30.{}.signature",
-            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&payload).unwrap())
-        ))
+        let claims = DomainLinkageCredentialBuilder::new(
+            "did:web:my-domain.example.org".parse().unwrap(),
+            origin,
+            test_utils::issuance_date(),
+            test_utils::expiration_date(),
+        )
+        .unwrap()
+        .jwt_claims();
+        format!(
+            "eyJhbGciOiJFZERTQSJ9.{}.c2lnbmF0dXJl",
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).unwrap())
+        )
+        .parse()
+        .unwrap()
     }
 
     fn linked_dids(resource: &ServiceResource) -> Vec<Jwt> {
         let ServiceResource::LinkedDomains(configuration) = resource;
-        configuration.linked_dids().to_vec()
+        configuration.jwts().map(|(_, jwt)| jwt.clone()).collect()
     }
 
     /// The origin each published credential claims, in the order they were issued.
     fn claimed_origins(resource: &ServiceResource) -> Vec<String> {
         linked_dids(resource)
             .iter()
-            .map(|jwt| credential_origin(jwt).expect("credential claims an origin").to_string())
+            .map(|jwt| {
+                UnverifiedLinkage::from_jwt(jwt)
+                    .expect("credential claims an origin")
+                    .origin
+            })
             .collect()
     }
 
@@ -635,8 +560,9 @@ pub mod service_tests {
         ServiceEvent::LinkedDomainsAdded {
             service_id: service_id.to_owned(),
             service: linked_domains_service_entry(service_id, &origins),
-            resource: ServiceResource::LinkedDomains(DomainLinkageConfiguration::new(
-                origins.iter().map(credential).collect::<Vec<_>>(),
+            resource: ServiceResource::LinkedDomains(origins.iter().map(credential).fold(
+                DomainLinkageConfiguration::new(),
+                DomainLinkageConfiguration::with_credential,
             )),
             is_deleted: false,
             origins,
@@ -645,6 +571,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_one_domain_writes_the_endpoint_as_a_bare_origin_string(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -655,11 +582,12 @@ pub mod service_tests {
 
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://my-domain.example.org")],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedDomainsAdded {
                 service_id: linked_domains_service_id,
                 // The fixture writes the flattened, single-origin form the specification allows.
@@ -672,6 +600,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_several_domains_issues_a_credential_per_domain_and_key(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -683,11 +612,12 @@ pub mod service_tests {
         let events = ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
             // Deliberately out of order, to show the stored set is normalized.
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://b.example"), url("https://a.example")],
             })
+            .await
             .inspect_result()
             .expect("linking succeeds");
 
@@ -706,25 +636,23 @@ pub mod service_tests {
         assert_eq!(
             claimed_origins(resource),
             vec![
-                "https://a.example/",
-                "https://a.example/",
-                "https://b.example/",
-                "https://b.example/"
+                "https://a.example",
+                "https://a.example",
+                "https://b.example",
+                "https://b.example"
             ]
         );
         assert_eq!(linked_dids(resource).len(), 2 * method_count);
         // Multiple origins use the array form rather than the flattened string.
         assert_eq!(
-            service.service_endpoint(),
-            &ServiceEndpoint::from_json_value(json!({
-                "origins": ["https://a.example/", "https://b.example/"]
-            }))
-            .unwrap()
+            serde_json::to_value(&service.service_endpoint).unwrap(),
+            json!({ "origins": ["https://a.example", "https://b.example"] })
         );
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_a_domain_that_is_already_linked_changes_nothing(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -733,16 +661,18 @@ pub mod service_tests {
 
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://a.example")],
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_a_further_domain_keeps_the_existing_ones(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -751,11 +681,12 @@ pub mod service_tests {
 
         let events = ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://b.example")],
             })
+            .await
             .inspect_result()
             .expect("linking succeeds");
 
@@ -767,7 +698,7 @@ pub mod service_tests {
             claimed_origins(resource)
                 .into_iter()
                 .collect::<std::collections::BTreeSet<_>>(),
-            ["https://a.example/".to_string(), "https://b.example/".to_string()].into()
+            ["https://a.example".to_string(), "https://b.example".to_string()].into()
         );
     }
 
@@ -775,6 +706,7 @@ pub mod service_tests {
     /// needs no signing keys at all.
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_one_domain_keeps_the_others_credentials_verbatim(linked_domains_service_id: String) {
         web_did_method();
         let given = already_linked(&linked_domains_service_id, &["https://a.example", "https://b.example"]);
@@ -782,10 +714,11 @@ pub mod service_tests {
 
         let events = ServiceTestFramework::with(IdentityServices::default())
             .given(vec![given])
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 origins: vec![url("https://b.example")],
             })
+            .await
             .inspect_result()
             .expect("unlinking succeeds");
 
@@ -805,22 +738,24 @@ pub mod service_tests {
         assert_eq!(linked_dids(resource.as_ref().unwrap()), vec![kept]);
         // Back down to one origin, so the endpoint returns to the flattened form.
         assert_eq!(
-            service.as_ref().unwrap().service_endpoint(),
-            &ServiceEndpoint::One("https://a.example/".parse().unwrap())
+            service.as_ref().unwrap().service_endpoint,
+            ServiceEndpoint::Uri("https://a.example".parse().unwrap())
         );
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_the_last_domain_removes_the_service(linked_domains_service_id: String) {
         web_did_method();
 
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 origins: vec![url("https://a.example")],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedDomainsRemoved {
                 service_id: linked_domains_service_id,
                 service: None,
@@ -832,34 +767,39 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_a_domain_that_is_not_linked_changes_nothing(linked_domains_service_id: String) {
         web_did_method();
 
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id,
                 origins: vec![url("https://elsewhere.example")],
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_when_nothing_is_linked_changes_nothing(linked_domains_service_id: String) {
         web_did_method();
 
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id,
                 origins: vec![url("https://a.example")],
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn renewal_re_issues_the_linked_set_without_changing_it(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -871,11 +811,12 @@ pub mod service_tests {
                 &linked_domains_service_id,
                 &["https://a.example", "https://b.example"],
             )])
-            .when(ServiceCommand::RenewLinkedDomainsCredentials {
+            .when_async(ServiceCommand::RenewLinkedDomainsCredentials {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 only_if_expiring: false,
             })
+            .await
             .inspect_result()
             .expect("renewal succeeds");
 
@@ -886,16 +827,17 @@ pub mod service_tests {
         assert_eq!(
             claimed_origins(resource),
             vec![
-                "https://a.example/",
-                "https://a.example/",
-                "https://b.example/",
-                "https://b.example/"
+                "https://a.example",
+                "https://a.example",
+                "https://b.example",
+                "https://b.example"
             ]
         );
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_without_an_origin_is_rejected(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -904,16 +846,18 @@ pub mod service_tests {
 
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 origins: vec![],
             })
+            .await
             .then_expect_error_message("At least one origin is required.")
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn removing_presentations_keeps_the_remaining_order(linked_verifiable_presentation_service_id: String) {
         let presentations = ["a", "b", "c"].map(|id| LinkedVerifiablePresentation {
             presentation_id: id.into(),
@@ -927,9 +871,10 @@ pub mod service_tests {
                 service_id: linked_verifiable_presentation_service_id.clone(),
                 presentations: presentations.to_vec(),
             }])
-            .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
+            .when_async(ServiceCommand::RemoveLinkedVerifiablePresentations {
                 presentation_ids: vec!["b".into(), "missing".into()],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
                 service_id: linked_verifiable_presentation_service_id,
                 presentation_ids: vec!["b".into()],
@@ -982,6 +927,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn removing_the_last_presentations_deletes_the_service(linked_verifiable_presentation_service_id: String) {
         let presentation = LinkedVerifiablePresentation {
             presentation_id: "a".into(),
@@ -995,9 +941,10 @@ pub mod service_tests {
                 service_id: linked_verifiable_presentation_service_id.clone(),
                 presentations: vec![presentation],
             }])
-            .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
+            .when_async(ServiceCommand::RemoveLinkedVerifiablePresentations {
                 presentation_ids: vec!["a".into(), "a".into()],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
                 service_id: linked_verifiable_presentation_service_id,
                 presentation_ids: vec!["a".into()],
@@ -1129,16 +1076,16 @@ pub mod test_utils {
 
     #[fixture]
     pub fn linked_domains_resource() -> ServiceResource {
-        let configuration = DomainLinkageConfiguration::new(vec![Jwt::from("eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDp3ZWI6bXktZG9tYWluLmV4YW1wbGUub3JnI2tleS0wIn0.eyJleHAiOjMxNTM2MDAwLCJpc3MiOiJkaWQ6d2ViOm15LWRvbWFpbi5leGFtcGxlLm9yZyIsIm5iZiI6MCwic3ViIjoiZGlkOndlYjpteS1kb21haW4uZXhhbXBsZS5vcmciLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsImh0dHBzOi8vaWRlbnRpdHkuZm91bmRhdGlvbi8ud2VsbC1rbm93bi9kaWQtY29uZmlndXJhdGlvbi92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiRG9tYWluTGlua2FnZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsib3JpZ2luIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvIn19fQ.l7dEPioa-No5zBlDCthfXDcffRB7371OnLrrQQgeAdnvHhs5F8XqRtdAWKXB8z3Se00WtGxHrTepLKmH9OWJDQ".to_string())]);
+        let configuration = DomainLinkageConfiguration::new().with_credential("eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDp3ZWI6bXktZG9tYWluLmV4YW1wbGUub3JnI2tleS0wIn0.eyJleHAiOjMxNTM2MDAwLCJpc3MiOiJkaWQ6d2ViOm15LWRvbWFpbi5leGFtcGxlLm9yZyIsIm5iZiI6MCwic3ViIjoiZGlkOndlYjpteS1kb21haW4uZXhhbXBsZS5vcmciLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIsImh0dHBzOi8vaWRlbnRpdHkuZm91bmRhdGlvbi8ud2VsbC1rbm93bi9kaWQtY29uZmlndXJhdGlvbi92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiRG9tYWluTGlua2FnZUNyZWRlbnRpYWwiXSwiY3JlZGVudGlhbFN1YmplY3QiOnsib3JpZ2luIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvIn19fQ.l7dEPioa-No5zBlDCthfXDcffRB7371OnLrrQQgeAdnvHhs5F8XqRtdAWKXB8z3Se00WtGxHrTepLKmH9OWJDQ".parse().unwrap());
 
         ServiceResource::LinkedDomains(configuration)
     }
 
-    pub fn issuance_date() -> Timestamp {
-        Timestamp::from_unix(0).unwrap()
+    pub fn issuance_date() -> DateTime<Utc> {
+        DateTime::UNIX_EPOCH
     }
 
-    pub fn expiration_date() -> Timestamp {
-        issuance_date().checked_add(Duration::days(365)).unwrap()
+    pub fn expiration_date() -> DateTime<Utc> {
+        issuance_date() + TimeDelta::days(365)
     }
 }

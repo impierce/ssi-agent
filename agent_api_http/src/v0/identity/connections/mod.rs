@@ -16,10 +16,10 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
-use identity_core::common::Url;
-use identity_did::DIDUrl;
+use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::Caller;
+use url::Url;
 
 pub mod openapi;
 
@@ -95,7 +95,7 @@ pub struct GetConnectionsEndpointRequest {
     pub url: Option<Url>,
     #[serde(default)]
     #[schema(value_type = Option<String>)]
-    pub did: Option<DIDUrl>,
+    pub did: Option<Did>,
 }
 
 /// List all connections
@@ -131,7 +131,7 @@ pub(crate) async fn get_connections(
                 display
                     .as_ref()
                     .is_none_or(|display| connection.display.as_ref() == Some(display))
-                    && url.as_ref().is_none_or(|url| *url == connection.url)
+                    && url.as_ref().is_none_or(|url| url.as_str() == connection.url)
                     && did.as_ref().is_none_or(|did| connection.dids.contains(did))
             })
             .collect();
@@ -185,7 +185,7 @@ pub struct SyncConnectionRequest {
     operation_id = "sync_connection_by_id",
     tags = ["Connections"],
     responses(
-        (status = 200),
+        (status = 200, description = "Connection synced"),
         (status = 400, description = "Malformed JSON request body"),
     )
 )]
@@ -224,7 +224,7 @@ pub struct AcceptConnectionChangesRequest {
     operation_id = "accept_connection_changes",
     tags = ["Connections"],
     responses(
-        (status = 200),
+        (status = 200, description = "Pending changes accepted"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Connection not found"),
         (status = 422, description = "Request body does not match the expected schema"),
@@ -264,7 +264,7 @@ pub struct RemoveConnectionRequest {
     operation_id = "remove_connection",
     tags = ["Connections"],
     responses(
-        (status = 200),
+        (status = 200, description = "Connection removed"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Connection not found"),
         (status = 422, description = "Request body does not match the expected schema"),

@@ -6,13 +6,12 @@ A decentralized identifier (DID) serves as a pointer to a corresponding DID Docu
 
 ## DID Methods supported in UniCore
 
-| DID Method                                                                                | Development |              | Production |              |
-| ----------------------------------------------------------------------------------------- | :---------: | :----------: | :--------: | :----------: |
-|                                                                                           |   Signing   | Verification |  Signing   | Verification |
-| **[did:key](https://w3c-ccg.github.io/did-key-spec/)**                                    |     ✅      |      ✅      |     ❌     |      ✅      |
-| **[did:jwk](https://github.com/quartzjer/did-jwk/blob/main/spec.md)**                     |     ✅      |      ✅      |     ❌     |      ✅      |
-| **[did:web](https://w3c-ccg.github.io/did-method-web/)**                                  |     ✅      |      ✅      |     ✅     |      ✅      |
-| **[did:iota](https://wiki.iota.org/identity.rs/explanations/decentralized-identifiers/)** |     ✅      |      ✅      |     ✅     |      ✅      |
+| DID Method                                                            | Development |              | Production |              |
+| --------------------------------------------------------------------- | :---------: | :----------: | :--------: | :----------: |
+|                                                                       |   Signing   | Verification |  Signing   | Verification |
+| **[did:key](https://w3c-ccg.github.io/did-key-spec/)**                |     ✅      |      ✅      |     ❌     |      ✅      |
+| **[did:jwk](https://github.com/quartzjer/did-jwk/blob/main/spec.md)** |     ✅      |      ✅      |     ❌     |      ✅      |
+| **[did:web](https://w3c-ccg.github.io/did-method-web/)**              |     ✅      |      ✅      |     ✅     |      ✅      |
 
 ✅ = Supported
 ❌ = Not recommended
@@ -29,11 +28,11 @@ needing to query an external service. Although these DID Methods are very simple
   dynamic environments. Features like **Domain Linkage** and **Linked Verifiable Presentations** are therefore not
   possible.
 
-Due to these limitations, **did:key** and **did:jwk** should **not** be used as primary signing methods in production environments. While they are convenient for quickly generating decentralized identifiers and verifying signed data, their **inability to rotate keys** or update DID Documents makes them unsuitable for long-term credential issuance or organizational use. Instead, production systems should rely on more **extensible DID Methods** like **did:web** or **did:iota**, which provide better flexibility, key management, and integration capabilities.
+Due to these limitations, **did:key** and **did:jwk** should **not** be used as primary signing methods in production environments. While they are convenient for quickly generating decentralized identifiers and verifying signed data, their **inability to rotate keys** or update DID Documents makes them unsuitable for long-term credential issuance or organizational use. Instead, production systems should rely on an **extensible DID Method** like **did:web**, which provides better flexibility, key management, and integration capabilities.
 
-In contrast, DID Methods like **did:web** and **did:iota** are more flexible and extensible. They allow you to store the
-DID Document in a separate location, such as a web server or a distributed ledger. This separation enables you to update
-the DID Document independently of the DID itself, providing more flexibility and control over the associated data.
+In contrast, a DID Method like **did:web** is more flexible and extensible. It stores the DID Document in a separate
+location, a web server. This separation enables you to update the DID Document independently of the DID itself,
+providing more flexibility and control over the associated data.
 
 :::note
 
@@ -41,18 +40,15 @@ Although **did:key** and **did:jwk** are useful for immediate and self-contained
 
 :::
 
-### Web-hosted vs. Ledger-based DID Methods
+### Web-hosted DID Methods
 
-The **did:web** method leverages established web infrastructure by hosting DID Documents as JSON files on web domains, which results in human-readable identifiers and seamless integration with existing DNS and HTTPS systems. This approach offers familiarity and ease of use for many applications. In contrast, the **did:iota** method anchors its DID Documents on the IOTA Tangle, a distributed ledger that provides additional benefits aligned with self-sovereign identity (SSI) principles.
-
-- **Enhanced Decentralization and Autonomy:** **did:iota** reduces reliance on centralized web hosting and DNS services, giving users and organizations greater control over their digital identities.
-- **Robust Security Through Distributed Trust:** The trustless verification process of distributed ledgers offers strong security benefits. This model allows for independent verification of identity data, complementing the straightforward approach of did:web with an extra layer of security.
+The **did:web** method leverages established web infrastructure by hosting DID Documents as JSON files on web domains, which results in human-readable identifiers and seamless integration with existing DNS and HTTPS systems. This approach offers familiarity and ease of use for many applications.
 
 :::note
 
 The DID Documents, regardless of the method used, contain only the public key(s) and optionally associated features such
 as **Domain Linkage** and **Linked Verifiable Presentations**. Their primary role is to enable the verification of signed data.
-Importantly, they do not store any actual personal information on the ledger or web server.
+Importantly, they do not store any actual personal information on the web server.
 
 :::
 
@@ -70,10 +66,8 @@ did_methods:
     enabled: true
   did_key:
     enabled: true
-  did_iota:
-    preferred: true
-    enabled: true
   did_web:
+    preferred: true
     enabled: true
 
 signing_algorithms_supported:

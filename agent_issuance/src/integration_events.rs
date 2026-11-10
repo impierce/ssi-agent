@@ -5,7 +5,7 @@ use crate::offer::event::OfferEvent;
 use crate::reissuance::aggregate::Reissuance;
 use crate::reissuance::event::ReissuanceEvent;
 use cqrs_es::EventEnvelope;
-use oauth_tsl::status_list::StatusType;
+use identity_kit::status_list::StatusType;
 use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};

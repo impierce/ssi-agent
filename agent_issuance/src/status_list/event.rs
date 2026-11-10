@@ -1,7 +1,9 @@
 use cqrs_es::DomainEvent;
-use oauth_tsl::status_list::{StatusList, StatusType};
+use identity_kit::status_list::StatusList;
 use serde::{Deserialize, Serialize};
 use strum::Display;
+
+use identity_kit::status_list::StatusType;
 
 #[derive(Clone, Debug, Deserialize, Display, PartialEq, Serialize)]
 pub enum StatusListEvent {

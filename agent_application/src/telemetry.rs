@@ -1,11 +1,22 @@
 use agent_shared::config::LogFormat;
-use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::trace::{TraceContextExt as _, TracerProvider as _};
 use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
 use opentelemetry_sdk::{
     logs::SdkLoggerProvider, metrics::SdkMeterProvider, propagation::TraceContextPropagator, trace::SdkTracerProvider,
     Resource,
 };
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use std::fmt;
+use tracing::{Event, Subscriber};
+use tracing_subscriber::{
+    fmt::{
+        format::{Format, Json, Writer},
+        FmtContext, FormatEvent, FormatFields,
+    },
+    layer::SubscriberExt,
+    registry::LookupSpan,
+    util::SubscriberInitExt,
+    EnvFilter, Layer,
+};
 
 /// Environment variables that activate OpenTelemetry export when present.
 ///
@@ -126,7 +137,14 @@ pub fn init_telemetry(log_format: &LogFormat) -> TelemetryGuard {
 
     // The console format layers are mutually exclusive; `Option`s keep the subscriber composition uniform.
     let (json_layer, text_layer) = match log_format {
-        LogFormat::Json => (Some(tracing_subscriber::fmt::layer().json()), None),
+        LogFormat::Json => (
+            Some(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .event_format(JsonWithTraceContext::default()),
+            ),
+            None,
+        ),
         LogFormat::Text => (None, Some(tracing_subscriber::fmt::layer())),
     };
 
@@ -135,6 +153,10 @@ pub fn init_telemetry(log_format: &LogFormat) -> TelemetryGuard {
     let mut otel_log_layer = None;
 
     if otel_export_enabled() {
+        // `identity-kit` builds `reqwest` without a TLS crypto provider, and the OTLP HTTP exporter shares that
+        // `reqwest` build, so a process-wide provider must be installed before the exporters are built.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let resource = resource();
 
         // Traces: `tracing` spans are bridged to OTel spans and exported via OTLP.
@@ -206,4 +228,122 @@ pub fn init_telemetry(log_format: &LogFormat) -> TelemetryGuard {
         .init();
 
     guard
+}
+
+/// The JSON log format, extended with the `trace_id` and `span_id` of the span an event belongs to
+/// when that span is exported via OpenTelemetry, so log lines can be correlated with traces.
+struct JsonWithTraceContext {
+    json: Format<Json>,
+}
+
+impl Default for JsonWithTraceContext {
+    fn default() -> Self {
+        Self {
+            json: tracing_subscriber::fmt::format().json(),
+        }
+    }
+}
+
+impl<S, N> FormatEvent<S, N> for JsonWithTraceContext
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(&self, ctx: &FmtContext<'_, S, N>, mut writer: Writer<'_>, event: &Event<'_>) -> fmt::Result {
+        let Some((trace_id, span_id)) = trace_context() else {
+            return self.json.format_event(ctx, writer, event);
+        };
+
+        let mut line = String::new();
+        self.json.format_event(ctx, Writer::new(&mut line), event)?;
+
+        // The JSON format writes one object per line, so the IDs go before its closing brace.
+        match line.trim_end().strip_suffix('}') {
+            Some(object) => writeln!(writer, r#"{object},"trace_id":"{trace_id}","span_id":"{span_id}"}}"#),
+            None => writer.write_str(&line),
+        }
+    }
+}
+
+/// The trace and span ID of the currently entered span, if it is exported via
+/// OpenTelemetry.
+fn trace_context() -> Option<(opentelemetry::TraceId, opentelemetry::SpanId)> {
+    // `tracing-opentelemetry` activates the OpenTelemetry context of a span while it is entered.
+    let context = opentelemetry::Context::current();
+    let span = context.span();
+    let span_context = span.span_context();
+
+    span_context
+        .is_valid()
+        .then(|| (span_context.trace_id(), span_context.span_id()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        io,
+        sync::{Arc, Mutex},
+    };
+    use tracing_opentelemetry::OpenTelemetrySpanExt as _;
+
+    #[derive(Clone, Default)]
+    struct Buffer(Arc<Mutex<Vec<u8>>>);
+
+    impl io::Write for Buffer {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().write(bytes)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Buffer {
+        fn lines(&self) -> Vec<serde_json::Value> {
+            String::from_utf8(self.0.lock().unwrap().clone())
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        }
+    }
+
+    #[test]
+    fn json_log_lines_carry_the_trace_context_of_their_span() {
+        let buffer = Buffer::default();
+        let writer = buffer.clone();
+        let tracer_provider = SdkTracerProvider::builder().build();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(tracer_provider.tracer("test")))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .event_format(JsonWithTraceContext::default())
+                    .with_writer(move || writer.clone()),
+            );
+
+        let span_context = tracing::subscriber::with_default(subscriber, || {
+            tracing::info!("outside of a span");
+
+            let span = tracing::info_span!("HTTP Request");
+            let _entered = span.enter();
+            tracing::info!(answer = 42, "inside of a span");
+            span.context().span().span_context().clone()
+        });
+
+        let lines = buffer.lines();
+        assert_eq!(lines.len(), 2);
+
+        assert_eq!(lines[0]["fields"]["message"], "outside of a span");
+        assert!(lines[0].get("trace_id").is_none());
+        assert!(lines[0].get("span_id").is_none());
+
+        assert_eq!(lines[1]["fields"]["message"], "inside of a span");
+        assert_eq!(lines[1]["fields"]["answer"], 42);
+        assert_eq!(lines[1]["span"]["name"], "HTTP Request");
+        assert_eq!(lines[1]["trace_id"], span_context.trace_id().to_string());
+        assert_eq!(lines[1]["span_id"], span_context.span_id().to_string());
+    }
 }

@@ -428,7 +428,7 @@ pub async fn initialize_documents(
             document
                 .document
                 .as_ref()
-                .map(|persisted| (document.document_id.clone(), persisted.id().clone()))
+                .map(|persisted| (document.document_id.clone(), persisted.id.clone()))
         })
         .collect();
     let mut did_web_overwritten = false;
@@ -454,7 +454,7 @@ pub async fn initialize_documents(
                      set `overwrite_previous_did_web` to the persisted DID"
                 )
             })?;
-            let authorized_did = previous_did.parse::<identity_did::CoreDID>().map_err(|error| {
+            let authorized_did = previous_did.parse::<identity_kit::did::Did>().map_err(|error| {
                 anyhow::anyhow!("Invalid `overwrite_previous_did_web` value '{previous_did}': {error}")
             })?;
             if drifted_documents
@@ -582,15 +582,15 @@ pub async fn initialize_documents(
         .await?
         .values()
     {
-        if let (Some(did_method), Some(core_document)) = (document.did_method, &document.document) {
-            for method in core_document.methods(None) {
-                if let Some(algorithm) = method.data().public_key_jwk().and_then(|jwk| jwk.alg()) {
+        if let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) {
+            for method in did_document.methods(None) {
+                if let Some(algorithm) = method.public_key_jwk().and_then(|jwk| jwk.alg()) {
                     state
                         .services
                         .subject
                         .insert_verification_method_id(
                             agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
-                            method.id().clone(),
+                            method.id.clone(),
                         )
                         .await?;
                 }
@@ -645,41 +645,6 @@ fn get_did_methods_with_or_without_fixed_algorithm(
                 .map(|did_method| (did_method, None)),
         )
         .collect()
-}
-
-/// Publishes all decentrally hosted documents.
-///
-/// This asynchronous function performs the following steps:
-///
-/// 1. Query Documents: It retrieves all documents whose associated DID methods indicate they are
-///    hosted decentrally by filtering with the `SupportedDidMethod::hosted_decentrally` predicate.
-/// 2. Publish Documents: For each decentrally hosted document found, it sends a `PublishDocument`
-///    command via the command handler to publish the document.
-pub async fn publish_decentrally_hosted_documents(state: &IdentityState) -> anyhow::Result<()> {
-    // Get all the decentrally hosted Documents.
-    let decentrally_hosted_documents = query_all_documents(state, |(_, document)| {
-        document
-            .did_method
-            .as_ref()
-            .map(SupportedDidMethod::hosted_decentrally)
-            .unwrap_or_default()
-    })
-    .await?;
-
-    // Publish each decentrally hosted Documents.
-    for document_id in decentrally_hosted_documents.keys() {
-        // Publish the Document. Note that we ignore any errors here to allow for the system to continue initializing.
-        let _ = command_handler(
-            state.authorization_checker.clone(),
-            Caller::Internal,
-            document_id,
-            &state.command.document,
-            DocumentCommand::PublishDocument,
-        )
-        .await;
-    }
-
-    Ok(())
 }
 
 // TODO: Make this function generic and move it to a shared module.

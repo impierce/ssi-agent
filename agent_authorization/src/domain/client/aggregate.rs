@@ -4,7 +4,6 @@ use super::event::ClientEvent;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::authorization_request::CodeChallengeMethod;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -60,8 +59,6 @@ impl Aggregate for Client {
         use ClientCommand::*;
         use ClientEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             RegisterClient {
                 client_id,
@@ -107,8 +104,6 @@ impl Aggregate for Client {
 
     fn apply(&mut self, event: Self::Event) {
         use ClientEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ClientRegistered {
@@ -156,6 +151,7 @@ pub mod client_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_register_client(
         client_id: String,
         client_secret: Option<String>,
@@ -173,7 +169,7 @@ pub mod client_tests {
     ) {
         ClientTestFramework::with(())
             .given_no_previous_events()
-            .when(ClientCommand::RegisterClient {
+            .when_async(ClientCommand::RegisterClient {
                 client_id: client_id.clone(),
                 client_secret: client_secret.clone(),
                 client_name: client_name.clone(),
@@ -188,6 +184,7 @@ pub mod client_tests {
                 code_challenge_methods_supported: code_challenge_methods_supported.clone(),
                 require_pushed_authorization_request,
             })
+            .await
             .then_expect_events(vec![ClientEvent::ClientRegistered {
                 client_id,
                 client_secret,

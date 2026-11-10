@@ -1,72 +1,106 @@
-use crate::stronghold_storage;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, SupportedDidMethod};
+use crate::key_store::issuer_keys;
+use crate::stronghold_key_store;
+use agent_shared::config::SupportedDidMethod;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use did_manager_consumer::resolver::Resolver;
-use did_manager_identity_stronghold_ext::StrongholdExtStorage;
-use did_manager_iota::consumer::NodeUrls;
-use identity_did::CoreDID;
-use identity_iota::did::DIDUrl;
-use identity_iota::document::CoreDocument;
-use identity_iota::storage::{JwkStorage, KeyId};
-use identity_iota::verification::jwk::Jwk;
-use identity_iota::{did::DID, document::DIDUrlQuery, verification::jwk::JwkParams};
+use identity_kit::{
+    did::{Did, DidDocument, DidUrl, VerificationRelationship},
+    jose::{Jwk, JwsAlgorithm, Signer as _},
+    keys::{KeyId, KeySigner, KeyStore},
+    methods::{jwk::DidJwk, key::DidKey, web::DidWeb, web::ReqwestClient},
+    resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
+};
 use jsonwebtoken::Algorithm;
-use oid4vc_core::verification_material_resolver::VerificationMaterialResolver;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-pub use sd_jwt::{JsonObject, JwsSigner};
 use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Responsible for signing and verifying data.
-#[derive(Debug)]
 pub struct Subject {
-    pub stronghold_storage: StrongholdExtStorage,
-    pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DIDUrl>>>,
-    pub resolver: Resolver,
+    /// Holds the configured issuer keys.
+    pub key_store: Arc<dyn KeyStore>,
+    pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
+    /// Resolves `did:key`, `did:jwk` and `did:web`.
+    pub key_resolver: identity_kit::resolver::Resolver,
+}
+
+impl fmt::Debug for Subject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Subject")
+            .field("verification_method_ids", &self.verification_method_ids)
+            .field("key_resolver", &self.key_resolver)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
+/// HTTP client. With the `allow-localhost` feature, that client may also fetch them from the local network over plain
+/// `http`, like the agent's other outbound requests; see
+/// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
+fn key_resolver() -> identity_kit::resolver::Resolver {
+    #[cfg(not(feature = "allow-localhost"))]
+    let client = ReqwestClient::new();
+    #[cfg(feature = "allow-localhost")]
+    let client = local_network_client();
+
+    resolver_with(client.expect("Failed to initialize the HTTP client for `did:web`"))
+}
+
+/// IdentityKit's HTTP client, which may also reach the local network over plain `http`.
+#[cfg(any(feature = "allow-localhost", feature = "test_utils"))]
+fn local_network_client() -> Result<ReqwestClient, identity_kit::methods::web::HttpError> {
+    ReqwestClient::builder()
+        .dangerous_allow_loopback()
+        .dangerous_allow_private_network()
+        .build()
+}
+
+fn resolver_with(client: ReqwestClient) -> identity_kit::resolver::Resolver {
+    identity_kit::resolver::Resolver::builder()
+        .with(DidKey::new())
+        .with(DidJwk)
+        .with(DidWeb::new(client))
+        .build()
+}
+
+/// The configured issuer key that signs with `algorithm`.
+fn issuer_key(algorithm: Algorithm) -> anyhow::Result<(KeyId, JwsAlgorithm)> {
+    let alg = JwsAlgorithm::try_from(algorithm)?;
+
+    issuer_keys()
+        .into_iter()
+        .find(|(_, key_alg)| *key_alg == alg)
+        .ok_or_else(|| anyhow!("No issuer key signs with {alg}"))
 }
 
 impl Subject {
     /// Create a new Subject.
     pub async fn new() -> Self {
-        let stronghold_storage = stronghold_storage().await;
-
-        // TODO: all networks are set to the same node URL ==> introduce per-network configuration?
-        let node_urls = NodeUrls {
-            mainnet: config().iota_node_url.clone(),
-            testnet: config().iota_node_url.clone(),
-            devnet: config().iota_node_url.clone(),
-        };
-
-        let username_password = config()
-            .iota_node_username
-            .clone()
-            .zip(config().iota_node_password.clone());
-        let username_password = username_password.as_ref().map(|(u, p)| (u.as_str(), p.as_str()));
-
         Self {
-            stronghold_storage,
+            key_store: Arc::new(stronghold_key_store().await),
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
-            resolver: Resolver::new_with_options(None, Some(node_urls), username_password),
+            key_resolver: key_resolver(),
         }
     }
 
-    pub async fn get_public_key(&self, key_id: KeyId, algorithm: &Algorithm) -> anyhow::Result<Jwk> {
-        match algorithm {
-            Algorithm::EdDSA => self.stronghold_storage.get_ed25519_public_key(&key_id).await,
-            Algorithm::ES256 => self.stronghold_storage.get_es256_public_key(&key_id).await,
-            _ => anyhow::bail!("Unsupported algorithm"),
-        }
-        .map_err(Into::into)
+    /// IdentityKit's signer with the configured issuer key for `algorithm`.
+    pub async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+        let (key, alg) = issuer_key(algorithm)?;
+
+        Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)
+    }
+
+    pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
+        Ok(self.key_store.public_jwk(&key_id).await?)
     }
 
     pub async fn insert_verification_method_id(
         &self,
         key: StorageKey,
-        verification_method_id: DIDUrl,
+        verification_method_id: DidUrl,
     ) -> anyhow::Result<()> {
         self.verification_method_ids
             .lock()
@@ -75,77 +109,51 @@ impl Subject {
         Ok(())
     }
 
-    pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DIDUrl> {
+    pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DidUrl> {
         self.verification_method_ids.lock().await.get(&key).cloned()
+    }
+
+    /// Resolves the DID document of `did`.
+    pub async fn resolve_document(&self, did: &Did) -> anyhow::Result<DidDocument> {
+        self.key_resolver
+            .resolve(did)
+            .await
+            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did}`, error: {err}"))?
+            .document
+            .ok_or_else(|| anyhow!("Failed to resolve DID Document for DID: `{did}`"))
     }
 
     /// Resolves the public key for a given DID URL.
     pub async fn resolve_public_key(&self, did_url: &str) -> anyhow::Result<Jwk> {
-        let did_url =
-            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+        let did_url = DidUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
 
-        let document = self
-            .resolver
-            .resolve(did_url.did().as_str())
+        self.resolve_verification_method_key(&did_url, None).await
+    }
+
+    /// Resolves the public key of the verification method `did_url`, which must be usable for `relationship` when one
+    /// is given.
+    async fn resolve_verification_method_key(
+        &self,
+        did_url: &DidUrl,
+        relationship: Option<VerificationRelationship>,
+    ) -> anyhow::Result<Jwk> {
+        self.key_resolver
+            .resolve_public_key(did_url, relationship)
             .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
-
-        let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), None)
-            .ok_or(anyhow!(
-                "Failed to resolve verification method for DID URL: `{did_url}`"
-            ))?;
-
-        verification_method
-            .data()
-            .public_key_jwk()
-            .ok_or_else(|| anyhow!("Failed to resolve public key for DID URL: `{did_url}`"))
-            .cloned()
+            .map_err(|err| anyhow!("Failed to resolve public key for DID URL: `{did_url}`, error: {err}"))
     }
 }
 
 #[async_trait]
-impl JwsSigner for Subject {
-    type Error = String;
+impl KeyResolver for Subject {
+    async fn resolve_key(&self, key: &KeyReference, role: KeyRole) -> Result<Jwk, KeyResolutionError> {
+        let KeyReference::DidUrl(did_url) = key else {
+            return Err(KeyResolutionError::unsupported(key));
+        };
 
-    async fn sign(&self, header: &JsonObject, payload: &JsonObject) -> Result<Vec<u8>, Self::Error> {
-        let algorithm = header
-            .get("alg")
-            .and_then(|alg| alg.as_str())
-            .and_then(|alg_str| Algorithm::from_str(alg_str).ok())
-            .unwrap_or_else(get_preferred_signing_algorithm);
-
-        let encoded_header = serde_json::to_vec(header)
-            .map_err(|e| format!("Failed to serialize header to JSON: {}", e))
-            .map(|header_bytes| URL_SAFE_NO_PAD.encode(&header_bytes))?;
-
-        let encoded_payload = serde_json::to_vec(payload)
-            .map_err(|e| format!("Failed to serialize payload to JSON: {}", e))
-            .map(|payload_bytes| URL_SAFE_NO_PAD.encode(&payload_bytes))?;
-
-        let message = format!("{}.{}", encoded_header, encoded_payload);
-
-        let preferred_did_method = get_preferred_did_method();
-
-        let proof_value = Sign::sign(self, &message, &preferred_did_method.to_string(), algorithm)
+        self.resolve_verification_method_key(did_url, Some(role.relationship()))
             .await
-            .map_err(|e| format!("Signing error: {}", e))?;
-
-        let signature = URL_SAFE_NO_PAD.encode(proof_value.as_slice());
-        let message = [message, signature].join(".");
-
-        Ok(message.as_bytes().to_vec())
-    }
-}
-
-#[async_trait]
-impl VerificationMaterialResolver for Subject {
-    async fn resolve_did_document(&self, did: &CoreDID) -> Result<CoreDocument, Box<dyn std::error::Error>> {
-        self.resolver.resolve(did.as_str()).await.map_err(|e| e.into())
-    }
-
-    async fn resolve_public_key(&self, kid: &str) -> Result<Jwk, Box<dyn std::error::Error>> {
-        Subject::resolve_public_key(self, kid).await.map_err(|e| e.into())
+            .map_err(KeyResolutionError::msg)
     }
 }
 
@@ -165,11 +173,19 @@ mod default_subject {
             "did:jwk:eyJhbGciOiJFZERTQSIsImNydiI6IkVkMjU1MTkiLCJraWQiOiJiUUtRUnphb3A3Q2dFdnFWcThVbGdMR3NkRi1SLWhuTEZrS0ZacVcyVk4wIiwia3R5IjoiT0tQIiwieCI6Ikdsbks5ZVBzODAyWHhBZ2xST1F6b0d1cm05UXB2MElGUEViZE1DSUxOX1UifQ#0";
     }
 
+    impl Subject {
+        /// This subject, resolving `did:web` documents on the local network over plain `http` as well, for tests
+        /// that serve them from mock servers.
+        pub fn with_local_network_resolver(mut self) -> Self {
+            self.key_resolver =
+                resolver_with(local_network_client().expect("Failed to initialize the HTTP client for `did:web`"));
+            self
+        }
+    }
+
     // This `Default` implementation for `Subject` returns a new `Subject` with the Verification Method IDs already preloaded.
     impl Subject {
         pub async fn test_subject() -> Self {
-            let stronghold_storage = stronghold_storage().await;
-
             let verification_method_ids = Arc::new(Mutex::new(HashMap::from_iter(vec![
                 (
                     StorageKey::new(SupportedDidMethod::Key, Algorithm::ES256),
@@ -190,9 +206,9 @@ mod default_subject {
             ])));
 
             Self {
-                stronghold_storage,
+                key_store: Arc::new(stronghold_key_store().await),
                 verification_method_ids,
-                resolver: Resolver::new(),
+                key_resolver: key_resolver(),
             }
         }
     }
@@ -201,47 +217,13 @@ mod default_subject {
 #[async_trait]
 impl Verify for Subject {
     async fn public_key(&self, did_url: &str) -> anyhow::Result<Vec<u8>> {
-        let did_url =
-            identity_iota::did::DIDUrl::parse(did_url).map_err(|err| anyhow!("Failed to parse DID URL: {err}"))?;
+        let public_key_jwk = self.resolve_public_key(did_url).await?;
 
-        let document = self
-            .resolver
-            .resolve(did_url.did().as_str())
-            .await
-            .map_err(|err| anyhow!("Failed to resolve DID Document for DID: `{did_url}`, error: {err}"))?;
-
-        let verification_method = document
-            .resolve_method(DIDUrlQuery::from(&did_url), None)
-            .ok_or(anyhow!(
-                "Failed to resolve verification method for DID URL: `{did_url}`"
-            ))?;
-
-        // Try decode from `MethodData` directly, else use public JWK params.
-        verification_method.data().try_decode().or_else(|_| {
-            verification_method
-                .data()
-                .public_key_jwk()
-                .and_then(|public_key_jwk| match public_key_jwk.params() {
-                    JwkParams::Okp(okp_params) => URL_SAFE_NO_PAD.decode(&okp_params.x).ok(),
-                    JwkParams::Ec(ec_params) => {
-                        let x_bytes = URL_SAFE_NO_PAD.decode(&ec_params.x).ok()?;
-                        let y_bytes = URL_SAFE_NO_PAD.decode(&ec_params.y).ok()?;
-
-                        let encoded_point = p256::EncodedPoint::from_affine_coordinates(
-                            p256::FieldBytes::from_slice(&x_bytes),
-                            p256::FieldBytes::from_slice(&y_bytes),
-                            false, // false for uncompressed point
-                        );
-
-                        let verifying_key = p256::ecdsa::VerifyingKey::from_encoded_point(&encoded_point)
-                            .expect("Failed to create verifying key from encoded point");
-
-                        Some(verifying_key.to_encoded_point(false).as_bytes().to_vec())
-                    }
-                    _ => None,
-                })
-                .ok_or(anyhow!("Failed to decode public key for DID URL: `{did_url}`"))
-        })
+        match public_key_jwk.kty() {
+            "OKP" => Ok(public_key_jwk.ed25519_public_bytes()?.to_vec()),
+            "EC" => Ok(public_key_jwk.p256_public_bytes()?.to_vec()),
+            kty => Err(anyhow!("Unsupported key type `{kty}` for DID URL: `{did_url}`")),
+        }
     }
 }
 
@@ -257,25 +239,7 @@ impl Sign for Subject {
     }
 
     async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        let stronghold_storage = &self.stronghold_storage;
-        let (key_id, public_key) = match algorithm {
-            Algorithm::ES256 => {
-                let es256_key_id = config().secret_manager.issuer_es256_key_id.clone();
-                let public_key = stronghold_storage.get_es256_public_key(&es256_key_id).await?;
-                (es256_key_id, public_key)
-            }
-            Algorithm::EdDSA => {
-                let ed25519_key_id = config().secret_manager.issuer_eddsa_key_id.clone();
-                let public_key = stronghold_storage.get_ed25519_public_key(&ed25519_key_id).await?;
-                (ed25519_key_id, public_key)
-            }
-            _ => return Err(anyhow!("Unsupported algorithm")),
-        };
-
-        stronghold_storage
-            .sign(&key_id, message.as_bytes(), &public_key)
-            .await
-            .map_err(Into::into)
+        Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?)
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -292,7 +256,7 @@ impl oid4vc_core::Subject for Subject {
         self.get_verification_method_id(StorageKey::new(method, algorithm))
             .await
             .as_ref()
-            .map(DIDUrl::did)
+            .map(DidUrl::did)
             .map(ToString::to_string)
             .ok_or_else(|| anyhow!("Failed to get verification method ID"))
     }
@@ -314,9 +278,8 @@ impl StorageKey {
 mod tests {
     use super::*;
     use agent_shared::config::{default_issuer_eddsa_key_id, default_issuer_es256_key_id, SecretManagerConfig};
-    use jsonwebtoken::DecodingKey;
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
-    use serde_json::json;
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
     const EDDSA_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKSmJWOVpNRkZQTm05SFgyczVNbTlzY1RWTWRIUTJZVkE0YzE5QmJFRmhWVUl6UzBkelVFY3RlR0kwSWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWxaUGFrUjBRblozY0daalNraHlUelpMVjFOUGRYTlZVR1ptUWt3eVIxOUtjWFp0VVRZNFMzaDRWalFpZlEjMCJ9.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlpFUlRRU0lzSW1OeWRpSTZJa1ZrTWpVMU1Ua2lMQ0pyYVdRaU9pSkpiVjlaTUZGUE5tOUhYMnM1TW05c2NUVk1kSFEyWVZBNGMxOUJiRUZoVlVJelMwZHpVRWN0ZUdJMElpd2lhM1I1SWpvaVQwdFFJaXdpZUNJNklsWlBha1IwUW5aM2NHWmpTa2h5VHpaTFYxTlBkWE5WVUdabVFrd3lSMTlLY1hadFVUWTRTM2g0VmpRaWZRIiwic3ViIjoiZGlkOmp3azpleUpoYkdjaU9pSkZaRVJUUVNJc0ltTnlkaUk2SWtWa01qVTFNVGtpTENKcmFXUWlPaUpKYlY5Wk1GRlBObTlIWDJzNU1tOXNjVFZNZEhRMllWQTRjMTlCYkVGaFZVSXpTMGR6VUVjdGVHSTBJaXdpYTNSNUlqb2lUMHRRSWl3aWVDSTZJbFpQYWtSMFFuWjNjR1pqU2toeVR6WkxWMU5QZFhOVlVHWm1Ra3d5UjE5S2NYWnRVVFk0UzNoNFZqUWlmUSIsImF1ZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGWkVSVFFTSXNJbU55ZGlJNklrVmtNalUxTVRraUxDSnJhV1FpT2lKdFFqSXhUV2t5Y1V0WVZtTTFOREpVWWt0U09UZ3lUelpUWjFKWVZrWlFaVzV3TTNGWWRIRlRla3R2SWl3aWEzUjVJam9pVDB0UUlpd2llQ0k2SWprM1JVRXpSSE5vUmpONlIwSllTVjlVYnpObVJrUnJNVTFxV1VaYVV6bFZiMUpVYmxCT1NIUlpVV01pZlEiLCJleHAiOjE3MjMwMzE3MTQsImlhdCI6MTcyMzAzMTExNCwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.oGRYpwH4QvWZs0bZkgAuxq6MqNYdoX44KxNfRl7GzXCnv_0D_c19rhYMwzn04R7udNCthFDr7GUhXLQgROlUDw";
@@ -366,105 +329,66 @@ mod tests {
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
     }
 
-    #[tokio::test]
-    async fn test_jws_signer_with_es256_algorithm() {
-        let subject = Subject::test_subject().await;
-
-        let preferred_did_method = get_preferred_did_method().to_string();
-        let kid = subject.key_id(&preferred_did_method, Algorithm::ES256).await.unwrap();
-
-        // Create header with ES256 algorithm
-        let header = json!({
-            "alg": "ES256",
-            "typ": "JWT",
-            "kid": kid
-        });
-
-        // Create a simple payload
-        let payload = json!({
-            "iss": "test-issuer",
-            "sub": "test-subject",
-            "iat": 1234567890
-        });
-
-        // Sign using JwsSigner trait
-        let result = JwsSigner::sign(&subject, header.as_object().unwrap(), payload.as_object().unwrap()).await;
-
-        assert!(result.is_ok());
-
-        let jwt_bytes = result.unwrap();
-        let jwt_string = String::from_utf8(jwt_bytes).unwrap();
-
-        // Verify JWT has 3 parts (header.payload.signature)
-        let parts: Vec<&str> = jwt_string.split('.').collect();
-        assert_eq!(parts.len(), 3);
-
-        // Verify the header part contains ES256
-        let decoded_header = URL_SAFE_NO_PAD.decode(parts[0]).unwrap();
-        let header_json: serde_json::Value = serde_json::from_slice(&decoded_header).unwrap();
-        assert_eq!(header_json["alg"], "ES256");
-
-        let public_key = subject.resolve_public_key(&kid).await.unwrap();
-
-        let jwk = serde_json::from_value(json!(public_key)).unwrap();
-
-        let decoding_key = DecodingKey::from_jwk(&jwk).unwrap();
-
-        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
-        validation.required_spec_claims = Default::default();
-
-        let token = jsonwebtoken::decode::<serde_json::Value>(&jwt_string, &decoding_key, &validation);
-
-        assert!(token.is_ok());
+    /// The public key of the `did:web` document [`serve_did_web`] serves.
+    fn did_web_public_key() -> serde_json::Value {
+        serde_json::json!({
+            "kty": "OKP",
+            "crv": "Ed25519",
+            "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+        })
     }
 
+    /// Serves a `did:web` document on `localhost` and returns the DID URL of its verification method.
+    async fn serve_did_web() -> (wiremock::MockServer, String) {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, MockServer, ResponseTemplate,
+        };
+
+        let server = MockServer::start().await;
+        let did = format!("did:web:localhost%3A{}", server.address().port());
+        let did_url = format!("{did}#key-0");
+        let document = serde_json::json!({
+            "id": did,
+            "verificationMethod": [{
+                "id": did_url,
+                "type": "JsonWebKey2020",
+                "controller": did,
+                "publicKeyJwk": did_web_public_key()
+            }],
+            "assertionMethod": [did_url]
+        });
+        Mock::given(method("GET"))
+            .and(path("/.well-known/did.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(document))
+            .mount(&server)
+            .await;
+
+        (server, did_url)
+    }
+
+    #[cfg(not(feature = "allow-localhost"))]
     #[tokio::test]
-    async fn test_jws_signer_with_eddsa_algorithm() {
+    async fn does_not_resolve_did_web_on_the_local_network() {
         let subject = Subject::test_subject().await;
+        let (server, did_url) = serve_did_web().await;
 
-        let preferred_did_method = get_preferred_did_method().to_string();
-        let kid = subject.key_id(&preferred_did_method, Algorithm::EdDSA).await.unwrap();
+        assert!(subject.resolve_public_key(&did_url).await.is_err());
+        assert_eq!(server.received_requests().await.unwrap().len(), 0);
+    }
 
-        // Create header with EdDSA algorithm
-        let header = json!({
-            "alg": "EdDSA",
-            "typ": "JWT",
-            "kid": kid
-        });
+    #[cfg(feature = "allow-localhost")]
+    mod allow_localhost_tests {
+        use super::*;
 
-        // Create a simple payload
-        let payload = json!({
-            "iss": "test-issuer",
-            "sub": "test-subject",
-            "iat": 1234567890
-        });
+        #[tokio::test]
+        async fn resolves_did_web_on_the_local_network() {
+            let subject = Subject::test_subject().await;
+            let (_server, did_url) = serve_did_web().await;
 
-        // Sign using JwsSigner trait
-        let result = JwsSigner::sign(&subject, header.as_object().unwrap(), payload.as_object().unwrap()).await;
+            let public_key = subject.resolve_public_key(&did_url).await.unwrap();
 
-        assert!(result.is_ok());
-
-        let jwt_bytes = result.unwrap();
-        let jwt_string = String::from_utf8(jwt_bytes).unwrap();
-
-        // Verify JWT has 3 parts (header.payload.signature)
-        let parts: Vec<&str> = jwt_string.split('.').collect();
-        assert_eq!(parts.len(), 3);
-
-        // Verify the header part contains EdDSA
-        let decoded_header = URL_SAFE_NO_PAD.decode(parts[0]).unwrap();
-        let header_json: serde_json::Value = serde_json::from_slice(&decoded_header).unwrap();
-        assert_eq!(header_json["alg"], "EdDSA");
-
-        let public_key = subject.resolve_public_key(&kid).await.unwrap();
-
-        let decoding_key = DecodingKey::from_jwk(&serde_json::from_value(json!(public_key)).unwrap()).unwrap();
-
-        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
-        validation.required_spec_claims = Default::default();
-
-        let token = jsonwebtoken::decode::<serde_json::Value>(&jwt_string, &decoding_key, &validation);
-
-        assert!(token.is_ok());
+            assert_eq!(serde_json::json!(public_key), did_web_public_key());
+        }
     }
 }

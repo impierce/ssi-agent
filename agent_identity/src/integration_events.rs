@@ -65,8 +65,8 @@ impl ProjectIntegrationEvent for Connection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use identity_core::common::Url;
     use std::collections::HashMap;
+    use url::Url;
 
     #[test]
     fn try_from_connection_added() {

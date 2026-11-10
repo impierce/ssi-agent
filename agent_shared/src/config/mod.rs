@@ -3,10 +3,7 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::{
-    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL, IOTA_TESTNET_URL},
-    storage::KeyId,
-};
+use identity_kit::keys::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
@@ -83,12 +80,25 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
     CONFIG.write().unwrap()
 }
 
+/// Whether `dev.log_sensitive_values` is enabled, which is only possible with the `development` profile. Reads without
+/// blocking, so that logging while the configuration is being written cannot deadlock; reports `false` meanwhile.
+pub fn log_sensitive_values() -> bool {
+    CONFIG
+        .try_read()
+        .map(|config| config.dev.log_sensitive_values)
+        .unwrap_or(false)
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Config)]
 pub struct ApplicationConfiguration {
     #[config(default)]
     #[serde(default, skip_serializing_if = "DevConfig::is_empty")]
     pub dev: DevConfig,
+    /// Switches for features that are still under development and hidden unless explicitly enabled.
+    #[config(default)]
+    #[serde(default, skip_serializing_if = "FeatureFlags::all_disabled")]
+    pub feature: FeatureFlags,
     #[config(default)]
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
@@ -289,19 +299,6 @@ pub struct ApplicationConfiguration {
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
-    #[config(default)]
-    pub iota_address: Option<String>,
-    #[config(default)]
-    pub iota_node_url: Option<String>,
-    #[config(default)]
-    pub iota_node_username: Option<String>,
-    #[config(default)]
-    pub iota_node_password: Option<String>,
-    #[config(default)]
-    pub iota_sponsoring_service_url: Option<Url>,
-    #[config(default)]
-    #[serde(serialize_with = "redact")]
-    pub iota_sponsoring_service_auth: Option<String>,
     // WARNING: When this is enabled, the authorization flow will be interactive. However, in the current form this
     // means that the issuance flow will always include an OpenID4VP Presentation Request containing a hardcoded DCQL
     // Query.
@@ -318,21 +315,6 @@ impl ApplicationConfiguration {
 
     /// Validates whether the configuration is suitable for development (enforce restrictions).
     pub fn validate_development(&self) -> Result<(), SharedError> {
-        if self.event_store.type_ == EventStoreType::InMemory {
-            for did_method in &[SupportedDidMethod::Iota] {
-                if self
-                    .did_methods
-                    .get(did_method)
-                    .map(|options| options.enabled)
-                    .unwrap_or_default()
-                {
-                    return Err(SharedError::InvalidConfiguration(format!(
-                        "`{did_method}` cannot be enabled when using the `in_memory` event store"
-                    )));
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -404,17 +386,97 @@ impl ApplicationConfiguration {
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
         self.secret_manager = config;
     }
+
+    /// The serialized configuration with all secrets redacted, for logging. On top of the fields the
+    /// serialization already redacts, the usernames, passwords and query values in URLs are redacted.
+    pub fn redacted(&self) -> serde_json::Value {
+        let mut value = serde_json::to_value(self).unwrap_or_default();
+        redact_url_credentials(&mut value);
+        value
+    }
+}
+
+/// Redacts the userinfo (e.g. `nats://token@host`) and the query values (e.g. `?api_key=...`) of
+/// every URL, keeping the query parameter names.
+fn redact_url_credentials(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => {
+            let Ok(mut url) = Url::parse(text) else {
+                return;
+            };
+            let mut redacted = false;
+            if !url.username().is_empty() {
+                redacted |= url.set_username("REDACTED").is_ok();
+            }
+            if url.password().is_some() {
+                redacted |= url.set_password(Some("REDACTED")).is_ok();
+            }
+            if url.query().is_some() {
+                let names: Vec<String> = url.query_pairs().map(|(name, _)| name.into_owned()).collect();
+                url.query_pairs_mut()
+                    .clear()
+                    .extend_pairs(names.iter().map(|name| (name, "REDACTED")));
+                redacted = true;
+            }
+            if redacted {
+                *text = url.to_string();
+            }
+        }
+        serde_json::Value::Array(values) => values.iter_mut().for_each(redact_url_credentials),
+        serde_json::Value::Object(map) => map.values_mut().for_each(redact_url_credentials),
+        _ => {}
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct DevConfig {
     #[serde(serialize_with = "redact")]
     pub api_key: Option<String>,
+    /// Logs tokens, codes, credential offers and personal data at `debug` that are redacted otherwise. Like every
+    /// `dev` setting, ignored with the `production` profile.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub log_sensitive_values: bool,
 }
 
 impl DevConfig {
     fn is_empty(&self) -> bool {
-        self.api_key.is_none()
+        self.api_key.is_none() && !self.log_sensitive_values
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct FeatureFlags {
+    /// Enables the Key Management System. Set through `UNICORE__FEATURE__KMS`; absent or empty means disabled.
+    #[serde(default, deserialize_with = "deserialize_feature_flag")]
+    pub kms: bool,
+}
+
+impl FeatureFlags {
+    fn all_disabled(&self) -> bool {
+        !self.kms
+    }
+}
+
+/// Reads a feature flag that is either a boolean or a string, so that an empty environment variable disables the
+/// feature instead of failing to load the configuration.
+fn deserialize_feature_flag<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Flag {
+        Bool(bool),
+        Text(String),
+    }
+
+    match Option::<Flag>::deserialize(deserializer)? {
+        None => Ok(false),
+        Some(Flag::Bool(enabled)) => Ok(enabled),
+        Some(Flag::Text(value)) => match value.trim().to_ascii_lowercase().as_str() {
+            "" | "false" | "0" | "off" | "no" => Ok(false),
+            "true" | "1" | "on" | "yes" => Ok(true),
+            other => Err(serde::de::Error::custom(format!(
+                "invalid feature flag value `{other}`, expected `true` or `false`"
+            ))),
+        },
     }
 }
 
@@ -586,15 +648,6 @@ pub enum SupportedDidMethod {
     #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
     #[strum(serialize = "did:web")]
     Web,
-    #[serde(alias = "did_iota", alias = "did:iota", rename = "did_iota")]
-    #[strum(serialize = "did:iota")]
-    Iota,
-    #[serde(alias = "did_iota_dev", alias = "did:iota:dev", rename = "did_iota_dev")]
-    #[strum(serialize = "did:iota:dev")]
-    IotaDev,
-    #[serde(alias = "did_iota_test", alias = "did:iota:test", rename = "did_iota_test")]
-    #[strum(serialize = "did:iota:test")]
-    IotaTest,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -603,67 +656,27 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest => true,
+            SupportedDidMethod::Web => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
 
     pub fn hosted_centrally(&self) -> bool {
         match self {
-            SupportedDidMethod::Jwk
-            | SupportedDidMethod::Key
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest => false,
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
             SupportedDidMethod::Web => true,
         }
     }
-
-    pub fn hosted_decentrally(&self) -> bool {
-        match self {
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev | SupportedDidMethod::IotaTest => true,
-        }
-    }
 }
-
-const IOTA_NETWORK: &str = "iota";
-const IOTA_DEV_NETWORK: &str = "dev";
-const IOTA_TEST_NETWORK: &str = "test";
 
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
 
 impl SupportedDidMethod {
-    pub fn api_endpoint(&self) -> Option<&str> {
-        match self {
-            SupportedDidMethod::Iota => Some(IOTA_MAINNET_URL),
-            SupportedDidMethod::IotaDev => Some(IOTA_DEVNET_URL),
-            SupportedDidMethod::IotaTest => Some(IOTA_TESTNET_URL),
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
-        }
-    }
-
-    pub fn network_name(&self) -> Option<&str> {
-        match self {
-            SupportedDidMethod::Iota => Some(IOTA_NETWORK),
-            SupportedDidMethod::IotaDev => Some(IOTA_DEV_NETWORK),
-            SupportedDidMethod::IotaTest => Some(IOTA_TEST_NETWORK),
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
-        }
-    }
-
     pub fn fragment(&self) -> Option<&str> {
         match self {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
-            SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest
-            | SupportedDidMethod::Key
-            | SupportedDidMethod::Web => None,
+            SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
 }
@@ -765,18 +778,20 @@ impl AlgorithmExt for jsonwebtoken::Algorithm {
             jsonwebtoken::Algorithm::PS384 => "PS384",
             jsonwebtoken::Algorithm::PS512 => "PS512",
             jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+            // `Algorithm` is `non_exhaustive`; all variants of jsonwebtoken 11 are listed above.
+            _ => unreachable!("unknown algorithm {self:?}"),
         }
     }
 }
 
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
+const REDACTED: &str = "<REDACTED>";
+
 pub(crate) fn redact<S, T>(_str: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    let redacted_value = "<REDACTED>";
-    let redacted_value = redacted_value.to_string();
-    redacted_value.serialize(serializer)
+    REDACTED.serialize(serializer)
 }
 
 #[cfg(test)]
@@ -926,6 +941,40 @@ mod tests {
 
     #[test]
     #[serial]
+    fn redacted_configuration_contains_no_secrets() {
+        let provisioned_config = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                    dev:
+                        api_key: "dev-api-key"
+                    event_store:
+                        type: "mongodb"
+                        connection_string: "mongodb://user:db-password@localhost:27017"
+                    secret_manager:
+                        stronghold_password: "stronghold-password"
+                "#,
+                config::FileFormat::Yaml,
+            ))
+            .build()
+            .unwrap();
+
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+        let redacted = config.redacted().to_string();
+
+        for secret in [
+            "dev-api-key",
+            "db-password",
+            "stronghold-password",
+        ] {
+            assert!(!redacted.contains(secret), "`{secret}` in {redacted}");
+        }
+
+        let redacted = config.redacted();
+        assert_eq!(redacted["public_url"], json!(config.public_url.as_str()));
+    }
+
+    #[test]
+    #[serial]
     fn test_development_config_loads_static_api_key() {
         let provisioned_config = config::Config::builder()
             .add_source(config::File::from_str(
@@ -987,6 +1036,44 @@ mod tests {
 
                 assert!(config.dev.api_key.is_none());
                 assert!(config.get_provisioned_config().get("dev").is_none());
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_log_sensitive_values_only_with_development_profile() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__DEV__LOG_SENSITIVE_VALUES", Some("true")),
+            ],
+            || {
+                let provisioned_config = || {
+                    config::Config::builder()
+                        .add_source(config::File::from_str(
+                            r#"
+                                application_url: "http://localhost"
+                                event_store:
+                                    type: "postgres"
+                                    connection_string: "postgresql://:test:"
+                                display:
+                                    - name: "UniCore"
+                            "#,
+                            config::FileFormat::Yaml,
+                        ))
+                        .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                        .build()
+                        .unwrap()
+                };
+
+                let development =
+                    ApplicationConfiguration::load(provisioned_config(), ApplicationProfile::Development).unwrap();
+                assert!(development.dev.log_sensitive_values);
+
+                let production =
+                    ApplicationConfiguration::load(provisioned_config(), ApplicationProfile::Production).unwrap();
+                assert!(!production.dev.log_sensitive_values);
             },
         );
     }
@@ -1445,5 +1532,43 @@ mod tests {
                 );
             },
         );
+    }
+    fn kms_feature_flag(value: Option<&str>) -> Result<bool, SharedError> {
+        temp_env::with_var("UNICORE__FEATURE__KMS", value, || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::File::from_str(
+                    r#"
+                        event_store:
+                            type: "in_memory"
+                    "#,
+                    config::FileFormat::Yaml,
+                ))
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development)
+                .map(|config| config.feature.kms)
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_disabled_when_its_variable_is_missing_or_empty() {
+        assert!(!kms_feature_flag(None).unwrap());
+        assert!(!kms_feature_flag(Some("")).unwrap());
+        assert!(!kms_feature_flag(Some("false")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_enabled_when_its_variable_is_true() {
+        assert!(kms_feature_flag(Some("true")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_flag_rejects_unrecognized_values() {
+        assert!(kms_feature_flag(Some("maybe")).is_err());
     }
 }
