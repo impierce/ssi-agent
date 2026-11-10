@@ -123,8 +123,9 @@ impl View<Template> for Template {
                 schema_properties_attributes,
                 modified_at,
             } => {
-                self.schema_properties_attributes
-                    .replace(schema_properties_attributes.clone());
+                // No attributes are stored as `None`, as `TemplateCreated` stores them.
+                self.schema_properties_attributes =
+                    (!schema_properties_attributes.is_empty()).then(|| schema_properties_attributes.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             CredentialExpirationUpdated {
@@ -231,6 +232,20 @@ mod tests {
 
         assert_eq!(view.description, None);
         assert_eq!(view.modified_at.as_deref(), Some("2024-01-02T00:00:00Z"));
+    }
+
+    #[test]
+    fn schema_properties_attributes_updated_with_an_empty_map_clears_them() {
+        let mut view = Template::default();
+        view.update(&created_event());
+
+        view.update(&event(TemplateEvent::SchemaPropertiesAttributesUpdated {
+            template_id: "template-id".to_string(),
+            schema_properties_attributes: HashMap::new(),
+            modified_at: "2024-01-02T00:00:00Z".to_string(),
+        }));
+
+        assert_eq!(view.schema_properties_attributes, None);
     }
 
     #[test]

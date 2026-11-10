@@ -263,6 +263,14 @@ impl Aggregate for Template {
                 // Normalize tags.
                 let tags = normalize_tags(tags);
 
+                // Normalized like `UpdateDescription`, so the same input stores the same description either way.
+                let description = description.as_deref().and_then(normalize_description);
+
+                // Trimmed like `UpdateSchemaPropertiesAttributes`.
+                let schema_properties_attributes = schema_properties_attributes
+                    .map(trim_and_deduplicate_attribute_keys)
+                    .transpose()?;
+
                 // Validate the credential expiration value if provided.
                 let credential_expiration = credential_expiration.unwrap_or_default();
                 validate_expiration(&credential_expiration)?;
@@ -455,8 +463,8 @@ impl Aggregate for Template {
             } => {
                 ensure_template_editable(&self.status)?;
 
-                // Trim whitespace.  An empty description clears the field (stored as None via apply).
-                let description = description.trim().to_string();
+                // An empty description clears the field (stored as None via apply).
+                let description = normalize_description(&description).unwrap_or_default();
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -766,7 +774,9 @@ impl Aggregate for Template {
                 schema_properties_attributes,
                 modified_at,
             } => {
-                self.schema_properties_attributes = Some(schema_properties_attributes);
+                // No attributes are stored as `None`, as `CreateNewTemplate` stores them.
+                self.schema_properties_attributes =
+                    (!schema_properties_attributes.is_empty()).then_some(schema_properties_attributes);
                 self.modified_at.replace(modified_at);
             }
             CredentialExpirationUpdated {
@@ -915,6 +925,13 @@ fn normalize_open_badges_type(filtered: Vec<String>) -> Result<Vec<String>, Temp
     let badge_type = if has_obc { OBC } else { AC };
 
     Ok(vec![VC.to_string(), badge_type.to_string()])
+}
+
+/// Trims a description. A blank one is absent, so `CreateNewTemplate` and `UpdateDescription` store the same value for
+/// the same input.
+fn normalize_description(description: &str) -> Option<String> {
+    let description = description.trim();
+    (!description.is_empty()).then(|| description.to_string())
 }
 
 /// Normalizes a tags vector: trims each entry, drops empty entries, deduplicates

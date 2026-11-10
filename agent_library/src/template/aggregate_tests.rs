@@ -3299,3 +3299,114 @@ fn delete_template_command_does_not_deserialize_as_update_origin() {
         "{command:?}"
     );
 }
+
+/// A Draft W3C VCDM 2.0 template with one `name` claim, created with `description` and `schema_properties_attributes`.
+fn create_command(
+    template_id: &str,
+    description: Option<&str>,
+    schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Test".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::W3CVcDataModelV2_0,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: description.map(ToString::to_string),
+        r#type: vec![],
+        schema: Box::new(Some(serde_json::json!({
+            "type": "object",
+            "properties": { "name": { "type": "string" } }
+        }))),
+        schema_properties_attributes,
+        holder_authorization: Authorization::default(),
+        origin: None,
+    }
+}
+
+fn disclosable() -> PropertyAttribute {
+    PropertyAttribute {
+        selectively_disclosable: true,
+        non_removable: false,
+        r#type: None,
+    }
+}
+
+/// The template after `commands`, each handled against the events the ones before it emitted.
+async fn template_after(commands: Vec<TemplateCommand>) -> Template {
+    let mut events = Vec::new();
+    for command in commands {
+        let emitted = TemplateTestFramework::with(())
+            .given(events.clone())
+            .when_async(command)
+            .await
+            .inspect_result()
+            .unwrap();
+        events.extend(emitted);
+    }
+
+    let mut template = Template::default();
+    for event in events {
+        template.apply(event);
+    }
+    template
+}
+
+/// A copy created with a description, and one whose description is updated to the same input, store and digest the
+/// same, so an imported copy updated by a re-import digests like its source.
+#[rstest]
+#[case::padded("  padded description  ", Some("padded description"))]
+#[case::empty("", None)]
+#[case::blank("   ", None)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_and_update_store_a_description_alike(
+    template_id: String,
+    #[case] description: &str,
+    #[case] expected: Option<&str>,
+) {
+    let created = template_after(vec![create_command(&template_id, Some(description), None)]).await;
+    let updated = template_after(vec![
+        create_command(&template_id, None, None),
+        TemplateCommand::UpdateDescription {
+            template_id: template_id.clone(),
+            description: description.to_string(),
+        },
+    ])
+    .await;
+
+    assert_eq!(created.description.as_deref(), expected);
+    assert_eq!(updated.description.as_deref(), expected);
+    assert_eq!(created.public_content().digest(), updated.public_content().digest());
+}
+
+/// Attribute keys are trimmed on create as on update, and no attributes are stored as `None` either way.
+#[rstest]
+#[case::padded_key(HashMap::from([(" /name ".to_string(), disclosable())]), Some(HashMap::from([("/name".to_string(), disclosable())])))]
+#[case::empty(HashMap::new(), None)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_and_update_store_schema_properties_attributes_alike(
+    template_id: String,
+    #[case] attributes: HashMap<String, PropertyAttribute>,
+    #[case] expected: Option<HashMap<String, PropertyAttribute>>,
+) {
+    let created = template_after(vec![create_command(&template_id, None, Some(attributes.clone()))]).await;
+    let updated = template_after(vec![
+        create_command(&template_id, None, None),
+        TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes: attributes,
+        },
+    ])
+    .await;
+
+    assert_eq!(created.schema_properties_attributes, expected);
+    assert_eq!(updated.schema_properties_attributes, expected);
+    assert_eq!(created.public_content().digest(), updated.public_content().digest());
+}
