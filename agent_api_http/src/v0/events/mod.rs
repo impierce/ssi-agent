@@ -1,7 +1,8 @@
+pub mod commands;
 pub mod config;
 pub mod error;
 pub mod openapi;
-pub mod publishers;
+pub mod queries;
 
 use axum::{
     extract::{Query, State},
@@ -159,19 +160,34 @@ pub fn router(state: Arc<EventsState>) -> Router {
             crate::API_VERSION,
             Router::new()
                 .route("/events", get(events_sse_handler))
-                .route("/create-event-publisher", post(publishers::create_event_publisher))
-                .route("/update-event-publisher", post(publishers::update_event_publisher))
-                .route("/activate-event-publisher", post(publishers::activate_event_publisher))
+                .route(
+                    "/create-event-publisher",
+                    post(commands::create_event_publisher::create_event_publisher),
+                )
+                .route(
+                    "/update-event-publisher",
+                    post(commands::update_event_publisher::update_event_publisher),
+                )
+                .route(
+                    "/activate-event-publisher",
+                    post(commands::activate_event_publisher::activate_event_publisher),
+                )
                 .route(
                     "/deactivate-event-publisher",
-                    post(publishers::deactivate_event_publisher),
+                    post(commands::deactivate_event_publisher::deactivate_event_publisher),
                 )
-                .route("/delete-event-publisher", post(publishers::delete_event_publisher))
+                .route(
+                    "/delete-event-publisher",
+                    post(commands::delete_event_publisher::delete_event_publisher),
+                )
                 .route(
                     "/get-event-publisher-by-id/{id}",
-                    get(publishers::get_event_publisher_by_id),
+                    get(queries::get_event_publisher_by_id::get_event_publisher_by_id),
                 )
-                .route("/get-event-publisher-list", get(publishers::get_event_publisher_list))
+                .route(
+                    "/get-event-publisher-list",
+                    get(queries::get_event_publisher_list::get_event_publisher_list),
+                )
                 .with_state(state),
         )
         // Merged after the trace layer so SSE payloads and secret webhook headers are not logged,

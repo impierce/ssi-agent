@@ -1,0 +1,58 @@
+use crate::{extractors::RequestActor, v0::events::EventsState};
+use axum::{extract::State, http::StatusCode, Json};
+use bc_event_publishing::{
+    application::access::DELETE_PUBLISHER_OPERATION, domain::event_publisher::command::EventPublisherCommand,
+};
+use http_api_problem::ApiError;
+use serde::{Deserialize, Serialize};
+use shared_kernel::authorization::Caller;
+use std::sync::Arc;
+use utoipa::ToSchema;
+
+/// Request payload for deleting an event publisher.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(as = DeleteEventPublisher)]
+pub struct DeleteEventPublisherRequest {
+    pub id: String,
+}
+
+/// Delete an Event Publisher
+///
+/// Permanently deletes an event publisher and stops its background worker immediately.
+#[utoipa::path(
+    post,
+    path = "/delete-event-publisher",
+    operation_id = "delete_event_publisher",
+    tag = "Events",
+    extensions(
+        ("x-access-operation" = json!(DELETE_PUBLISHER_OPERATION))
+    ),
+    request_body(
+        content = DeleteEventPublisherRequest,
+        example = json!({ "id": "f2202574-9a5b-5ecd-a1a3-df5ca8e87354" })
+    ),
+    responses(
+        (status = 200, description = "Event publisher deleted", body = String),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Event publisher not found")
+    )
+)]
+pub async fn delete_event_publisher(
+    State(state): State<Arc<EventsState>>,
+    RequestActor(actor): RequestActor,
+    Json(payload): Json<DeleteEventPublisherRequest>,
+) -> Result<(StatusCode, String), ApiError> {
+    let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
+
+    let id = state
+        .dispatch_command(
+            caller,
+            payload.id,
+            EventPublisherCommand::DeleteEventPublisher.into(),
+        )
+        .await?;
+
+    Ok((StatusCode::OK, id))
+}

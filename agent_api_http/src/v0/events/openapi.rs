@@ -1,15 +1,19 @@
 use crate::v0::events::{
     __path_events_sse_handler,
+    commands::{
+        activate_event_publisher::{__path_activate_event_publisher, ActivateEventPublisherRequest},
+        create_event_publisher::{__path_create_event_publisher, CreateEventPublisherRequest},
+        deactivate_event_publisher::{__path_deactivate_event_publisher, DeactivateEventPublisherRequest},
+        delete_event_publisher::{__path_delete_event_publisher, DeleteEventPublisherRequest},
+        update_event_publisher::{__path_update_event_publisher, UpdateEventPublisherRequest},
+    },
     config::{
         EventPublisherConfigDto, HttpEventPublisherConfigDto, HttpEventPublisherType, NatsEventPublisherConfigDto,
         NatsEventPublisherType,
     },
-    publishers::{
-        __path_activate_event_publisher, __path_create_event_publisher, __path_deactivate_event_publisher,
-        __path_delete_event_publisher, __path_get_event_publisher_by_id, __path_get_event_publisher_list,
-        __path_update_event_publisher, ActivateEventPublisherRequest, CreateEventPublisherRequest,
-        DeactivateEventPublisherRequest, DeleteEventPublisherRequest, EventPublisherDto, EventPublisherListDto,
-        UpdateEventPublisherRequest,
+    queries::{
+        get_event_publisher_by_id::{__path_get_event_publisher_by_id, EventPublisherDto},
+        get_event_publisher_list::{__path_get_event_publisher_list, EventPublisherListDto},
     },
 };
 use bc_event_publishing::domain::event_publisher::config::{
