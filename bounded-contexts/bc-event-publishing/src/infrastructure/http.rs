@@ -48,9 +48,14 @@ impl HttpEventPublisherWorker {
         let stream = event_bus.subscribe(filter.clone());
         let headers = config.header_map();
 
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             id,
-            client: reqwest::Client::new(),
+            client,
             target_url: config.target_url,
             headers,
             filter,
@@ -241,6 +246,48 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(120)).await;
 
         assert!(!handle.is_finished());
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn http_worker_does_not_follow_redirects() {
+        let mock_server = MockServer::start().await;
+        let redirected_target = format!("{}/redirected", mock_server.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(307).insert_header("Location", redirected_target.as_str()))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/redirected"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let config = HttpPublisherConfig {
+            target_url: format!("{}/webhook", mock_server.uri()),
+            headers: None,
+        };
+
+        let event_bus = EventBusHandle::new(100);
+        let worker = HttpEventPublisherWorker::new(
+            "pub-redirect".to_string(),
+            &EventPublisherFilter {
+                types: vec!["test.redirect.event".to_string()],
+            },
+            config,
+            &event_bus,
+        );
+        let handle = worker.spawn();
+
+        event_bus.publish(CloudEvent::new("test.redirect.event", "https://example.test/test"));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        mock_server.verify().await;
         handle.abort();
     }
 }
