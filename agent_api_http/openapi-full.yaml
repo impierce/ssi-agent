@@ -1429,12 +1429,14 @@ paths:
         required: false
         schema:
           type: string
+          format: date-time
       - name: until
         in: query
         description: Filter events before RFC 3339 timestamp
         required: false
         schema:
           type: string
+          format: date-time
       responses:
         '200':
           description: Server-Sent Events stream of CloudEvents
@@ -1442,6 +1444,8 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/CloudEvent'
+        '400':
+          description: Invalid query parameter
         '401':
           description: Unauthorized
         '403':
