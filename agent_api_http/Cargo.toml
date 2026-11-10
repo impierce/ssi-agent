@@ -3,6 +3,9 @@ name = "agent_api_http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
@@ -10,6 +13,7 @@ agent_authorization = { path = "../agent_authorization" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
+agent_kms = { path = "../agent_kms" }
 agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
@@ -30,10 +34,6 @@ http-api-problem = { version = "0.60", features = ["axum", "api-error"] }
 http-body-util = "0.1"
 hyper = { version = "1.2" }
 identity-kit.workspace = true
-identity_core.workspace = true
-identity_credential.workspace = true
-identity_did.workspace = true
-identity_document.workspace = true
 indexmap.workspace = true
 oid4vc-core.workspace = true
 oid4vci.workspace = true
@@ -65,6 +65,7 @@ agent_event_publisher_http = { path = "../agent_event_publisher_http", features 
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_identity = { path = "../agent_identity", features = ["test_utils"] }
 agent_issuance = { path = "../agent_issuance", features = ["test_utils"] }
+agent_kms = { path = "../agent_kms", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }
@@ -78,7 +79,6 @@ verification-authorization = { path = "../infrastructure/adapters/verification-a
 async-trait.workspace = true
 flate2.workspace = true
 futures.workspace = true
-identity_document.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
 mime.workspace = true

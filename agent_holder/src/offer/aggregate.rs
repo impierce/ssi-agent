@@ -1,9 +1,11 @@
+use crate::credential::signed::SignedCredential;
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
+use agent_shared::sensitive_logging::sensitive_debug;
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_credential::credential::Jwt;
+use identity_kit::vc::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
 use oid4vci::credential_response::CredentialResponseType;
@@ -12,7 +14,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
 pub enum Status {
@@ -26,8 +28,7 @@ pub enum Status {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct OfferCredential {
     pub holder_credential_id: String,
-    #[schema(value_type = String)]
-    pub credential: Jwt,
+    pub credential: SignedCredential,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
@@ -69,8 +70,6 @@ impl Aggregate for Offer {
         use OfferCommand::*;
         use OfferError::*;
         use OfferEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             ReceiveCredentialOffer {
@@ -146,7 +145,11 @@ impl Aggregate for Offer {
                     _ => return Err(MissingPreAuthorizedCodeError),
                 };
 
-                info!("token_request: {:?}", token_request);
+                debug!(
+                    grant_type = "pre-authorized_code",
+                    token_request = sensitive_debug(&token_request),
+                    "Requesting access token"
+                );
 
                 // Get an access token.
                 let token_response = wallet
@@ -159,7 +162,7 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|_| TokenResponseError)?;
 
-                info!("token_response: {:?}", token_response);
+                log_token_response(&token_response);
 
                 Ok(vec![
                     CredentialOfferAccepted {
@@ -215,7 +218,7 @@ impl Aggregate for Offer {
                             None
                         };
 
-                        info!("nonce: {nonce:?}");
+                        debug!(nonce = ?nonce, "Requested nonce");
 
                         // Determine if anonymous access is supported.
                         // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-8.2.1.1-2.2.2.2
@@ -242,10 +245,14 @@ impl Aggregate for Offer {
                             .await
                             .map_err(|_| CredentialResponseError)?;
 
+                        // Only JWT credentials can be stored, so anything else is refused here, before
+                        // the offer is marked as having received its credentials.
                         let credential = match credential_response.credential {
-                            CredentialResponseType::Immediate { credentials, .. } => {
-                                Jwt::from(credentials[0].credential.clone())
-                            }
+                            CredentialResponseType::Immediate { credentials, .. } => credentials[0]
+                                .credential
+                                .parse::<Jwt>()
+                                .map(SignedCredential::Jwt)
+                                .map_err(|_| UnsupportedCredentialFormatError)?,
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
                             }
@@ -266,7 +273,12 @@ impl Aggregate for Offer {
                     }
                 };
 
-                info!("credentials: {credentials:?}");
+                debug!(
+                    count = credentials.len(),
+                    holder_credential_ids = ?credentials.iter().map(|credential| &credential.holder_credential_id).collect::<Vec<_>>(),
+                    credentials = sensitive_debug(&credentials),
+                    "Received credentials"
+                );
 
                 Ok(vec![CredentialResponseReceived {
                     received_offer_id,
@@ -303,8 +315,6 @@ impl Aggregate for Offer {
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             CredentialOfferReceived {
                 credential_offer,
@@ -331,6 +341,17 @@ impl Aggregate for Offer {
             }
         }
     }
+}
+
+/// Logs the token response; the access and refresh tokens, which are bearer credentials, only as sensitive values.
+fn log_token_response(token_response: &TokenResponse) {
+    debug!(
+        token_type = %token_response.token_type,
+        expires_in = ?token_response.expires_in,
+        refresh_token = token_response.refresh_token.is_some(),
+        response = sensitive_debug(token_response),
+        "Received token response"
+    );
 }
 
 #[cfg(test)]
@@ -696,13 +717,47 @@ pub mod tests {
             .await
             .then_expect_error_message(&OfferError::MissingCredentialOfferError.to_string());
     }
+
+    fn token_response() -> TokenResponse {
+        TokenResponse {
+            access_token: "secret-access-token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: Some(300),
+            refresh_token: Some("secret-refresh-token".to_string()),
+            scope: None,
+            authorization_details: None,
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_without_tokens() {
+        log_token_response(&token_response());
+
+        assert!(logs_contain("Received token response"));
+        assert!(logs_contain("Bearer"));
+        assert!(!logs_contain("secret-access-token"));
+        assert!(!logs_contain("secret-refresh-token"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = agent_shared::sensitive_logging::SensitiveValuesLogged::enable();
+
+        log_token_response(&token_response());
+
+        assert!(logs_contain("secret-access-token"));
+        assert!(logs_contain("secret-refresh-token"));
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
     use agent_shared::generate_random_string;
-    use identity_credential::credential::Jwt;
     use rstest::*;
 
     #[fixture]
@@ -717,6 +772,6 @@ pub mod test_utils {
 
     #[fixture]
     pub fn signed_credentials(holder_credential_id: String) -> Vec<OfferCredential> {
-        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6RG5hZVJ3VDRnNkFaQ0h6eHZOTDdETGpxVGFUODhhbTRYUjZUVUdyS3I2RFhqNlR6IiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9LCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.6oVjfN06dzQmd2oCVBm9lgOkhL0mLIHn-I8vUB0OX3n7MbjhIWjjfA_6SSvcofGGLj-BFt1fMCDUy1VriCviAA".to_string())}]
+        vec![OfferCredential { holder_credential_id, credential: "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6RG5hZVJ3VDRnNkFaQ0h6eHZOTDdETGpxVGFUODhhbTRYUjZUVUdyS3I2RFhqNlR6IiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9LCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.6oVjfN06dzQmd2oCVBm9lgOkhL0mLIHn-I8vUB0OX3n7MbjhIWjjfA_6SSvcofGGLj-BFt1fMCDUy1VriCviAA".parse().unwrap()}]
     }
 }

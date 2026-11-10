@@ -1,5 +1,5 @@
 use cqrs_es::DomainEvent;
-use identity_credential::credential::Jwt;
+use identity_kit::vc::Jwt;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 

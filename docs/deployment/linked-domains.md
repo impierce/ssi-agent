@@ -2,11 +2,10 @@
 
 Domain linkage proves that the controller of a DID also controls a web origin. UniCore publishes signed
 Domain Linkage Credentials at `/.well-known/did-configuration.json` and adds a `LinkedDomains`
-service to its enabled, update-supporting DID documents (`did:web` and funded or sponsored `did:iota`).
+service to its enabled, update-supporting DID documents (`did:web`).
 
 Which domains are linked is **independent of the deployment's own identity**: the DID being proven and
-the origins being claimed are separate concepts, exactly as they are for `did:iota`, whose identifier
-has no textual relationship to any domain. Linking a domain never changes the deployment DID.
+the origins being claimed are separate concepts. Linking a domain never changes the deployment DID.
 
 ## Deployment identity
 

@@ -5,7 +5,6 @@ use crate::services::IssuanceServices;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Nonce {
@@ -32,8 +31,6 @@ impl Aggregate for Nonce {
         // TODO: add proper errors within NonceError
         // use NonceError::*
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             GenerateNonce { c_nonce } => Ok(vec![NonceGenerated {
                 c_nonce,
@@ -54,8 +51,6 @@ impl Aggregate for Nonce {
 
     fn apply(&mut self, event: Self::Event) {
         use NonceEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             NonceGenerated { c_nonce, is_redeemed } => {
@@ -84,15 +79,17 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_nonce_generation() {
         let issuance_services = IssuanceServices::default().await;
         let nonce_value = "123-nonce-123".to_string();
 
         NonceTestFramework::with(issuance_services)
             .given_no_previous_events()
-            .when(NonceCommand::GenerateNonce {
+            .when_async(NonceCommand::GenerateNonce {
                 c_nonce: nonce_value.clone(),
             })
+            .await
             .then_expect_events(vec![NonceEvent::NonceGenerated {
                 c_nonce: nonce_value,
                 is_redeemed: false,
@@ -101,6 +98,7 @@ pub mod tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_nonce_redemption() {
         let issuance_services = IssuanceServices::default().await;
         let nonce_value = "123-nonce-123".to_string();
@@ -110,9 +108,10 @@ pub mod tests {
                 c_nonce: nonce_value.clone(),
                 is_redeemed: false,
             }])
-            .when(NonceCommand::RedeemNonce {
+            .when_async(NonceCommand::RedeemNonce {
                 c_nonce: nonce_value.clone(),
             })
+            .await
             .then_expect_events(vec![NonceEvent::NonceRedeemed {
                 c_nonce: nonce_value,
                 is_redeemed: true,

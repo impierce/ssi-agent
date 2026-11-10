@@ -1,4 +1,4 @@
-use identity_credential::credential::Jwt;
+use identity_kit::vc::Jwt;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
 
