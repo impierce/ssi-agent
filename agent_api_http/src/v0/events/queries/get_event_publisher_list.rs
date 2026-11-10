@@ -4,9 +4,7 @@ use crate::{
     v0::events::{queries::get_event_publisher_by_id::EventPublisherDto, EventsState},
 };
 use axum::{extract::State, http::StatusCode, Json};
-use bc_event_publishing::application::{
-    access::READ_PUBLISHERS_OPERATION, query::EventPublishingQuery, views::EventPublishingView,
-};
+use bc_event_publishing::application::{query::EventPublishingQuery, views::EventPublishingView};
 use http_api_problem::ApiError;
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::Caller;
@@ -46,9 +44,6 @@ impl TryFrom<EventPublishingView> for EventPublisherListDto {
     path = "/get-event-publisher-list",
     operation_id = "get_event_publisher_list",
     tag = "Events",
-    extensions(
-        ("x-access-operation" = json!(READ_PUBLISHERS_OPERATION))
-    ),
     responses(
         (status = 200, description = "Event publisher list retrieved successfully", body = EventPublisherListDto),
         (status = 401, description = "Unauthorized"),

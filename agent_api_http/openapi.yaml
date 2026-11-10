@@ -125,7 +125,6 @@ paths:
           description: Forbidden
         '404':
           description: Event publisher not found
-      x-access-operation: event_publishing.publishers.activate
   /v0/add-linked-domains:
     post:
       tags:
@@ -565,7 +564,6 @@ paths:
           description: Forbidden
         '409':
           description: An event publisher with this ID already exists
-      x-access-operation: event_publishing.publishers.create
   /v0/create-new-catalog:
     post:
       tags:
@@ -794,7 +792,6 @@ paths:
           description: Forbidden
         '404':
           description: Event publisher not found
-      x-access-operation: event_publishing.publishers.deactivate
   /v0/delete-catalog:
     post:
       tags:
@@ -846,7 +843,6 @@ paths:
           description: Forbidden
         '404':
           description: Event publisher not found
-      x-access-operation: event_publishing.publishers.delete
   /v0/delete-public-offer:
     post:
       tags:
@@ -1039,7 +1035,6 @@ paths:
           description: Unauthorized
         '403':
           description: Forbidden
-      x-access-operation: events.stream
   /v0/get-all-catalogs:
     get:
       tags:
@@ -1144,7 +1139,6 @@ paths:
           description: Forbidden
         '404':
           description: Event publisher not found
-      x-access-operation: event_publishing.publishers.read
   /v0/get-event-publisher-list:
     get:
       tags:
@@ -1163,7 +1157,6 @@ paths:
           description: Unauthorized
         '403':
           description: Forbidden
-      x-access-operation: event_publishing.publishers.read
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -1924,7 +1917,6 @@ paths:
           description: Forbidden
         '404':
           description: Event publisher not found
-      x-access-operation: event_publishing.publishers.update
   /v0/update-template:
     post:
       tags:
@@ -3057,7 +3049,7 @@ components:
     EventPublisherFilter:
       type: object
       description: |-
-        Event subscription filter for an [`EventPublisher`](super::aggregate::EventPublisher).
+        Event subscription filter for an event publisher.
 
         Field names match the `/v0/events` SSE query parameters (`types`, and in future extensions
         `sources`, `subject`, etc.).
@@ -3069,7 +3061,7 @@ components:
           items:
             type: string
           description: |-
-            CloudEvent `type` patterns to subscribe to (exact types, prefix globs like
+            `CloudEvent` `type` patterns to subscribe to (exact types, prefix globs like
             `com.impierce.unicore.issuance.*`, or `*`).
           example:
           - com.impierce.unicore.issuance.credential.offered
@@ -3082,7 +3074,7 @@ components:
       description: List of configured event publishers.
     EventPublisherType:
       type: string
-      description: Identifies the transport mechanism of an [`EventPublisherConfig`].
+      description: Identifies the transport mechanism of an event publisher configuration.
       enum:
       - http
       - nats
@@ -3202,7 +3194,7 @@ components:
         targetUrl:
           type: string
           description: |-
-            Destination HTTP or HTTPS URL that receives CloudEvents via `POST` with
+            Destination HTTP or HTTPS URL that receives `CloudEvents` via `POST` with
             `Content-Type: application/cloudevents+json`.
           example: https://example.test/webhooks/unicore
     Info:
@@ -3540,7 +3532,7 @@ components:
           example: nats://127.0.0.1:4222
         subject:
           type: string
-          description: NATS subject to which matching CloudEvents are published.
+          description: NATS subject to which matching `CloudEvents` are published.
           example: unicore.events
     Offer:
       type: object

@@ -6,7 +6,7 @@ use crate::{
 };
 use axum::{extract::State, http::StatusCode, Json};
 use bc_event_publishing::{
-    application::{access::CREATE_PUBLISHER_OPERATION, query::EventPublishingQuery},
+    application::query::EventPublishingQuery,
     domain::event_publisher::{command::EventPublisherCommand, config::EventPublisherFilter},
 };
 use http_api_problem::ApiError;
@@ -53,9 +53,6 @@ pub struct CreateEventPublisherRequest {
     path = "/create-event-publisher",
     operation_id = "create_event_publisher",
     tag = "Events",
-    extensions(
-        ("x-access-operation" = json!(CREATE_PUBLISHER_OPERATION))
-    ),
     request_body(
         content = CreateEventPublisherRequest,
         example = json!({

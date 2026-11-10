@@ -212,9 +212,6 @@ pub fn router(state: Arc<EventsState>) -> Router {
     path = "/events",
     operation_id = "events_sse_handler",
     tag = "Events",
-    extensions(
-        ("x-access-operation" = json!("events.stream"))
-    ),
     params(
         ("types" = Option<String>, Query, description = "Comma-separated list of CloudEvent types to filter"),
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),

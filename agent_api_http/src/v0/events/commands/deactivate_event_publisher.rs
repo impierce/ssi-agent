@@ -1,8 +1,6 @@
 use crate::{extractors::RequestActor, v0::events::EventsState};
 use axum::{extract::State, http::StatusCode, Json};
-use bc_event_publishing::{
-    application::access::DEACTIVATE_PUBLISHER_OPERATION, domain::event_publisher::command::EventPublisherCommand,
-};
+use bc_event_publishing::domain::event_publisher::command::EventPublisherCommand;
 use http_api_problem::ApiError;
 use serde::{Deserialize, Serialize};
 use shared_kernel::authorization::Caller;
@@ -25,9 +23,6 @@ pub struct DeactivateEventPublisherRequest {
     path = "/deactivate-event-publisher",
     operation_id = "deactivate_event_publisher",
     tag = "Events",
-    extensions(
-        ("x-access-operation" = json!(DEACTIVATE_PUBLISHER_OPERATION))
-    ),
     request_body(
         content = DeactivateEventPublisherRequest,
         example = json!({ "id": "f2202574-9a5b-5ecd-a1a3-df5ca8e87354" })

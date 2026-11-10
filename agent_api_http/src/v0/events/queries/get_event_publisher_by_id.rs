@@ -10,7 +10,6 @@ use axum::{
 };
 use bc_event_publishing::{
     application::{
-        access::READ_PUBLISHERS_OPERATION,
         query::EventPublishingQuery,
         views::{event_publisher::EventPublisherView, EventPublishingView},
     },
@@ -91,9 +90,6 @@ impl TryFrom<EventPublishingView> for EventPublisherDto {
     path = "/get-event-publisher-by-id/{id}",
     operation_id = "get_event_publisher_by_id",
     tag = "Events",
-    extensions(
-        ("x-access-operation" = json!(READ_PUBLISHERS_OPERATION))
-    ),
     params(
         ("id" = String, Path, description = "Event publisher ID")
     ),
