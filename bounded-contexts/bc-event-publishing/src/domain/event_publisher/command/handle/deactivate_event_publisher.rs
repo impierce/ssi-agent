@@ -3,7 +3,6 @@ use crate::domain::event_publisher::{
 };
 use chrono::Utc;
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
-use tracing::info;
 
 impl EventPublisher {
     /// Idempotent deactivation of an event publisher.
@@ -11,17 +10,15 @@ impl EventPublisher {
         &mut self,
         sink: &EventSink<Self>,
     ) -> Result<(), <EventPublisher as Aggregate>::Error> {
-        let (publisher_id, already_disabled) = match self {
-            EventPublisher::Configured(inner) => (inner.id.clone(), !inner.enabled),
+        let already_disabled = match self {
+            EventPublisher::Configured(inner) => !inner.enabled,
             EventPublisher::None => return Err(EventPublisherError::EventPublisherNotFound),
         };
 
         if already_disabled {
-            info!(publisher_id = %publisher_id, "Event publisher is already inactive; skipping event write");
             return Ok(());
         }
 
-        info!(publisher_id = %publisher_id, "Deactivating event publisher");
         sink.write(
             EventPublisherDeactivated {
                 occurred_at: Utc::now(),

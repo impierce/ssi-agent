@@ -20,6 +20,8 @@ use utoipa::ToSchema;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = UpdateEventPublisher)]
 pub struct UpdateEventPublisherRequest {
+    #[serde(deserialize_with = "super::deserialize_non_empty_id")]
+    #[schema(pattern = r"^[^\x00]+$")]
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,

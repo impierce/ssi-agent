@@ -16,9 +16,7 @@ use crate::v0::events::{
         get_event_publisher_list::{__path_get_event_publisher_list, EventPublisherListDto},
     },
 };
-use bc_event_publishing::domain::event_publisher::config::{
-    EventPublisherFilter, EventPublisherType, HttpPublisherConfig, NatsPublisherConfig,
-};
+use bc_event_publishing::domain::event_publisher::config::{EventPublisherFilter, EventPublisherType};
 use shared_kernel::event_bus::CloudEvent;
 use utoipa::{
     openapi::{
@@ -45,8 +43,6 @@ use utoipa::{
         CloudEvent,
         EventPublisherType,
         EventPublisherFilter,
-        HttpPublisherConfig,
-        NatsPublisherConfig,
         HttpEventPublisherType,
         NatsEventPublisherType,
         HttpEventPublisherConfigDto,
@@ -79,13 +75,14 @@ pub fn webhooks() -> Paths {
         .build()
 }
 
-/// The request `agent_event_publisher_http` sends to each target configured under `event_publishers.http`.
+/// The request sent to each active HTTP event publisher (`publisherType: "http"`).
 fn cloud_event_webhook() -> PathItem {
     let operation = OperationBuilder::new()
         .summary(Some("Receive a CloudEvent"))
         .description(Some(
-            "Sent to the `target_url` of every target configured under `event_publishers.http` whose `events.types` \
-            include the event's type, with the headers configured for that target, e.g. a shared secret.\n\n\
+            "Sent to the `targetUrl` of every active HTTP event publisher (`publisherType: \"http\"`) whose \
+            `filter.types` matches the event's `type`, with any custom `headers` configured on that publisher \
+            (e.g. a shared secret).\n\n\
             Delivery is fire-and-forget: each request times out after 10 seconds and is not retried, and events are \
             dropped when the publisher falls behind the event bus. The response status is only logged.",
         ))

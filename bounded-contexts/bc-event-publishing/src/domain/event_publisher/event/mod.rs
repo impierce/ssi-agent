@@ -31,8 +31,6 @@ pub enum EventPublisherEvent {
         occurred_at: DateTime<Utc>,
     },
     EventPublisherActivated {
-        filter: EventPublisherFilter,
-        config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     },
     EventPublisherDeactivated {

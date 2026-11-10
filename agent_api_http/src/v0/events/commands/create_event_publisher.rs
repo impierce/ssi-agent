@@ -25,9 +25,6 @@ const fn default_enabled() -> bool {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = CreateEventPublisher)]
 pub struct CreateEventPublisherRequest {
-    /// Optional explicit identifier; a UUID v4 is generated when omitted.
-    #[serde(default)]
-    pub id: Option<String>,
     /// Human-readable display name for this event publisher.
     pub name: String,
     /// Optional operator description.
@@ -77,7 +74,6 @@ pub struct CreateEventPublisherRequest {
         (status = 400, description = "Invalid event publisher configuration or event types"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
-        (status = 409, description = "An event publisher with this ID already exists"),
         (status = 422, description = "Request body does not match the expected schema")
     )
 )]
@@ -87,11 +83,7 @@ pub async fn create_event_publisher(
     Json(payload): Json<CreateEventPublisherRequest>,
 ) -> Result<(StatusCode, Json<EventPublisherDto>), ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
-    let id = payload
-        .id
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let id = Uuid::new_v4().to_string();
 
     let id = state
         .dispatch_command(

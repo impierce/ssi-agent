@@ -1,9 +1,9 @@
 use crate::domain::event_publisher::config::{EventPublisherFilter, HttpPublisherConfig};
-use reqwest::header::HeaderMap;
-use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
+use reqwest::header::{HeaderValue, CONTENT_TYPE};
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle};
 use std::time::Duration;
 use tokio_stream::StreamExt;
-use tracing::info;
+use url::Url;
 
 /// Default timeout for outgoing HTTP webhook requests.
 pub const DEFAULT_WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -14,10 +14,8 @@ pub struct HttpEventPublisherWorker {
     id: String,
     client: reqwest::Client,
     target_url: String,
-    headers: HeaderMap,
-    filter: EventFilter,
+    target_host: Option<String>,
     stream: BusEventStream,
-    timeout: Duration,
 }
 
 impl HttpEventPublisherWorker {
@@ -25,6 +23,10 @@ impl HttpEventPublisherWorker {
     ///
     /// Subscribes immediately to `event_bus` upon creation so no events published after
     /// this call are missed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying TLS/HTTP client backend fails to initialize.
     #[must_use]
     pub fn new(
         id: String,
@@ -36,6 +38,10 @@ impl HttpEventPublisherWorker {
     }
 
     /// Creates a new `HttpEventPublisherWorker` with a custom request timeout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying TLS/HTTP client backend fails to initialize.
     #[must_use]
     pub fn with_timeout(
         id: String,
@@ -44,37 +50,44 @@ impl HttpEventPublisherWorker {
         event_bus: &EventBusHandle,
         timeout: Duration,
     ) -> Self {
-        let filter = filter.to_event_filter();
-        let stream = event_bus.subscribe(filter.clone());
-        let headers = config.header_map();
+        let stream: BusEventStream = if filter.types.is_empty() {
+            Box::pin(tokio_stream::empty())
+        } else {
+            event_bus.subscribe(filter.to_event_filter())
+        };
+
+        let mut default_headers = config.header_map();
+        // CloudEvents JSON format envelope media type:
+        // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
+        // Inserted after custom headers so publisher headers cannot override Content-Type.
+        default_headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/cloudevents+json"));
 
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .default_headers(default_headers)
+            .timeout(timeout)
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .expect("failed to build HTTP event publisher reqwest::Client");
+
+        let target_host = Url::parse(&config.target_url)
+            .ok()
+            .and_then(|parsed| parsed.host_str().map(str::to_owned));
 
         Self {
             id,
             client,
             target_url: config.target_url,
-            headers,
-            filter,
+            target_host,
             stream,
-            timeout,
         }
     }
 
     /// Runs the HTTP event publisher delivery loop until the stream closes or the task is aborted.
     pub async fn run(mut self) {
-        info!(
-            publisher_id = %self.id,
-            target_url = %self.target_url,
-            "Starting HTTP event publisher worker"
-        );
-
         while let Some(item) = self.stream.next().await {
             let cloud_event = match item {
                 Ok(event) => event,
+                Err(EventBusError::Closed) => break,
                 Err(EventBusError::Lagged(dropped_count)) => {
                     tracing::warn!(
                         publisher_id = %self.id,
@@ -86,55 +99,53 @@ impl HttpEventPublisherWorker {
                 Err(err) => {
                     tracing::error!(
                         publisher_id = %self.id,
-                        error = ?err,
+                        error = %err,
                         "HTTP event publisher worker encountered event bus error"
                     );
                     continue;
                 }
             };
 
-            if self.filter.event_types.is_empty() || !self.filter.matches(&cloud_event) {
-                continue;
-            }
+            let payload = match serde_json::to_vec(&cloud_event) {
+                Ok(payload) => payload,
+                Err(err) => {
+                    tracing::error!(
+                        publisher_id = %self.id,
+                        event_id = %cloud_event.id,
+                        error = %err,
+                        "Failed to serialize CloudEvent for HTTP webhook target"
+                    );
+                    continue;
+                }
+            };
 
-            let mut req = self
-                .client
-                .post(&self.target_url)
-                // CloudEvents JSON format envelope media type:
-                // https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md#3-envelope
-                .header(reqwest::header::CONTENT_TYPE, "application/cloudevents+json");
-
-            if !self.headers.is_empty() {
-                req = req.headers(self.headers.clone());
-            }
-
-            let req = req.json(&cloud_event).timeout(self.timeout);
-
-            match req.send().await {
+            let target_host = self.target_host.as_deref().unwrap_or("<unknown>");
+            match self.client.post(&self.target_url).body(payload).send().await {
                 Ok(res) => {
                     if res.status().is_success() {
-                        info!(
+                        tracing::debug!(
                             publisher_id = %self.id,
                             event_id = %cloud_event.id,
-                            target_url = %self.target_url,
+                            target_host,
                             "Successfully forwarded CloudEvent to HTTP webhook target"
                         );
                     } else {
                         tracing::warn!(
                             publisher_id = %self.id,
                             event_id = %cloud_event.id,
-                            target_url = %self.target_url,
+                            target_host,
                             status = %res.status(),
                             "HTTP webhook target returned non-success status"
                         );
                     }
                 }
                 Err(err) => {
+                    let sanitized_err = err.without_url();
                     tracing::error!(
                         publisher_id = %self.id,
                         event_id = %cloud_event.id,
-                        target_url = %self.target_url,
-                        error = ?err,
+                        target_host,
+                        error = %sanitized_err,
                         "Failed to send CloudEvent to HTTP webhook target"
                     );
                 }
@@ -154,15 +165,19 @@ mod tests {
     use super::*;
     use shared_kernel::event_bus::CloudEvent;
     use std::collections::BTreeMap;
+    use tracing_test::traced_test;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
-    async fn http_worker_publishes_matching_events_with_headers() {
+    async fn http_worker_publishes_matching_events_with_cloudevents_content_type_and_headers() {
         let mock_server = MockServer::start().await;
 
         let mut headers = BTreeMap::new();
         headers.insert("x-webhook-secret".to_string(), "supersecret".to_string());
+        // Even if constructed directly in Rust with a conflicting content-type header,
+        // the worker must enforce `application/cloudevents+json`.
+        headers.insert("content-type".to_string(), "text/plain".to_string());
 
         Mock::given(method("POST"))
             .and(path("/webhook"))
@@ -289,5 +304,98 @@ mod tests {
 
         mock_server.verify().await;
         handle.abort();
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn http_worker_logs_never_leak_capability_paths_or_query_secrets() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/hooks/cap-secret-200"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/hooks/cap-secret-500"))
+            .respond_with(ResponseTemplate::new(502))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let event_bus = EventBusHandle::new(100);
+        let filter = EventPublisherFilter {
+            types: vec!["test.log.event".to_string()],
+        };
+
+        let ok_handle = HttpEventPublisherWorker::new(
+            "pub-ok".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: format!("{}/hooks/cap-secret-200?sig=query-secret-200", mock_server.uri()),
+                headers: None,
+            },
+            &event_bus,
+        )
+        .spawn();
+
+        let warn_handle = HttpEventPublisherWorker::new(
+            "pub-warn".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: format!("{}/hooks/cap-secret-500?sig=query-secret-500", mock_server.uri()),
+                headers: None,
+            },
+            &event_bus,
+        )
+        .spawn();
+
+        let err_handle = HttpEventPublisherWorker::with_timeout(
+            "pub-conn-err".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: "http://127.0.0.1:1/hooks/cap-secret-err?sig=query-secret-err".to_string(),
+                headers: None,
+            },
+            &event_bus,
+            Duration::from_millis(100),
+        )
+        .spawn();
+
+        let ipv6_err_handle = HttpEventPublisherWorker::with_timeout(
+            "pub-ipv6-conn-err".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: "http://[::1]:1/hooks/ipv6-cap-secret?sig=ipv6-query-secret".to_string(),
+                headers: None,
+            },
+            &event_bus,
+            Duration::from_millis(100),
+        )
+        .spawn();
+
+        event_bus.publish(CloudEvent::new("test.log.event", "https://example.test/test"));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        mock_server.verify().await;
+        ok_handle.abort();
+        warn_handle.abort();
+        err_handle.abort();
+        ipv6_err_handle.abort();
+
+        for secret in [
+            "cap-secret-200",
+            "query-secret-200",
+            "cap-secret-500",
+            "query-secret-500",
+            "cap-secret-err",
+            "query-secret-err",
+            "ipv6-cap-secret",
+            "ipv6-query-secret",
+        ] {
+            assert!(!logs_contain(secret), "leaked URL secret `{secret}` in logs");
+        }
     }
 }

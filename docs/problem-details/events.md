@@ -64,11 +64,11 @@ Verify the event publisher ID via `GET /v0/get-event-publisher-list` and retry w
 
 ## Event Publisher Already Exists
 
-This error occurs when `POST /v0/create-event-publisher` is called with an explicit `id` that is already in use by an existing event publisher. The system returns a `409 Conflict` error.
+This error occurs if a `CreateEventPublisher` command targets an aggregate identifier that is already in use by an existing event publisher. `POST /v0/create-event-publisher` generates a fresh UUID v4 automatically, so this `409 Conflict` only arises on internal command replay or duplicate aggregate creation.
 
 ### Resolution
 
-Omit `id` to let UniCore generate a fresh UUID, or use `POST /v0/update-event-publisher` to update the existing publisher.
+Retry `POST /v0/create-event-publisher` to generate a new publisher identifier, or use `POST /v0/update-event-publisher` to update an existing publisher.
 
 ## Invalid Event Publisher Name
 
@@ -88,7 +88,7 @@ Specify at least one valid CloudEvent `type` pattern in `filter.types` (an exact
 
 ## Invalid Event Publisher Configuration
 
-This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS `targetUrl`, an invalid HTTP header name or unpreserved `"****"` placeholder value, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed NATS `subject`). The system returns a `400 Bad Request` error.
+This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS `targetUrl`, a reserved HTTP header such as `Content-Type`/`Content-Length`/`Host`, an invalid HTTP header name or unpreserved `"****"` placeholder value, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed/wildcard NATS `subject` containing `*` or `>`). The system returns a `400 Bad Request` error.
 
 ### Resolution
 

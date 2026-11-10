@@ -79,15 +79,15 @@ impl View<EventPublisher> for EventPublisherView {
                 self.config = Some(config.clone());
                 self.last_modified_at = *occurred_at;
             }
-            EventPublisherEvent::EventPublisherActivated { occurred_at, .. } => {
+            EventPublisherEvent::EventPublisherActivated { occurred_at } => {
                 self.enabled = true;
                 self.last_modified_at = *occurred_at;
             }
-            EventPublisherEvent::EventPublisherDeactivated { occurred_at, .. } => {
+            EventPublisherEvent::EventPublisherDeactivated { occurred_at } => {
                 self.enabled = false;
                 self.last_modified_at = *occurred_at;
             }
-            EventPublisherEvent::EventPublisherDeleted { occurred_at, .. } => {
+            EventPublisherEvent::EventPublisherDeleted { occurred_at } => {
                 self.enabled = false;
                 self.config = None;
                 self.view_status = Status::None;

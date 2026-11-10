@@ -1,9 +1,15 @@
 use crate::domain::event_publisher::config::{EventPublisherFilter, NatsPublisherConfig};
 use async_nats::Client;
-use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle, EventFilter};
-use std::time::Duration;
+use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio_stream::StreamExt;
-use tracing::info;
+use url::Url;
 
 /// Background worker that subscribes to the [`EventBusHandle`] for a single configured
 /// NATS event publisher and publishes matching [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s
@@ -12,7 +18,6 @@ pub struct NatsEventPublisherWorker {
     id: String,
     client: Client,
     subject: String,
-    filter: EventFilter,
     stream: BusEventStream,
 }
 
@@ -28,30 +33,137 @@ impl NatsEventPublisherWorker {
         config: NatsPublisherConfig,
         event_bus: &EventBusHandle,
     ) -> tokio::task::JoinHandle<()> {
-        let filter = filter.to_event_filter();
-        let stream = event_bus.subscribe(filter.clone());
+        Self::spawn_resilient_with_initial_backoff(id, filter, config, event_bus, Duration::from_secs(1))
+    }
+
+    fn build_connect_options(
+        id: String,
+        host: String,
+        subject: String,
+        disconnected: Arc<AtomicBool>,
+    ) -> async_nats::ConnectOptions {
+        async_nats::ConnectOptions::new().event_callback(move |event| {
+            let cb_id = id.clone();
+            let cb_host = host.clone();
+            let cb_subject = subject.clone();
+            let cb_disconnected = Arc::clone(&disconnected);
+            async move {
+                match event {
+                    async_nats::Event::Disconnected => {
+                        if !cb_disconnected.swap(true, Ordering::AcqRel) {
+                            tracing::warn!(
+                                publisher_id = %cb_id,
+                                target_host = %cb_host,
+                                subject = %cb_subject,
+                                "NATS event publisher worker disconnected from broker; reconnecting"
+                            );
+                        }
+                    }
+                    async_nats::Event::Connected => {
+                        if cb_disconnected.swap(false, Ordering::AcqRel) {
+                            tracing::info!(
+                                publisher_id = %cb_id,
+                                target_host = %cb_host,
+                                subject = %cb_subject,
+                                "NATS event publisher worker reconnected to broker"
+                            );
+                        }
+                    }
+                    async_nats::Event::ClientError(err) => {
+                        tracing::debug!(
+                            publisher_id = %cb_id,
+                            target_host = %cb_host,
+                            error = %err,
+                            "NATS event publisher background client error"
+                        );
+                    }
+                    other => {
+                        tracing::debug!(
+                            publisher_id = %cb_id,
+                            target_host = %cb_host,
+                            event = %other,
+                            "NATS event publisher client state update"
+                        );
+                    }
+                }
+            }
+        })
+    }
+
+    fn spawn_resilient_with_initial_backoff(
+        id: String,
+        filter: &EventPublisherFilter,
+        config: NatsPublisherConfig,
+        event_bus: &EventBusHandle,
+        initial_backoff: Duration,
+    ) -> tokio::task::JoinHandle<()> {
+        let stream: BusEventStream = if filter.types.is_empty() {
+            Box::pin(tokio_stream::empty())
+        } else {
+            event_bus.subscribe(filter.to_event_filter())
+        };
+
+        let candidate = if config.nats_url.contains("://") {
+            config.nats_url.clone()
+        } else {
+            format!("nats://{}", config.nats_url)
+        };
+        let target_host = Url::parse(&candidate)
+            .ok()
+            .and_then(|parsed| parsed.host_str().map(str::to_owned));
 
         tokio::spawn(async move {
-            let mut backoff = Duration::from_secs(1);
+            let mut backoff = initial_backoff;
+            let mut logged_connect_error = false;
+            let host_owned = target_host.unwrap_or_else(|| "<unknown>".to_string());
+            let disconnected = Arc::new(AtomicBool::new(false));
+
             let client = loop {
-                match async_nats::connect(&config.nats_url).await {
+                let connect_options = Self::build_connect_options(
+                    id.clone(),
+                    host_owned.clone(),
+                    config.subject.clone(),
+                    Arc::clone(&disconnected),
+                );
+
+                match connect_options.connect(&config.nats_url).await {
                     Ok(client) => {
-                        info!(
-                            publisher_id = %id,
-                            nats_url = %config.nats_url,
-                            subject = %config.subject,
-                            "NATS event publisher worker connected"
-                        );
+                        if logged_connect_error {
+                            tracing::info!(
+                                publisher_id = %id,
+                                target_host = %host_owned,
+                                subject = %config.subject,
+                                "NATS event publisher worker connected after retry"
+                            );
+                        } else {
+                            tracing::debug!(
+                                publisher_id = %id,
+                                target_host = %host_owned,
+                                subject = %config.subject,
+                                "NATS event publisher worker connected"
+                            );
+                        }
                         break client;
                     }
                     Err(err) => {
-                        tracing::error!(
-                            publisher_id = %id,
-                            nats_url = %config.nats_url,
-                            error = ?err,
-                            retry_in_secs = backoff.as_secs(),
-                            "Failed to connect NATS event publisher worker; retrying"
-                        );
+                        if logged_connect_error {
+                            tracing::debug!(
+                                publisher_id = %id,
+                                target_host = %host_owned,
+                                error = %err,
+                                retry_in_ms = backoff.as_millis(),
+                                "NATS event publisher worker still unable to connect; retrying"
+                            );
+                        } else {
+                            logged_connect_error = true;
+                            tracing::error!(
+                                publisher_id = %id,
+                                target_host = %host_owned,
+                                error = %err,
+                                retry_in_ms = backoff.as_millis(),
+                                "Failed to connect NATS event publisher worker; retrying"
+                            );
+                        }
                         tokio::time::sleep(backoff).await;
                         backoff = (backoff * 2).min(Duration::from_secs(30));
                     }
@@ -62,7 +174,6 @@ impl NatsEventPublisherWorker {
                 id,
                 client,
                 subject: config.subject,
-                filter,
                 stream,
             };
             worker.run().await;
@@ -74,6 +185,7 @@ impl NatsEventPublisherWorker {
         while let Some(item) = self.stream.next().await {
             let cloud_event = match item {
                 Ok(event) => event,
+                Err(EventBusError::Closed) => break,
                 Err(EventBusError::Lagged(dropped_count)) => {
                     tracing::warn!(
                         publisher_id = %self.id,
@@ -85,23 +197,20 @@ impl NatsEventPublisherWorker {
                 Err(err) => {
                     tracing::error!(
                         publisher_id = %self.id,
-                        error = ?err,
+                        error = %err,
                         "NATS event publisher worker encountered event bus error"
                     );
                     continue;
                 }
             };
 
-            if self.filter.event_types.is_empty() || !self.filter.matches(&cloud_event) {
-                continue;
-            }
-
             let payload = match serde_json::to_vec(&cloud_event) {
                 Ok(p) => p,
                 Err(err) => {
                     tracing::error!(
                         publisher_id = %self.id,
-                        error = ?err,
+                        event_id = %cloud_event.id,
+                        error = %err,
                         "Failed to serialize CloudEvent for NATS"
                     );
                     continue;
@@ -113,11 +222,11 @@ impl NatsEventPublisherWorker {
                     publisher_id = %self.id,
                     event_id = %cloud_event.id,
                     subject = %self.subject,
-                    error = ?err,
+                    error = %err,
                     "Failed to publish CloudEvent to NATS subject"
                 );
             } else {
-                info!(
+                tracing::debug!(
                     publisher_id = %self.id,
                     event_id = %cloud_event.id,
                     subject = %self.subject,
@@ -134,30 +243,133 @@ mod tests {
     use shared_kernel::event_bus::CloudEvent;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use tracing_test::traced_test;
 
     #[tokio::test]
-    async fn nats_worker_unreachable_broker_retries_without_panicking() {
+    #[traced_test]
+    async fn nats_worker_unreachable_broker_logs_error_once_and_debug_on_subsequent_retries() {
         let event_bus = EventBusHandle::new(100);
         let config = NatsPublisherConfig {
             nats_url: "127.0.0.1:1".to_string(),
             subject: "test.subject".to_string(),
         };
 
-        let handle = NatsEventPublisherWorker::spawn_resilient(
+        let handle = NatsEventPublisherWorker::spawn_resilient_with_initial_backoff(
             "nats-1".to_string(),
             &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.issuance.credential.offered".to_string()],
             },
             config,
             &event_bus,
+            Duration::from_millis(10),
         );
 
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(70)).await;
         assert!(
             !handle.is_finished(),
             "Resilient worker should stay alive retrying when broker is unreachable"
         );
         handle.abort();
+
+        assert!(logs_contain("Failed to connect NATS event publisher worker; retrying"));
+        assert!(logs_contain(
+            "NATS event publisher worker still unable to connect; retrying"
+        ));
+        logs_assert(|lines: &[&str]| {
+            let error_count = lines.iter().filter(|line| line.contains("ERROR")).count();
+            if error_count == 1 {
+                Ok(())
+            } else {
+                Err(format!(
+                    "expected exactly 1 ERROR log across all targets, got {error_count}: {lines:?}"
+                ))
+            }
+        });
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn nats_worker_disconnect_and_reconnect_logs_state_transitions_without_error_spam() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_addr = listener.local_addr().unwrap();
+
+        let mock_server_handle = tokio::spawn(async move {
+            let info = b"INFO {\"server_id\":\"TEST\",\"server_name\":\"test\",\"version\":\"2.10.0\",\"proto\":1,\"headers\":true,\"max_payload\":1048576}\r\n";
+
+            // 1. Accept initial connection, respond to handshake PING, then drop socket to simulate broker crash.
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let _ = socket.write_all(info).await;
+                let mut buf = [0u8; 1024];
+                if let Ok(n) = socket.read(&mut buf).await {
+                    if buf[..n].windows(4).any(|w| w == b"PING") {
+                        let _ = socket.write_all(b"PONG\r\n").await;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(40)).await;
+                drop(socket);
+            }
+
+            // 2. Accept reconnect and keep it alive briefly.
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let _ = socket.write_all(info).await;
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = socket.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    if buf[..n].windows(4).any(|w| w == b"PING") {
+                        let _ = socket.write_all(b"PONG\r\n").await;
+                    }
+                }
+            }
+        });
+
+        let event_bus = EventBusHandle::new(100);
+        let handle = NatsEventPublisherWorker::spawn_resilient(
+            "nats-reconnect".to_string(),
+            &EventPublisherFilter {
+                types: vec!["com.impierce.unicore.credential.issued".to_string()],
+            },
+            NatsPublisherConfig {
+                nats_url: local_addr.to_string(),
+                subject: "unicore.events".to_string(),
+            },
+            &event_bus,
+        );
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while !logs_contain("NATS event publisher worker reconnected to broker") {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timed out waiting for NATS worker reconnect log"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+
+        handle.abort();
+        mock_server_handle.abort();
+
+        assert!(logs_contain(
+            "NATS event publisher worker disconnected from broker; reconnecting"
+        ));
+        assert!(logs_contain("NATS event publisher worker reconnected to broker"));
+        logs_assert(|lines: &[&str]| {
+            let error_count = lines.iter().filter(|line| line.contains("ERROR")).count();
+            let warn_count = lines
+                .iter()
+                .filter(|line| {
+                    line.contains("WARN")
+                        && line.contains("NATS event publisher worker disconnected from broker; reconnecting")
+                })
+                .count();
+            if error_count == 0 && warn_count == 1 {
+                Ok(())
+            } else {
+                Err(format!(
+                    "expected 0 ERROR logs and 1 disconnect WARN log, got {error_count} ERROR and {warn_count} WARN: {lines:?}"
+                ))
+            }
+        });
     }
 
     #[tokio::test]

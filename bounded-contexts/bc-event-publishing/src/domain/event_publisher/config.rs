@@ -1,6 +1,6 @@
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 use url::Url;
 
 /// Placeholder value returned for HTTP webhook headers in read models and accepted on updates
@@ -40,30 +40,80 @@ impl EventPublisherFilter {
     }
 }
 
-fn redact_url_if_userinfo_present(raw_url: &str) -> &str {
-    let trimmed = raw_url.trim();
-    let candidate = if trimmed.contains("://") {
-        trimmed.to_string()
-    } else {
-        format!("nats://{trimmed}")
+fn has_scheme_double_slash(url: &str) -> Option<&str> {
+    let (_scheme, rest) = url.split_once("://")?;
+    Some(rest)
+}
+
+fn authority_contains_at(url: &str) -> bool {
+    let Some(after_scheme) = has_scheme_double_slash(url) else {
+        return url.contains('@');
     };
-    if let Ok(parsed) = Url::parse(&candidate) {
-        if !parsed.username().is_empty() || parsed.password().is_some() {
-            return "<redacted>";
-        }
-    } else if trimmed.contains('@') {
-        return "<redacted>";
+    let authority_end = after_scheme.find(['/', '\\', '?', '#']).unwrap_or(after_scheme.len());
+    after_scheme[..authority_end].contains('@')
+}
+
+/// Redacts sensitive components of `raw_url` before formatting in `Debug` output or validation
+/// error messages:
+/// - Returns `""` when `raw_url` is empty or whitespace.
+/// - Returns `"<redacted>"` whenever `raw_url` contains `@` (covering embedded userinfo credentials
+///   as well as non-hierarchical `mailto:` / `urn:` or malformed inputs), fails to parse as a
+///   hierarchical URL (other than a bare `host:port` broker address), or lacks a host.
+/// - Replaces non-root paths, query strings, and fragments with `/<redacted>` so capability webhook
+///   paths and query secrets never leak in logs or error strings.
+#[must_use]
+pub fn redact_url_for_logging(raw_url: &str) -> Cow<'_, str> {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+        return Cow::Borrowed("");
     }
-    raw_url
+    if raw_url.contains('@') {
+        return Cow::Borrowed("<redacted>");
+    }
+
+    if has_scheme_double_slash(trimmed).is_some() {
+        if let Ok(parsed) = Url::parse(trimmed) {
+            let Some(host) = parsed.host_str().filter(|h| !h.is_empty()) else {
+                return Cow::Borrowed("<redacted>");
+            };
+            let has_sensitive_suffix = (!parsed.path().is_empty() && parsed.path() != "/")
+                || parsed.query().is_some()
+                || parsed.fragment().is_some();
+            if has_sensitive_suffix {
+                return Cow::Owned(match parsed.port() {
+                    Some(port) => format!("{}://{host}:{port}/<redacted>", parsed.scheme()),
+                    None => format!("{}://{host}/<redacted>", parsed.scheme()),
+                });
+            }
+            return Cow::Borrowed(trimmed);
+        }
+    }
+
+    if !trimmed.contains("://") {
+        if let Some((host_part, port_part)) = trimmed.rsplit_once(':') {
+            if !host_part.is_empty() && port_part.parse::<u16>().is_ok() {
+                if let Ok(parsed) = Url::parse(&format!("nats://{trimmed}")) {
+                    if parsed.host_str().is_some_and(|h| !h.is_empty())
+                        && parsed.path().is_empty()
+                        && parsed.query().is_none()
+                        && parsed.fragment().is_none()
+                    {
+                        return Cow::Borrowed(trimmed);
+                    }
+                }
+            }
+        }
+    }
+
+    Cow::Borrowed("<redacted>")
 }
 
 /// Transport-specific configuration for an HTTP webhook event publisher.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpPublisherConfig {
     /// Destination HTTP or HTTPS URL that receives `CloudEvents` via `POST` with
     /// `Content-Type: application/cloudevents+json`.
-    #[schema(example = "https://example.test/webhooks/unicore")]
     pub target_url: String,
     /// Optional HTTP headers attached to every outgoing webhook request.
     /// Header values are redacted as `"****"` in query responses.
@@ -80,28 +130,26 @@ impl std::fmt::Debug for HttpPublisherConfig {
                 .collect()
         });
         f.debug_struct("HttpPublisherConfig")
-            .field("target_url", &redact_url_if_userinfo_present(&self.target_url))
+            .field("target_url", &redact_url_for_logging(&self.target_url))
             .field("headers", &redacted_headers)
             .finish()
     }
 }
 
 /// Transport-specific configuration for a NATS event publisher.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NatsPublisherConfig {
     /// NATS server URL (`nats://host:port` or `tls://host:port`).
-    #[schema(example = "nats://127.0.0.1:4222")]
     pub nats_url: String,
     /// NATS subject to which matching `CloudEvents` are published.
-    #[schema(example = "unicore.events")]
     pub subject: String,
 }
 
 impl std::fmt::Debug for NatsPublisherConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NatsPublisherConfig")
-            .field("nats_url", &redact_url_if_userinfo_present(&self.nats_url))
+            .field("nats_url", &redact_url_for_logging(&self.nats_url))
             .field("subject", &self.subject)
             .finish()
     }
@@ -138,15 +186,15 @@ impl HttpPublisherConfig {
     /// # Errors
     ///
     /// Returns [`InvalidPublisherConfig`] if `target_url` is not a valid `http://` or `https://`
-    /// URL with a non-empty host, or if any header name or value is syntactically invalid.
+    /// URL with a non-empty host, or if any header name is reserved/invalid or header value is invalid.
     pub fn normalized(self) -> Result<Self, InvalidPublisherConfig> {
         let trimmed_url = self.target_url.trim().to_string();
         let parsed = Url::parse(&trimmed_url).map_err(|err| InvalidPublisherConfig::InvalidTargetUrl {
-            url: redact_url_if_userinfo_present(&self.target_url).to_string(),
+            url: redact_url_for_logging(&self.target_url).into_owned(),
             reason: err.to_string(),
         })?;
 
-        if !parsed.username().is_empty() || parsed.password().is_some() {
+        if !parsed.username().is_empty() || parsed.password().is_some() || authority_contains_at(&trimmed_url) {
             return Err(InvalidPublisherConfig::InvalidTargetUrl {
                 url: "<redacted>".to_string(),
                 reason: "HTTP target URL must not contain embedded userinfo credentials".to_string(),
@@ -155,14 +203,21 @@ impl HttpPublisherConfig {
 
         if parsed.scheme() != "http" && parsed.scheme() != "https" {
             return Err(InvalidPublisherConfig::InvalidTargetUrl {
-                url: self.target_url,
+                url: redact_url_for_logging(&self.target_url).into_owned(),
                 reason: "scheme must be `http` or `https`".to_string(),
+            });
+        }
+
+        if has_scheme_double_slash(&trimmed_url).is_none() {
+            return Err(InvalidPublisherConfig::InvalidTargetUrl {
+                url: redact_url_for_logging(&self.target_url).into_owned(),
+                reason: "URL must start with `http://` or `https://`".to_string(),
             });
         }
 
         if parsed.host_str().is_none_or(str::is_empty) {
             return Err(InvalidPublisherConfig::InvalidTargetUrl {
-                url: self.target_url,
+                url: redact_url_for_logging(&self.target_url).into_owned(),
                 reason: "URL must include a non-empty host".to_string(),
             });
         }
@@ -180,6 +235,12 @@ impl HttpPublisherConfig {
                             reason: err.to_string(),
                         }
                     })?;
+                    if matches!(header_name, CONTENT_TYPE | CONTENT_LENGTH | HOST) {
+                        return Err(InvalidPublisherConfig::InvalidHeaderName {
+                            name,
+                            reason: format!("`{header_name}` is a reserved HTTP header managed by the publisher"),
+                        });
+                    }
                     if normalized_headers.contains_key(header_name.as_str()) {
                         return Err(InvalidPublisherConfig::InvalidHeaderName {
                             name,
@@ -274,28 +335,29 @@ impl NatsPublisherConfig {
     /// # Errors
     ///
     /// Returns [`InvalidPublisherConfig`] if `nats_url` is not a valid `nats://` or `tls://` URL
-    /// with a non-empty host, or if `subject` is empty or contains invalid characters/tokens.
+    /// with a non-empty host and no path/query/fragment, or if `subject` is empty, contains
+    /// wildcards (`*` / `>`), or contains invalid characters/tokens.
     pub fn normalized(self) -> Result<Self, InvalidPublisherConfig> {
         let trimmed_url = self.nats_url.trim();
         if trimmed_url.is_empty() {
             return Err(InvalidPublisherConfig::InvalidNatsUrl {
-                url: self.nats_url,
+                url: redact_url_for_logging(&self.nats_url).into_owned(),
                 reason: "NATS URL must not be empty".to_string(),
             });
         }
 
-        let normalized_url = if trimmed_url.contains("://") {
+        let candidate_url = if trimmed_url.contains("://") {
             trimmed_url.to_string()
         } else {
             format!("nats://{trimmed_url}")
         };
 
-        let parsed = Url::parse(&normalized_url).map_err(|err| InvalidPublisherConfig::InvalidNatsUrl {
-            url: redact_url_if_userinfo_present(&self.nats_url).to_string(),
+        let mut parsed = Url::parse(&candidate_url).map_err(|err| InvalidPublisherConfig::InvalidNatsUrl {
+            url: redact_url_for_logging(&self.nats_url).into_owned(),
             reason: err.to_string(),
         })?;
 
-        if !parsed.username().is_empty() || parsed.password().is_some() {
+        if !parsed.username().is_empty() || parsed.password().is_some() || authority_contains_at(&candidate_url) {
             return Err(InvalidPublisherConfig::InvalidNatsUrl {
                 url: "<redacted>".to_string(),
                 reason: "NATS URL must not contain embedded userinfo credentials".to_string(),
@@ -304,16 +366,36 @@ impl NatsPublisherConfig {
 
         if parsed.scheme() != "nats" && parsed.scheme() != "tls" {
             return Err(InvalidPublisherConfig::InvalidNatsUrl {
-                url: self.nats_url,
+                url: redact_url_for_logging(&self.nats_url).into_owned(),
                 reason: "scheme must be `nats` or `tls`".to_string(),
+            });
+        }
+
+        if has_scheme_double_slash(&candidate_url).is_none() {
+            return Err(InvalidPublisherConfig::InvalidNatsUrl {
+                url: redact_url_for_logging(&self.nats_url).into_owned(),
+                reason: "NATS URL must start with `nats://` or `tls://`".to_string(),
             });
         }
 
         if parsed.host_str().is_none_or(str::is_empty) {
             return Err(InvalidPublisherConfig::InvalidNatsUrl {
-                url: self.nats_url,
+                url: redact_url_for_logging(&self.nats_url).into_owned(),
                 reason: "NATS URL must include a non-empty host".to_string(),
             });
+        }
+
+        if (!parsed.path().is_empty() && parsed.path() != "/")
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(InvalidPublisherConfig::InvalidNatsUrl {
+                url: redact_url_for_logging(&self.nats_url).into_owned(),
+                reason: "NATS URL must not contain a path, query, or fragment".to_string(),
+            });
+        }
+        if parsed.path() == "/" {
+            parsed.set_path("");
         }
 
         let trimmed_subject = self.subject.trim().to_string();
@@ -328,6 +410,13 @@ impl NatsPublisherConfig {
             });
         }
 
+        if trimmed_subject.contains(['*', '>']) {
+            return Err(InvalidPublisherConfig::InvalidNatsSubject {
+                subject: self.subject,
+                reason: "subject must not contain NATS wildcard characters (`*` or `>`)".to_string(),
+            });
+        }
+
         if trimmed_subject.split('.').any(str::is_empty) {
             return Err(InvalidPublisherConfig::InvalidNatsSubject {
                 subject: self.subject,
@@ -336,7 +425,7 @@ impl NatsPublisherConfig {
         }
 
         Ok(Self {
-            nats_url: normalized_url,
+            nats_url: parsed.to_string(),
             subject: trimmed_subject,
         })
     }
@@ -422,16 +511,37 @@ mod tests {
                 .map(String::as_str),
             Some(REDACTED_HEADER_VALUE)
         );
+
+        // `@` inside the path (rather than authority) is valid for HTTP webhooks, while its Debug
+        // representation still redacts it.
+        let at_in_path = HttpPublisherConfig {
+            target_url: "https://example.test/@org/webhook".to_string(),
+            headers: None,
+        }
+        .normalized()
+        .unwrap();
+        assert_eq!(at_in_path.target_url, "https://example.test/@org/webhook");
+        assert!(!format!("{at_in_path:?}").contains("@org"));
     }
 
     #[test]
-    fn http_config_rejects_invalid_urls_and_headers() {
+    fn http_config_rejects_invalid_urls_and_headers_without_leaking_secrets() {
         for bad_url in [
             "not-a-url",
-            "ftp://example.test/webhook",
+            "sk_live_secret-token",
+            "https:example.test/secret-path",
+            "hooks.example.test/services/secret-path",
+            "htps://hooks.example.test/cap/secret-path?token=secret-token",
+            "https://hooks.example.test:99999/cap/secret-path?token=secret-token",
+            "ftp://example.test/secret-path?token=secret-token",
             "http://",
+            "https://@example.test/webhook",
+            "https://:@example.test/webhook",
             "https://user:password@example.test/webhook",
             "https://secret-token@example.test/webhook",
+            "mailto:secret-token@example.test",
+            "urn:unicore:secret-token@example.test",
+            "not a url with secret-token@example.test",
         ] {
             let err = HttpPublisherConfig {
                 target_url: bad_url.to_string(),
@@ -439,9 +549,17 @@ mod tests {
             }
             .normalized()
             .unwrap_err();
-            assert!(matches!(err, InvalidPublisherConfig::InvalidTargetUrl { .. }));
-            assert!(!err.to_string().contains("password"));
-            assert!(!err.to_string().contains("secret-token"));
+            assert!(
+                matches!(err, InvalidPublisherConfig::InvalidTargetUrl { .. }),
+                "expected InvalidTargetUrl for `{bad_url}`, got {err:?}"
+            );
+            let rendered = err.to_string();
+            assert!(!rendered.contains("password"), "leaked password in `{rendered}`");
+            assert!(
+                !rendered.contains("secret-token"),
+                "leaked secret-token in `{rendered}`"
+            );
+            assert!(!rendered.contains("secret-path"), "leaked secret-path in `{rendered}`");
         }
 
         let mut bad_name = BTreeMap::new();
@@ -455,6 +573,29 @@ mod tests {
             .unwrap_err(),
             InvalidPublisherConfig::InvalidHeaderName { .. }
         ));
+
+        for reserved in [
+            "Content-Type",
+            "content-type",
+            " cOnTeNt-TyPe ",
+            "Content-Length",
+            " content-length ",
+            "HOST",
+            "host",
+            " hOsT ",
+        ] {
+            let mut reserved_headers = BTreeMap::new();
+            reserved_headers.insert(reserved.to_string(), "custom".to_string());
+            assert!(matches!(
+                HttpPublisherConfig {
+                    target_url: "https://example.test/webhook".to_string(),
+                    headers: Some(reserved_headers),
+                }
+                .normalized()
+                .unwrap_err(),
+                InvalidPublisherConfig::InvalidHeaderName { .. }
+            ));
+        }
 
         let mut duplicate_headers = BTreeMap::new();
         duplicate_headers.insert("Authorization".to_string(), "Bearer first".to_string());
@@ -533,7 +674,31 @@ mod tests {
         assert_eq!(config.nats_url, "nats://127.0.0.1:4222");
         assert_eq!(config.subject, "unicore.issuance.events");
 
-        for bad_subject in ["", "   ", "unicore..events", ".leading", "trailing.", "has space"] {
+        let ipv6_config = NatsPublisherConfig {
+            nats_url: "NATS://[::1]:4222/".to_string(),
+            subject: "unicore.events".to_string(),
+        }
+        .normalized()
+        .unwrap();
+        assert_eq!(ipv6_config.nats_url, "nats://[::1]:4222");
+
+        for bad_subject in [
+            "",
+            "   ",
+            "unicore..events",
+            ".leading",
+            "trailing.",
+            "has space",
+            "has\ttab",
+            "has\0nul",
+            "*",
+            ">",
+            "unicore.*",
+            "unicore.>",
+            "unicore.*.events",
+            "unicore.events*",
+            "unicore.events>",
+        ] {
             assert!(NatsPublisherConfig {
                 nats_url: "nats://127.0.0.1:4222".to_string(),
                 subject: bad_subject.to_string(),
@@ -546,9 +711,17 @@ mod tests {
             "",
             "http://127.0.0.1:4222",
             "nats://",
+            "nats://@127.0.0.1:4222",
+            "@127.0.0.1:4222",
+            "nats://127.0.0.1:4222/secret-path",
+            "nats://127.0.0.1:4222?token=secret-token",
+            "nats://127.0.0.1:4222#secret-token",
+            "127.0.0.1:4222/secret-path?token=secret-token",
             "nats://user:password@127.0.0.1:4222",
             "nats://secret-token@127.0.0.1:4222",
             "http://user:password@127.0.0.1:4222",
+            "mailto:secret-token@example.test",
+            "urn:unicore:secret-token@example.test",
         ] {
             let err = NatsPublisherConfig {
                 nats_url: bad_url.to_string(),
@@ -556,32 +729,64 @@ mod tests {
             }
             .normalized()
             .unwrap_err();
-            assert!(!err.to_string().contains("password"));
-            assert!(!err.to_string().contains("secret-token"));
+            let rendered = err.to_string();
+            assert!(!rendered.contains("password"), "leaked password in `{rendered}`");
+            assert!(
+                !rendered.contains("secret-token"),
+                "leaked secret-token in `{rendered}`"
+            );
+            assert!(!rendered.contains("secret-path"), "leaked secret-path in `{rendered}`");
         }
     }
 
     #[test]
-    fn http_config_debug_redacts_secret_header_values_and_rejects_unpreserved_placeholder() {
+    fn http_config_debug_redacts_secret_headers_capability_paths_and_queries() {
         let mut headers = BTreeMap::new();
         headers.insert("Authorization".to_string(), "Bearer super-secret-value".to_string());
-        let config = HttpPublisherConfig {
-            target_url: "https://user:url-secret@example.test/webhook".to_string(),
-            headers: Some(headers),
-        };
-        let debug_output = format!("{config:?}");
-        assert!(!debug_output.contains("super-secret-value"));
-        assert!(!debug_output.contains("url-secret"));
-        assert!(debug_output.contains(REDACTED_HEADER_VALUE));
-        assert!(debug_output.contains("<redacted>"));
+        for secret_url in [
+            "https://user:url-secret@example.test/webhook",
+            "https://hooks.example.test/cap/url-secret?sig=query-secret#frag-secret",
+            "http://[::1]:8080/cap/url-secret?sig=query-secret",
+            "mailto:url-secret@example.test",
+            "urn:unicore:url-secret@example.test",
+            "url-secret-raw-token",
+        ] {
+            let config = HttpPublisherConfig {
+                target_url: secret_url.to_string(),
+                headers: Some(headers.clone()),
+            };
+            let debug_output = format!("{config:?}");
+            assert!(!debug_output.contains("super-secret-value"));
+            assert!(
+                !debug_output.contains("url-secret"),
+                "leaked url-secret in `{debug_output}`"
+            );
+            assert!(
+                !debug_output.contains("query-secret"),
+                "leaked query-secret in `{debug_output}`"
+            );
+            assert!(
+                !debug_output.contains("frag-secret"),
+                "leaked frag-secret in `{debug_output}`"
+            );
+            assert!(debug_output.contains(REDACTED_HEADER_VALUE));
+            assert!(debug_output.contains("<redacted>"));
+        }
 
-        let nats_config = NatsPublisherConfig {
-            nats_url: "nats://user:nats-secret@127.0.0.1:4222".to_string(),
-            subject: "unicore.events".to_string(),
-        };
-        let nats_debug = format!("{nats_config:?}");
-        assert!(!nats_debug.contains("nats-secret"));
-        assert!(nats_debug.contains("<redacted>"));
+        for secret_nats_url in [
+            "nats://user:nats-secret@127.0.0.1:4222",
+            "nats://127.0.0.1:4222?token=nats-secret",
+            "mailto:nats-secret@example.test",
+            "urn:unicore:nats-secret@example.test",
+        ] {
+            let nats_config = NatsPublisherConfig {
+                nats_url: secret_nats_url.to_string(),
+                subject: "unicore.events".to_string(),
+            };
+            let nats_debug = format!("{nats_config:?}");
+            assert!(!nats_debug.contains("nats-secret"));
+            assert!(nats_debug.contains("<redacted>"));
+        }
 
         let mut placeholder_headers = BTreeMap::new();
         placeholder_headers.insert("Authorization".to_string(), REDACTED_HEADER_VALUE.to_string());

@@ -3,7 +3,6 @@ use crate::domain::event_publisher::{
 };
 use chrono::Utc;
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
-use tracing::info;
 
 impl EventPublisher {
     /// Removes an event publisher, stopping any active background delivery task.
@@ -11,12 +10,10 @@ impl EventPublisher {
         &mut self,
         sink: &EventSink<Self>,
     ) -> Result<(), <EventPublisher as Aggregate>::Error> {
-        let publisher_id = match self {
-            EventPublisher::Configured(inner) => inner.id.clone(),
-            EventPublisher::None => return Err(EventPublisherError::EventPublisherNotFound),
-        };
+        if self.is_none() {
+            return Err(EventPublisherError::EventPublisherNotFound);
+        }
 
-        info!(publisher_id = %publisher_id, "Deleting event publisher");
         sink.write(
             EventPublisherDeleted {
                 occurred_at: Utc::now(),

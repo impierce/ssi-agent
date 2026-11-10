@@ -12,7 +12,8 @@ use utoipa::ToSchema;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = DeleteEventPublisher)]
 pub struct DeleteEventPublisherRequest {
-    #[schema(pattern = r"^[^\x00]*$")]
+    #[serde(deserialize_with = "super::deserialize_non_empty_id")]
+    #[schema(pattern = r"^[^\x00]+$")]
     pub id: String,
 }
 

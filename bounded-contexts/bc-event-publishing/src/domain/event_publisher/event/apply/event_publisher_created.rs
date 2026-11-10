@@ -3,7 +3,6 @@ use crate::domain::event_publisher::{
     config::{EventPublisherConfig, EventPublisherFilter},
 };
 use chrono::{DateTime, Utc};
-use tracing::debug;
 
 impl EventPublisher {
     #[allow(clippy::too_many_arguments)]
@@ -17,7 +16,6 @@ impl EventPublisher {
         config: EventPublisherConfig,
         occurred_at: DateTime<Utc>,
     ) {
-        debug!(id = %id, "Applying EventPublisherCreated event");
         *self = EventPublisher::Configured(Box::new(EventPublisherInner {
             id,
             name,

@@ -9,26 +9,21 @@ use crate::{
             EventPublisherViewRepositories, EventPublishingView,
         },
     },
-    domain::event_publisher::{aggregate::EventPublisher, services::KnownEventTypes},
+    domain::event_publisher::aggregate::EventPublisher,
 };
 use shared_kernel::{
-    application_service::{ApplicationContext, ApplicationService},
+    application_service::ApplicationContext,
     async_trait,
     authorization::Caller,
     command_handler::{self, CommandHandler},
     view_repository::{load_by_id, SoftDeletable as _},
 };
-use tracing::{debug, error, warn};
-
-/// The main Application Service for the `EventPublishingContext`.
-pub type EventPublishingService = ApplicationService<EventPublishingContext>;
 
 #[derive(Clone)]
 pub struct EventPublishingContext {
     pub event_publisher: CommandHandler<EventPublisher>,
     pub views: EventPublisherViewRepositories,
     pub supervisor: EventPublisherSupervisor,
-    pub known_event_types: KnownEventTypes,
 }
 
 impl EventPublishingContext {
@@ -40,7 +35,6 @@ impl EventPublishingContext {
         if let Some(view) = self.load_event_publisher(id).await? {
             Ok(EventPublishingView::EventPublisher(Box::new(view.redacted())))
         } else {
-            warn!(publisher_id = %id, "Event publisher not found or deleted");
             Err(EventPublishingQueryError::NotFound(id.to_string()))
         }
     }
@@ -72,12 +66,8 @@ impl ApplicationContext for EventPublishingContext {
 
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError> {
         match query {
-            EventPublishingQuery::GetEventPublisherById { id } => {
-                debug!(publisher_id = %id, "Querying event publisher by ID");
-                self.event_publisher_by_id(&id).await
-            }
+            EventPublishingQuery::GetEventPublisherById { id } => self.event_publisher_by_id(&id).await,
             EventPublishingQuery::GetEventPublisherList => {
-                debug!("Querying event publisher list");
                 match self.views.event_publisher_list.load(EVENT_PUBLISHER_LIST_VIEW_ID).await {
                     Ok(Some(view)) => {
                         let mut items: Vec<_> = view
@@ -86,17 +76,10 @@ impl ApplicationContext for EventPublishingContext {
                             .map(EventPublisherView::redacted)
                             .collect();
                         items.sort_by(|a, b| a.created_at.cmp(&b.created_at).then_with(|| a.id.cmp(&b.id)));
-                        debug!(count = items.len(), "Returning event publisher list");
                         Ok(EventPublishingView::EventPublisherList(items))
                     }
-                    Ok(None) => {
-                        debug!("No event publisher list view found, returning empty list");
-                        Ok(EventPublishingView::EventPublisherList(vec![]))
-                    }
-                    Err(e) => {
-                        error!(error = %e, "Failed to load event publisher list");
-                        Err(EventPublishingQueryError::PersistenceError(e))
-                    }
+                    Ok(None) => Ok(EventPublishingView::EventPublisherList(vec![])),
+                    Err(e) => Err(EventPublishingQueryError::PersistenceError(e)),
                 }
             }
         }
@@ -283,5 +266,177 @@ mod tests {
                 .await,
             Err(EventPublishingQueryError::NotFound(_))
         ));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn inactive_publisher_activates_after_restart_and_after_update_while_paused() {
+        use crate::domain::event_publisher::event::EventPublisherEvent;
+        use chrono::Utc;
+        use shared_kernel::cqrs_es::{EventEnvelope, Query as _};
+
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1"))
+            .and(header("authorization", "Bearer secret-paused"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(3)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v2"))
+            .and(header("authorization", "Bearer secret-paused"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let event_bus = EventBusHandle::new(64);
+        let views = EventPublisherViewRepositories::from_factory(&InMemoryStore);
+
+        let context = EventPublishingContextBuilder::new()
+            .with_views(views.clone())
+            .with_event_bus(event_bus.clone())
+            .build(&InMemoryStore)
+            .await
+            .unwrap();
+
+        let pub_id = "pub-paused".to_string();
+        let mut headers = BTreeMap::new();
+        headers.insert("Authorization".to_string(), "Bearer secret-paused".to_string());
+
+        // 1. Create publisher initially disabled
+        context
+            .handle_command(
+                &pub_id,
+                EventPublisherCommand::CreateEventPublisher {
+                    id: pub_id.clone(),
+                    name: "Paused Webhook".to_string(),
+                    description: None,
+                    enabled: false,
+                    filter: EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+                    },
+                    config: EventPublisherConfig::Http(HttpPublisherConfig {
+                        target_url: format!("{}/v1", mock_server.uri()),
+                        headers: Some(headers),
+                    }),
+                }
+                .into(),
+                &Caller::Internal,
+            )
+            .await
+            .unwrap();
+        assert_eq!(context.supervisor.active_count(), 0);
+
+        let activated_envelope = EventEnvelope {
+            aggregate_id: pub_id.clone(),
+            sequence: 2,
+            payload: EventPublisherEvent::EventPublisherActivated {
+                occurred_at: Utc::now(),
+            },
+            metadata: std::collections::HashMap::new(),
+        };
+
+        // 2a. Simulated restart: hydrate inactive view into a fresh supervisor, then dispatch Activated
+        let hydrated_supervisor = EventPublisherSupervisor::new(event_bus.clone());
+        let list_view = views
+            .event_publisher_list
+            .load(EVENT_PUBLISHER_LIST_VIEW_ID)
+            .await
+            .unwrap()
+            .unwrap();
+        hydrated_supervisor.hydrate_from_views(list_view.into_values());
+        assert_eq!(hydrated_supervisor.active_count(), 0);
+
+        hydrated_supervisor
+            .dispatch(&pub_id, std::slice::from_ref(&activated_envelope))
+            .await;
+        assert!(hydrated_supervisor.is_active(&pub_id));
+        event_bus.publish(CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        ));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        drop(hydrated_supervisor);
+
+        // 2b. Multi-replica fallback: fresh supervisor with view_repo (not in memory) activates from persisted view
+        let fallback_supervisor =
+            EventPublisherSupervisor::new(event_bus.clone()).with_view_repository(views.event_publisher.clone());
+        fallback_supervisor
+            .dispatch(&pub_id, std::slice::from_ref(&activated_envelope))
+            .await;
+        assert!(fallback_supervisor.is_active(&pub_id));
+        event_bus.publish(CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        ));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        drop(fallback_supervisor);
+
+        // 3. Activate via command on original context -> delivers to /v1
+        context
+            .handle_command(
+                &pub_id,
+                EventPublisherCommand::ActivateEventPublisher.into(),
+                &Caller::Internal,
+            )
+            .await
+            .unwrap();
+        assert!(context.supervisor.is_active(&pub_id));
+
+        event_bus.publish(CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        ));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // 4. Deactivate, update target_url to /v2 while paused, then activate -> delivers to /v2
+        context
+            .handle_command(
+                &pub_id,
+                EventPublisherCommand::DeactivateEventPublisher.into(),
+                &Caller::Internal,
+            )
+            .await
+            .unwrap();
+        assert!(!context.supervisor.is_active(&pub_id));
+
+        context
+            .handle_command(
+                &pub_id,
+                EventPublisherCommand::UpdateEventPublisher {
+                    name: None,
+                    description: None,
+                    filter: None,
+                    config: Some(EventPublisherConfig::Http(HttpPublisherConfig {
+                        target_url: format!("{}/v2", mock_server.uri()),
+                        headers: None,
+                    })),
+                }
+                .into(),
+                &Caller::Internal,
+            )
+            .await
+            .unwrap();
+        assert!(!context.supervisor.is_active(&pub_id));
+
+        context
+            .handle_command(
+                &pub_id,
+                EventPublisherCommand::ActivateEventPublisher.into(),
+                &Caller::Internal,
+            )
+            .await
+            .unwrap();
+        assert!(context.supervisor.is_active(&pub_id));
+
+        event_bus.publish(CloudEvent::new(
+            "com.impierce.unicore.issuance.credential.issued",
+            "/services/credential",
+        ));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        mock_server.verify().await;
     }
 }

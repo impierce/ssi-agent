@@ -14,7 +14,6 @@ use crate::domain::event_publisher::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
-use tracing::{debug, info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct EventPublisherInner {
@@ -48,9 +47,6 @@ impl Aggregate for EventPublisher {
         service: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
-        info!("Handling event publisher command: {:?}", command);
-        debug!("Current event publisher state: {:?}", self);
-
         match command {
             CreateEventPublisher {
                 id,
@@ -64,7 +60,6 @@ impl Aggregate for EventPublisher {
                     .await?;
             }
             _ if self.is_none() => {
-                warn!("Command rejected: event publisher does not exist");
                 return Err(EventPublisherError::EventPublisherNotFound);
             }
             UpdateEventPublisher {
@@ -87,7 +82,6 @@ impl Aggregate for EventPublisher {
             }
         }
 
-        info!("Successfully handled event publisher command");
         Ok(())
     }
 
@@ -114,7 +108,7 @@ impl Aggregate for EventPublisher {
             } => {
                 self.event_publisher_updated(name, description, enabled, filter, config, occurred_at);
             }
-            EventPublisherActivated { occurred_at, .. } => {
+            EventPublisherActivated { occurred_at } => {
                 self.event_publisher_activated(occurred_at);
             }
             EventPublisherDeactivated { occurred_at } => {

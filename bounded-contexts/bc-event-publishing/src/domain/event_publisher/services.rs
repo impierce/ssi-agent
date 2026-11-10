@@ -5,7 +5,7 @@ use shared_kernel::{
 };
 use std::{
     collections::HashSet,
-    sync::{Arc, RwLock},
+    sync::{Arc, PoisonError, RwLock},
 };
 
 /// Why a list of event type patterns was rejected.
@@ -66,11 +66,10 @@ impl KnownEventTypes {
     /// Adds all integration event types documented by `projectors` into this registry.
     pub fn extend_from_projectors(&self, projectors: &[EventProjector]) {
         let docs = collect_projector_docs(projectors);
-        if let Ok(mut guard) = self.inner.write() {
-            for group in docs {
-                for variant in group.variants {
-                    guard.insert(variant.event_type.to_string());
-                }
+        let mut guard = self.inner.write().unwrap_or_else(PoisonError::into_inner);
+        for group in docs {
+            for variant in group.variants {
+                guard.insert(variant.event_type.to_string());
             }
         }
     }
@@ -89,7 +88,7 @@ impl KnownEventTypes {
             return Err(InvalidEventTypes::EmptyEvents);
         }
 
-        let known_guard = self.inner.read().ok();
+        let known_guard = self.inner.read().unwrap_or_else(PoisonError::into_inner);
         let mut normalized = Vec::with_capacity(events.len());
 
         for pattern in events {
@@ -103,12 +102,10 @@ impl KnownEventTypes {
                 ..Default::default()
             };
 
-            let matches_known = match known_guard.as_deref() {
-                Some(known) if !known.is_empty() => {
-                    known.iter().any(|event_type| filter.matches_event_type(event_type))
-                }
-                _ => true,
-            };
+            let matches_known = known_guard.is_empty()
+                || known_guard
+                    .iter()
+                    .any(|event_type| filter.matches_event_type(event_type));
 
             if !matches_known {
                 return Err(InvalidEventTypes::UnknownEventType(trimmed));
@@ -153,5 +150,38 @@ impl EventPublisherDomainServices {
     #[must_use]
     pub fn known_event_types(&self) -> &KnownEventTypes {
         &self.known_event_types
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poisoned_rwlock_still_enforces_known_event_types() {
+        let known = KnownEventTypes::with_event_types(["com.impierce.unicore.issuance.credential.issued"]);
+        let poisoned = known.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned.inner.write().unwrap();
+            panic!("intentional panic to poison RwLock");
+        })
+        .join();
+
+        assert!(known.inner.read().is_err());
+
+        assert_eq!(
+            known
+                .validate_and_normalize(vec!["issuance.credential.issued".to_string()])
+                .unwrap(),
+            vec!["issuance.credential.issued".to_string()]
+        );
+        assert_eq!(
+            known
+                .validate_and_normalize(vec!["com.impierce.unicore.unknown.event".to_string()])
+                .unwrap_err(),
+            InvalidEventTypes::UnknownEventType("com.impierce.unicore.unknown.event".to_string())
+        );
+
+        known.extend_from_projectors(&[]);
     }
 }

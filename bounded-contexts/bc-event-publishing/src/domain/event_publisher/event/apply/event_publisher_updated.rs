@@ -3,7 +3,6 @@ use crate::domain::event_publisher::{
     config::{EventPublisherConfig, EventPublisherFilter},
 };
 use chrono::{DateTime, Utc};
-use tracing::debug;
 
 impl EventPublisher {
     pub fn event_publisher_updated(
@@ -16,7 +15,6 @@ impl EventPublisher {
         occurred_at: DateTime<Utc>,
     ) {
         if let EventPublisher::Configured(inner) = self {
-            debug!(id = %inner.id, "Applying EventPublisherUpdated event");
             inner.name = name;
             inner.description = description;
             inner.enabled = enabled;

@@ -20,7 +20,6 @@ use shared_kernel::{
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
-use tracing::{debug, info};
 
 /// Keeps the aggregate load, event write, view projections, and [`EventPublisherSupervisor`]
 /// worker transitions serialized within one process so concurrent commands cannot dispatch
@@ -92,20 +91,18 @@ impl EventPublishingContextBuilder {
         self,
         factory: &impl CommandHandlerFactory,
     ) -> Result<EventPublishingContext, Box<dyn std::error::Error>> {
-        info!("Building EventPublishingContext");
-
         let views = self.views.ok_or("EventPublishingContextBuilder: views are required")?;
         let event_bus = self
             .event_bus
             .ok_or("EventPublishingContextBuilder: event_bus is required")?;
         let known_event_types = self.known_event_types.unwrap_or_default();
 
-        let supervisor = EventPublisherSupervisor::new(event_bus);
+        let supervisor = EventPublisherSupervisor::new(event_bus).with_view_repository(views.event_publisher.clone());
         if let Some(list_view) = views.event_publisher_list.load(EVENT_PUBLISHER_LIST_VIEW_ID).await? {
             supervisor.hydrate_from_views(list_view.into_values());
         }
 
-        let domain_services = EventPublisherDomainServices::new(known_event_types.clone());
+        let domain_services = EventPublisherDomainServices::new(known_event_types);
 
         let mut queries: Vec<Box<dyn Query<EventPublisher>>> = vec![
             Box::new(GenericQuery::new(views.event_publisher.clone())),
@@ -117,19 +114,16 @@ impl EventPublishingContextBuilder {
         ];
         queries.extend(self.extra_queries);
 
-        debug!(query_count = queries.len(), "Creating event_publisher command handler");
         let inner = factory.create_handler(domain_services, queries).await?;
         let event_publisher = Arc::new(SerializedEventPublisherHandler {
             inner,
             execution: Mutex::new(()),
         });
 
-        info!("EventPublishingContext built successfully");
         Ok(EventPublishingContext {
             event_publisher,
             views,
             supervisor,
-            known_event_types,
         })
     }
 }

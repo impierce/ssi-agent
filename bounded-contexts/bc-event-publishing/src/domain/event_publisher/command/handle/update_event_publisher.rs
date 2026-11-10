@@ -7,7 +7,6 @@ use crate::domain::event_publisher::{
 };
 use chrono::Utc;
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
-use tracing::info;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum UpdateEventPublisherError {
@@ -76,15 +75,8 @@ impl EventPublisher {
             && updated_filter == current.filter
             && updated_config == current.config
         {
-            info!(publisher_id = %current.id, "Event publisher update submitted unchanged; skipping event write");
             return Ok(());
         }
-
-        info!(
-            publisher_id = %current.id,
-            publisher_type = ?updated_config.publisher_type(),
-            "Updating event publisher"
-        );
 
         sink.write(
             EventPublisherUpdated {

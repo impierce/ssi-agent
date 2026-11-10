@@ -6,7 +6,6 @@ use crate::domain::event_publisher::{
 };
 use chrono::Utc;
 use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
-use tracing::info;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CreateEventPublisherError {
@@ -46,13 +45,6 @@ impl EventPublisher {
 
         let filter = service.known_event_types().validate_and_normalize_filter(filter)?;
         let config = config.normalized()?;
-
-        info!(
-            publisher_id = %id,
-            publisher_type = ?config.publisher_type(),
-            enabled,
-            "Creating event publisher"
-        );
 
         sink.write(
             EventPublisherCreated {

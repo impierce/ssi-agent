@@ -580,8 +580,6 @@ paths:
           description: Unauthorized
         '403':
           description: Forbidden
-        '409':
-          description: An event publisher with this ID already exists
         '422':
           description: Request body does not match the expected schema
   /v0/create-new-catalog:
@@ -2141,7 +2139,7 @@ webhooks:
       - Events
       summary: Receive a CloudEvent
       description: |-
-        Sent to the `target_url` of every target configured under `event_publishers.http` whose `events.types` include the event's type, with the headers configured for that target, e.g. a shared secret.
+        Sent to the `targetUrl` of every active HTTP event publisher (`publisherType: "http"`) whose `filter.types` matches the event's `type`, with any custom `headers` configured on that publisher (e.g. a shared secret).
 
         Delivery is fire-and-forget: each request times out after 10 seconds and is not retried, and events are dropped when the publisher falls behind the event bus. The response status is only logged.
       requestBody:
@@ -2171,7 +2169,7 @@ components:
       properties:
         id:
           type: string
-          pattern: ^[^\x00]*$
+          pattern: ^[^\x00]+$
       additionalProperties: false
     AddConnectionEndpointRequest:
       type: object
@@ -2634,11 +2632,6 @@ components:
         filter:
           $ref: '#/components/schemas/EventPublisherFilter'
           description: Event subscription filter matching `/v0/events` query parameters (`types`).
-        id:
-          type:
-          - string
-          - 'null'
-          description: Optional explicit identifier; a UUID v4 is generated when omitted.
         name:
           type: string
           description: Human-readable display name for this event publisher.
@@ -2916,7 +2909,7 @@ components:
       properties:
         id:
           type: string
-          pattern: ^[^\x00]*$
+          pattern: ^[^\x00]+$
       additionalProperties: false
     DeleteCatalogRequest:
       type: object
@@ -2932,7 +2925,7 @@ components:
       properties:
         id:
           type: string
-          pattern: ^[^\x00]*$
+          pattern: ^[^\x00]+$
       additionalProperties: false
     DeletePublicOfferRequest:
       type: object
@@ -3288,24 +3281,10 @@ components:
       - individual
       - organization
     HttpEventPublisherConfigDto:
-      allOf:
-      - $ref: '#/components/schemas/HttpPublisherConfig'
-      - type: object
-        required:
-        - publisherType
-        properties:
-          publisherType:
-            $ref: '#/components/schemas/HttpEventPublisherType'
-      description: Configuration for an HTTP webhook event publisher.
-    HttpEventPublisherType:
-      type: string
-      description: Marks a configuration payload as being for an `http` webhook event publisher.
-      enum:
-      - http
-    HttpPublisherConfig:
       type: object
-      description: Transport-specific configuration for an HTTP webhook event publisher.
+      description: Configuration for an HTTP webhook event publisher.
       required:
+      - publisherType
       - targetUrl
       properties:
         headers:
@@ -3319,12 +3298,20 @@ components:
             type: string
           propertyNames:
             type: string
+        publisherType:
+          $ref: '#/components/schemas/HttpEventPublisherType'
         targetUrl:
           type: string
           description: |-
             Destination HTTP or HTTPS URL that receives `CloudEvents` via `POST` with
             `Content-Type: application/cloudevents+json`.
           example: https://example.test/webhooks/unicore
+      additionalProperties: false
+    HttpEventPublisherType:
+      type: string
+      description: Marks a configuration payload as being for an `http` webhook event publisher.
+      enum:
+      - http
     Info:
       allOf:
       - $ref: '#/components/schemas/Version'
@@ -3622,24 +3609,10 @@ components:
       - $ref: '#/components/schemas/VerificationMethod'
       description: 'An entry of a verification relationship (DID Core §5.3): a reference to a verification method, or a method embedded in the relationship.'
     NatsEventPublisherConfigDto:
-      allOf:
-      - $ref: '#/components/schemas/NatsPublisherConfig'
-      - type: object
-        required:
-        - publisherType
-        properties:
-          publisherType:
-            $ref: '#/components/schemas/NatsEventPublisherType'
-      description: Configuration for a NATS event publisher.
-    NatsEventPublisherType:
-      type: string
-      description: Marks a configuration payload as being for a `nats` event publisher.
-      enum:
-      - nats
-    NatsPublisherConfig:
       type: object
-      description: Transport-specific configuration for a NATS event publisher.
+      description: Configuration for a NATS event publisher.
       required:
+      - publisherType
       - natsUrl
       - subject
       properties:
@@ -3647,10 +3620,18 @@ components:
           type: string
           description: NATS server URL (`nats://host:port` or `tls://host:port`).
           example: nats://127.0.0.1:4222
+        publisherType:
+          $ref: '#/components/schemas/NatsEventPublisherType'
         subject:
           type: string
           description: NATS subject to which matching `CloudEvents` are published.
           example: unicore.events
+      additionalProperties: false
+    NatsEventPublisherType:
+      type: string
+      description: Marks a configuration payload as being for a `nats` event publisher.
+      enum:
+      - nats
     Offer:
       type: object
       required:
@@ -4360,6 +4341,7 @@ components:
           - type: 'null'
         id:
           type: string
+          pattern: ^[^\x00]+$
         name:
           type:
           - string

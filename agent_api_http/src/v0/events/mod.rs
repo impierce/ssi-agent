@@ -154,44 +154,52 @@ pub struct EventQueryParams {
     pub until: Option<DateTime<Utc>>,
 }
 
-pub fn router(state: Arc<EventsState>) -> Router {
+pub fn publishers_router(state: Arc<EventsState>) -> Router {
+    Router::new().nest(
+        crate::API_VERSION,
+        Router::new()
+            .route(
+                "/create-event-publisher",
+                post(commands::create_event_publisher::create_event_publisher),
+            )
+            .route(
+                "/update-event-publisher",
+                post(commands::update_event_publisher::update_event_publisher),
+            )
+            .route(
+                "/activate-event-publisher",
+                post(commands::activate_event_publisher::activate_event_publisher),
+            )
+            .route(
+                "/deactivate-event-publisher",
+                post(commands::deactivate_event_publisher::deactivate_event_publisher),
+            )
+            .route(
+                "/delete-event-publisher",
+                post(commands::delete_event_publisher::delete_event_publisher),
+            )
+            .route(
+                "/get-event-publisher-by-id/{id}",
+                get(queries::get_event_publisher_by_id::get_event_publisher_by_id),
+            )
+            .route(
+                "/get-event-publisher-list",
+                get(queries::get_event_publisher_list::get_event_publisher_list),
+            )
+            .with_state(state),
+    )
+}
+
+pub fn sse_router(state: Arc<EventsState>) -> Router {
     Router::new()
         .nest(
             crate::API_VERSION,
             Router::new()
                 .route("/events", get(events_sse_handler))
-                .route(
-                    "/create-event-publisher",
-                    post(commands::create_event_publisher::create_event_publisher),
-                )
-                .route(
-                    "/update-event-publisher",
-                    post(commands::update_event_publisher::update_event_publisher),
-                )
-                .route(
-                    "/activate-event-publisher",
-                    post(commands::activate_event_publisher::activate_event_publisher),
-                )
-                .route(
-                    "/deactivate-event-publisher",
-                    post(commands::deactivate_event_publisher::deactivate_event_publisher),
-                )
-                .route(
-                    "/delete-event-publisher",
-                    post(commands::delete_event_publisher::delete_event_publisher),
-                )
-                .route(
-                    "/get-event-publisher-by-id/{id}",
-                    get(queries::get_event_publisher_by_id::get_event_publisher_by_id),
-                )
-                .route(
-                    "/get-event-publisher-list",
-                    get(queries::get_event_publisher_list::get_event_publisher_list),
-                )
                 .with_state(state),
         )
-        // Merged after the trace layer so SSE payloads and secret webhook headers are not logged,
-        // while still rejecting NUL bytes in both URI and request body.
+        // Merged after the trace layer so SSE payloads and connections are not logged,
+        // while still rejecting NUL bytes in the request URI.
         .layer(axum::middleware::from_fn(crate::reject_null_byte_uri))
 }
 
@@ -409,7 +417,7 @@ mod tests {
         bus_handle.publish(cred_event.clone());
         bus_handle.publish(other_event.clone());
 
-        let app = router(Arc::new(bus_handle.clone().into()));
+        let app = sse_router(Arc::new(bus_handle.clone().into()));
 
         let req = axum::http::Request::builder()
             .uri("/v0/events?sources=credential")
@@ -459,7 +467,7 @@ mod tests {
         bus_handle.publish(event1.clone());
         bus_handle.publish(event2.clone());
 
-        let app = router(Arc::new(bus_handle.clone().into()));
+        let app = sse_router(Arc::new(bus_handle.clone().into()));
 
         let req = axum::http::Request::builder()
             .uri("/v0/events?sources=credential")
@@ -504,7 +512,7 @@ mod tests {
         .with_data(serde_json::json!({}));
         bus_handle.publish(event.clone());
 
-        let app = router(Arc::new(bus_handle.clone().into()));
+        let app = sse_router(Arc::new(bus_handle.clone().into()));
 
         let past_time = (now - chrono::Duration::hours(1)).to_rfc3339();
         let uri = format!(
@@ -550,7 +558,7 @@ mod tests {
         .with_data(serde_json::json!({}));
         bus_handle.publish(event1.clone());
 
-        let app = router(Arc::new(bus_handle.clone().into()));
+        let app = sse_router(Arc::new(bus_handle.clone().into()));
         let req = axum::http::Request::builder()
             .uri("/v0/events?sources=credential")
             .body(axum::body::Body::empty())
@@ -620,7 +628,7 @@ mod tests {
 
         let bus_handle = EventBusHandle::new(16);
         let events_state = Arc::new(EventsState::new(bus_handle, Arc::new(MockAuth)));
-        let app = router(events_state);
+        let app = sse_router(events_state);
 
         // 1. Without actor -> 401 Unauthorized
         let req = axum::http::Request::builder()
@@ -660,7 +668,7 @@ mod tests {
         let bus_handle = EventBusHandle::new(16);
         bus_handle.set_history_reader(Arc::new(FailingReader));
 
-        let app = router(Arc::new(bus_handle.into()));
+        let app = sse_router(Arc::new(bus_handle.into()));
 
         let req = axum::http::Request::builder()
             .uri("/v0/events")
@@ -705,7 +713,7 @@ mod tests {
             resume_after: None,
         }));
 
-        let app = router(Arc::new(bus_handle.into()));
+        let app = sse_router(Arc::new(bus_handle.into()));
         let req = axum::http::Request::builder()
             .uri(format!("/v0/events{query}"))
             .body(axum::body::Body::empty())
@@ -734,7 +742,7 @@ mod tests {
             resume_after: Some("credential:cred-9:42".to_string()),
         }));
 
-        let app = router(Arc::new(bus_handle.into()));
+        let app = sse_router(Arc::new(bus_handle.into()));
         let req = axum::http::Request::builder()
             .uri("/v0/events")
             .body(axum::body::Body::empty())
@@ -785,7 +793,7 @@ mod tests {
         let bus_handle = EventBusHandle::new(16);
         bus_handle.set_history_reader(Arc::new(LeakyReader));
 
-        let app = router(Arc::new(bus_handle.into()));
+        let app = sse_router(Arc::new(bus_handle.into()));
         let req = axum::http::Request::builder()
             .uri("/v0/events")
             .body(axum::body::Body::empty())
@@ -804,7 +812,7 @@ mod tests {
     #[tokio::test]
     async fn test_events_sse_rejects_null_byte_in_query() {
         let bus_handle = EventBusHandle::new(16);
-        let app = router(Arc::new(bus_handle.into()));
+        let app = sse_router(Arc::new(bus_handle.into()));
 
         let req = axum::http::Request::builder()
             .uri("/v0/events?subject=%00")
@@ -844,7 +852,7 @@ mod tests {
             .unwrap();
 
         let state = Arc::new(EventsState::from(bus_handle).with_event_publishing(Arc::new(context)));
-        let app = router(state);
+        let app = crate::with_request_logging(publishers_router(state));
 
         // 1. NUL byte in request body is rejected with 400
         let nul_req = axum::http::Request::builder()
@@ -856,27 +864,64 @@ mod tests {
         let nul_resp = tower::ServiceExt::oneshot(app.clone(), nul_req).await.unwrap();
         assert_eq!(nul_resp.status(), axum::http::StatusCode::BAD_REQUEST);
 
-        // 2. Invalid targetUrl is rejected with 400
-        let invalid_req = axum::http::Request::builder()
+        // 1b. Client-supplied `id` on create-event-publisher is rejected with 422 (deny_unknown_fields)
+        let explicit_id_req = axum::http::Request::builder()
             .method("POST")
             .uri("/v0/create-event-publisher")
             .header("content-type", "application/json")
             .body(axum::body::Body::from(
                 serde_json::to_vec(&json!({
-                    "name": "Bad Webhook",
+                    "id": "client-chosen-id",
+                    "name": "Client ID Webhook",
                     "filter": {
                         "types": ["com.impierce.unicore.issuance.credential.issued"]
                     },
                     "config": {
                         "publisherType": "http",
-                        "targetUrl": "ftp://invalid.example.org"
+                        "targetUrl": "https://subscriber.example.org/events"
                     }
                 }))
                 .unwrap(),
             ))
             .unwrap();
-        let invalid_resp = tower::ServiceExt::oneshot(app.clone(), invalid_req).await.unwrap();
-        assert_eq!(invalid_resp.status(), axum::http::StatusCode::BAD_REQUEST);
+        let explicit_id_resp = tower::ServiceExt::oneshot(app.clone(), explicit_id_req).await.unwrap();
+        assert_eq!(explicit_id_resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+
+        // 2. Invalid targetUrl, reserved HTTP header, and NATS wildcard subject are rejected with 400
+        for bad_config in [
+            json!({
+                "publisherType": "http",
+                "targetUrl": "ftp://invalid.example.org"
+            }),
+            json!({
+                "publisherType": "http",
+                "targetUrl": "https://subscriber.example.org/events",
+                "headers": { "Content-Type": "text/plain" }
+            }),
+            json!({
+                "publisherType": "nats",
+                "natsUrl": "nats://broker.internal:4222",
+                "subject": "unicore.events.*"
+            }),
+        ] {
+            let invalid_req = axum::http::Request::builder()
+                .method("POST")
+                .uri("/v0/create-event-publisher")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&json!({
+                        "name": "Bad Publisher",
+                        "filter": {
+                            "types": ["com.impierce.unicore.issuance.credential.issued"]
+                        },
+                        "config": bad_config
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap();
+            let invalid_resp = tower::ServiceExt::oneshot(app.clone(), invalid_req).await.unwrap();
+            assert_eq!(invalid_resp.status(), axum::http::StatusCode::BAD_REQUEST);
+        }
 
         // 3. Create valid HTTP publisher -> 200 OK with redacted secret header
         let create_req = axum::http::Request::builder()
@@ -957,6 +1002,28 @@ mod tests {
             .unwrap();
         let update_resp = tower::ServiceExt::oneshot(app.clone(), update_req).await.unwrap();
         assert_eq!(update_resp.status(), axum::http::StatusCode::OK);
+
+        for endpoint in [
+            "/v0/update-event-publisher",
+            "/v0/deactivate-event-publisher",
+            "/v0/activate-event-publisher",
+            "/v0/delete-event-publisher",
+        ] {
+            let empty_id_req = axum::http::Request::builder()
+                .method("POST")
+                .uri(endpoint)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&json!({ "id": "" })).unwrap(),
+                ))
+                .unwrap();
+            let empty_id_resp = tower::ServiceExt::oneshot(app.clone(), empty_id_req).await.unwrap();
+            assert_eq!(
+                empty_id_resp.status(),
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "empty id should be rejected on {endpoint}"
+            );
+        }
 
         for endpoint in [
             "/v0/deactivate-event-publisher",
