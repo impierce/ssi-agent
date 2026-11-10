@@ -6,16 +6,42 @@ use crate::{
     },
     domain::event_publisher::{
         aggregate::EventPublisher,
+        command::EventPublisherCommand,
+        error::EventPublisherError,
         services::{EventPublisherDomainServices, KnownEventTypes},
     },
 };
 use shared_kernel::{
-    command_handler::CommandHandlerFactory,
-    cqrs_es::{persist::GenericQuery, Query},
+    async_trait,
+    command_handler::{CommandExecutor, CommandHandler, CommandHandlerFactory},
+    cqrs_es::{persist::GenericQuery, AggregateError, Query},
     custom_queries::ListAllQuery,
     event_bus::EventBusHandle,
 };
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 use tracing::{debug, info};
+
+/// Keeps the aggregate load, event write, view projections, and [`EventPublisherSupervisor`]
+/// worker transitions serialized within one process so concurrent commands cannot dispatch
+/// out of order to `ListAllQuery` or `EventPublisherSupervisor`.
+struct SerializedEventPublisherHandler {
+    inner: CommandHandler<EventPublisher>,
+    execution: Mutex<()>,
+}
+
+#[async_trait]
+impl CommandExecutor<EventPublisher> for SerializedEventPublisherHandler {
+    async fn execute_with_metadata(
+        &self,
+        aggregate_id: &str,
+        command: EventPublisherCommand,
+        metadata: HashMap<String, String>,
+    ) -> Result<(), AggregateError<EventPublisherError>> {
+        let _execution = self.execution.lock().await;
+        self.inner.execute_with_metadata(aggregate_id, command, metadata).await
+    }
+}
 
 #[derive(Default)]
 pub struct EventPublishingContextBuilder {
@@ -92,7 +118,11 @@ impl EventPublishingContextBuilder {
         queries.extend(self.extra_queries);
 
         debug!(query_count = queries.len(), "Creating event_publisher command handler");
-        let event_publisher = factory.create_handler(domain_services, queries).await?;
+        let inner = factory.create_handler(domain_services, queries).await?;
+        let event_publisher = Arc::new(SerializedEventPublisherHandler {
+            inner,
+            execution: Mutex::new(()),
+        });
 
         info!("EventPublishingContext built successfully");
         Ok(EventPublishingContext {
