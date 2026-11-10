@@ -62,6 +62,10 @@ EXCLUDED_PATHS=(
 EXCLUDED_OPERATION_IDS=(
     # POST /v0/connections fetches credential-issuer metadata from the submitted URL.
     "add_connection"
+    # POST /v0/create-event-publisher and /v0/update-event-publisher spawn background HTTP/NATS workers
+    # that connect to the submitted targetUrl / natsUrl.
+    "create_event_publisher"
+    "update_event_publisher"
 )
 
 if [ "$FUZZ_SPEC" = "full" ]; then
