@@ -53,18 +53,6 @@ The `@context` UniCore writes depends on the data model, not only on the format:
 - **HAIP 1.0** (OpenID4VC High Assurance Interoperability Profile, final). Each flow must support IETF SD-JWT VC (`dc+sd-jwt`) or ISO mdoc (`mso_mdoc`), or both; it does not list W3C formats ([§3 Scope][haip-scope], [§6][haip-profiles]). For SD-JWT VC it also requires issuer key resolution through an X.509 chain in the `x5c` header ([§6.1.1][haip-x5c]) and a JWK in `cnf` when holder binding is required ([§6.1][haip-sd-jwt-vc]). UniCore today signs with DID keys and sets `cnf` to a `kid`.
 - **DIIP** (FIDES Decentralized Identity Interop Profile). Both the released v4 and the v6 draft require support for **both** SD-JWT VC **and** W3C VCDM 2.0 secured with SD-JWT as in VC-JOSE-COSE, plus ES256 and the IETF Token Status List ([DIIP, Credential Format][diip]). So for DIIP, `vc+sd-jwt` is required, not optional, even though OpenID4VCI 1.0 has no format profile for it. DIIP does not say which format identifier to use for it in OpenID4VCI. v4 references SD-JWT VC draft -08 and OpenID4VCI draft 15; the v6 draft references SD-JWT VC draft -13 and OpenID4VCI/OpenID4VP 1.0. The v6 draft also requires issuers to put a `fed` claim (SD-JWT VC) or a `termsOfUse` entry (VCDM) into credentials, as defined in its OpenID Federation profile. UniCore does not do this yet.
 
-## Planned / under consideration
-
-**Status: proposal, not decided.** These are candidates with a basis in the specifications above, not commitments.
-
-- **Open Badges 3.0 conformance.** Issue Open Badges with one of the proof formats Open Badges 3.0 defines: the JWT proof (credential as the JWT payload, no `vc` claim) or a Data Integrity proof with `eddsa-rdfc-2022`. Today UniCore uses `jwt_vc_json` or `vc+sd-jwt`.
-- **Format chosen by the wallet.** Today each template has exactly one credential configuration, with one format. OpenID4VCI lets the wallet pick among the issuer's `credential_configurations_supported`, so a template could be offered once per format, and the wallet's credential request would decide the format. Template authors would then only choose the data model.
-- **ES256 by default for SD-JWT credentials.** DIIP requires ES256. UniCore signs every format with the one preferred algorithm, which is EdDSA by default, while the default verifier metadata lists only ES256 for both SD-JWT formats.
-- **`dc+sd-jwt` from templates.** Map templates to `dc+sd-jwt`, as required by HAIP and DIIP. HAIP compliance would also need `x5c` issuer keys and `cnf.jwk`.
-- **DIIP v6.** The `fed` and `termsOfUse` claims from the DIIP OpenID Federation profile.
-- **ELM on VCDM 2.0.** VCDM 2.0 requires `https://www.w3.org/ns/credentials/v2` as the first `@context` ([Contexts][vcdm2-contexts]). ELM credentials put the v1 context first until the ELM schema moves to VCDM 2.0.
-- **Not planned unless a use case needs them:** `ldp_vc`, `jwt_vc_json-ld`, `mso_mdoc`, `vc+jwt`, SD-JWT VCLD.
-
 ## Code references
 
 - Template to format: `agent_issuance/src/application/credential_configuration_projection.rs` (`credential_configuration_from_template`)
@@ -99,7 +87,6 @@ The `@context` UniCore writes depends on the data model, not only on the format:
 [haip-x5c]: https://openid.net/specs/openid4vc-high-assurance-interoperability-profile-1_0.html#name-issuer-identification-and-k
 [vcjc-sd-jwt]: https://www.w3.org/TR/vc-jose-cose/#secure-with-sd-jwt
 [vcjc-media-type]: https://www.w3.org/TR/vc-jose-cose/#vc-sd-jwt-media-type
-[vcdm2-contexts]: https://www.w3.org/TR/vc-data-model-2.0/#contexts
 [vcdm2-compat]: https://www.w3.org/TR/vc-data-model-2.0/#ecosystem-compatibility
 [vcdm2-history]: https://www.w3.org/TR/vc-data-model-2.0/#revision-history
 [sd-jwt-vc]: https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/
