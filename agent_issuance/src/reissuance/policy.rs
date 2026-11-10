@@ -33,7 +33,7 @@ impl ReissuancePolicy for NoOpReissuancePolicy {
 mod tests {
     use super::*;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn noop_reissuance_policy_allows_requests() {
         let policy = NoOpReissuancePolicy;
 

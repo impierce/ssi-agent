@@ -1,8 +1,8 @@
-use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
+use crate::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use async_trait::async_trait;
-use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
+use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
 use mongodb::bson::{self, doc, Document};
@@ -12,18 +12,21 @@ use shared_kernel::event_bus::{
     Position, SourceEvent, SubscribePosition,
 };
 use shared_kernel::integration_event::EventProjector;
+use shared_kernel::streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS};
 use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
-impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
+impl<A> AggregateHandler<A, StreamingEventStore<MongoEventRepository, A>>
 where
     A: Aggregate,
 {
     async fn new(client: Client, services: A::Services) -> Self {
-        let repo = new_event_repository(client).await;
-        let store = PersistedEventStore::new_event_store(repo);
+        let replay = new_event_repository(client.clone())
+            .await
+            .with_streaming_channel_size(REPLAY_BUFFER_EVENTS);
+        let store = StreamingEventStore::new(new_event_repository(client).await, replay);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
         }
@@ -72,17 +75,12 @@ impl MongoDB {
     }
     // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
 
+    /// Verifies all persisted events, one at a time as they are read: the event store can be far
+    /// larger than the memory available to the agent.
     pub async fn verify_events_with(
         &self,
         verifiers: &[EventVerifier],
     ) -> Result<EventVerificationReport, EventVerificationError> {
-        Ok(event_verification::verify_events_with(
-            self.load_raw_events().await?,
-            verifiers,
-        ))
-    }
-
-    async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {
         #[derive(serde::Deserialize)]
         struct RawStoredEventDocument {
             aggregate_type: String,
@@ -116,15 +114,15 @@ impl MongoDB {
             .build();
 
         let mut cursor = collection.find(doc! {}).with_options(options).await?;
-        let mut events = Vec::new();
+        let mut report = EventVerificationReport::default();
 
         while cursor.advance().await? {
             let document = cursor.deserialize_current()?;
             let event: RawStoredEventDocument = bson::from_document(document)?;
-            events.push(event.into());
+            report.verify(event.into(), verifiers);
         }
 
-        Ok(events)
+        Ok(report)
     }
 }
 

@@ -354,5 +354,21 @@ CREATE TABLE all_server_configs
     PRIMARY KEY (view_id)
 );
 
+CREATE TABLE key_providers
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE all_key_providerss
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE USER demo_user WITH ENCRYPTED PASSWORD 'demo_pass';
 GRANT ALL PRIVILEGES ON DATABASE postgres TO demo_user;

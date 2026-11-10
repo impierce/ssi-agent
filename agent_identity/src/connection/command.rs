@@ -1,6 +1,6 @@
-use identity_core::common::Url;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]

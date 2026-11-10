@@ -468,7 +468,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_rejects_missing_original_credential() {
         let state = test_state().await;
         let service = ReissuanceService::default();
@@ -497,7 +497,7 @@ mod tests {
         ));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_rejects_non_object_payload() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
@@ -516,7 +516,7 @@ mod tests {
         assert!(matches!(error, ReissuanceServiceError::InvalidCredentialPayload));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_rejects_non_sd_jwt_configuration() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "001").await;
@@ -544,7 +544,7 @@ mod tests {
         assert!(matches!(error, ReissuanceServiceError::UnsupportedCredentialFormat(_)));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_prepares_new_credential_offer_and_relation() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
@@ -602,7 +602,7 @@ mod tests {
         assert_eq!(reissuance.triggered_by.as_deref(), Some("unitrust"));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_prepares_vc_sd_jwt_credential_offer_and_relation() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "VCDM SD-JWT VC").await;
@@ -678,7 +678,7 @@ mod tests {
             .is_none());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_rejects_pending_original() {
         let state = test_state().await;
         let configuration = credential_configuration(&state, "SD-JWT VC").await;
@@ -709,7 +709,7 @@ mod tests {
         assert_no_replacement(&state).await;
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_rejects_different_credential_type() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "VCDM SD-JWT VC").await;
@@ -726,7 +726,7 @@ mod tests {
         assert_no_replacement(&state).await;
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_enforces_template_state_schema_and_expiration() {
         use agent_issuance::application::template_issuance::TemplateIssuanceError;
         use agent_library::template::{
@@ -818,7 +818,7 @@ mod tests {
         assert_no_replacement(&state).await;
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn failed_relation_cannot_leave_an_issuable_replacement() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
@@ -862,7 +862,7 @@ mod tests {
         assert!(query_handler("offer-id", &state.query.offer).await.unwrap().is_none());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn create_reissuance_defaults_expiration_from_template() {
         let state = test_state().await;
         create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;

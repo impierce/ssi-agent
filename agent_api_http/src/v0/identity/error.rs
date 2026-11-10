@@ -175,11 +175,6 @@ mod tests {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),
-            (
-                DocumentError::IotaPublishDocumentError("error".to_string()),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                None,
-            ),
         ]);
     }
 

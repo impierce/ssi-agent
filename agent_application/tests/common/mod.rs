@@ -31,6 +31,7 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         type_,
         connection_string: Some(connection_string),
     };
+    config_mut().feature.kms = true;
 
     let state = application_state().await;
     state.verify_persisted_events().await;
@@ -56,6 +57,18 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
 
     let (status, _) = send(&app, Request::get("/readyz").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = send(
+        &app,
+        Request::post("/v0/add-key-provider")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                json!({ "providerType": "aws_kms_ambient", "name": "Persisted keys" }).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
 
     let (status, catalog) = send(
         &app,
@@ -96,6 +109,17 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     let (status, profile) = send(&app, Request::get("/v0/profile").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(profile["source"], "Provisioned");
+
+    let (status, providers) = send(
+        &app,
+        Request::get("/v0/get-all-key-providers").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        providers,
+        json!([{ "providerType": "aws_kms_ambient", "name": "Persisted keys" }])
+    );
 }
 
 async fn assert_reissuance_views(app: &Router) {

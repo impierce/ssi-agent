@@ -2,6 +2,8 @@ openapi: 3.1.0
 info:
   title: UniCore HTTP API
   description: ''
+  contact:
+    name: Impierce Technologies B.V.
   license:
     name: Apache 2.0
   version: 0.0.0-semantically-released
@@ -54,22 +56,6 @@ paths:
             application/yaml:
               schema:
                 type: string
-  /public/sponsoring-configuration:
-    get:
-      tags:
-      - Public
-      summary: Get the public sponsoring configuration
-      description: Returns the public display name, optional logo, and IOTA address used by sponsored identities.
-      operationId: sponsoring_configuration
-      responses:
-        '200':
-          description: Sponsoring configuration retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SponsoringConfiguration'
-        '404':
-          description: No sponsoring IOTA address is configured
   /public/templates:
     get:
       tags:
@@ -97,6 +83,34 @@ paths:
           description: Application is ready
         '503':
           description: Application is not ready
+  /v0/add-key-provider:
+    post:
+      tags:
+      - Key Management
+      summary: Add a key provider
+      description: |-
+        Connects this instance to a key provider. Only one provider of each type can be added. The in-memory provider
+        is only available in the development profile.
+      operationId: add_key_provider
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddKeyProviderRequest'
+        required: true
+      responses:
+        '201':
+          description: Key provider added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyProvider'
+        '400':
+          description: Missing name, or a provider type that is not available in this profile
+        '409':
+          description: A provider of this type, or with this name, already exists
+        '422':
+          description: Request body does not match the expected schema
   /v0/add-linked-domains:
     post:
       tags:
@@ -926,6 +940,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Catalog'
+  /v0/get-all-key-providers:
+    get:
+      tags:
+      - Key Management
+      summary: List all key providers
+      description: Lists the key providers this instance is connected to, in the order they were added.
+      operationId: get_all_key_providers
+      responses:
+        '200':
+          description: All key providers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeyProvider'
   /v0/get-all-public-offers:
     get:
       tags:
@@ -986,6 +1016,33 @@ paths:
                 $ref: '#/components/schemas/Reissuance'
         '404':
           description: Credential reissuance relation not found
+  /v0/get-key-provider-keys/{provider_type}:
+    get:
+      tags:
+      - Key Management
+      summary: List the keys in a key provider
+      description: |-
+        Lists the keys that exist in an added key provider and that this instance's credentials can see, as reported
+        by the provider. Nothing is stored, and the keys are not used by UniCore yet.
+      operationId: get_key_provider_keys
+      parameters:
+      - name: provider_type
+        in: path
+        description: The type of the added key provider
+        required: true
+        schema:
+          $ref: '#/components/schemas/KeyProviderType'
+      responses:
+        '200':
+          description: The keys this instance may use, and how many more it may not
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderKeys'
+        '404':
+          description: No provider of this type has been added
+        '502':
+          description: The provider could not be reached
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -1531,6 +1588,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
+  /v0/remove-key-provider:
+    post:
+      tags:
+      - Key Management
+      summary: Remove a key provider
+      description: Disconnects this instance from a key provider. No keys are deleted at the provider.
+      operationId: remove_key_provider
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyProviderTypeRequest'
+        required: true
+      responses:
+        '204':
+          description: Key provider removed
+        '404':
+          description: No provider of this type has been added
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-linked-domains:
     post:
       tags:
@@ -1704,6 +1781,32 @@ paths:
           description: Public offer not found
         '422':
           description: Request body does not match the expected schema
+  /v0/test-key-provider-connection:
+    post:
+      tags:
+      - Key Management
+      summary: Test a key provider connection
+      description: |-
+        Checks whether an added key provider can be reached with the current credentials. The outcome is returned but
+        not stored, so an unreachable provider is a successful response with `reachable` set to `false`.
+      operationId: test_key_provider_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyProviderTypeRequest'
+        required: true
+      responses:
+        '200':
+          description: The connection was tested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        '404':
+          description: No provider of this type has been added
+        '422':
+          description: Request body does not match the expected schema
   /v0/update-template:
     post:
       tags:
@@ -1795,6 +1898,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Version'
+webhooks:
+  cloud-event:
+    post:
+      tags:
+      - Events
+      summary: Receive a CloudEvent
+      description: |-
+        Sent to the `target_url` of every target configured under `event_publishers.http` whose `events.types` include the event's type, with the headers configured for that target, e.g. a shared secret.
+
+        Delivery is fire-and-forget: each request times out after 10 seconds and is not retried, and events are dropped when the publisher falls behind the event bus. The response status is only logged.
+      requestBody:
+        description: The event, in the CloudEvents JSON format.
+        content:
+          application/cloudevents+json:
+            schema:
+              $ref: '#/components/schemas/CloudEvent'
+        required: true
+      responses:
+        2XX:
+          description: The event was received. Other statuses are logged and the event is not resent.
 components:
   schemas:
     AcceptConnectionChangesRequest:
@@ -1811,6 +1934,17 @@ components:
       properties:
         url:
           type: string
+    AddKeyProviderRequest:
+      type: object
+      required:
+      - providerType
+      - name
+      properties:
+        name:
+          type: string
+          description: A name for the provider, unique among the providers this instance lists. It can't be changed later.
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     AddTemplatesRequest:
       type: object
       properties:
@@ -2155,6 +2289,19 @@ components:
           type:
           - string
           - 'null'
+    ConnectionTestResult:
+      type: object
+      description: The outcome of a connection test. It is not stored.
+      required:
+      - reachable
+      properties:
+        message:
+          type:
+          - string
+          - 'null'
+          description: Why the provider could not be reached, as reported by the provider.
+        reachable:
+          type: boolean
     CreateCatalogRequest:
       type: object
       properties:
@@ -2615,10 +2762,6 @@ components:
           - type: 'null'
         id:
           type: string
-        iota_metadata:
-          oneOf:
-          - $ref: '#/components/schemas/IotaMetadata'
-          - type: 'null'
         status:
           type: string
           enum:
@@ -2631,23 +2774,28 @@ components:
           - EdDSA
     DomainLinkageConfiguration:
       type: object
-      description: |-
-        A DID Configuration resource that links a domain to DIDs.
-
-        See the [DID Configuration Resource](https://identity.foundation/.well-known/resources/did-configuration/#did-configuration-resource).
+      description: 'A DID configuration resource (Well Known DID Configuration §3.1): the context and the domain linkage credentials, one per linked DID.'
       required:
       - '@context'
       - linked_dids
       properties:
         '@context':
           type: string
-          example: https://identity.foundation/.well-known/did-configuration/v1
+          description: The DID configuration context.
+          enum:
+          - https://identity.foundation/.well-known/did-configuration/v1
         linked_dids:
           type: array
           items:
-            type: string
-          description: Domain Linkage Credentials in the JSON Web Token Proof Format.
-          minItems: 1
+            oneOf:
+            - type: string
+              description: 'A domain linkage credential in the JSON Web Token proof format: a compact JWS.'
+            - type: object
+              description: A domain linkage credential in the Linked Data Proof format.
+              additionalProperties: true
+            description: A domain linkage credential.
+          description: The domain linkage credentials.
+      additionalProperties: false
     DomainLinkageValidation:
       type: object
       required:
@@ -2757,7 +2905,7 @@ components:
       - credential
       properties:
         credential:
-          type: string
+          $ref: '#/components/schemas/Jwt'
           description: Compact JWT-encoded verifiable credential to add to the holder.
     HolderType:
       type: string
@@ -2790,41 +2938,6 @@ components:
           uptime:
             type: string
             description: The current uptime of the application in a human-friendly format.
-    IotaMetadata:
-      type: object
-      description: Metadata for IOTA-based DID Documents.
-      required:
-      - wallet_address
-      - is_funded
-      - balance
-      - is_published
-      - is_deactivated
-      properties:
-        balance:
-          type: integer
-          format: int64
-          minimum: 0
-        created_at:
-          type:
-          - string
-          - 'null'
-        explorer_url:
-          type:
-          - string
-          - 'null'
-        is_deactivated:
-          type: boolean
-        is_funded:
-          type: boolean
-        is_published:
-          type: boolean
-        updated_at:
-          type:
-          - string
-          - 'null'
-        wallet_address:
-          type: string
-          example: '0x1234567890'
     Jwk:
       type: object
       description: 'A JSON Web Key (RFC 7517 §4): the key type, the parameters of RFC 7518 §6 and RFC 8037 §2 for that type, and the common members. Parameters are base64url-encoded without padding.'
@@ -2905,6 +3018,36 @@ components:
           type: string
           description: The y coordinate of an `EC` key.
       additionalProperties: true
+    Jwt:
+      type: string
+      description: A JWT (RFC 7519) in JWS compact serialization.
+      pattern: ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$
+    KeyProvider:
+      type: object
+      description: A key provider this instance is connected to.
+      required:
+      - providerType
+      - name
+      properties:
+        name:
+          type: string
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
+    KeyProviderType:
+      type: string
+      description: |-
+        The kinds of key providers an instance can connect to. An instance connects to at most one provider of each type,
+        so the type also identifies the provider.
+      enum:
+      - in_memory
+      - aws_kms_ambient
+    KeyProviderTypeRequest:
+      type: object
+      required:
+      - providerType
+      properties:
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     LinkedCredentialValidation:
       type: object
       required:
@@ -2912,104 +3055,12 @@ components:
       - result
       properties:
         credential:
-          type: object
-          required:
-          - '@context'
-          - type
-          - credentialSubject
-          - issuer
-          - issuanceDate
-          properties:
-            '@context':
-              oneOf:
-              - oneOf:
-                - type: string
-                  format: uri
-                - type: object
-                  additionalProperties: true
-              - type: array
-                items:
-                  oneOf:
-                  - type: string
-                    format: uri
-                  - type: object
-                    additionalProperties: true
-            credentialSchema:
-              oneOf:
-              - type: object
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  additionalProperties: true
-            credentialStatus:
-              type: object
-              additionalProperties: true
-            credentialSubject:
-              oneOf:
-              - type: object
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  additionalProperties: true
-            evidence:
-              oneOf:
-              - type: object
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  additionalProperties: true
-            expirationDate:
-              type: string
-              format: date-time
-            id:
-              type: string
-              format: uri
-            issuanceDate:
-              type: string
-              format: date-time
-            issuer:
-              oneOf:
-              - type: string
-                format: uri
-              - type: object
-                required:
-                - id
-                properties:
-                  id:
-                    type: string
-                    format: uri
-                additionalProperties: true
-            nonTransferable:
-              type: boolean
-            proof:
-              type: object
-              additionalProperties: true
-            refreshService:
-              oneOf:
-              - type: object
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  additionalProperties: true
-            termsOfUse:
-              oneOf:
-              - type: object
-                additionalProperties: true
-              - type: array
-                items:
-                  type: object
-                  additionalProperties: true
-            type:
-              oneOf:
-              - type: string
-              - type: array
-                items:
-                  type: string
-          additionalProperties: true
+          oneOf:
+          - $ref: '#/components/schemas/W3cCredential'
+            description: |-
+              The credential. Decoded from the JWT *without* verifying its signature when
+              `result.valid` is `false`, and `None` when it could not be decoded at all.
+          - type: 'null'
         jwt:
           type: string
           description: The raw credential JWT exactly as it appeared in the presentation.
@@ -3228,7 +3279,7 @@ components:
       - credential
       properties:
         credential:
-          type: string
+          $ref: '#/components/schemas/SignedCredential'
         holder_credential_id:
           type: string
     OfferView:
@@ -3434,6 +3485,49 @@ components:
               Purely a rendering hint that UniCore stores as given and never validates against the
               schema or the issued values.
           - type: 'null'
+    ProviderKey:
+      type: object
+      description: A key that exists in a key provider, as reported by the provider.
+      required:
+      - id
+      - state
+      properties:
+        id:
+          type: string
+          description: The provider's identifier for the key.
+        resourceName:
+          type:
+          - string
+          - 'null'
+          description: The provider's full resource name for the key, where it has one (an ARN for AWS KMS).
+        state:
+          $ref: '#/components/schemas/ProviderKeyState'
+          description: Whether the provider currently allows the key to be used.
+    ProviderKeyState:
+      type: string
+      description: Whether a key can be used, as reported by its provider.
+      enum:
+      - enabled
+      - disabled
+      - pending_deletion
+      - unavailable
+    ProviderKeys:
+      type: object
+      description: The keys in a provider that this instance may use.
+      required:
+      - keys
+      - hiddenKeys
+      properties:
+        hiddenKeys:
+          type: integer
+          description: |-
+            How many more keys exist in the provider that this instance's credentials may not use. When this is above
+            zero and `keys` is empty, the credentials may lack a permission rather than the provider being empty.
+          minimum: 0
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderKey'
     PublicOfferStatusDto:
       type: object
       required:
@@ -3568,6 +3662,10 @@ components:
         path:
           type: string
           description: JSON pointer to the offending value within the claims; empty for the claims object itself.
+    SdJwt:
+      type: string
+      description: 'An SD-JWT (RFC 9901 §4) in compact serialization: the issuer-signed JWT, each disclosure followed by `~`, then an optional key binding JWT.'
+      pattern: ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*~([A-Za-z0-9_-]+~)*([A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?$
     Service:
       type: object
       description: 'A service (DID Core §5.4): a way of interacting with the DID subject.'
@@ -3645,6 +3743,11 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Service'
           - type: 'null'
+    SignedCredential:
+      oneOf:
+      - $ref: '#/components/schemas/Jwt'
+      - $ref: '#/components/schemas/SdJwt'
+      description: 'A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.'
     Source:
       type: string
       enum:
@@ -3652,21 +3755,6 @@ components:
       - Default
       - Runtime
       - None
-    SponsoringConfiguration:
-      type: object
-      required:
-      - name
-      - iota_address
-      properties:
-        iota_address:
-          type: string
-        logo_uri:
-          type:
-          - string
-          - 'null'
-          format: uri
-        name:
-          type: string
     SupportedDidMethod:
       type: string
       description: DID methods supported by UniCore
@@ -3674,9 +3762,6 @@ components:
       - did_jwk
       - did_key
       - did_web
-      - did_iota
-      - did_iota_dev
-      - did_iota_test
     SyncConnectionRequest:
       type: object
       required:
@@ -3809,7 +3894,7 @@ components:
           format: int32
           description: The length of the PIN must be between 0 and 255 characters.
           examples:
-          - $serde_json::private::Number: '6'
+          - 6
           maximum: 255
           minimum: 0
     UpdateTemplateEndpointRequest:
@@ -3955,6 +4040,294 @@ components:
       enum:
       - private
       - public
+    W3cCredential:
+      type: object
+      description: A verifiable credential of the VC Data Model 1.1 (§4), as the `vc` claim of a JWT carries it once `iss`, `jti`, `nbf`, `exp` and `sub` are mapped back.
+      required:
+      - '@context'
+      - type
+      - issuer
+      - issuanceDate
+      - credentialSubject
+      properties:
+        '@context':
+          oneOf:
+          - type: string
+            description: The base context alone.
+            enum:
+            - https://www.w3.org/2018/credentials/v1
+          - type: array
+            items: {}
+            prefixItems:
+            - type: string
+              description: The base context.
+              enum:
+              - https://www.w3.org/2018/credentials/v1
+            description: The base context first, then further contexts.
+            minItems: 1
+          description: The JSON-LD context, carried as data (VCDM 1.1 §4.1); it begins with `https://www.w3.org/2018/credentials/v1`.
+        credentialSchema:
+          oneOf:
+          - type: object
+            description: A data schema.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A data schema.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Data schemas (VCDM 1.1 §5.4).
+        credentialStatus:
+          type: object
+          description: Where to learn whether the credential is revoked or suspended (VCDM 1.1 §4.9).
+          required:
+          - type
+          properties:
+            id:
+              type: string
+              format: uri
+              description: The identifier.
+            type:
+              oneOf:
+              - type: string
+                description: A type.
+              - type: array
+                items:
+                  type: string
+                  description: A type.
+                minItems: 1
+              description: The types.
+          additionalProperties: true
+        credentialSubject:
+          oneOf:
+          - type: object
+            description: A subject and the claims about it.
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier of the subject.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A subject and the claims about it.
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier of the subject.
+              additionalProperties: true
+            minItems: 1
+          description: The subjects and the claims about them (VCDM 1.1 §4.4).
+        evidence:
+          oneOf:
+          - type: object
+            description: Evidence.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: Evidence.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Evidence (VCDM 1.1 §5.8).
+        expirationDate:
+          type: string
+          format: date-time
+          description: When the credential ceases to be valid (VCDM 1.1 §4.8).
+        id:
+          type: string
+          format: uri
+          description: The identifier of the credential (VCDM 1.1 §4.2).
+        issuanceDate:
+          type: string
+          format: date-time
+          description: When the credential becomes valid (VCDM 1.1 §4.6).
+        issuer:
+          oneOf:
+          - type: string
+            format: uri
+            description: The identifier.
+          - type: object
+            description: The identifier with further properties.
+            required:
+            - id
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+            additionalProperties: true
+          description: The issuer (VCDM 1.1 §4.5).
+        refreshService:
+          oneOf:
+          - type: object
+            description: A refresh service.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A refresh service.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Refresh services (VCDM 1.1 §5.6).
+        termsOfUse:
+          oneOf:
+          - type: object
+            description: Terms of use.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: Terms of use.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Terms of use (VCDM 1.1 §5.7).
+        type:
+          oneOf:
+          - type: string
+            description: A type.
+          - type: array
+            items:
+              type: string
+              description: A type.
+            minItems: 1
+          description: The types (VCDM 1.1 §4.3), including `VerifiableCredential`.
+      additionalProperties: true
 tags:
 - name: Configuration
   description: Inspect UniCore application configuration.
@@ -3978,6 +4351,8 @@ tags:
   description: Create and manage templates which provide the structure for credentials to be issued.
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
+- name: Key Management
+  description: Connect key providers that will hold this instance's signing keys. Only available when the `kms` feature flag is enabled.
 - name: Authorization Requests
   description: Manage requests for verifiable presentations and their responses.
 - name: Public

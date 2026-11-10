@@ -31,7 +31,6 @@ pub enum DocumentCommand {
     RemoveService {
         service_id: String,
     },
-    PublishDocument,
 }
 
 impl CommandOperation for DocumentCommand {
@@ -43,7 +42,6 @@ impl CommandOperation for DocumentCommand {
             Self::UpdatePublicKeys { .. } => "identity.documents.public_keys.update",
             Self::AddService { .. } => "identity.documents.services.add",
             Self::RemoveService { .. } => "identity.documents.services.remove",
-            Self::PublishDocument => "identity.documents.publish",
         }
     }
 }
