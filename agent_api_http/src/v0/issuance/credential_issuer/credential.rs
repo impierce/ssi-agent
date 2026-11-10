@@ -456,18 +456,20 @@ pub mod tests {
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
-                "test-pub".to_string(),
-                bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
-                    types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
-                },
-                bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
-                    target_url,
-                    headers: None,
-                },
-                &event_bus,
-            )
-            .spawn();
+            drop(
+                bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
+                    "test-pub".to_string(),
+                    &bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
+                    },
+                    bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
+                        target_url,
+                        headers: None,
+                    },
+                    &event_bus,
+                )
+                .spawn(),
+            );
             Some(external_server)
         } else {
             None

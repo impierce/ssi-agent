@@ -60,7 +60,7 @@ impl EventPublisherSupervisor {
         for view in views {
             if !view.is_deleted() && view.enabled {
                 if let Some(config) = view.config {
-                    self.start_or_replace_worker(view.id, view.filter, config);
+                    self.start_or_replace_worker(view.id, &view.filter, config);
                     hydrated_count += 1;
                 }
             }
@@ -71,7 +71,7 @@ impl EventPublisherSupervisor {
     /// Returns the number of currently active publisher worker tasks.
     #[must_use]
     pub fn active_count(&self) -> usize {
-        self.registry.workers.lock().map(|g| g.len()).unwrap_or(0)
+        self.registry.workers.lock().map_or(0, |g| g.len())
     }
 
     /// Returns `true` if a background worker task is currently running for `id`.
@@ -80,11 +80,10 @@ impl EventPublisherSupervisor {
         self.registry
             .workers
             .lock()
-            .map(|g| g.contains_key(id))
-            .unwrap_or(false)
+            .is_ok_and(|g| g.contains_key(id))
     }
 
-    fn start_or_replace_worker(&self, id: String, filter: EventPublisherFilter, config: EventPublisherConfig) {
+    fn start_or_replace_worker(&self, id: String, filter: &EventPublisherFilter, config: EventPublisherConfig) {
         let Ok(mut guard) = self.registry.workers.lock() else {
             return;
         };
@@ -142,13 +141,13 @@ impl Query<EventPublisher> for EventPublisherSupervisor {
                     ..
                 } => {
                     if *enabled {
-                        self.start_or_replace_worker(id.clone(), filter.clone(), config.clone());
+                        self.start_or_replace_worker(id.clone(), filter, config.clone());
                     } else {
                         self.stop_worker(id);
                     }
                 }
                 EventPublisherEvent::EventPublisherActivated { id, filter, config, .. } => {
-                    self.start_or_replace_worker(id.clone(), filter.clone(), config.clone());
+                    self.start_or_replace_worker(id.clone(), filter, config.clone());
                 }
                 EventPublisherEvent::EventPublisherDeactivated { id, .. }
                 | EventPublisherEvent::EventPublisherDeleted { id, .. } => {

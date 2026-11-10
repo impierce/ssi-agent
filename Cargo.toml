@@ -44,6 +44,7 @@ oid4vc-core = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 oid4vc-manager = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 oid4vp = { git = "https://github.com/impierce/openid4vc", rev = "0fbeaf2" }
 
+bc-event-publishing = { path = "bounded-contexts/bc-event-publishing" }
 shared-kernel = { path = "shared-kernel" }
 
 anyhow = "1.0"

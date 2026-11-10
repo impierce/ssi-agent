@@ -14,7 +14,7 @@ agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_verification = { path = "../agent_verification" }
-bc-event-publishing = { path = "../bounded-contexts/bc-event-publishing" }
+bc-event-publishing.workspace = true
 shared-kernel.workspace = true
 
 anyhow.workspace = true

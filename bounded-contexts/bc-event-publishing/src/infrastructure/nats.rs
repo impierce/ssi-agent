@@ -27,7 +27,7 @@ impl NatsEventPublisherWorker {
     /// Returns [`async_nats::ConnectError`] if connecting to `config.nats_url` fails.
     pub async fn connect(
         id: String,
-        filter: EventPublisherFilter,
+        filter: &EventPublisherFilter,
         config: NatsPublisherConfig,
         event_bus: &EventBusHandle,
     ) -> Result<Self, async_nats::ConnectError> {
@@ -59,7 +59,7 @@ impl NatsEventPublisherWorker {
     #[must_use]
     pub fn spawn_resilient(
         id: String,
-        filter: EventPublisherFilter,
+        filter: &EventPublisherFilter,
         config: NatsPublisherConfig,
         event_bus: &EventBusHandle,
     ) -> tokio::task::JoinHandle<()> {
@@ -163,6 +163,7 @@ impl NatsEventPublisherWorker {
     }
 
     /// Spawns the connected NATS event publisher worker on the Tokio runtime.
+    #[must_use]
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(self.run())
     }
@@ -185,7 +186,7 @@ mod tests {
 
         let res = NatsEventPublisherWorker::connect(
             "nats-1".to_string(),
-            EventPublisherFilter {
+            &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.issuance.credential.offered".to_string()],
             },
             config,
@@ -234,7 +235,7 @@ mod tests {
         let event_bus = EventBusHandle::new(100);
         let worker = NatsEventPublisherWorker::connect(
             "nats-1".to_string(),
-            EventPublisherFilter {
+            &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.credential.issued".to_string()],
             },
             config,

@@ -140,6 +140,7 @@ mod tests {
     };
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn runtime_lifecycle_create_update_deactivate_activate_delete_and_redaction() {
         let mock_server = MockServer::start().await;
         Mock::given(method("POST"))

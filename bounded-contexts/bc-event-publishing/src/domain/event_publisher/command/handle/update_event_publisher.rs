@@ -9,7 +9,7 @@ use shared_kernel::cqrs_es::{event_sink::EventSink, Aggregate};
 use tracing::info;
 
 impl EventPublisher {
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::option_option)]
     pub(crate) async fn update_event_publisher(
         &mut self,
         id: String,

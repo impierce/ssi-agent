@@ -196,18 +196,20 @@ pub mod tests {
         let target_url = format!("{}/ssi-events-subscriber", &mock_server.uri());
 
         let event_bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-        bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
-            "test-pub".to_string(),
-            bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
-                types: vec!["com.impierce.unicore.verification.presentation.verified".to_string()],
-            },
-            bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
-                target_url,
-                headers: None,
-            },
-            &event_bus,
-        )
-        .spawn();
+        drop(
+            bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
+                "test-pub".to_string(),
+                &bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
+                    types: vec!["com.impierce.unicore.verification.presentation.verified".to_string()],
+                },
+                bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
+                    target_url,
+                    headers: None,
+                },
+                &event_bus,
+            )
+            .spawn(),
+        );
 
         let verification_state =
             Arc::new(verification_state(&InMemory, VerificationServices::default().await, &event_bus).await);

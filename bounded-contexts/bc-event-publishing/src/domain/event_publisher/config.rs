@@ -22,7 +22,7 @@ pub enum EventPublisherType {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EventPublisherFilter {
-    /// CloudEvent `type` patterns to subscribe to (exact types, prefix globs like
+    /// `CloudEvent` `type` patterns to subscribe to (exact types, prefix globs like
     /// `com.impierce.unicore.issuance.*`, or `*`).
     #[schema(example = json!(["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.issued"]))]
     pub types: Vec<String>,
@@ -44,7 +44,7 @@ impl EventPublisherFilter {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpPublisherConfig {
-    /// Destination HTTP or HTTPS URL that receives CloudEvents via `POST` with
+    /// Destination HTTP or HTTPS URL that receives `CloudEvents` via `POST` with
     /// `Content-Type: application/cloudevents+json`.
     #[schema(example = "https://example.test/webhooks/unicore")]
     pub target_url: String,
@@ -76,7 +76,7 @@ pub struct NatsPublisherConfig {
     /// NATS server URL (`nats://host:port` or `tls://host:port`).
     #[schema(example = "nats://127.0.0.1:4222")]
     pub nats_url: String,
-    /// NATS subject to which matching CloudEvents are published.
+    /// NATS subject to which matching `CloudEvents` are published.
     #[schema(example = "unicore.events")]
     pub subject: String,
 }

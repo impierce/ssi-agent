@@ -28,7 +28,7 @@ impl HttpEventPublisherWorker {
     #[must_use]
     pub fn new(
         id: String,
-        filter: EventPublisherFilter,
+        filter: &EventPublisherFilter,
         config: HttpPublisherConfig,
         event_bus: &EventBusHandle,
     ) -> Self {
@@ -39,7 +39,7 @@ impl HttpEventPublisherWorker {
     #[must_use]
     pub fn with_timeout(
         id: String,
-        filter: EventPublisherFilter,
+        filter: &EventPublisherFilter,
         config: HttpPublisherConfig,
         event_bus: &EventBusHandle,
         timeout: Duration,
@@ -138,6 +138,7 @@ impl HttpEventPublisherWorker {
     }
 
     /// Spawns the HTTP event publisher worker as a background task on the Tokio runtime.
+    #[must_use]
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(self.run())
     }
@@ -175,7 +176,7 @@ mod tests {
         let event_bus = EventBusHandle::new(100);
         let worker = HttpEventPublisherWorker::new(
             "pub-1".to_string(),
-            EventPublisherFilter {
+            &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.credential.issued".to_string()],
             },
             config,
@@ -227,7 +228,7 @@ mod tests {
         let event_bus = EventBusHandle::new(100);
         let worker = HttpEventPublisherWorker::with_timeout(
             "pub-err".to_string(),
-            EventPublisherFilter {
+            &EventPublisherFilter {
                 types: vec!["test.error.event".to_string()],
             },
             config,

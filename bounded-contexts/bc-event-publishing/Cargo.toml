@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-shared-kernel = { path = "../../shared-kernel" }
+shared-kernel.workspace = true
 
 async-nats = "0.50"
 chrono.workspace = true
@@ -21,7 +21,7 @@ url.workspace = true
 utoipa.workspace = true
 
 [dev-dependencies]
-shared-kernel = { path = "../../shared-kernel", features = ["test-utils"] }
+shared-kernel = { workspace = true, features = ["test-utils"] }
 
 futures.workspace = true
 rstest.workspace = true
@@ -36,3 +36,6 @@ docker-tests = []
 [[test]]
 name = "nats"
 required-features = ["docker-tests"]
+
+[lints]
+workspace = true
