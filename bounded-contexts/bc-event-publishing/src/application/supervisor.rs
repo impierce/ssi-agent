@@ -77,10 +77,7 @@ impl EventPublisherSupervisor {
     /// Returns `true` if a background worker task is currently running for `id`.
     #[must_use]
     pub fn is_active(&self, id: &str) -> bool {
-        self.registry
-            .workers
-            .lock()
-            .is_ok_and(|g| g.contains_key(id))
+        self.registry.workers.lock().is_ok_and(|g| g.contains_key(id))
     }
 
     fn start_or_replace_worker(&self, id: String, filter: &EventPublisherFilter, config: EventPublisherConfig) {

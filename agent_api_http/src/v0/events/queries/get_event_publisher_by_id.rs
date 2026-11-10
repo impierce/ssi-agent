@@ -91,10 +91,11 @@ impl TryFrom<EventPublishingView> for EventPublisherDto {
     operation_id = "get_event_publisher_by_id",
     tag = "Events",
     params(
-        ("id" = String, Path, description = "Event publisher ID")
+        ("id" = String, Path, description = "Event publisher ID", pattern = r"^[^\x00]+$")
     ),
     responses(
         (status = 200, description = "Event publisher retrieved successfully", body = EventPublisherDto),
+        (status = 400, description = "Invalid path parameter"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Event publisher not found")

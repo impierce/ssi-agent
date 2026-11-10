@@ -145,7 +145,9 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
 
     let (status, publishers) = send(
         &app,
-        Request::get("/v0/get-event-publisher-list").body(Body::empty()).unwrap(),
+        Request::get("/v0/get-event-publisher-list")
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

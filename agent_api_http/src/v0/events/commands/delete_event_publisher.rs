@@ -9,9 +9,10 @@ use utoipa::ToSchema;
 
 /// Request payload for deleting an event publisher.
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = DeleteEventPublisher)]
 pub struct DeleteEventPublisherRequest {
+    #[schema(pattern = r"^[^\x00]*$")]
     pub id: String,
 }
 
@@ -29,9 +30,11 @@ pub struct DeleteEventPublisherRequest {
     ),
     responses(
         (status = 200, description = "Event publisher deleted", body = String),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
-        (status = 404, description = "Event publisher not found")
+        (status = 404, description = "Event publisher not found"),
+        (status = 422, description = "Request body does not match the expected schema")
     )
 )]
 pub async fn delete_event_publisher(
@@ -42,11 +45,7 @@ pub async fn delete_event_publisher(
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
 
     let id = state
-        .dispatch_command(
-            caller,
-            payload.id,
-            EventPublisherCommand::DeleteEventPublisher.into(),
-        )
+        .dispatch_command(caller, payload.id, EventPublisherCommand::DeleteEventPublisher.into())
         .await?;
 
     Ok((StatusCode::OK, id))

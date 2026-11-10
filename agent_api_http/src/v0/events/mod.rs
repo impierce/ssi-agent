@@ -217,11 +217,12 @@ pub fn router(state: Arc<EventsState>) -> Router {
         ("sources" = Option<String>, Query, description = "Comma-separated list of sources/aggregate types to filter"),
         ("subject" = Option<String>, Query, description = "Optional aggregate/subject ID filter"),
         ("limit" = Option<usize>, Query, description = "Optional limit on historical events; defaults to 100, clamped to 1000, set to 0 for live-only stream"),
-        ("since" = Option<String>, Query, description = "Filter events after RFC 3339 timestamp"),
-        ("until" = Option<String>, Query, description = "Filter events before RFC 3339 timestamp")
+        ("since" = Option<DateTime<Utc>>, Query, description = "Filter events after RFC 3339 timestamp"),
+        ("until" = Option<DateTime<Utc>>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
     responses(
         (status = 200, description = "Server-Sent Events stream of CloudEvents", body = shared_kernel::event_bus::CloudEvent, content_type = "text/event-stream"),
+        (status = 400, description = "Invalid query parameter"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden")
     )

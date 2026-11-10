@@ -629,12 +629,16 @@ paths:
             text/plain:
               schema:
                 type: string
+        '400':
+          description: Malformed JSON request body
         '401':
           description: Unauthorized
         '403':
           description: Forbidden
         '404':
           description: Event publisher not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/add-key-provider:
     post:
       tags:
@@ -1102,6 +1106,8 @@ paths:
           description: Forbidden
         '409':
           description: An event publisher with this ID already exists
+        '422':
+          description: Request body does not match the expected schema
   /v0/create-new-catalog:
     post:
       tags:
@@ -1324,12 +1330,16 @@ paths:
             text/plain:
               schema:
                 type: string
+        '400':
+          description: Malformed JSON request body
         '401':
           description: Unauthorized
         '403':
           description: Forbidden
         '404':
           description: Event publisher not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/delete-catalog:
     post:
       tags:
@@ -1375,12 +1385,16 @@ paths:
             text/plain:
               schema:
                 type: string
+        '400':
+          description: Malformed JSON request body
         '401':
           description: Unauthorized
         '403':
           description: Forbidden
         '404':
           description: Event publisher not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/delete-public-offer:
     post:
       tags:
@@ -1556,12 +1570,14 @@ paths:
         required: false
         schema:
           type: string
+          format: date-time
       - name: until
         in: query
         description: Filter events before RFC 3339 timestamp
         required: false
         schema:
           type: string
+          format: date-time
       responses:
         '200':
           description: Server-Sent Events stream of CloudEvents
@@ -1569,6 +1585,8 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/CloudEvent'
+        '400':
+          description: Invalid query parameter
         '401':
           description: Unauthorized
         '403':
@@ -1680,6 +1698,7 @@ paths:
         required: true
         schema:
           type: string
+          pattern: ^[^\x00]+$
       responses:
         '200':
           description: Event publisher retrieved successfully
@@ -1687,6 +1706,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventPublisher'
+        '400':
+          description: Invalid path parameter
         '401':
           description: Unauthorized
         '403':
@@ -2544,6 +2565,8 @@ paths:
           description: Forbidden
         '404':
           description: Event publisher not found
+        '422':
+          description: Request body does not match the expected schema
   /v0/update-template:
     post:
       tags:
@@ -2704,6 +2727,8 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[^\x00]*$
+      additionalProperties: false
     AddConnectionEndpointRequest:
       type: object
       required:
@@ -3582,6 +3607,7 @@ components:
         name:
           type: string
           description: Human-readable display name for this event publisher.
+      additionalProperties: false
     CreateNewTemplateRequestBody:
       type: object
       properties:
@@ -4179,6 +4205,8 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[^\x00]*$
+      additionalProperties: false
     DeleteCatalogRequest:
       type: object
       properties:
@@ -4193,6 +4221,8 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[^\x00]*$
+      additionalProperties: false
     DeletePublicOfferRequest:
       type: object
       required:
@@ -6086,7 +6116,7 @@ components:
           format: int32
           description: The length of the PIN must be between 0 and 255 characters.
           examples:
-          - $serde_json::private::Number: '6'
+          - 6
           maximum: 255
           minimum: 0
     TypeMetadata:
@@ -6146,6 +6176,7 @@ components:
           type:
           - string
           - 'null'
+      additionalProperties: false
     UpdateTemplateEndpointRequest:
       type: object
       properties:

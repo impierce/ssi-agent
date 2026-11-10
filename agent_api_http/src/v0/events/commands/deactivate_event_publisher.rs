@@ -9,9 +9,10 @@ use utoipa::ToSchema;
 
 /// Request payload for deactivating (pausing) an event publisher.
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = DeactivateEventPublisher)]
 pub struct DeactivateEventPublisherRequest {
+    #[schema(pattern = r"^[^\x00]*$")]
     pub id: String,
 }
 
@@ -29,9 +30,11 @@ pub struct DeactivateEventPublisherRequest {
     ),
     responses(
         (status = 200, description = "Event publisher deactivated", body = String),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
-        (status = 404, description = "Event publisher not found")
+        (status = 404, description = "Event publisher not found"),
+        (status = 422, description = "Request body does not match the expected schema")
     )
 )]
 pub async fn deactivate_event_publisher(

@@ -1,8 +1,6 @@
 use crate::{
     extractors::RequestActor,
-    v0::events::{
-        config::EventPublisherConfigDto, queries::get_event_publisher_by_id::EventPublisherDto, EventsState,
-    },
+    v0::events::{config::EventPublisherConfigDto, queries::get_event_publisher_by_id::EventPublisherDto, EventsState},
 };
 use axum::{extract::State, http::StatusCode, Json};
 use bc_event_publishing::{
@@ -19,7 +17,7 @@ use utoipa::ToSchema;
 /// Request payload for updating an existing runtime event publisher.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = UpdateEventPublisher)]
 pub struct UpdateEventPublisherRequest {
     pub id: String,
@@ -68,7 +66,8 @@ pub struct UpdateEventPublisherRequest {
         (status = 400, description = "Invalid event publisher configuration or event types"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
-        (status = 404, description = "Event publisher not found")
+        (status = 404, description = "Event publisher not found"),
+        (status = 422, description = "Request body does not match the expected schema")
     )
 )]
 pub async fn update_event_publisher(

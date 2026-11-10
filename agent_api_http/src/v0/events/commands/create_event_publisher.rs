@@ -1,8 +1,6 @@
 use crate::{
     extractors::RequestActor,
-    v0::events::{
-        config::EventPublisherConfigDto, queries::get_event_publisher_by_id::EventPublisherDto, EventsState,
-    },
+    v0::events::{config::EventPublisherConfigDto, queries::get_event_publisher_by_id::EventPublisherDto, EventsState},
 };
 use axum::{extract::State, http::StatusCode, Json};
 use bc_event_publishing::{
@@ -24,7 +22,7 @@ const fn default_enabled() -> bool {
 /// Request payload for creating a runtime event publisher.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(as = CreateEventPublisher)]
 pub struct CreateEventPublisherRequest {
     /// Optional explicit identifier; a UUID v4 is generated when omitted.
@@ -79,7 +77,8 @@ pub struct CreateEventPublisherRequest {
         (status = 400, description = "Invalid event publisher configuration or event types"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
-        (status = 409, description = "An event publisher with this ID already exists")
+        (status = 409, description = "An event publisher with this ID already exists"),
+        (status = 422, description = "Request body does not match the expected schema")
     )
 )]
 pub async fn create_event_publisher(

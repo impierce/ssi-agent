@@ -73,14 +73,16 @@ python3 scripts/fuzz-summary.py reports/fuzz/junit.xml
 A fuzzer sends arbitrary data to every operation it is given, including operations that would
 normally reach third parties. Two measures keep a run self-contained:
 
-- `agent_application/docker/fuzz.config.yaml` disables both event publishers and the `did:web`
-  method, so nothing leaves the compose project through configuration.
-- The runner excludes the three operations that reach out regardless of configuration:
-  `GET /v0/verify-linked-domains` (resolves each linked origin's DID configuration and does a CNAME
-  lookup), `POST /v0/connections` (fetches credential-issuer metadata from the supplied URL), and
-  `POST /v0/connections/sync-connection` (fetches state from the remote agent). With
-  `FUZZ_SPEC=full`, it also excludes `GET /credential_offer`, which fetches the offer from
-  `credential_offer_uri` and the issuer's metadata.
+- `agent_application/docker/fuzz.config.yaml` disables the `did:web` method, so nothing leaves the
+  compose project through configuration.
+- The runner excludes the operations that reach out regardless of configuration or stream
+  indefinitely: `GET /v0/verify-linked-domains` (resolves each linked origin's DID configuration and
+  does a CNAME lookup), `POST /v0/connections` (fetches credential-issuer metadata from the supplied
+  URL), `POST /v0/connections/sync-connection` (fetches state from the remote agent),
+  `POST /v0/create-event-publisher` and `POST /v0/update-event-publisher` (spawn background HTTP or
+  NATS workers that connect to the supplied URL), and `GET /v0/events` (opens an unbounded
+  Server-Sent Events stream). With `FUZZ_SPEC=full`, it also excludes `GET /credential_offer`, which
+  fetches the offer from `credential_offer_uri` and the issuer's metadata.
 
 ## Published or full specification
 

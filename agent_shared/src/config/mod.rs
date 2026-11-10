@@ -961,11 +961,7 @@ mod tests {
         let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
         let redacted = config.redacted().to_string();
 
-        for secret in [
-            "dev-api-key",
-            "db-password",
-            "stronghold-password",
-        ] {
+        for secret in ["dev-api-key", "db-password", "stronghold-password"] {
             assert!(!redacted.contains(secret), "`{secret}` in {redacted}");
         }
 
