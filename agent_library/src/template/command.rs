@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
 pub use super::origin::TemplateOrigin;
-pub use super::public_content::PublicTemplateContent;
 use agent_shared::config::Authorization;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
@@ -73,18 +72,6 @@ pub enum TemplateCommand {
         template_id: String,
         holder_authorization: Authorization,
     },
-    /// Replaces the template's content with `content` and its origin with `origin` in one step: every field is
-    /// validated first, and the events of all fields are committed together or not at all. Only fields that change
-    /// emit an event; the origin always does, last. A schema can't be removed, so a `content` without one keeps the
-    /// template's. The data model and holder type can't change.
-    ///
-    /// Before `UpdateOrigin`, which would otherwise match the same fields when deserializing.
-    ReplaceContent {
-        template_id: String,
-        content: Box<PublicTemplateContent>,
-        #[serde(deserialize_with = "Option::deserialize")]
-        origin: Option<TemplateOrigin>,
-    },
     /// Replaces the origin, or removes it with `None`.
     UpdateOrigin {
         template_id: String,
@@ -113,7 +100,6 @@ impl CommandOperation for TemplateCommand {
             Self::UpdateSchemaPropertiesAttributes { .. } => "library.templates.schema_properties.update",
             Self::UpdateCredentialExpiration { .. } => "library.templates.credential_expiration.update",
             Self::UpdateHolderAuthorization { .. } => "library.templates.holder_authorization.update",
-            Self::ReplaceContent { .. } => "library.templates.content.replace",
             Self::UpdateOrigin { .. } => "library.templates.origin.update",
             Self::DeleteTemplate { .. } => "library.templates.delete",
         }

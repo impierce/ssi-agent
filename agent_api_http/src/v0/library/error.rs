@@ -121,16 +121,6 @@ impl IntoApiErrorExt for TemplateError {
                 .type_url(type_url("library#invalid-template-origin"))
                 .source(self)
                 .finish(),
-            TemplateError::DataModelImmutable => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Data Model Immutable")
-                .type_url(type_url("library#data-model-immutable"))
-                .source(self)
-                .finish(),
-            TemplateError::HolderTypeImmutable => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
-                .title("Holder Type Immutable")
-                .type_url(type_url("library#holder-type-immutable"))
-                .source(self)
-                .finish(),
         }
     }
 }
@@ -373,26 +363,6 @@ mod tests {
                 "title": "Template Not Found",
                 "status": 404,
                 "detail": "No Template found with id: `missing-id`"
-            })
-        );
-
-        assert_problem_details!(
-            TemplateError::DataModelImmutable,
-            json!({
-                "type": type_url("library#data-model-immutable"),
-                "title": "Data Model Immutable",
-                "status": 422,
-                "detail": "A template's data model can't be changed"
-            })
-        );
-
-        assert_problem_details!(
-            TemplateError::HolderTypeImmutable,
-            json!({
-                "type": type_url("library#holder-type-immutable"),
-                "title": "Holder Type Immutable",
-                "status": 422,
-                "detail": "A template's holder type can't be changed"
             })
         );
     }

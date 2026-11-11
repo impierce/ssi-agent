@@ -46,8 +46,4 @@ pub enum TemplateError {
     TemplateNotFound(String),
     #[error("Invalid origin: {0}")]
     InvalidOrigin(String),
-    #[error("A template's data model can't be changed")]
-    DataModelImmutable,
-    #[error("A template's holder type can't be changed")]
-    HolderTypeImmutable,
 }

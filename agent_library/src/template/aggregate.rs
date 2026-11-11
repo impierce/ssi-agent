@@ -9,10 +9,7 @@ pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
     ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
 };
-use super::{
-    command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin,
-    public_content::PublicTemplateContent,
-};
+use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin};
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -227,404 +224,10 @@ impl Aggregate for Template {
         _services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
-        for event in self.decide(command)? {
-            sink.write(event, self).await;
-        }
-
-        Ok(())
-    }
-
-    fn apply(&mut self, event: Self::Event) {
-        use TemplateEvent::*;
-
-        match event {
-            TemplateCreated {
-                template_id,
-                source_template_id,
-                title,
-                display,
-                data_model,
-                holder_type,
-                modified_at,
-                tags,
-                status,
-                visibility,
-                credential_expiration,
-                description,
-                r#type,
-                schema,
-                schema_properties_attributes,
-                holder_authorization,
-                origin,
-            } => {
-                self.template_id = template_id;
-                self.source_template_id = source_template_id;
-                self.title = title;
-                self.display = *display;
-                self.data_model = data_model;
-                self.holder_type = holder_type;
-                self.modified_at.replace(modified_at);
-                self.tags = tags;
-                self.status = status;
-                self.visibility = visibility;
-                self.credential_expiration = credential_expiration;
-                self.description = description;
-                self.r#type = r#type;
-                self.schema = schema;
-                self.schema_properties_attributes = schema_properties_attributes;
-                self.holder_authorization = holder_authorization;
-                self.origin = origin.map(|origin| *origin);
-            }
-            TitleUpdated {
-                template_id: _,
-                title,
-                modified_at,
-            } => {
-                self.title = title;
-                self.modified_at.replace(modified_at);
-            }
-            DisplayUpdated {
-                template_id: _,
-                display,
-                modified_at,
-            } => {
-                self.display = Some(display);
-                self.modified_at.replace(modified_at);
-            }
-            TagsUpdated {
-                template_id: _,
-                tags,
-                modified_at,
-            } => {
-                self.tags = if tags.is_empty() { None } else { Some(tags) };
-                self.modified_at.replace(modified_at);
-            }
-            StatusUpdated {
-                template_id: _,
-                status,
-                modified_at,
-            } => {
-                self.status = status;
-                self.modified_at.replace(modified_at);
-            }
-            VisibilityUpdated {
-                template_id: _,
-                visibility,
-                modified_at,
-            } => {
-                self.visibility = visibility;
-                self.modified_at.replace(modified_at);
-            }
-            DescriptionUpdated {
-                template_id: _,
-                description,
-                modified_at,
-            } => {
-                self.description = if description.is_empty() {
-                    None
-                } else {
-                    Some(description)
-                };
-                self.modified_at.replace(modified_at);
-            }
-            TypeUpdated {
-                template_id: _,
-                r#type,
-                modified_at,
-            } => {
-                self.r#type = r#type;
-                self.modified_at.replace(modified_at);
-            }
-            SchemaUpdated {
-                template_id: _,
-                schema,
-                modified_at,
-            } => {
-                *self.schema = Some(schema);
-                self.modified_at.replace(modified_at);
-            }
-            SchemaPropertiesAttributesUpdated {
-                template_id: _,
-                schema_properties_attributes,
-                modified_at,
-            } => {
-                // No attributes are stored as `None`, as `CreateNewTemplate` stores them.
-                self.schema_properties_attributes =
-                    (!schema_properties_attributes.is_empty()).then_some(schema_properties_attributes);
-                self.modified_at.replace(modified_at);
-            }
-            CredentialExpirationUpdated {
-                template_id: _,
-                credential_expiration,
-                modified_at,
-            } => {
-                self.credential_expiration = credential_expiration;
-                self.modified_at.replace(modified_at);
-            }
-            HolderAuthorizationUpdated {
-                template_id: _,
-                holder_authorization,
-                modified_at,
-            } => {
-                self.holder_authorization = holder_authorization;
-                self.modified_at.replace(modified_at);
-            }
-            OriginUpdated {
-                template_id: _,
-                origin,
-                modified_at,
-            } => {
-                self.origin = origin;
-                self.modified_at.replace(modified_at);
-            }
-            TemplateDeleted { template_id } => {
-                *self = Self::default();
-                self.template_id = template_id;
-                self.status = Status::Deleted;
-            }
-        }
-    }
-}
-
-fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    jsonschema::validator_for(schema)
-        .map(|_| ())
-        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
-}
-
-/// Validates that no field in the schema (at any nesting level) has `"type": "array"`.
-///
-/// Arrays are not supported in template schemas at this time. Supporting arrays would require
-/// a strategy for addressing individual array item fields in `schemaPropertiesAttributes` and
-/// in SD-JWT claim paths, which is deferred to a future release.
-fn validate_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    validate_no_array_types_recursive(schema)
-}
-
-fn validate_no_array_types_recursive(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    if let Some(type_val) = schema.get("type").and_then(|t| t.as_str()) {
-        if type_val == "array" {
-            return Err(TemplateError::InvalidSchema(
-                "Array types are not supported in template schemas. \
-                 Define only object and scalar fields."
-                    .to_string(),
-            ));
-        }
-    }
-
-    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
-        for value in properties.values() {
-            validate_no_array_types_recursive(value)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Normalizes and validates the `type` field.
-///
-/// - Drops blank/whitespace-only entries.
-/// - For OpenBadges 3.0: enforces that exactly one badge-specific subtype is present,
-///   that no extra types are included, and defaults to `['VerifiableCredential', 'OpenBadgeCredential']`
-///   for empty or incomplete input.
-/// - For all other data models: ensures `VerifiableCredential` is present (adds it if missing),
-///   deduplicates, and applies canonical ordering (VerifiableCredential first).
-fn normalize_and_validate_type(type_input: Vec<String>, data_model: &DataModel) -> Result<Vec<String>, TemplateError> {
-    // Drop blank/whitespace-only entries.
-    let filtered: Vec<String> = type_input.into_iter().filter(|t| !t.trim().is_empty()).collect();
-
-    match data_model {
-        DataModel::OpenBadges3_0 => normalize_open_badges_type(filtered),
-        _ => normalize_standard_type(filtered),
-    }
-}
-
-fn normalize_standard_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
-    const VC: &str = "VerifiableCredential";
-
-    // Empty input defaults to ['VerifiableCredential'].
-    if filtered.is_empty() {
-        return Ok(vec![VC.to_string()]);
-    }
-
-    // Deduplicate preserving first-seen order.
-    let mut seen = std::collections::HashSet::new();
-    let deduped: Vec<String> = filtered.into_iter().filter(|t| seen.insert(t.clone())).collect();
-
-    // Canonical order: VerifiableCredential first, then extras.
-    let mut result = vec![VC.to_string()];
-    for t in &deduped {
-        if t != VC {
-            result.push(t.clone());
-        }
-    }
-
-    Ok(result)
-}
-
-fn normalize_open_badges_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
-    const OBC: &str = "OpenBadgeCredential";
-    const AC: &str = "AchievementCredential";
-    const VC: &str = "VerifiableCredential";
-
-    // Empty or only-VC input defaults to ['VerifiableCredential', 'OpenBadgeCredential'].
-    if filtered.is_empty() || (filtered.len() == 1 && filtered[0] == VC) {
-        return Ok(vec![VC.to_string(), OBC.to_string()]);
-    }
-
-    let has_obc = filtered.contains(&OBC.to_string());
-    let has_ac = filtered.contains(&AC.to_string());
-
-    if has_obc && has_ac {
-        return Err(TemplateError::InvalidType(
-            "OpenBadges type cannot include both `OpenBadgeCredential` and `AchievementCredential`".to_string(),
-        ));
-    }
-
-    // No extra types allowed beyond VC, OBC, AC.
-    let allowed = [VC, OBC, AC];
-    let extras: Vec<&str> = filtered
-        .iter()
-        .filter(|t| !allowed.contains(&t.as_str()))
-        .map(|t| t.as_str())
-        .collect();
-    if !extras.is_empty() {
-        return Err(TemplateError::InvalidType(format!(
-            "OpenBadges type includes disallowed extra entries: [{}]",
-            extras.join(", ")
-        )));
-    }
-
-    // Must contain exactly one badge-specific subtype; deduplicate preserving order.
-    let badge_type = if has_obc { OBC } else { AC };
-
-    Ok(vec![VC.to_string(), badge_type.to_string()])
-}
-
-/// Trims a description. A blank one is absent, so `CreateNewTemplate` and `UpdateDescription` store the same value for
-/// the same input.
-fn normalize_description(description: &str) -> Option<String> {
-    let description = description.trim();
-    (!description.is_empty()).then(|| description.to_string())
-}
-
-/// Normalizes a tags vector: trims each entry, drops empty entries, deduplicates
-/// preserving first-seen order.  Returns `None` when the result would be empty.
-fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
-    let tags = tags?;
-
-    let mut seen = std::collections::HashSet::new();
-    let normalized: Vec<String> = tags
-        .into_iter()
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-        .filter(|t| seen.insert(t.clone()))
-        .collect();
-
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
-impl Template {
-    /// The events of `ReplaceContent`: each field's own update command, decided in turn against the template as the
-    /// earlier ones left it, so every field is validated by the same rules as on its own and nothing is emitted unless
-    /// all of them pass. A command that changes no public content emits nothing; the origin is always set, last.
-    fn replace_content(
-        &self,
-        template_id: String,
-        content: PublicTemplateContent,
-        origin: Option<TemplateOrigin>,
-    ) -> Result<Vec<TemplateEvent>, TemplateError> {
-        use TemplateCommand::*;
-
-        ensure_template_editable(&self.status)?;
-        if content.data_model != self.data_model {
-            return Err(TemplateError::DataModelImmutable);
-        }
-        if content.holder_type != self.holder_type {
-            return Err(TemplateError::HolderTypeImmutable);
-        }
-
-        let PublicTemplateContent {
-            title,
-            description,
-            display,
-            r#type,
-            tags,
-            credential_expiration,
-            schema,
-            schema_properties_attributes,
-            ..
-        } = content;
-
-        let mut commands = vec![
-            UpdateTitle {
-                template_id: template_id.clone(),
-                title,
-            },
-            UpdateDisplay {
-                template_id: template_id.clone(),
-                display,
-            },
-            // Empty tags and an empty description clear the field.
-            UpdateTags {
-                template_id: template_id.clone(),
-                tags: tags.unwrap_or_default(),
-            },
-            UpdateCredentialExpiration {
-                template_id: template_id.clone(),
-                credential_expiration,
-            },
-            UpdateDescription {
-                template_id: template_id.clone(),
-                description: description.unwrap_or_default(),
-            },
-            UpdateType {
-                template_id: template_id.clone(),
-                r#type,
-            },
-        ];
-        if let Some(schema) = schema {
-            commands.push(UpdateSchema {
-                template_id: template_id.clone(),
-                schema,
-            });
-        }
-        // No attributes clear them, except for W3C VC 1.1, which never has any.
-        let schema_properties_attributes = schema_properties_attributes.unwrap_or_default();
-        if self.data_model != DataModel::W3CVcDataModelV1_1 || !schema_properties_attributes.is_empty() {
-            commands.push(UpdateSchemaPropertiesAttributes {
-                template_id: template_id.clone(),
-                schema_properties_attributes,
-            });
-        }
-
-        let mut template = self.clone();
-        let mut events = Vec::new();
-        for command in commands {
-            let before = template.public_content();
-            let emitted = template.decide(command)?;
-            for event in &emitted {
-                template.apply(event.clone());
-            }
-            if template.public_content() != before {
-                events.extend(emitted);
-            }
-        }
-
-        events.extend(template.decide(UpdateOrigin { template_id, origin })?);
-        Ok(events)
-    }
-
-    /// The events `command` emits against this template, or why it is refused. Nothing is written.
-    fn decide(&self, command: TemplateCommand) -> Result<Vec<TemplateEvent>, TemplateError> {
         use TemplateCommand::*;
         use TemplateEvent::*;
 
-        match command {
+        let events: Vec<Self::Event> = match command {
             CreateNewTemplate {
                 template_id,
                 source_template_id,
@@ -1030,11 +633,6 @@ impl Template {
                     modified_at,
                 }])
             }
-            ReplaceContent {
-                template_id,
-                content,
-                origin,
-            } => self.replace_content(template_id, *content, origin),
             UpdateOrigin { template_id, origin } => {
                 ensure_template_editable(&self.status)?;
 
@@ -1053,7 +651,306 @@ impl Template {
                     modified_at,
                 }])
             }
+        }?;
+
+        for event in events {
+            sink.write(event, self).await;
         }
+
+        Ok(())
+    }
+
+    fn apply(&mut self, event: Self::Event) {
+        use TemplateEvent::*;
+
+        match event {
+            TemplateCreated {
+                template_id,
+                source_template_id,
+                title,
+                display,
+                data_model,
+                holder_type,
+                modified_at,
+                tags,
+                status,
+                visibility,
+                credential_expiration,
+                description,
+                r#type,
+                schema,
+                schema_properties_attributes,
+                holder_authorization,
+                origin,
+            } => {
+                self.template_id = template_id;
+                self.source_template_id = source_template_id;
+                self.title = title;
+                self.display = *display;
+                self.data_model = data_model;
+                self.holder_type = holder_type;
+                self.modified_at.replace(modified_at);
+                self.tags = tags;
+                self.status = status;
+                self.visibility = visibility;
+                self.credential_expiration = credential_expiration;
+                self.description = description;
+                self.r#type = r#type;
+                self.schema = schema;
+                self.schema_properties_attributes = schema_properties_attributes;
+                self.holder_authorization = holder_authorization;
+                self.origin = origin.map(|origin| *origin);
+            }
+            TitleUpdated {
+                template_id: _,
+                title,
+                modified_at,
+            } => {
+                self.title = title;
+                self.modified_at.replace(modified_at);
+            }
+            DisplayUpdated {
+                template_id: _,
+                display,
+                modified_at,
+            } => {
+                self.display = Some(display);
+                self.modified_at.replace(modified_at);
+            }
+            TagsUpdated {
+                template_id: _,
+                tags,
+                modified_at,
+            } => {
+                self.tags = if tags.is_empty() { None } else { Some(tags) };
+                self.modified_at.replace(modified_at);
+            }
+            StatusUpdated {
+                template_id: _,
+                status,
+                modified_at,
+            } => {
+                self.status = status;
+                self.modified_at.replace(modified_at);
+            }
+            VisibilityUpdated {
+                template_id: _,
+                visibility,
+                modified_at,
+            } => {
+                self.visibility = visibility;
+                self.modified_at.replace(modified_at);
+            }
+            DescriptionUpdated {
+                template_id: _,
+                description,
+                modified_at,
+            } => {
+                self.description = if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                };
+                self.modified_at.replace(modified_at);
+            }
+            TypeUpdated {
+                template_id: _,
+                r#type,
+                modified_at,
+            } => {
+                self.r#type = r#type;
+                self.modified_at.replace(modified_at);
+            }
+            SchemaUpdated {
+                template_id: _,
+                schema,
+                modified_at,
+            } => {
+                *self.schema = Some(schema);
+                self.modified_at.replace(modified_at);
+            }
+            SchemaPropertiesAttributesUpdated {
+                template_id: _,
+                schema_properties_attributes,
+                modified_at,
+            } => {
+                // No attributes are stored as `None`, as `CreateNewTemplate` stores them.
+                self.schema_properties_attributes =
+                    (!schema_properties_attributes.is_empty()).then_some(schema_properties_attributes);
+                self.modified_at.replace(modified_at);
+            }
+            CredentialExpirationUpdated {
+                template_id: _,
+                credential_expiration,
+                modified_at,
+            } => {
+                self.credential_expiration = credential_expiration;
+                self.modified_at.replace(modified_at);
+            }
+            HolderAuthorizationUpdated {
+                template_id: _,
+                holder_authorization,
+                modified_at,
+            } => {
+                self.holder_authorization = holder_authorization;
+                self.modified_at.replace(modified_at);
+            }
+            OriginUpdated {
+                template_id: _,
+                origin,
+                modified_at,
+            } => {
+                self.origin = origin;
+                self.modified_at.replace(modified_at);
+            }
+            TemplateDeleted { template_id } => {
+                *self = Self::default();
+                self.template_id = template_id;
+                self.status = Status::Deleted;
+            }
+        }
+    }
+}
+
+fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    jsonschema::validator_for(schema)
+        .map(|_| ())
+        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+}
+
+/// Validates that no field in the schema (at any nesting level) has `"type": "array"`.
+///
+/// Arrays are not supported in template schemas at this time. Supporting arrays would require
+/// a strategy for addressing individual array item fields in `schemaPropertiesAttributes` and
+/// in SD-JWT claim paths, which is deferred to a future release.
+fn validate_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    validate_no_array_types_recursive(schema)
+}
+
+fn validate_no_array_types_recursive(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    if let Some(type_val) = schema.get("type").and_then(|t| t.as_str()) {
+        if type_val == "array" {
+            return Err(TemplateError::InvalidSchema(
+                "Array types are not supported in template schemas. \
+                 Define only object and scalar fields."
+                    .to_string(),
+            ));
+        }
+    }
+
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        for value in properties.values() {
+            validate_no_array_types_recursive(value)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Normalizes and validates the `type` field.
+///
+/// - Drops blank/whitespace-only entries.
+/// - For OpenBadges 3.0: enforces that exactly one badge-specific subtype is present,
+///   that no extra types are included, and defaults to `['VerifiableCredential', 'OpenBadgeCredential']`
+///   for empty or incomplete input.
+/// - For all other data models: ensures `VerifiableCredential` is present (adds it if missing),
+///   deduplicates, and applies canonical ordering (VerifiableCredential first).
+fn normalize_and_validate_type(type_input: Vec<String>, data_model: &DataModel) -> Result<Vec<String>, TemplateError> {
+    // Drop blank/whitespace-only entries.
+    let filtered: Vec<String> = type_input.into_iter().filter(|t| !t.trim().is_empty()).collect();
+
+    match data_model {
+        DataModel::OpenBadges3_0 => normalize_open_badges_type(filtered),
+        _ => normalize_standard_type(filtered),
+    }
+}
+
+fn normalize_standard_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
+    const VC: &str = "VerifiableCredential";
+
+    // Empty input defaults to ['VerifiableCredential'].
+    if filtered.is_empty() {
+        return Ok(vec![VC.to_string()]);
+    }
+
+    // Deduplicate preserving first-seen order.
+    let mut seen = std::collections::HashSet::new();
+    let deduped: Vec<String> = filtered.into_iter().filter(|t| seen.insert(t.clone())).collect();
+
+    // Canonical order: VerifiableCredential first, then extras.
+    let mut result = vec![VC.to_string()];
+    for t in &deduped {
+        if t != VC {
+            result.push(t.clone());
+        }
+    }
+
+    Ok(result)
+}
+
+fn normalize_open_badges_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
+    const OBC: &str = "OpenBadgeCredential";
+    const AC: &str = "AchievementCredential";
+    const VC: &str = "VerifiableCredential";
+
+    // Empty or only-VC input defaults to ['VerifiableCredential', 'OpenBadgeCredential'].
+    if filtered.is_empty() || (filtered.len() == 1 && filtered[0] == VC) {
+        return Ok(vec![VC.to_string(), OBC.to_string()]);
+    }
+
+    let has_obc = filtered.contains(&OBC.to_string());
+    let has_ac = filtered.contains(&AC.to_string());
+
+    if has_obc && has_ac {
+        return Err(TemplateError::InvalidType(
+            "OpenBadges type cannot include both `OpenBadgeCredential` and `AchievementCredential`".to_string(),
+        ));
+    }
+
+    // No extra types allowed beyond VC, OBC, AC.
+    let allowed = [VC, OBC, AC];
+    let extras: Vec<&str> = filtered
+        .iter()
+        .filter(|t| !allowed.contains(&t.as_str()))
+        .map(|t| t.as_str())
+        .collect();
+    if !extras.is_empty() {
+        return Err(TemplateError::InvalidType(format!(
+            "OpenBadges type includes disallowed extra entries: [{}]",
+            extras.join(", ")
+        )));
+    }
+
+    // Must contain exactly one badge-specific subtype; deduplicate preserving order.
+    let badge_type = if has_obc { OBC } else { AC };
+
+    Ok(vec![VC.to_string(), badge_type.to_string()])
+}
+
+/// Trims a description. A blank one is absent, so `CreateNewTemplate` and `UpdateDescription` store the same value for
+/// the same input.
+fn normalize_description(description: &str) -> Option<String> {
+    let description = description.trim();
+    (!description.is_empty()).then(|| description.to_string())
+}
+
+/// Normalizes a tags vector: trims each entry, drops empty entries, deduplicates
+/// preserving first-seen order.  Returns `None` when the result would be empty.
+fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
+    let tags = tags?;
+
+    let mut seen = std::collections::HashSet::new();
+    let normalized: Vec<String> = tags
+        .into_iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .filter(|t| seen.insert(t.clone()))
+        .collect();
+
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
     }
 }
 
