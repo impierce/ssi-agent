@@ -1,11 +1,10 @@
-use crate::credential::signed::SignedCredential;
+use crate::credential::signed::{verify_sd_jwt_credential, SdJwtCredentialError, SignedCredential};
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
 use agent_shared::sensitive_logging::sensitive_debug;
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_kit::vc::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
 use oid4vci::credential_response::CredentialResponseType;
@@ -245,17 +244,30 @@ impl Aggregate for Offer {
                             .await
                             .map_err(|_| CredentialResponseError)?;
 
-                        // Only JWT credentials can be stored, so anything else is refused here, before
-                        // the offer is marked as having received its credentials.
+                        // Only credential JWTs and `vc+sd-jwt` credentials can be stored, and an SD-JWT only once its
+                        // issuer signature verifies, so anything else is refused here, before the offer is marked as
+                        // having received its credentials.
                         let credential = match credential_response.credential {
-                            CredentialResponseType::Immediate { credentials, .. } => credentials
-                                .first()
-                                // OpenID4VCI requires at least one credential in an immediate response.
-                                .ok_or(CredentialResponseError)?
-                                .credential
-                                .parse::<Jwt>()
-                                .map(SignedCredential::Jwt)
-                                .map_err(|_| UnsupportedCredentialFormatError)?,
+                            CredentialResponseType::Immediate { credentials, .. } => {
+                                let credential = credentials
+                                    .first()
+                                    // OpenID4VCI requires at least one credential in an immediate response.
+                                    .ok_or(CredentialResponseError)?
+                                    .credential
+                                    .parse::<SignedCredential>()
+                                    .map_err(|_| UnsupportedCredentialFormatError)?;
+                                if let SignedCredential::SdJwt(sd_jwt) = &credential {
+                                    verify_sd_jwt_credential(sd_jwt, &*services.holder)
+                                        .await
+                                        .map_err(|error| match error {
+                                            SdJwtCredentialError::UnsupportedFormat(_) => {
+                                                UnsupportedCredentialFormatError
+                                            }
+                                            SdJwtCredentialError::Invalid(reason) => InvalidCredentialError(reason),
+                                        })?;
+                                }
+                                credential
+                            }
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
                             }
@@ -361,6 +373,7 @@ fn log_token_response(token_response: &TokenResponse) {
 pub mod tests {
     use super::test_utils::*;
     use super::*;
+    use crate::credential::signed::{issue_vc_sd_jwt, with_forged_signature};
     use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
     use agent_authorization::authorization_state;
@@ -389,6 +402,7 @@ pub mod tests {
     use serde_json::json;
     use tokio::net::TcpListener;
     use tower::Service as _;
+    use OfferError::*;
 
     const TEMPLATE_ID: &str = "001";
 
@@ -720,14 +734,14 @@ pub mod tests {
         issuer_url
     }
 
-    #[rstest]
-    #[serial_test::serial]
-    #[tokio::test]
-    async fn credential_response_without_credentials_is_refused(
+    /// Sends the credential request of an accepted offer to a local issuer answering with `credential_response`.
+    async fn send_credential_request(
+        services: Arc<HolderServices>,
         received_offer_id: String,
-        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
-    ) {
-        let issuer_url = bootstrap_fake_issuer(json!({ "credentials": [] })).await;
+        credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,
+        credential_response: serde_json::Value,
+    ) -> Result<Vec<OfferEvent>, OfferError> {
+        let issuer_url = bootstrap_fake_issuer(credential_response).await;
         let credential_offer: CredentialOfferParameters = serde_json::from_value(json!({
             "credential_issuer": issuer_url,
             "credential_configuration_ids": [TEMPLATE_ID],
@@ -737,12 +751,12 @@ pub mod tests {
         }))
         .unwrap();
 
-        OfferTestFramework::with(HolderServices::default().await)
+        OfferTestFramework::with(services)
             .given(vec![
                 OfferEvent::CredentialOfferReceived {
                     received_offer_id: received_offer_id.clone(),
                     credential_offer: Box::new(credential_offer),
-                    credential_configurations: credential_configurations_supported,
+                    credential_configurations,
                 },
                 OfferEvent::CredentialOfferAccepted {
                     received_offer_id: received_offer_id.clone(),
@@ -755,7 +769,97 @@ pub mod tests {
             ])
             .when_async(OfferCommand::SendCredentialRequest { received_offer_id })
             .await
-            .then_expect_error_message("An error occurred while requesting the credentials");
+            .inspect_result()
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn credential_response_without_credentials_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let error = send_credential_request(
+            HolderServices::default().await,
+            received_offer_id,
+            credential_configurations_supported,
+            json!({ "credentials": [] }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, CredentialResponseError), "{error:?}");
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn received_vc_sd_jwt_credential_is_kept(
+        received_offer_id: String,
+        holder_credential_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+
+        let events = send_credential_request(
+            services,
+            received_offer_id.clone(),
+            credential_configurations_supported,
+            json!({ "credentials": [{ "credential": sd_jwt.to_string() }] }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            events,
+            vec![OfferEvent::CredentialResponseReceived {
+                received_offer_id,
+                status: Status::CredentialsReceived,
+                credentials: vec![OfferCredential {
+                    holder_credential_id,
+                    credential: SignedCredential::SdJwt(sd_jwt),
+                }],
+            }]
+        );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn received_sd_jwt_credential_that_does_not_verify_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+
+        let error = send_credential_request(
+            services,
+            received_offer_id,
+            credential_configurations_supported,
+            json!({ "credentials": [{ "credential": with_forged_signature(&sd_jwt).to_string() }] }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, InvalidCredentialError(_)), "{error:?}");
+    }
+
+    /// An SD-JWT VC (`dc+sd-jwt`) is not kept.
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn received_dc_sd_jwt_credential_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let error = send_credential_request(
+            HolderServices::default().await,
+            received_offer_id,
+            credential_configurations_supported,
+            json!({ "credentials": [{ "credential": crate::credential::signed::SD_JWT }] }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, UnsupportedCredentialFormatError), "{error:?}");
     }
 
     #[rstest]
