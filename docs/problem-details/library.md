@@ -84,6 +84,14 @@ This error occurs when a template in `Draft` stage is made public.
 
 This error occurs when a template's `origin` is malformed: `source` is not an absolute URI, `sourceTemplateId` is empty, or `digest` is not `sha256-` followed by 64 lowercase hexadecimal digits.
 
+## Data Model Immutable
+
+This error occurs when a template's content is replaced with content of another data model. A template's data model can't be changed.
+
+## Holder Type Immutable
+
+This error occurs when a template's content is replaced with content of another holder type. A template's holder type can't be changed.
+
 # Catalogs
 
 ## Catalog Template Not Found
