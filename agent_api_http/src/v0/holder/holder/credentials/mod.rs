@@ -56,7 +56,8 @@ pub struct HolderCredentialsEndpointRequest {
 /// Store a credential in the organisation's wallet
 ///
 /// Imports a credential into the organisation's holder wallet: a credential JWT, or a VCDM 2.0 credential secured
-/// with SD-JWT (`vc+sd-jwt`), whose issuer signature and validity period are verified first.
+/// with SD-JWT (`vc+sd-jwt`). The issuer signature and validity period of a `vc+sd-jwt` credential are verified
+/// first; a credential JWT is stored without them being verified. The status of either is checked.
 #[utoipa::path(
     post,
     path = "/holder/credentials",
@@ -66,7 +67,7 @@ pub struct HolderCredentialsEndpointRequest {
     responses(
         (status = 201, description = "Credential stored successfully", body = Credential),
         (status = 400, description = "Malformed JSON request body"),
-        (status = 422, description = "Request body does not match the expected schema, the credential could not be decoded, or its issuer signature, validity period or status does not hold"),
+        (status = 422, description = "Request body does not match the expected schema, the credential could not be decoded, the issuer signature or validity period of a `vc+sd-jwt` credential does not hold, or the credential's status is not valid"),
     )
 )]
 #[axum_macros::debug_handler]

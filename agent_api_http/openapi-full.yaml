@@ -1613,7 +1613,8 @@ paths:
       summary: Store a credential in the organisation's wallet
       description: |-
         Imports a credential into the organisation's holder wallet: a credential JWT, or a VCDM 2.0 credential secured
-        with SD-JWT (`vc+sd-jwt`), whose issuer signature and validity period are verified first.
+        with SD-JWT (`vc+sd-jwt`). The issuer signature and validity period of a `vc+sd-jwt` credential are verified
+        first; a credential JWT is stored without them being verified. The status of either is checked.
       operationId: create_holder_credential
       requestBody:
         content:
@@ -1631,7 +1632,7 @@ paths:
         '400':
           description: Malformed JSON request body
         '422':
-          description: Request body does not match the expected schema, the credential could not be decoded, or its issuer signature, validity period or status does not hold
+          description: Request body does not match the expected schema, the credential could not be decoded, the issuer signature or validity period of a `vc+sd-jwt` credential does not hold, or the credential's status is not valid
   /v0/holder/credentials/{credential_id}:
     get:
       tags:
@@ -1731,7 +1732,7 @@ paths:
         '501':
           description: The credential issuer requires a flow UniCore does not support yet, or sent a credential format other than a credential JWT or `vc+sd-jwt`
         '502':
-          description: The credential issuer or its authorization server could not be reached, or the credential it sent does not verify
+          description: The credential issuer or its authorization server could not be reached, or the `vc+sd-jwt` credential it sent does not verify
   /v0/holder/offers/{offer_id}/reject:
     post:
       tags:
