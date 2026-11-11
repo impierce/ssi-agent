@@ -1,11 +1,10 @@
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self};
 use crate::credential::event::CredentialEvent;
-use crate::credential::signed::SignedCredential;
+use crate::credential::signed::{verify_sd_jwt_credential, SdJwtCredentialError, SignedCredential};
 use crate::services::HolderServices;
 use agent_shared::credential_status_checker::CredentialStatusChecker;
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_kit::vc::Jwt;
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -22,7 +21,7 @@ pub struct Credential {
     pub holder_credential_id: String,
     pub received_offer_id: Option<String>,
     #[schema(value_type = Option<String>)]
-    pub signed: Option<Jwt>,
+    pub signed: Option<SignedCredential>,
     pub data: Option<Data>,
 }
 
@@ -50,24 +49,42 @@ impl Aggregate for Credential {
                 received_offer_id,
                 credential,
             } => {
-                let SignedCredential::Jwt(credential) = credential else {
-                    return Err(CredentialDecodingError);
+                let (raw_credential, status_claim) = match &credential {
+                    SignedCredential::Jwt(jwt) => {
+                        let raw = get_unverified_jwt_claims(&serde_json::json!(jwt))
+                            .map_err(|_| CredentialError::CredentialDecodingError)?;
+                        (
+                            raw.get("vc").cloned().ok_or(CredentialDecodingError)?,
+                            raw.get("status").cloned(),
+                        )
+                    }
+                    SignedCredential::SdJwt(sd_jwt) => {
+                        let verified = verify_sd_jwt_credential(sd_jwt, &*services.holder)
+                            .await
+                            .map_err(|error| match error {
+                                SdJwtCredentialError::UnsupportedFormat(_) => CredentialDecodingError,
+                                SdJwtCredentialError::Invalid(reason) => InvalidCredential(reason),
+                            })?;
+                        let raw = serde_json::to_value(verified.credential()).map_err(|_| CredentialDecodingError)?;
+                        let status = verified
+                            .status()
+                            .map(serde_json::to_value)
+                            .transpose()
+                            .map_err(|_| CredentialDecodingError)?;
+                        (raw, status)
+                    }
                 };
-                let raw = get_unverified_jwt_claims(&serde_json::json!(credential))
-                    .map_err(|_| CredentialError::CredentialDecodingError)?;
 
-                if let Some(status_claim) = raw.get("status") {
+                if let Some(status_claim) = status_claim {
                     let credential_status_checker = CredentialStatusChecker {
                         key_resolver: services.holder.clone(),
                     };
 
                     credential_status_checker
-                        .check_credential_status(status_claim.to_owned())
+                        .check_credential_status(status_claim)
                         .await
                         .map_err(|_| CredentialError::InvalidCredentialStatus)?;
                 }
-
-                let raw_credential = raw.get("vc").cloned().ok_or(CredentialDecodingError)?;
 
                 Ok(vec![CredentialAdded {
                     holder_credential_id,
@@ -110,6 +127,7 @@ pub mod credential_tests {
     use super::*;
     use crate::credential::aggregate::Credential;
     use crate::credential::event::CredentialEvent;
+    use crate::credential::signed::{issue_vc_sd_jwt, with_forged_signature};
     use crate::offer::aggregate::test_utils::received_offer_id;
     use agent_issuance::credential::aggregate::test_utils::JWT_VC_JSON_OBV3_JWT;
     use agent_secret_manager::service::Service;
@@ -140,7 +158,72 @@ pub mod credential_tests {
             }])
     }
 
-    /// Only JWT credentials are stored; an SD-JWT is refused as before.
+    /// A `vc+sd-jwt` credential is stored once its issuer signature verifies, its data the credential with the
+    /// disclosures it carries applied.
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_add_vc_sd_jwt_credential(holder_credential_id: String, received_offer_id: String) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+        let raw = serde_json::to_value(
+            identity_kit::sd_jwt_vc::SdJwtCredentialV2::from_sd_jwt(sd_jwt.clone())
+                .unwrap()
+                .credential(),
+        )
+        .unwrap();
+        assert_eq!(raw["credentialSubject"]["name"], "Example LLC");
+
+        CredentialTestFramework::with(services)
+            .given_no_previous_events()
+            .when_async(CredentialCommand::AddCredential {
+                holder_credential_id: holder_credential_id.clone(),
+                received_offer_id: Some(received_offer_id.clone()),
+                credential: SignedCredential::SdJwt(sd_jwt.clone()),
+            })
+            .await
+            .then_expect_events(vec![CredentialEvent::CredentialAdded {
+                holder_credential_id,
+                received_offer_id: Some(received_offer_id),
+                credential: SignedCredential::SdJwt(sd_jwt),
+                data: Data { raw },
+            }])
+    }
+
+    #[rstest]
+    #[case::forged_signature(true, 1)]
+    #[case::expired(false, -1)]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_add_invalid_vc_sd_jwt_credential(
+        holder_credential_id: String,
+        #[case] forged: bool,
+        #[case] days_valid: i64,
+    ) {
+        let services = HolderServices::default().await;
+        let mut sd_jwt = issue_vc_sd_jwt(
+            &services.holder,
+            chrono::Utc::now() + chrono::Duration::days(days_valid),
+        )
+        .await;
+        if forged {
+            sd_jwt = with_forged_signature(&sd_jwt);
+        }
+
+        let error = CredentialTestFramework::with(services)
+            .given_no_previous_events()
+            .when_async(CredentialCommand::AddCredential {
+                holder_credential_id,
+                received_offer_id: None,
+                credential: SignedCredential::SdJwt(sd_jwt),
+            })
+            .await
+            .inspect_result()
+            .unwrap_err();
+        assert!(matches!(error, CredentialError::InvalidCredential(_)), "{error:?}");
+    }
+
+    /// An SD-JWT VC (`dc+sd-jwt`) is not stored.
     #[rstest]
     #[serial_test::serial]
     #[tokio::test]

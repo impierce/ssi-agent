@@ -14,4 +14,6 @@ pub enum PresentationError {
     SigningError(String),
     #[error("Failed to get a key identifier for signing the presentation")]
     KeyIdError,
+    #[error("A presentation holds either credential JWTs or `vc+sd-jwt` credentials, not both")]
+    MixedCredentialFormatsError,
 }

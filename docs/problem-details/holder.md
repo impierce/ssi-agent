@@ -4,7 +4,11 @@ These problems can occur while receiving credentials or creating presentations i
 
 ## Credential Decoding Failed
 
-The supplied credential could not be decoded as a JWT verifiable credential. Ensure that the credential is a well-formed JWT and that it is supplied in the format expected by the holder endpoint.
+The supplied credential could not be decoded as a credential JWT or a VCDM 2.0 credential secured with SD-JWT (`vc+sd-jwt`). SD-JWT VCs (`dc+sd-jwt`) are not stored. Ensure that the credential is well-formed and supplied in the format expected by the holder endpoint.
+
+## Invalid Credential
+
+The credential's issuer signature or validity period does not hold. `422` for a credential supplied to the holder endpoint, `502` for one an issuer sent in a credential response. Check that the credential is unaltered, that its issuer's key resolves, and that it is within its validity period.
 
 ## Invalid Credential Status
 
@@ -72,7 +76,7 @@ The requested flow requires a batch credential request. UniCore does not yet sup
 
 ## Unsupported Credential Format
 
-The issuer offers a credential format other than JWT. UniCore currently supports JWT credentials in this holder flow.
+The issuer sent a credential in a format other than a credential JWT or a VCDM 2.0 credential secured with SD-JWT (`vc+sd-jwt`). UniCore does not store other formats, such as SD-JWT VCs (`dc+sd-jwt`), in this holder flow.
 
 ## Missing Holder Identifier
 
@@ -97,3 +101,7 @@ UniCore could not find the signing key identifier required to sign the presentat
 ## Presentation Signing Failed
 
 UniCore could not sign the presentation with the holder's key. Verify the holder's key configuration and inspect the accompanying error detail.
+
+## Mixed Credential Formats
+
+The presentation names both credential JWTs and `vc+sd-jwt` credentials. A presentation holds credential JWTs (a VCDM 1.1 presentation) or `vc+sd-jwt` credentials (a VCDM 2.0 presentation), not both; create one presentation per format.
