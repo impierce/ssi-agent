@@ -88,7 +88,9 @@ pub struct PresentationsEndpointRequest {
 
 /// Create a new credential presentation
 ///
-/// Creates and signs a new credential presentation containing the given credentials held by your organisation.
+/// Creates and signs a new credential presentation containing the given credentials held by your organisation:
+/// credential JWTs in a VCDM 1.1 presentation, `vc+sd-jwt` credentials in a VCDM 2.0 presentation (`vp+jwt`),
+/// each with every disclosure it carries.
 #[utoipa::path(
     post,
     path = "/holder/presentations",
@@ -99,7 +101,7 @@ pub struct PresentationsEndpointRequest {
         (status = 201, description = "Presentation created successfully", body = Presentation),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
-        (status = 422, description = "Request body does not match the expected schema"),
+        (status = 422, description = "Request body does not match the expected schema, or the credentials mix credential JWTs and `vc+sd-jwt` credentials"),
     )
 )]
 #[axum_macros::debug_handler]

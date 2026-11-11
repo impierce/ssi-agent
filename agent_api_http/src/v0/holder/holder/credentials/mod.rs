@@ -48,14 +48,15 @@ pub(crate) async fn credentials(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HolderCredentialsEndpointRequest {
-    /// Compact JWT-encoded verifiable credential to add to the holder.
-    #[schema(value_type = identity_kit::vc::Jwt)]
+    /// The credential to add to the holder: a credential JWT, or a VCDM 2.0 credential secured with SD-JWT
+    /// (`vc+sd-jwt`) with the disclosures to keep.
     pub credential: SignedCredential,
 }
 
 /// Store a credential in the organisation's wallet
 ///
-/// Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+/// Imports a credential into the organisation's holder wallet: a credential JWT, or a VCDM 2.0 credential secured
+/// with SD-JWT (`vc+sd-jwt`), whose issuer signature and validity period are verified first.
 #[utoipa::path(
     post,
     path = "/holder/credentials",
@@ -65,7 +66,7 @@ pub struct HolderCredentialsEndpointRequest {
     responses(
         (status = 201, description = "Credential stored successfully", body = Credential),
         (status = 400, description = "Malformed JSON request body"),
-        (status = 422, description = "Request body does not match the expected schema, or the credential could not be decoded"),
+        (status = 422, description = "Request body does not match the expected schema, the credential could not be decoded, or its issuer signature, validity period or status does not hold"),
     )
 )]
 #[axum_macros::debug_handler]
