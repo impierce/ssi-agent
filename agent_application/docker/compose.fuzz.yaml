@@ -2,14 +2,21 @@
 #
 # Deliberately separate from `compose.yaml` rather than an override of it:
 #   - its own project name, so a fuzz run never disturbs a local development stack;
-#   - no published port on 3033, which is where a development instance usually lives;
-#   - no pgadmin, no persistent volumes, no event publishers.
+#   - no pgadmin, no persistent volumes, no event publishers;
+#   - an internal network without a route to the outside, so no generated request reaches a third
+#     party, whatever URL or domain it carries. Readiness checks and seeding therefore run inside the
+#     network too, from the Schemathesis container.
 
 name: unicore-fuzz
+
+networks:
+  fuzz:
+    internal: true
 
 services:
   fuzz-postgres:
     image: postgres:17
+    networks: [fuzz]
     environment:
       POSTGRES_DB: fuzz
       POSTGRES_USER: fuzz_user
@@ -29,13 +36,10 @@ services:
     build:
       context: ../..
       dockerfile: ./agent_application/docker/Dockerfile
+    networks: [fuzz]
     depends_on:
       fuzz-postgres:
         condition: service_healthy
-    # Published so the runner script can poll `/readyz` and so a developer can inspect the
-    # instance while it is up. Schemathesis itself reaches the agent over the compose network.
-    ports:
-      - "${UNICORE_FUZZ_PORT:-3099}:3033"
     environment:
       UNICORE__PROFILE: development
       UNICORE__CONFIG_FILE: /app/config.yaml
@@ -44,18 +48,29 @@ services:
       UNICORE__EVENT_STORE__CONNECTION_STRING: postgresql://fuzz_user:fuzz_pass@fuzz-postgres:5432/fuzz
       # Throwaway instance, throwaway secret. Never reuse this value anywhere else.
       UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD: "fuzz-only-stronghold-password"
+      # Saved to `reports/fuzz/agent.log`. At `info`, every request body is logged, which a long run turns into
+      # gigabytes; warnings and errors are what explains a finding.
+      RUST_LOG: ${FUZZ_AGENT_LOG_LEVEL:-warn}
     volumes:
       - ./fuzz.config.yaml:/app/config.yaml:ro
 
   schemathesis:
-    image: ghcr.io/schemathesis/schemathesis:${SCHEMATHESIS_VERSION:-4.9.4}
+    image: schemathesis/schemathesis:${SCHEMATHESIS_VERSION:-v4.33.1}
     # Started only via `docker compose run`, never by `docker compose up`.
     profiles: ["tools"]
+    networks: [fuzz]
     depends_on:
       - ssi-agent
     volumes:
       # `openapi.yaml` or `openapi-full.yaml`, as selected by `FUZZ_SPEC` in the runner script.
       - ../../agent_api_http/${FUZZ_SPEC_FILE:-openapi.yaml}:/spec/openapi.yaml:ro
+      - ./schemathesis.toml:/config/schemathesis.toml:ro
+      - ./schemathesis_hooks.py:/config/schemathesis_hooks.py:ro
+      - ../../scripts/fuzz-seed.py:/scripts/fuzz-seed.py:ro
       - ../../reports/fuzz:/reports
+    environment:
+      # Loaded before the command line is parsed. Through `hooks` in `schemathesis.toml`, the image's bundled
+      # coverage plugin fails to start (`KeyError: 'coverage_format'`).
+      SCHEMATHESIS_HOOKS: /config/schemathesis_hooks.py
     # The arguments come from `scripts/fuzz-openapi.sh`.
     entrypoint: ["schemathesis"]
