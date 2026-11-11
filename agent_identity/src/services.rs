@@ -13,12 +13,13 @@ use identity_kit::{
     jose::DefaultVerifier,
     linked_vp::{self, LinkedVpError, LinkedVpValidationOptions, LinkedVpValidator},
     resolver::{CompositeKeyResolver, DocumentKeyResolver},
+    sd_jwt_vc::{SdJwtCredentialValidator, SdJwtValidationOptions},
     vc::{
         validation::{
             decode_credential, extract_holder, extract_issuer, CredentialValidationOptions, FailFast, StatusPolicy,
             SubjectHolderRelationship,
         },
-        Jwt,
+        CredentialV2, EnvelopedVc, Jwt,
     },
 };
 use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
@@ -113,29 +114,38 @@ pub(crate) async fn validate_linked_verifiable_presentation(
     // the holder's document doesn't hold, so their errors are not the presentation's.
     let options = LinkedVpValidationOptions::new().with_subject_holder(SubjectHolderRelationship::Any);
     match LinkedVpValidator::new(DocumentKeyResolver::new(holder_document.clone()), DefaultVerifier)
-        .validate(presentation, &holder, &options)
+        .validate_any(presentation, &holder, &options)
         .await
     {
         Ok(_) => {}
         Err(LinkedVpError::Presentation(error)) if error.presentation.is_none() => {}
         Err(error) => return Err(invalid(error.to_string())),
     }
-    let credentials = linked_vp::decode(presentation)
-        .map_err(|error| invalid(error.to_string()))?
-        .credentials
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
+    // The subject IDs of each embedded credential, in either form of presentation.
+    let subject_ids: Vec<Vec<String>> =
+        if linked_vp::is_vcdm2(presentation).map_err(|error| invalid(error.to_string()))? {
+            linked_vp::decode_v2(presentation)
+                .map_err(|error| invalid(error.to_string()))?
+                .credentials
+                .into_iter()
+                .map(|decoded| decoded.map(|decoded| subject_ids(decoded.credential().credential_subject.iter())))
+                .collect::<Result<_, _>>()
+        } else {
+            linked_vp::decode(presentation)
+                .map_err(|error| invalid(error.to_string()))?
+                .credentials
+                .into_iter()
+                .map(|decoded| decoded.map(|decoded| subject_ids(decoded.credential.credential_subject.iter())))
+                .collect::<Result<_, _>>()
+        }
         .map_err(|error| invalid(error.to_string()))?;
-    if credentials.is_empty() {
+    if subject_ids.is_empty() {
         return Err(invalid("the presentation contains no credentials".to_owned()));
     }
-    if credentials.iter().any(|decoded| {
-        !decoded
-            .credential
-            .credential_subject
-            .iter()
-            .any(|subject| subject.id.as_ref().is_some_and(|id| id.as_str() == holder.as_str()))
-    }) {
+    if subject_ids
+        .iter()
+        .any(|ids| !ids.iter().any(|id| id == holder.as_str()))
+    {
         return Err(invalid(format!(
             "holder DID `{holder}` is not the subject of every embedded credential"
         )));
@@ -349,6 +359,12 @@ impl IdentityServices {
             .with_subject_holder(SubjectHolderRelationship::Any)
             .with_fail_fast(FailFast::AllErrors);
 
+        if linked_vp::is_vcdm2(&presentation_jwt).unwrap_or(false) {
+            return Ok(self
+                .validated_credentials_v2(&validator, &presentation_jwt, &holder_document.id, &options, url)
+                .await);
+        }
+
         // What the presentation carries, one entry of `verifiableCredential` each, read without verifying anything, so
         // that credentials can be reported whatever their outcome.
         let entries = presented_entries(&presentation_jwt);
@@ -360,6 +376,7 @@ impl IdentityServices {
                 .ok()
                 .and_then(|jwt| decode_credential(&jwt).ok())
                 .map(|decoded| decoded.credential),
+            credential_v2: None,
             jwt: credential_jwt.to_owned(),
             result: ValidationResult {
                 valid: error.is_none(),
@@ -421,6 +438,111 @@ impl IdentityServices {
                     credentials.push(result(credential_jwt, error));
                 }
                 Ok((credentials, Some(error.to_string())))
+            }
+        }
+    }
+
+    /// [`validated_credentials`](Self::validated_credentials) for a VCDM 2.0 presentation (`vp+jwt`): each credential
+    /// unwrapped from its envelope, reported with its own outcome, and the presentation's own error when its signature
+    /// could not be verified.
+    async fn validated_credentials_v2(
+        &self,
+        validator: &LinkedVpValidator<CompositeKeyResolver>,
+        presentation_jwt: &Jwt,
+        holder: &Did,
+        options: &LinkedVpValidationOptions,
+        url: &Url,
+    ) -> (Vec<LinkedCredentialValidation>, Option<String>) {
+        // What the presentation carries, one envelope each, read without verifying anything.
+        let decoded = linked_vp::decode_v2(presentation_jwt);
+        let entries: Vec<(&EnvelopedVc, Option<CredentialV2>)> = match &decoded {
+            Ok(decoded) => decoded
+                .presentation
+                .verifiable_credential
+                .iter()
+                .zip(&decoded.credentials)
+                .map(|(envelope, credential)| {
+                    (
+                        envelope,
+                        credential
+                            .as_ref()
+                            .ok()
+                            .map(|credential| credential.credential().clone()),
+                    )
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        let last_validated_at = self.now();
+        let result = |(envelope, credential): &(&EnvelopedVc, Option<CredentialV2>), error: Option<String>| {
+            LinkedCredentialValidation {
+                credential: None,
+                credential_v2: credential.clone(),
+                jwt: envelope.data().to_owned(),
+                result: ValidationResult {
+                    valid: error.is_none(),
+                    error,
+                    last_validated_at,
+                },
+            }
+        };
+        let issued_by = |credential: &Option<CredentialV2>, error: &dyn std::fmt::Display| match credential {
+            Some(credential) => format!(
+                "Failed to validate credential issued by '{}': {error}",
+                credential.issuer.id()
+            ),
+            None => format!("Failed to decode credential: {error}"),
+        };
+
+        match validator.validate_v2(presentation_jwt, holder, options).await {
+            Ok(_) => (entries.iter().map(|entry| result(entry, None)).collect(), None),
+            Err(LinkedVpError::Presentation(error)) if error.presentation.is_none() => {
+                // Each envelope fails alone, under its index.
+                let credentials = entries
+                    .iter()
+                    .enumerate()
+                    .map(|(index, entry)| {
+                        let error = error.credentials.get(&index).map(|error| issued_by(&entry.1, error));
+                        result(entry, error)
+                    })
+                    .collect();
+                (credentials, None)
+            }
+            Err(error) => {
+                warn!("Failed to validate the linked presentation at '{url}': {error}");
+                // The credentials weren't validated with the presentation, so each one is validated on its own.
+                let credential_validator = validator.presentation_validator().credential_validator();
+                let mut credentials = Vec::with_capacity(entries.len());
+                for entry in &entries {
+                    let (envelope, credential) = entry;
+                    let outcome = if envelope.is_sd_jwt() {
+                        match envelope.to_sd_jwt() {
+                            Ok(sd_jwt) => SdJwtCredentialValidator::new(
+                                credential_validator.resolver(),
+                                credential_validator.verifier(),
+                            )
+                            .validate_v2(
+                                &sd_jwt,
+                                &SdJwtValidationOptions::new().with_status(options.credentials.status),
+                            )
+                            .await
+                            .map(|_| ())
+                            .map_err(|error| error.to_string()),
+                            Err(error) => Err(error.to_string()),
+                        }
+                    } else {
+                        match envelope.to_jwt() {
+                            Ok(jwt) => credential_validator
+                                .validate_v2(&jwt, &options.credentials)
+                                .await
+                                .map(|_| ())
+                                .map_err(|error| error.to_string()),
+                            Err(error) => Err(error.to_string()),
+                        }
+                    };
+                    credentials.push(result(entry, outcome.err().map(|error| issued_by(credential, &error))));
+                }
+                (credentials, Some(error.to_string()))
             }
         }
     }
@@ -498,6 +620,13 @@ impl IdentityServices {
         }
         Ok(config)
     }
+}
+
+/// The IDs of `subjects`.
+fn subject_ids<'a>(subjects: impl Iterator<Item = &'a identity_kit::vc::Subject>) -> Vec<String> {
+    subjects
+        .filter_map(|subject| subject.id.as_ref().map(|id| id.as_str().to_owned()))
+        .collect()
 }
 
 /// The entries of the presentation's `vp.verifiableCredential`, one credential or a list of them, read without
@@ -730,7 +859,8 @@ mod tests {
         did::{DidUrl, MethodType, VerificationMaterial, VerificationMethod, VerificationRelationship},
         jose::{Jwk, JwsAlgorithm, JwsHeader, KeyType},
         keys::{InMemoryKeyStore, KeyId, KeySigner, KeySpec, KeyStore},
-        linked_vp::LinkedPresentationBuilder,
+        linked_vp::{LinkedPresentationBuilder, LinkedPresentationV2Builder},
+        sd_jwt_vc::{SdJwt, SdJwtCredentialV2Builder},
         vc::{Credential, Subject as CredentialSubject},
     };
     use wiremock::{
@@ -839,6 +969,37 @@ mod tests {
                 .unwrap()
         }
 
+        fn credential_v2(&self) -> CredentialV2 {
+            let subject = CredentialSubject::new(self.document.id.clone()).with_property("name", "Example LLC");
+            CredentialV2::new(self.document.id.clone(), subject)
+                .with_type("OrganizationCredential")
+                .with_valid_from("2026-03-04T12:00:00Z".parse().unwrap())
+        }
+
+        /// `credential` secured with SD-JWT, its subject's name concealed.
+        async fn sd_jwt_credential(&self, credential: &CredentialV2, method: &DidUrl) -> SdJwt {
+            SdJwtCredentialV2Builder::new(credential.clone())
+                .with_kid(method.as_str())
+                .conceal(["credentialSubject", "name"])
+                .sign(&self.signer(method).await)
+                .await
+                .unwrap()
+                .into_sd_jwt()
+        }
+
+        /// A VCDM 2.0 presentation (`vp+jwt`) of `credentials`, each disclosed in full.
+        async fn presentation_v2_jwt(&self, credentials: &[SdJwt], method: &DidUrl) -> Jwt {
+            credentials
+                .iter()
+                .fold(
+                    LinkedPresentationV2Builder::new(self.document.id.clone()),
+                    |builder, sd_jwt| builder.with_credential(EnvelopedVc::from_sd_jwt(sd_jwt)),
+                )
+                .sign(method, &self.signer(method).await)
+                .await
+                .unwrap()
+        }
+
         /// A presentation of `credential_jwt` followed by an entry that is not a JWT and one that is not even a string.
         async fn presentation_jwt_with_malformed_entries(&self, credential_jwt: Jwt, method: &DidUrl) -> Jwt {
             self.presentation_jwt_with_entries(credential_jwt, ["not-a-jwt".into(), 42.into()], method)
@@ -924,6 +1085,7 @@ mod tests {
     fn unavailable_credential_is_omitted_from_json() {
         let validation = LinkedCredentialValidation {
             credential: None,
+            credential_v2: None,
             jwt: "invalid.jwt".to_string(),
             result: ValidationResult {
                 valid: false,
@@ -1090,6 +1252,148 @@ mod tests {
                 "{entry}: {result:?}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn a_vcdm2_presentation_can_be_published() {
+        let mock_server = MockServer::start().await;
+        let mut holder = Holder::new(&mock_server);
+        let method = holder.add_key().await;
+        let sd_jwt = holder.sd_jwt_credential(&holder.credential_v2(), &method).await;
+        let presentation_jwt = holder.presentation_v2_jwt(&[sd_jwt], &method).await;
+
+        let result = validate_linked_verifiable_presentation(
+            "presentation",
+            Some(&presentation_jwt),
+            &[holder.document.clone()],
+        )
+        .await;
+
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn a_vcdm2_presentation_of_another_subject_cannot_be_published() {
+        let mock_server = MockServer::start().await;
+        let mut holder = Holder::new(&mock_server);
+        let method = holder.add_key().await;
+        let credential = CredentialV2::new(
+            holder.document.id.clone(),
+            CredentialSubject::new("did:example:other".parse::<Did>().unwrap()).with_property("name", "Other LLC"),
+        );
+        let sd_jwt = holder.sd_jwt_credential(&credential, &method).await;
+        let presentation_jwt = holder.presentation_v2_jwt(&[sd_jwt], &method).await;
+
+        let result = validate_linked_verifiable_presentation(
+            "presentation",
+            Some(&presentation_jwt),
+            &[holder.document.clone()],
+        )
+        .await;
+
+        assert!(
+            matches!(&result, Err(ServiceError::PresentationInvalid(_, reason)) if reason.contains("not the subject")),
+            "{result:?}"
+        );
+    }
+
+    /// `sd_jwt` with the signature of its issuer-signed JWT replaced.
+    fn forged(sd_jwt: &SdJwt) -> SdJwt {
+        let serialized = sd_jwt.to_string();
+        let (jwt, disclosures) = serialized.split_once('~').unwrap();
+        let (signed, _signature) = jwt.rsplit_once('.').unwrap();
+        format!("{signed}.c2lnbmF0dXJl~{disclosures}").parse().unwrap()
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_returns_the_credentials_of_a_vcdm2_presentation() {
+        let mock_server = MockServer::start().await;
+        let mut holder = Holder::new(&mock_server);
+        let holder_did = holder.did().to_owned();
+        let method = holder.add_key().await;
+        let credential = holder.credential_v2();
+        let sd_jwt = holder.sd_jwt_credential(&credential, &method).await;
+        let presentation_jwt = holder.presentation_v2_jwt(std::slice::from_ref(&sd_jwt), &method).await;
+        holder.serve(&mock_server, &presentation_jwt).await;
+
+        let validations = IdentityServices::default()
+            .fetch_linked_vp_validations(&[verified_linked_did(&holder_did)])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        assert!(validations[0].result.valid, "{:?}", validations[0].result.error);
+        assert_eq!(validations[0].credentials.len(), 1);
+        let validation = &validations[0].credentials[0];
+        assert!(validation.result.valid, "{:?}", validation.result.error);
+        assert_eq!(validation.credential, None);
+        // The concealed name is disclosed in the presentation, so it is part of the credential.
+        assert_eq!(validation.credential_v2, Some(credential));
+        assert_eq!(validation.jwt, sd_jwt.to_string());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_reports_a_forged_credential_of_a_vcdm2_presentation() {
+        let mock_server = MockServer::start().await;
+        let mut holder = Holder::new(&mock_server);
+        let holder_did = holder.did().to_owned();
+        let method = holder.add_key().await;
+        let credential = holder.credential_v2();
+        let genuine = holder.sd_jwt_credential(&credential, &method).await;
+        let forged = forged(&holder.sd_jwt_credential(&credential, &method).await);
+        let presentation_jwt = holder.presentation_v2_jwt(&[genuine, forged], &method).await;
+        holder.serve(&mock_server, &presentation_jwt).await;
+
+        let validations = IdentityServices::default()
+            .fetch_linked_vp_validations(&[verified_linked_did(&holder_did)])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        assert!(!validations[0].result.valid);
+        assert_eq!(validations[0].credentials.len(), 2);
+        assert!(validations[0].credentials[0].result.valid);
+        let forged = &validations[0].credentials[1];
+        assert!(!forged.result.valid);
+        assert!(
+            forged.result.error.as_deref().unwrap().contains(&holder_did),
+            "{:?}",
+            forged.result.error
+        );
+        // Decoded without its signature verified.
+        assert_eq!(forged.credential_v2, Some(credential));
+    }
+
+    /// As [`fetch_linked_vp_validations_reports_credentials_of_an_unverifiable_presentation`], for a VCDM 2.0
+    /// presentation.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_reports_credentials_of_an_unverifiable_vcdm2_presentation() {
+        let mock_server = MockServer::start().await;
+        let mut holder = Holder::new(&mock_server);
+        let holder_did = holder.did().to_owned();
+        let issuing_method = holder.add_key().await;
+        let presenting_method = holder.add_key().await;
+        let credential = holder.credential_v2();
+        let sd_jwt = holder.sd_jwt_credential(&credential, &issuing_method).await;
+        let presentation_jwt = holder.presentation_v2_jwt(&[sd_jwt], &presenting_method).await;
+        assert!(holder.document.remove_verification_method(&presenting_method).is_some());
+        holder.serve(&mock_server, &presentation_jwt).await;
+
+        let validations = IdentityServices::default()
+            .fetch_linked_vp_validations(&[verified_linked_did(&holder_did)])
+            .await;
+
+        assert_eq!(validations.len(), 1);
+        assert!(!validations[0].result.valid);
+        assert!(validations[0].result.error.is_some());
+        assert_eq!(validations[0].credentials.len(), 1);
+        assert!(
+            validations[0].credentials[0].result.valid,
+            "{:?}",
+            validations[0].credentials[0].result.error
+        );
+        assert_eq!(validations[0].credentials[0].credential_v2, Some(credential));
     }
 
     #[test]
