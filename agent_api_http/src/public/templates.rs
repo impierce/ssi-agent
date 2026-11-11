@@ -3,6 +3,7 @@ use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
     DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility,
 };
+use agent_library::template::public_content::PublicTemplateContent;
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -13,11 +14,11 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
-// Compared to the internal `TemplateDto` this omits the identifiers (`id` and `sourceTemplateId`)
-// and `holderAuthorization` (issuance-side configuration). `status` and `visibility` are omitted as
-// well: every template returned here is by definition published and public, so both fields would be
-// constants. `modifiedAt` is kept because, absent a versioning system, it is the only signal a
-// reader has of how fresh a template is.
+// Compared to the internal `TemplateDto` this omits the identifiers (`id` and `sourceTemplateId`),
+// `origin`, and `holderAuthorization` (issuance-side configuration). `status` and `visibility` are
+// omitted as well: every template returned here is by definition published and public, so both
+// fields would be constants. `modifiedAt` is kept because, absent a versioning system, it is the
+// only signal a reader has of how fresh a template is.
 //
 // Data transfer object for publicly available Templates.
 //
@@ -43,20 +44,35 @@ pub struct PublicTemplateDto {
 
 impl From<agent_library::template::views::TemplateView> for PublicTemplateDto {
     fn from(value: agent_library::template::views::TemplateView) -> Self {
-        let display = Display::resolve(value.display, &value.title);
+        let modified_at = value.modified_at.clone();
+
+        // Exhaustive on both sides: a field added to `PublicTemplateContent`, the input of the
+        // template origin digest, fails to compile here until this projection carries it too.
+        let PublicTemplateContent {
+            title,
+            description,
+            display,
+            data_model,
+            holder_type,
+            r#type,
+            tags,
+            credential_expiration,
+            schema,
+            schema_properties_attributes,
+        } = PublicTemplateContent::from(value);
 
         Self {
-            title: value.title,
-            description: value.description,
+            title,
+            description,
             display,
-            data_model: value.data_model,
-            holder_type: value.holder_type,
-            r#type: value.r#type,
-            tags: value.tags,
-            credential_expiration: value.credential_expiration,
-            schema: *value.schema,
-            schema_properties_attributes: value.schema_properties_attributes,
-            modified_at: value.modified_at,
+            data_model,
+            holder_type,
+            r#type,
+            tags,
+            credential_expiration,
+            schema,
+            schema_properties_attributes,
+            modified_at,
         }
     }
 }
@@ -261,6 +277,12 @@ mod tests {
     async fn does_not_expose_internal_fields() {
         let app = app(vec![TemplateView {
             source_template_id: Some("the-source-template".to_string()),
+            origin: Some(agent_library::template::origin::TemplateOrigin {
+                source: "https://issuer.example".to_string(),
+                source_template_id: "0b7c".to_string(),
+                digest: format!("sha256-{}", "a".repeat(64)),
+                check_for_updates: true,
+            }),
             holder_authorization: agent_shared::config::Authorization {
                 pre_authorized: false,
                 tx_code_constraints: None,
@@ -282,7 +304,14 @@ mod tests {
         let template = &body.as_array().unwrap()[0];
         let keys: Vec<&String> = template.as_object().unwrap().keys().collect();
 
-        for internal_field in ["id", "sourceTemplateId", "status", "visibility", "holderAuthorization"] {
+        for internal_field in [
+            "id",
+            "sourceTemplateId",
+            "origin",
+            "status",
+            "visibility",
+            "holderAuthorization",
+        ] {
             assert!(
                 !keys.contains(&&internal_field.to_string()),
                 "`{internal_field}` must not be exposed publicly, got: {keys:?}"
@@ -296,5 +325,36 @@ mod tests {
         assert_eq!(template["description"], "A description");
         assert_eq!(template["type"], serde_json::json!(["VerifiableCredential"]));
         assert_eq!(template["schema"], serde_json::json!({ "type": "object" }));
+    }
+
+    #[test]
+    fn projection_without_modified_at_is_the_public_content() {
+        let template = TemplateView {
+            description: Some("A description".to_string()),
+            display: Some(Display {
+                name: String::new(),
+                logo: None,
+            }),
+            tags: Some(vec!["education".to_string()]),
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(Some(serde_json::json!({ "type": "object" }))),
+            ..template(
+                "public-published",
+                Status::Published,
+                Visibility::Public,
+                "2026-01-01T00:00:00Z",
+            )
+        };
+
+        let mut projection = serde_json::to_value(PublicTemplateDto::from(template.clone())).unwrap();
+        projection.as_object_mut().unwrap().remove("modifiedAt");
+
+        assert_eq!(projection, serde_json::to_value(template.public_content()).unwrap());
+        assert_eq!(
+            serde_json::from_value::<PublicTemplateContent>(projection)
+                .unwrap()
+                .digest(),
+            template.public_content().digest()
+        );
     }
 }

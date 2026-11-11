@@ -29,6 +29,7 @@ impl View<Template> for Template {
                 schema,
                 schema_properties_attributes,
                 holder_authorization,
+                origin,
             } => {
                 self.template_id.clone_from(template_id);
                 self.source_template_id.clone_from(source_template_id);
@@ -47,6 +48,7 @@ impl View<Template> for Template {
                 self.schema_properties_attributes
                     .clone_from(schema_properties_attributes);
                 self.holder_authorization = holder_authorization.clone();
+                self.origin = origin.as_deref().cloned();
             }
             TitleUpdated {
                 template_id: _,
@@ -121,8 +123,9 @@ impl View<Template> for Template {
                 schema_properties_attributes,
                 modified_at,
             } => {
-                self.schema_properties_attributes
-                    .replace(schema_properties_attributes.clone());
+                // No attributes are stored as `None`, as `TemplateCreated` stores them.
+                self.schema_properties_attributes =
+                    (!schema_properties_attributes.is_empty()).then(|| schema_properties_attributes.clone());
                 self.modified_at.replace(modified_at.clone());
             }
             CredentialExpirationUpdated {
@@ -139,6 +142,14 @@ impl View<Template> for Template {
                 modified_at,
             } => {
                 self.holder_authorization = holder_authorization.clone();
+                self.modified_at.replace(modified_at.clone());
+            }
+            OriginUpdated {
+                template_id: _,
+                origin,
+                modified_at,
+            } => {
+                self.origin.clone_from(origin);
                 self.modified_at.replace(modified_at.clone());
             }
             TemplateDeleted { template_id: _ } => {
@@ -189,6 +200,7 @@ mod tests {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: agent_shared::config::Authorization::default(),
+            origin: None,
         })
     }
 
@@ -220,6 +232,20 @@ mod tests {
 
         assert_eq!(view.description, None);
         assert_eq!(view.modified_at.as_deref(), Some("2024-01-02T00:00:00Z"));
+    }
+
+    #[test]
+    fn schema_properties_attributes_updated_with_an_empty_map_clears_them() {
+        let mut view = Template::default();
+        view.update(&created_event());
+
+        view.update(&event(TemplateEvent::SchemaPropertiesAttributesUpdated {
+            template_id: "template-id".to_string(),
+            schema_properties_attributes: HashMap::new(),
+            modified_at: "2024-01-02T00:00:00Z".to_string(),
+        }));
+
+        assert_eq!(view.schema_properties_attributes, None);
     }
 
     #[test]

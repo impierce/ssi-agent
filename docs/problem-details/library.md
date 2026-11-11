@@ -80,6 +80,10 @@ This error occurs when `schemaPropertiesAttributes` contains duplicate keys afte
 
 This error occurs when a template in `Draft` stage is made public.
 
+## Invalid Template Origin
+
+This error occurs when a template's `origin` is malformed: `source` is not an absolute URI, `sourceTemplateId` is empty, or `digest` is not `sha256-` followed by 64 lowercase hexadecimal digits.
+
 # Catalogs
 
 ## Catalog Template Not Found

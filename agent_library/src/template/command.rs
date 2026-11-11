@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
+pub use super::origin::TemplateOrigin;
 use agent_shared::config::Authorization;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
@@ -24,6 +25,8 @@ pub enum TemplateCommand {
         schema: Box<Option<serde_json::Value>>,
         schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
         holder_authorization: Authorization,
+        #[serde(default)]
+        origin: Option<Box<TemplateOrigin>>,
     },
     UpdateTitle {
         template_id: String,
@@ -69,6 +72,14 @@ pub enum TemplateCommand {
         template_id: String,
         holder_authorization: Authorization,
     },
+    /// Replaces the origin, or removes it with `None`.
+    UpdateOrigin {
+        template_id: String,
+        // Required, though nullable: an absent `origin` must not match this variant, or the
+        // untagged deserialization would read `DeleteTemplate` as removing the origin.
+        #[serde(deserialize_with = "Option::deserialize")]
+        origin: Option<TemplateOrigin>,
+    },
     DeleteTemplate {
         template_id: String,
     },
@@ -89,6 +100,7 @@ impl CommandOperation for TemplateCommand {
             Self::UpdateSchemaPropertiesAttributes { .. } => "library.templates.schema_properties.update",
             Self::UpdateCredentialExpiration { .. } => "library.templates.credential_expiration.update",
             Self::UpdateHolderAuthorization { .. } => "library.templates.holder_authorization.update",
+            Self::UpdateOrigin { .. } => "library.templates.origin.update",
             Self::DeleteTemplate { .. } => "library.templates.delete",
         }
     }

@@ -3362,6 +3362,12 @@ components:
         holderType:
           $ref: '#/components/schemas/HolderType'
           default: individual
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+            description: Where the template is imported from, if it is.
+          - type: 'null'
+          default: null
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -5710,6 +5716,11 @@ components:
           type:
           - string
           - 'null'
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+            description: Where the template was imported from, if it was.
+          - type: 'null'
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -5751,6 +5762,38 @@ components:
           - 'null'
         uri:
           type: string
+    TemplateOrigin:
+      type: object
+      description: |-
+        Where a template was imported from.
+
+        Set by the importing caller, stored as given, and never fetched or verified. Compare `digest`
+        with the digest of the source's current public content to tell whether the source changed since
+        the import, and with the digest of the local template's public content to tell whether the copy
+        was edited locally.
+      required:
+      - source
+      - sourceTemplateId
+      - digest
+      properties:
+        checkForUpdates:
+          type: boolean
+          description: |-
+            Whether the importer wants to hear about changes at the source. Off for a copy that is meant to be taken once
+            and maintained locally. Not part of the template's public content, so it never changes its digest. Absent means
+            `true`.
+          default: true
+        digest:
+          type: string
+          description: |-
+            Digest of the template's public content at import time: `sha256-` followed by 64 lowercase
+            hexadecimal digits.
+        source:
+          type: string
+          description: URI of the source, e.g. the identifier of the publishing entity.
+        sourceTemplateId:
+          type: string
+          description: Identifier of the template at the source. Opaque.
     TokenErrorResponse:
       type: string
       description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
@@ -5931,6 +5974,11 @@ components:
         id:
           type: string
           default: ''
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+          - type: 'null'
+          description: Replaces the origin; `null` removes it. Applied after all other fields.
         schema: {}
         schemaPropertiesAttributes:
           type:

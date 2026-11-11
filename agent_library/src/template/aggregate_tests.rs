@@ -26,6 +26,7 @@ fn template_created_event_with_status(template_id: &str, status: Status) -> Temp
         schema: Box::new(None),
         schema_properties_attributes: None,
         holder_authorization: Authorization::default(),
+        origin: None,
     }
 }
 
@@ -66,6 +67,7 @@ async fn test_create_template(
             schema: Box::new(schema.clone()),
             schema_properties_attributes: schema_properties_attributes.clone(),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -85,6 +87,7 @@ async fn test_create_template(
             schema: Box::new(schema),
             schema_properties_attributes,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -110,6 +113,7 @@ async fn test_create_template_without_title(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_error_message("A title is required when creating or updating a template")
@@ -137,6 +141,7 @@ async fn test_create_template_with_empty_title(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_error_message("A title is required when creating or updating a template")
@@ -164,6 +169,7 @@ async fn test_create_template_rejects_archived_status_on_create(template_id: Str
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_error_message("Invalid status on create: only Draft or Published are allowed")
@@ -191,6 +197,7 @@ async fn test_update_title_with_empty_string(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateTitle {
             template_id,
@@ -227,6 +234,7 @@ async fn test_update_display_keeps_empty_name_instead_of_materializing_the_title
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateDisplay {
             template_id: template_id.clone(),
@@ -361,6 +369,7 @@ async fn test_update_type_normalizes_standard_input(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateType {
             template_id: template_id.clone(),
@@ -418,6 +427,7 @@ async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: 
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateType {
             template_id,
@@ -508,6 +518,7 @@ async fn test_create_open_badges_template_rejects_extra_types(template_id: Strin
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_error_message("Invalid type: OpenBadges type includes disallowed extra entries: [ExtraType]")
@@ -535,6 +546,7 @@ async fn test_update_status_reject_invalid_archived_to_draft(template_id: String
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateStatus {
             template_id,
@@ -581,6 +593,7 @@ async fn test_create_open_badges_template_missing_required_achievement_propertie
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message(
             "Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [/achievement/criteria, /achievement/name]"
@@ -630,6 +643,7 @@ async fn test_create_open_badges_template_with_array_type_in_schema(template_id:
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message(
             "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields."
@@ -708,6 +722,7 @@ async fn test_create_template_with_invalid_schema(template_id: String) {
             schema: Box::new(Some(invalid_schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
 }
@@ -734,6 +749,7 @@ async fn test_create_template_with_no_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -753,6 +769,7 @@ async fn test_create_template_with_no_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -782,6 +799,7 @@ async fn test_update_schema_with_invalid_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id,
@@ -819,6 +837,7 @@ async fn test_update_schema_with_valid_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -876,6 +895,7 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [nonexistent]")
 }
@@ -912,6 +932,7 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
             schema: Box::new(None),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
 }
@@ -955,6 +976,7 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_error_message("schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates")
@@ -999,6 +1021,7 @@ async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -1039,6 +1062,7 @@ async fn test_update_field_attributes_with_no_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -1086,6 +1110,7 @@ async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -1142,6 +1167,7 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
@@ -1216,6 +1242,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -1286,6 +1313,7 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -1365,6 +1393,7 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id,
@@ -1525,6 +1554,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
@@ -1580,6 +1610,7 @@ async fn test_create_open_badges_template_errors_when_required_properties_missin
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [/achievement/criteria, /achievement/name]")
 }
@@ -1673,6 +1704,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -1692,6 +1724,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -1811,6 +1844,7 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -1830,6 +1864,7 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -1888,6 +1923,7 @@ async fn test_create_open_badges_template_rejects_unknown_profile_property(templ
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/profile`: [phoneNumber]")
 }
@@ -1928,6 +1964,7 @@ async fn test_create_open_badges_template_rejects_profile_field_wrong_type(templ
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/givenName]")
 }
@@ -1968,6 +2005,7 @@ async fn test_create_open_badges_template_rejects_profile_email_without_format(t
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/email]")
 }
@@ -2011,6 +2049,7 @@ async fn test_create_open_badges_template_rejects_non_object_profile(
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile]")
 }
@@ -2047,6 +2086,7 @@ async fn test_create_open_badges_template_rejects_array_profile(template_id: Str
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message(
             "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.",
@@ -2093,6 +2133,7 @@ async fn test_create_open_badges_template_rejects_unsanctioned_format_on_profile
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/familyName, /profile/givenName]")
 }
@@ -2186,6 +2227,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -2205,6 +2247,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -2268,6 +2311,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(existing_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id: template_id.clone(),
@@ -2324,6 +2368,7 @@ async fn test_create_open_badges_template_rejects_disallowed_properties(template
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/`: [not_allowed_field]")
 }
@@ -2422,6 +2467,7 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id,
@@ -2523,6 +2569,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -2542,6 +2589,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -2630,6 +2678,7 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -2649,6 +2698,7 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -2683,6 +2733,7 @@ async fn test_create_template_rejects_array_type(template_id: String) {
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.")
 }
@@ -2716,6 +2767,7 @@ async fn test_update_schema_rejects_array_type(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
         .when_async(TemplateCommand::UpdateSchema {
             template_id,
@@ -2792,6 +2844,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs.clone()),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -2811,6 +2864,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -2859,6 +2913,7 @@ async fn test_create_template_rejects_attribute_key_pointing_to_object_node(temp
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [/address]")
 }
@@ -2936,6 +2991,7 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             schema: Box::new(Some(schema.clone())),
             schema_properties_attributes: Some(attributes.clone()),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
         .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
@@ -2955,5 +3011,465 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attributes),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
+}
+
+fn origin(digest_byte: char) -> TemplateOrigin {
+    TemplateOrigin {
+        source: "https://issuer.example".to_string(),
+        source_template_id: "0b7c".to_string(),
+        digest: format!("sha256-{}", digest_byte.to_string().repeat(64)),
+        check_for_updates: true,
+    }
+}
+
+fn create_command_with_origin(template_id: &str, origin: Option<TemplateOrigin>) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Test".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::W3CVcDataModelV1_1,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: None,
+        r#type: vec![],
+        schema: Box::new(None),
+        schema_properties_attributes: None,
+        holder_authorization: Authorization::default(),
+        origin: origin.map(Box::new),
+    }
+}
+
+fn template_created_event_with_origin(template_id: &str, origin: Option<TemplateOrigin>) -> TemplateEvent {
+    let TemplateEvent::TemplateCreated {
+        template_id,
+        source_template_id,
+        title,
+        display,
+        data_model,
+        holder_type,
+        modified_at,
+        tags,
+        status,
+        visibility,
+        credential_expiration,
+        description,
+        schema,
+        schema_properties_attributes,
+        holder_authorization,
+        ..
+    } = template_created_event_with_status(template_id, Status::Draft)
+    else {
+        unreachable!()
+    };
+
+    TemplateEvent::TemplateCreated {
+        template_id,
+        source_template_id,
+        title,
+        display,
+        data_model,
+        holder_type,
+        modified_at,
+        tags,
+        status,
+        visibility,
+        credential_expiration,
+        description,
+        r#type: vec!["VerifiableCredential".to_string()],
+        schema,
+        schema_properties_attributes,
+        holder_authorization,
+        origin: origin.map(Box::new),
+    }
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_template_with_origin(template_id: String) {
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when_async(create_command_with_origin(&template_id, Some(origin('a'))))
+        .await
+        .then_expect_events(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_template_with_invalid_origin_is_rejected(template_id: String) {
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when_async(create_command_with_origin(
+            &template_id,
+            Some(TemplateOrigin {
+                digest: "sha256-A".to_string(),
+                ..origin('a')
+            }),
+        ))
+        .await
+        .then_expect_error_message(
+            "Invalid origin: `digest` must be `sha256-` followed by 64 lowercase hexadecimal digits",
+        )
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_replaces_origin(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('b')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('b')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_turns_update_checks_off_and_on(template_id: String) {
+    let opted_out = TemplateOrigin {
+        check_for_updates: false,
+        ..origin('a')
+    };
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(opted_out.clone()),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id: template_id.clone(),
+            origin: Some(opted_out.clone()),
+            modified_at: test_utils::modified_at(),
+        }]);
+
+    TemplateTestFramework::with(())
+        .given(vec![
+            template_created_event_with_origin(&template_id, Some(origin('a'))),
+            TemplateEvent::OriginUpdated {
+                template_id: template_id.clone(),
+                origin: Some(opted_out),
+                modified_at: test_utils::modified_at(),
+            },
+        ])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('a')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+/// Whether the importer checks for updates is about the copy, not its content, so it never changes the digest.
+#[test]
+fn update_checks_never_change_the_digest() {
+    let mut template = Template {
+        origin: Some(origin('a')),
+        ..Template::default()
+    };
+    let digest = template.public_content().digest();
+
+    template.origin = Some(TemplateOrigin {
+        check_for_updates: false,
+        ..origin('a')
+    });
+
+    assert_eq!(template.public_content().digest(), digest);
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_sets_origin_on_template_without_one(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(&template_id, None)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('a')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_with_none_removes_origin(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: None,
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: None,
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_with_invalid_origin_is_rejected(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(&template_id, None)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id,
+            origin: Some(TemplateOrigin {
+                source: "issuer.example".to_string(),
+                ..origin('a')
+            }),
+        })
+        .await
+        .then_expect_error_message("Invalid origin: `source` must be an absolute URI")
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_on_archived_template_is_rejected(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_status(&template_id, Status::Archived)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id,
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_error_message("Archived templates are immutable except for status changes")
+}
+
+#[rstest]
+fn origin_events_apply_to_aggregate_and_view(template_id: String) {
+    use crate::template::views::TemplateView;
+    use cqrs_es::{EventEnvelope, View};
+
+    let events = [
+        template_created_event_with_origin(&template_id, Some(origin('a'))),
+        TemplateEvent::OriginUpdated {
+            template_id: template_id.clone(),
+            origin: Some(origin('b')),
+            modified_at: "2024-02-01T00:00:00Z".to_string(),
+        },
+    ];
+
+    let mut aggregate = Template::default();
+    let mut view = TemplateView::default();
+    for (sequence, event) in (1..).zip(events) {
+        view.update(&EventEnvelope {
+            aggregate_id: template_id.clone(),
+            sequence,
+            payload: event.clone(),
+            metadata: HashMap::new(),
+        });
+        aggregate.apply(event);
+    }
+
+    assert_eq!(aggregate.origin, Some(origin('b')));
+    assert_eq!(view.origin, Some(origin('b')));
+    assert_eq!(view.modified_at.as_deref(), Some("2024-02-01T00:00:00Z"));
+
+    aggregate.apply(TemplateEvent::OriginUpdated {
+        template_id,
+        origin: None,
+        modified_at: "2024-03-01T00:00:00Z".to_string(),
+    });
+
+    assert_eq!(aggregate.origin, None);
+}
+
+#[rstest]
+fn template_created_event_without_origin_keeps_its_stored_form(template_id: String) {
+    let event = template_created_event_with_origin(&template_id, None);
+    let mut stored = serde_json::to_value(&event).unwrap();
+
+    assert!(stored["TemplateCreated"].get("origin").is_none(), "{stored}");
+    assert_eq!(serde_json::from_value::<TemplateEvent>(stored.clone()).unwrap(), event);
+
+    stored["TemplateCreated"]["origin"] = serde_json::to_value(origin('a')).unwrap();
+    assert_eq!(
+        serde_json::from_value::<TemplateEvent>(stored).unwrap(),
+        template_created_event_with_origin(&template_id, Some(origin('a')))
+    );
+}
+
+#[test]
+fn template_view_stored_without_origin_deserializes() {
+    let view: Template = serde_json::from_value(serde_json::json!({
+        "id": "template_id",
+        "title": "Test",
+        "data_model": "w3c_vc_data_model_v2-0",
+        "holder_type": "individual",
+        "status": "draft",
+        "visibility": "private",
+        "credential_expiration": { "type": "never" },
+        "type": ["VerifiableCredential"],
+        "schema": null,
+        "holder_authorization": { "pre_authorized": true },
+    }))
+    .unwrap();
+
+    assert_eq!(view.origin, None);
+}
+
+#[test]
+fn delete_template_command_does_not_deserialize_as_update_origin() {
+    let command: TemplateCommand = serde_json::from_value(serde_json::json!({ "template_id": "template_id" })).unwrap();
+
+    assert!(matches!(command, TemplateCommand::DeleteTemplate { .. }), "{command:?}");
+
+    let command: TemplateCommand =
+        serde_json::from_value(serde_json::json!({ "template_id": "template_id", "origin": null })).unwrap();
+
+    assert!(
+        matches!(command, TemplateCommand::UpdateOrigin { origin: None, .. }),
+        "{command:?}"
+    );
+}
+
+/// A Draft W3C VCDM 2.0 template with one `name` claim, created with `description` and `schema_properties_attributes`.
+fn create_command(
+    template_id: &str,
+    description: Option<&str>,
+    schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Test".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::W3CVcDataModelV2_0,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: description.map(ToString::to_string),
+        r#type: vec![],
+        schema: Box::new(Some(serde_json::json!({
+            "type": "object",
+            "properties": { "name": { "type": "string" } }
+        }))),
+        schema_properties_attributes,
+        holder_authorization: Authorization::default(),
+        origin: None,
+    }
+}
+
+fn disclosable() -> PropertyAttribute {
+    PropertyAttribute {
+        selectively_disclosable: true,
+        non_removable: false,
+        r#type: None,
+    }
+}
+
+/// The template after `commands`, each handled against the events the ones before it emitted.
+async fn template_after(commands: Vec<TemplateCommand>) -> Template {
+    let mut events = Vec::new();
+    for command in commands {
+        let emitted = TemplateTestFramework::with(())
+            .given(events.clone())
+            .when_async(command)
+            .await
+            .inspect_result()
+            .unwrap();
+        events.extend(emitted);
+    }
+
+    let mut template = Template::default();
+    for event in events {
+        template.apply(event);
+    }
+    template
+}
+
+/// A copy created with a description, and one whose description is updated to the same input, store and digest the
+/// same, so an imported copy updated by a re-import digests like its source.
+#[rstest]
+#[case::padded("  padded description  ", Some("padded description"))]
+#[case::empty("", None)]
+#[case::blank("   ", None)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_and_update_store_a_description_alike(
+    template_id: String,
+    #[case] description: &str,
+    #[case] expected: Option<&str>,
+) {
+    let created = template_after(vec![create_command(&template_id, Some(description), None)]).await;
+    let updated = template_after(vec![
+        create_command(&template_id, None, None),
+        TemplateCommand::UpdateDescription {
+            template_id: template_id.clone(),
+            description: description.to_string(),
+        },
+    ])
+    .await;
+
+    assert_eq!(created.description.as_deref(), expected);
+    assert_eq!(updated.description.as_deref(), expected);
+    assert_eq!(created.public_content().digest(), updated.public_content().digest());
+}
+
+/// Attribute keys are trimmed on create as on update, and no attributes are stored as `None` either way.
+#[rstest]
+#[case::padded_key(HashMap::from([(" /name ".to_string(), disclosable())]), Some(HashMap::from([("/name".to_string(), disclosable())])))]
+#[case::empty(HashMap::new(), None)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_and_update_store_schema_properties_attributes_alike(
+    template_id: String,
+    #[case] attributes: HashMap<String, PropertyAttribute>,
+    #[case] expected: Option<HashMap<String, PropertyAttribute>>,
+) {
+    let created = template_after(vec![create_command(&template_id, None, Some(attributes.clone()))]).await;
+    let updated = template_after(vec![
+        create_command(&template_id, None, None),
+        TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes: attributes,
+        },
+    ])
+    .await;
+
+    assert_eq!(created.schema_properties_attributes, expected);
+    assert_eq!(updated.schema_properties_attributes, expected);
+    assert_eq!(created.public_content().digest(), updated.public_content().digest());
 }
