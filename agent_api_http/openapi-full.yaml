@@ -111,7 +111,7 @@ paths:
           type: string
       responses:
         '302':
-          description: Redirect to the client's redirect URI
+          description: Redirect to the client's registered redirect URI, with `code` once consent is granted or `error=access_denied` once it is denied, and `state`
           headers:
             Location:
               schema:
@@ -125,7 +125,7 @@ paths:
                 type: string
               description: The consent page URI
         '400':
-          description: The query string is invalid, or the authorization request is unknown, expired, or for another client
+          description: The query string is invalid, the authorization request is unknown, expired, for another client or without a redirect URI (`invalid_request`), or its client is not registered or the redirect URI is not registered for it (`unauthorized_client`)
   /auth/consent:
     get:
       tags:
@@ -172,7 +172,7 @@ paths:
                 type: string
               description: The client's redirect URI
         '400':
-          description: The `request_uri` does not refer to a pending authorization request
+          description: The `request_uri` does not refer to a pending authorization request of the given client, or consent was already given or denied (`invalid_request`), or the client is not registered (`unauthorized_client`)
         '415':
           description: The request body is not `application/x-www-form-urlencoded`
         '422':
@@ -898,6 +898,8 @@ paths:
                 $ref: '#/components/schemas/Connection'
         '400':
           description: Malformed JSON request body
+        '502':
+          description: The credential issuer metadata of the URL could not be fetched
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -960,6 +962,10 @@ paths:
           description: Connection synced
         '400':
           description: Malformed JSON request body
+        '404':
+          description: Connection not found
+        '502':
+          description: The credential issuer metadata of the connection could not be fetched
   /v0/connections/{connection_id}:
     get:
       tags:
@@ -1229,6 +1235,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '409':
+          description: 'The credential has no status list entry: not issued yet, or signed outside UniCore'
         '422':
           description: Request body does not match the expected schema, or the status list can't hold the status
   /v0/delete-catalog:
@@ -2028,6 +2036,8 @@ paths:
           description: The credential offer does not exist
         '422':
           description: Request body does not match the expected schema
+        '502':
+          description: The target URL could not be reached or did not accept the offer
   /v0/offers/{offer_id}:
     get:
       tags:

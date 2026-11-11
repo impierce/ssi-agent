@@ -256,12 +256,11 @@ impl Aggregate for Offer {
                             "Sending credential offer"
                         );
 
-                        client
-                            .get(target)
-                            .send()
-                            .await
-                            .and_then(|response| response.error_for_status())
-                            .map_err(SendCredentialOfferError)?;
+                        let response = client.get(target).send().await.map_err(SendCredentialOfferError)?;
+                        // Redirects are followed; a final `304` or other non-2xx response is not a delivery.
+                        if !response.status().is_success() {
+                            return Err(CredentialOfferNotAcceptedError(response.status().as_u16()));
+                        }
 
                         Ok(vec![CredentialOfferSent {
                             offer_id,

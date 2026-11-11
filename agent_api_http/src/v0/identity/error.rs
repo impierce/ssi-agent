@@ -15,7 +15,7 @@ impl IntoApiErrorExt for ConnectionError {
                 .type_url(type_url("identity#connection-not-found"))
                 .message("No connection found.".to_string())
                 .finish(),
-            CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            CredentialIssuerMetadataFetchFailed(url) => ApiError::builder(StatusCode::BAD_GATEWAY)
                 .title("Credential Issuer Metadata Fetch Failed")
                 .type_url(type_url("identity#credential-issuer-metadata-fetch-failed"))
                 .message(format!("Failed to fetch credential issuer metadata from: {url}"))
@@ -141,7 +141,7 @@ mod tests {
             ),
             (
                 ConnectionError::CredentialIssuerMetadataFetchFailed("https://example.com".parse().unwrap()),
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::BAD_GATEWAY,
                 Some("identity#credential-issuer-metadata-fetch-failed"),
             ),
             (

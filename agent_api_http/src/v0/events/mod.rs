@@ -66,6 +66,35 @@ pub struct EventQueryParams {
     pub until: Option<DateTime<Utc>>,
 }
 
+/// An SSE field ends at a line break, so an `id` carrying one would end the frame early (axum's encoder panics on it).
+/// Event IDs embed aggregate IDs, which clients choose, so `%`, CR and LF are percent-encoded in the `id` field and
+/// decoded again from `Last-Event-ID`.
+fn encode_event_id(id: &str) -> String {
+    id.replace('%', "%25").replace('\r', "%0D").replace('\n', "%0A")
+}
+
+fn decode_event_id(encoded: &str) -> String {
+    let mut decoded = String::with_capacity(encoded.len());
+    let mut rest = encoded;
+    while let Some(index) = rest.find('%') {
+        decoded.push_str(&rest[..index]);
+        let escape = rest.get(index..index + 3);
+        match escape {
+            Some("%25") => decoded.push('%'),
+            Some("%0D") => decoded.push('\r'),
+            Some("%0A") => decoded.push('\n'),
+            _ => {
+                decoded.push('%');
+                rest = &rest[index + 1..];
+                continue;
+            }
+        }
+        rest = &rest[index + 3..];
+    }
+    decoded.push_str(rest);
+    decoded
+}
+
 pub fn router(state: Arc<EventsState>) -> Router {
     Router::new()
         .nest(
@@ -165,7 +194,7 @@ pub async fn events_sse_handler(
     let last_event_id = headers
         .get("last-event-id")
         .and_then(|header_value| header_value.to_str().ok())
-        .map(|id_str| id_str.to_string());
+        .map(decode_event_id);
 
     let limit = Some(params.limit.unwrap_or(DEFAULT_CATCHUP_LIMIT).min(MAX_CATCHUP_LIMIT));
 
@@ -202,7 +231,10 @@ pub async fn events_sse_handler(
         let event_type = cloud_event.event_type.clone();
         let event_id = cloud_event.id.clone();
         catchup_items.push(match serde_json::to_string(&cloud_event) {
-            Ok(json_data) => Ok(sse::Event::default().id(event_id).event(event_type).data(json_data)),
+            Ok(json_data) => Ok(sse::Event::default()
+                .id(encode_event_id(&event_id))
+                .event(event_type)
+                .data(json_data)),
             Err(err) => Ok(sse::Event::default()
                 .event("error")
                 .data(format!("Serialization error: {}", err))),
@@ -224,7 +256,7 @@ pub async fn events_sse_handler(
         // A browser `EventSource` takes its next `Last-Event-ID` from the frame's `id` and never
         // from the payload, so without this a reconnect repeats the query that truncated.
         if let Some(resume_after) = catchup_result.resume_after.as_deref() {
-            frame = frame.id(resume_after);
+            frame = frame.id(encode_event_id(resume_after));
         }
 
         catchup_items.push(Ok(frame));
@@ -246,7 +278,10 @@ pub async fn events_sse_handler(
                 let event_type = cloud_event.event_type.clone();
                 let event_id = cloud_event.id.clone();
                 match serde_json::to_string(&cloud_event) {
-                    Ok(json_data) => Ok(sse::Event::default().id(event_id).event(event_type).data(json_data)),
+                    Ok(json_data) => Ok(sse::Event::default()
+                        .id(encode_event_id(&event_id))
+                        .event(event_type)
+                        .data(json_data)),
                     Err(err) => Ok(sse::Event::default()
                         .event("error")
                         .data(format!("Serialization error: {}", err))),
@@ -324,6 +359,68 @@ mod tests {
 
         assert!(body_str.contains(&cred_event.id));
         assert!(!body_str.contains(&other_event.id));
+    }
+
+    #[test]
+    fn event_ids_round_trip_through_the_id_field() {
+        for id in [
+            "offer:plain:1",
+            "offer:a\nb\r:2",
+            "offer:100%:3",
+            "offer:%0A:4",
+            "offer:%:5",
+        ] {
+            let encoded = encode_event_id(id);
+            assert!(!encoded.contains(['\r', '\n']), "{encoded}");
+            assert_eq!(decode_event_id(&encoded), id);
+        }
+    }
+
+    #[tokio::test]
+    async fn events_with_line_breaks_in_their_id_stream_and_resume() {
+        let bus_handle = EventBusHandle::new(16);
+        let event1 = shared_kernel::event_bus::build_cloud_event(
+            "offer",
+            "a\nb",
+            1,
+            "OfferCreated",
+            serde_json::json!({}),
+            None,
+        );
+        let event2 =
+            shared_kernel::event_bus::build_cloud_event("offer", "a\nb", 2, "OfferSent", serde_json::json!({}), None);
+        bus_handle.publish(event1.clone());
+        bus_handle.publish(event2.clone());
+
+        for (last_event_id, expected) in [
+            (None, encode_event_id(&event1.id)),
+            (Some(encode_event_id(&event1.id)), encode_event_id(&event2.id)),
+        ] {
+            let app = router(Arc::new(bus_handle.clone().into()));
+            let mut req = axum::http::Request::builder().uri("/v0/events?sources=offer");
+            if let Some(last_event_id) = &last_event_id {
+                req = req.header("last-event-id", last_event_id);
+            }
+            let response = tower::ServiceExt::oneshot(app, req.body(axum::body::Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+            let mut body = response.into_body();
+            let frame = tokio::time::timeout(
+                std::time::Duration::from_millis(200),
+                http_body_util::BodyExt::frame(&mut body),
+            )
+            .await
+            .ok()
+            .flatten()
+            .and_then(|frame_res| frame_res.ok())
+            .and_then(|frame| frame.into_data().ok())
+            .map(|bytes| String::from_utf8(bytes.to_vec()).unwrap())
+            .unwrap_or_default();
+
+            assert!(frame.contains(&format!("id: {expected}\n")), "{frame}");
+        }
     }
 
     #[tokio::test]

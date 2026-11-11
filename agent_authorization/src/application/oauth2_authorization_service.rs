@@ -1,6 +1,7 @@
 use crate::{
     domain::{
-        authorization_code::command::AuthorizationCodeCommand, oauth2_authorization_request::aggregate::ConsentStatus,
+        authorization_code::command::AuthorizationCodeCommand,
+        oauth2_authorization_request::aggregate::{ConsentStatus, OAuth2AuthorizationRequest},
     },
     state::AuthorizationState,
 };
@@ -9,6 +10,7 @@ use oid4vc_core::utils::form_urlencoded::to_form_urlencoded_string;
 use oid4vci::wallet::AuthorizationRequestByReference;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::error;
 use url::Url;
 
 #[derive(Deserialize, Serialize)]
@@ -32,6 +34,8 @@ pub enum OAuth2AuthorizationError {
     InvalidClientIdError,
     #[error("Missing redirect URI")]
     MissingRedirectUriError,
+    #[error("The client is not registered, or the redirect URI is not one of its registered redirect URIs")]
+    UnauthorizedClient,
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -73,9 +77,7 @@ impl OAuth2AuthorizationService {
             }
             ConsentStatus::Expired => Err(OAuth2AuthorizationError::ExpiredAuthorizationRequestError),
             ConsentStatus::Granted => {
-                let redirect_uri = oauth2_authorization_request
-                    .redirect_uri
-                    .ok_or(OAuth2AuthorizationError::MissingRedirectUriError)?;
+                let redirect_uri = registered_redirect_uri(state, &oauth2_authorization_request).await?;
 
                 let authorization_code_id = uuid::Uuid::new_v4().to_string();
                 let command = AuthorizationCodeCommand::CreateAuthorizationCode {
@@ -89,26 +91,95 @@ impl OAuth2AuthorizationService {
                     expires_in: 600, // 10 minutes
                 };
 
-                public_command_handler(&authorization_code_id, &state.command.authorization_code, command)
-                    .await
-                    .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
-
-                let state = oauth2_authorization_request.state;
-
-                let redirect_uri_with_code = redirect_uri
-                    .join(&format!("?code={authorization_code_id}&state={state}"))
-                    .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?;
+                // The redirect URI is validated, so the failure is reported to the client (RFC 6749, section 4.1.2.1).
+                if let Err(err) =
+                    public_command_handler(&authorization_code_id, &state.command.authorization_code, command).await
+                {
+                    error!(error = %err, "Failed to create authorization code");
+                    return Ok(OAuth2AuthorizationServiceResponse::RedirectToClient(
+                        redirect_to_client(
+                            redirect_uri,
+                            ("error", "server_error"),
+                            &oauth2_authorization_request.state,
+                        ),
+                    ));
+                }
 
                 Ok(OAuth2AuthorizationServiceResponse::RedirectToClient(
-                    redirect_uri_with_code,
+                    redirect_to_client(
+                        redirect_uri,
+                        ("code", &authorization_code_id),
+                        &oauth2_authorization_request.state,
+                    ),
                 ))
             }
             ConsentStatus::Rejected => {
-                // TODO: where to redirect the user?
-                Err(OAuth2AuthorizationError::Internal(
-                    "Consent was rejected, but no redirect URI is specified".to_string(),
+                let redirect_uri = registered_redirect_uri(state, &oauth2_authorization_request).await?;
+
+                Ok(OAuth2AuthorizationServiceResponse::RedirectToClient(
+                    redirect_to_client(
+                        redirect_uri,
+                        ("error", "access_denied"),
+                        &oauth2_authorization_request.state,
+                    ),
                 ))
             }
         }
+    }
+}
+
+/// The redirect URI of the authorization request, if its client is registered and lists it. Pushed authorization
+/// requests of unregistered clients are accepted (see `PushedAuthorizationService`), so the redirect URI is checked
+/// again before anything is sent to it.
+async fn registered_redirect_uri(
+    state: &AuthorizationState,
+    oauth2_authorization_request: &OAuth2AuthorizationRequest,
+) -> Result<Url, OAuth2AuthorizationError> {
+    let redirect_uri = oauth2_authorization_request
+        .redirect_uri
+        .clone()
+        .ok_or(OAuth2AuthorizationError::MissingRedirectUriError)?;
+
+    let client = public_query_handler(&oauth2_authorization_request.client_id, &state.query.client)
+        .await
+        .map_err(|err| OAuth2AuthorizationError::Internal(err.to_string()))?
+        .ok_or(OAuth2AuthorizationError::UnauthorizedClient)?;
+
+    if !client.redirect_uris.contains(&redirect_uri) {
+        return Err(OAuth2AuthorizationError::UnauthorizedClient);
+    }
+
+    Ok(redirect_uri)
+}
+
+/// Appends the authorization response parameter and, if the request carried one, `state` to the redirect URI, keeping
+/// its query (RFC 6749, sections 3.1.2 and 4.1.2).
+fn redirect_to_client(mut redirect_uri: Url, (key, value): (&str, &str), state: &str) -> Url {
+    {
+        let mut query = redirect_uri.query_pairs_mut();
+        query.append_pair(key, value);
+        if !state.is_empty() {
+            query.append_pair("state", state);
+        }
+    }
+    redirect_uri
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redirect_parameters_are_encoded_and_keep_the_query() {
+        let redirect_uri: Url = "https://client.example/cb?tenant=a".parse().unwrap();
+
+        assert_eq!(
+            redirect_to_client(redirect_uri.clone(), ("code", "c"), "s&code=evil").as_str(),
+            "https://client.example/cb?tenant=a&code=c&state=s%26code%3Devil"
+        );
+        assert_eq!(
+            redirect_to_client(redirect_uri, ("error", "access_denied"), "").as_str(),
+            "https://client.example/cb?tenant=a&error=access_denied"
+        );
     }
 }

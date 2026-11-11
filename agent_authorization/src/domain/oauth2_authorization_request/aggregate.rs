@@ -47,6 +47,12 @@ pub struct OAuth2AuthorizationRequest {
     pub openid4vp_request: Option<serde_json::Value>,
 }
 
+impl OAuth2AuthorizationRequest {
+    fn consent_decided(&self) -> bool {
+        matches!(self.consent_status, ConsentStatus::Granted | ConsentStatus::Rejected)
+    }
+}
+
 impl Aggregate for OAuth2AuthorizationRequest {
     type Command = OAuth2AuthorizationRequestCommand;
     type Event = OAuth2AuthorizationRequestEvent;
@@ -104,6 +110,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     openid4vp_request,
                 }])
             }
+            GrantConsent if self.consent_decided() => Err(ConsentAlreadyDecided),
             GrantConsent => {
                 let now = chrono::Utc::now().timestamp();
                 if now > self.expires_at {
@@ -118,6 +125,7 @@ impl Aggregate for OAuth2AuthorizationRequest {
                     }])
                 }
             }
+            RejectConsent if self.consent_decided() => Err(ConsentAlreadyDecided),
             RejectConsent => {
                 let now = chrono::Utc::now().timestamp();
                 if now > self.expires_at {
@@ -295,6 +303,38 @@ pub mod oauth2_authorization_request_tests {
                 oauth2_authorization_request_id,
                 consent_status: ConsentStatus::Rejected,
             }]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn consent_is_decided_once(
+        oauth2_authorization_request_id: String,
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let decided = [
+            OAuth2AuthorizationRequestEvent::ConsentGranted {
+                oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
+                consent_status: ConsentStatus::Granted,
+            },
+            OAuth2AuthorizationRequestEvent::ConsentRejected {
+                oauth2_authorization_request_id,
+                consent_status: ConsentStatus::Rejected,
+            },
+        ];
+
+        for decision in decided {
+            for command in [
+                OAuth2AuthorizationRequestCommand::GrantConsent,
+                OAuth2AuthorizationRequestCommand::RejectConsent,
+            ] {
+                OAuth2AuthorizationRequestTestFramework::with(OAuth2AuthorizationRequestDomainServices::default())
+                    .given(vec![authorization_request_pushed_event.clone(), decision.clone()])
+                    .when_async(command)
+                    .await
+                    .then_expect_error_message(&OAuth2AuthorizationRequestError::ConsentAlreadyDecided.to_string());
+            }
+        }
     }
 
     fn expired(mut event: OAuth2AuthorizationRequestEvent) -> OAuth2AuthorizationRequestEvent {

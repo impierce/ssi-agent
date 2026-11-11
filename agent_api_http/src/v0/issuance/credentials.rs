@@ -862,6 +862,7 @@ pub struct PatchCredentialEndpointRequest {
         (status = 204, description = "Credential status updated successfully"),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
+        (status = 409, description = "The credential has no status list entry: not issued yet, or signed outside UniCore"),
         (status = 422, description = "Request body does not match the expected schema, or the status list can't hold the status"),
     )
 )]
@@ -1435,6 +1436,53 @@ pub mod tests {
 
             assert_eq!(response.status(), expected_status, "{credential_status}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_patch_credential_refuses_credentials_without_status_list_entry() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+
+        let mut app = router((issuance_state.clone(), library_state));
+
+        let credential_endpoint = credentials_with_template(&mut app, &template_id).await;
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::PATCH)
+                    .uri(&credential_endpoint)
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({ "credentialStatus": "INVALID" })).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["type"], type_url("issuance#no-status-list-entry"));
+
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(&credential_endpoint)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["credential_status"]["status"], json!("VALID"));
     }
 
     #[tokio::test]
