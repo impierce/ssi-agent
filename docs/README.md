@@ -19,6 +19,7 @@ These markdown files are used as input for generating the official documentation
 - **[Introduction](./introduction/)** - Quick start and feature overview
 - **[Configuration](./configuration/)** - Setup and environment variables
 - **[Migration Guides](./migration-guides)** - Step-by-step version migration instructions
+- **[Credential Formats](./concepts/credential-formats.md)** - Supported credential formats, the data models they carry and the specifications behind them
 - **[API Documentation](https://beta.docs.impierce.com/unicore/)** - OpenAPI specification
 
 ### For Developers & AI Agents
