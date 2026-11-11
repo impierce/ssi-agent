@@ -1,6 +1,14 @@
 use std::convert::Infallible;
 
-use axum::extract::FromRequestParts;
+use crate::error::type_url;
+use axum::{
+    body::Bytes,
+    extract::{rejection::JsonRejection, FromRequest, FromRequestParts, Path, Query, Request},
+    Json,
+};
+use http::StatusCode;
+use http_api_problem::ApiError;
+use serde::de::{DeserializeOwned, IgnoredAny};
 use shared_kernel::authorization::Actor;
 
 /// Optional actor extracted from request extensions.
@@ -18,5 +26,313 @@ where
 
     async fn from_request_parts(parts: &mut http::request::Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Ok(Self(parts.extensions.get::<Actor>().cloned()))
+    }
+}
+
+/// Query parameters of a UniCore API operation.
+///
+/// Wraps [`axum::extract::Query`] so that a query string that does not fit the parameters is rejected with an RFC 9457
+/// problem (`400`, `application/problem+json`) instead of plain text.
+pub struct QueryParams<T>(pub T);
+
+impl<T, S> FromRequestParts<S> for QueryParams<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut http::request::Parts, state: &S) -> Result<Self, Self::Rejection> {
+        Query::<T>::from_request_parts(parts, state)
+            .await
+            .map(|Query(params)| QueryParams(params))
+            .map_err(|rejection| {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Query Parameters")
+                    .type_url(type_url("request#invalid-query"))
+                    .message(rejection.body_text())
+                    .finish()
+            })
+    }
+}
+
+/// Path parameters of a UniCore API operation.
+///
+/// Wraps [`axum::extract::Path`] so that a path segment that does not fit the parameter (an unknown enum value, or
+/// percent-encoding that is not UTF-8) is rejected with an RFC 9457 problem (`400`, `application/problem+json`) instead
+/// of plain text.
+pub struct PathParams<T>(pub T);
+
+impl<T, S> FromRequestParts<S> for PathParams<T>
+where
+    T: DeserializeOwned + Send,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut http::request::Parts, state: &S) -> Result<Self, Self::Rejection> {
+        Path::<T>::from_request_parts(parts, state)
+            .await
+            .map(|Path(params)| PathParams(params))
+            .map_err(|rejection| {
+                ApiError::builder(StatusCode::BAD_REQUEST)
+                    .title("Invalid Path Parameter")
+                    .type_url(type_url("request#invalid-path"))
+                    .message(rejection.body_text())
+                    .finish()
+            })
+    }
+}
+
+/// JSON request body of a UniCore API operation.
+///
+/// Wraps [`axum::Json`] so that every rejection is an RFC 9457 problem (`application/problem+json`)
+/// instead of plain text, and requires the body to be a JSON object: `serde` would otherwise
+/// deserialize a struct from a JSON array of its fields in order (`[null, null]`).
+///
+/// Status codes follow [`axum::Json`]: `415` without a JSON `Content-Type`, `413` for a body over the size limit, `400`
+/// for a body that is not valid JSON, `422` for valid JSON of the wrong shape.
+pub struct JsonBody<T>(pub T);
+
+impl<T, S> FromRequest<S> for JsonBody<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
+        if !has_json_content_type(request.headers()) {
+            return Err(ApiError::builder(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+                .title("Unsupported Media Type")
+                .type_url(type_url("request#unsupported-media-type"))
+                .message("The request body must be sent with `Content-Type: application/json`.")
+                .finish());
+        }
+
+        let bytes = Bytes::from_request(request, state)
+            .await
+            .map_err(|rejection| match rejection.status() {
+                StatusCode::PAYLOAD_TOO_LARGE => ApiError::builder(StatusCode::PAYLOAD_TOO_LARGE)
+                    .title("Request Body Too Large")
+                    .type_url(type_url("request#body-too-large"))
+                    .message(rejection.body_text())
+                    .finish(),
+                _ => malformed_body(rejection.body_text()),
+            })?;
+
+        if bytes.trim_ascii_start().first() != Some(&b'{') {
+            return Err(match serde_json::from_slice::<IgnoredAny>(&bytes) {
+                Ok(_) => invalid_body("The request body must be a JSON object."),
+                Err(error) => malformed_body(error.to_string()),
+            });
+        }
+
+        // Deserialized from the bytes rather than an intermediate `Value`, which would keep only the last of
+        // duplicate fields instead of rejecting them.
+        Json::<T>::from_bytes(&bytes)
+            .map(|Json(value)| JsonBody(value))
+            .map_err(|rejection| match rejection {
+                JsonRejection::JsonDataError(error) => invalid_body(error.body_text()),
+                rejection => malformed_body(rejection.body_text()),
+            })
+    }
+}
+
+/// `application/json` or any `application/*+json`, like [`axum::Json`].
+fn has_json_content_type(headers: &http::HeaderMap) -> bool {
+    headers
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.split(';').next().unwrap_or_default().trim().to_ascii_lowercase())
+        .is_some_and(|essence| {
+            essence == "application/json" || (essence.starts_with("application/") && essence.ends_with("+json"))
+        })
+}
+
+fn malformed_body(message: impl Into<String>) -> ApiError {
+    ApiError::builder(StatusCode::BAD_REQUEST)
+        .title("Malformed Request Body")
+        .type_url(type_url("request#malformed-body"))
+        .message(message.into())
+        .finish()
+}
+
+fn invalid_body(message: impl Into<String>) -> ApiError {
+    ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+        .title("Invalid Request Body")
+        .type_url(type_url("request#invalid-body"))
+        .message(message.into())
+        .finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::Body, routing::post, Router};
+    use serde::Deserialize;
+    use serde_json::Value;
+    use tower::ServiceExt as _;
+
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Body2 {
+        first: Option<String>,
+        second: Option<String>,
+    }
+
+    async fn send(content_type: Option<&str>, body: &str) -> (StatusCode, Option<Value>) {
+        let app = Router::new().route(
+            "/",
+            post(|JsonBody(_): JsonBody<Body2>| async { StatusCode::NO_CONTENT }),
+        );
+        let mut request = Request::builder().method("POST").uri("/");
+        if let Some(content_type) = content_type {
+            request = request.header(http::header::CONTENT_TYPE, content_type);
+        }
+        let response = app
+            .oneshot(request.body(Body::from(body.to_string())).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(http::header::CONTENT_TYPE)
+            .map(|value| value.to_str().unwrap().to_string());
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        if status != StatusCode::NO_CONTENT {
+            assert_eq!(content_type.as_deref(), Some("application/problem+json"));
+        }
+        (status, serde_json::from_slice(&bytes).ok())
+    }
+
+    #[tokio::test]
+    async fn accepts_a_json_object() {
+        for content_type in [
+            "application/json",
+            "application/json; charset=utf-8",
+            "application/merge-patch+json",
+        ] {
+            let (status, _) = send(Some(content_type), r#"{"first": "a"}"#).await;
+            assert_eq!(status, StatusCode::NO_CONTENT, "{content_type}");
+        }
+    }
+
+    #[tokio::test]
+    async fn query_rejection_is_a_problem() {
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct Params {
+            limit: Option<u8>,
+        }
+
+        let app = Router::new().route(
+            "/",
+            axum::routing::get(|QueryParams(_): QueryParams<Params>| async { StatusCode::NO_CONTENT }),
+        );
+        let response = app
+            .oneshot(Request::builder().uri("/?limit=many").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(problem["type"], type_url("request#invalid-query"));
+    }
+
+    #[tokio::test]
+    async fn path_rejection_is_a_problem() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        enum Kind {
+            Known,
+        }
+
+        let app = Router::new().route(
+            "/{kind}",
+            axum::routing::get(|PathParams(_): PathParams<Kind>| async { StatusCode::NO_CONTENT }),
+        );
+        let request = |uri: &str| Request::builder().uri(uri).body(Body::empty()).unwrap();
+
+        let response = app.clone().oneshot(request("/known")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let response = app.oneshot(request("/unknown")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let problem: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(problem["type"], type_url("request#invalid-path"));
+    }
+
+    #[tokio::test]
+    async fn body_over_the_size_limit_is_a_problem() {
+        let body = format!(r#"{{"first": "{}"}}"#, "a".repeat(3 * 1024 * 1024));
+
+        let (status, problem) = send(Some("application/json"), &body).await;
+
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(problem.unwrap()["type"], type_url("request#body-too-large"));
+    }
+
+    #[tokio::test]
+    async fn rejections_are_problem_details() {
+        for (content_type, body, expected_status, expected_type) in [
+            (
+                None,
+                r#"{"first": "a"}"#,
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "request#unsupported-media-type",
+            ),
+            (
+                Some("text/plain"),
+                r#"{"first": "a"}"#,
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "request#unsupported-media-type",
+            ),
+            (
+                Some("application/json"),
+                r#"{"first": "a""#,
+                StatusCode::BAD_REQUEST,
+                "request#malformed-body",
+            ),
+            (
+                Some("application/json"),
+                r#"{"first": 1}"#,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "request#invalid-body",
+            ),
+            // `serde` reads a struct from an array of its fields, which no client means to send.
+            (
+                Some("application/json"),
+                "[null, null]",
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "request#invalid-body",
+            ),
+            (
+                Some("application/json"),
+                "[]",
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "request#invalid-body",
+            ),
+            (
+                Some("application/json"),
+                "null",
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "request#invalid-body",
+            ),
+        ] {
+            let (status, problem) = send(content_type, body).await;
+            assert_eq!(status, expected_status, "{body}");
+            assert_eq!(problem.unwrap()["type"], type_url(expected_type), "{body}");
+        }
     }
 }

@@ -1,7 +1,7 @@
 pub mod openapi;
 pub mod queries;
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{caller, command_handler};
 use crate::API_VERSION;
 use agent_library::catalog::{
@@ -51,9 +51,11 @@ impl From<CatalogView> for CatalogDto {
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CreateCatalogRequest {
     pub display: CatalogDisplay,
+    #[serde(default)]
+    #[schema(default = "Private")]
     pub visibility: CatalogVisibility,
 }
 
@@ -78,13 +80,9 @@ pub struct CreateCatalogRequest {
 pub(crate) async fn create_catalog(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(CreateCatalogRequest { display, visibility }): Json<CreateCatalogRequest>,
+    JsonBody(CreateCatalogRequest { display, visibility }): JsonBody<CreateCatalogRequest>,
 ) -> Result<Response, ApiError> {
     let catalog_id = uuid::Uuid::new_v4().to_string();
-
-    if display.name.trim().is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST));
-    }
 
     let command = CatalogCommand::CreateCatalog {
         catalog_id: catalog_id.clone(),
@@ -108,7 +106,10 @@ pub(crate) async fn create_catalog(
         .map(|catalog_view| {
             (
                 StatusCode::CREATED,
-                [(header::LOCATION, format!("{API_VERSION}/catalog/{catalog_id}"))],
+                [(
+                    header::LOCATION,
+                    format!("{API_VERSION}/get-catalog-by-id/{catalog_id}"),
+                )],
                 Json(CatalogDto::from(catalog_view)),
             )
                 .into_response()
@@ -145,10 +146,10 @@ pub struct AddTemplatesRequest {
 pub(crate) async fn add_templates_to_catalog(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(AddTemplatesRequest {
+    JsonBody(AddTemplatesRequest {
         catalog_id,
         template_ids,
-    }): Json<AddTemplatesRequest>,
+    }): JsonBody<AddTemplatesRequest>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor.clone()), &catalog_id)
         .await
@@ -190,7 +191,7 @@ pub struct RemoveTemplatesRequest {
 #[utoipa::path(
     post,
     path = "/remove-templates-from-catalog",
-    operation_id = "remove-templates-from-catalog",
+    operation_id = "remove_templates_from_catalog",
     tags = ["Library", "Catalog"],
     request_body(
         content = RemoveTemplatesRequest,
@@ -206,10 +207,10 @@ pub struct RemoveTemplatesRequest {
 pub(crate) async fn remove_templates_from_catalog(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(RemoveTemplatesRequest {
+    JsonBody(RemoveTemplatesRequest {
         catalog_id,
         template_ids,
-    }): Json<RemoveTemplatesRequest>,
+    }): JsonBody<RemoveTemplatesRequest>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor.clone()), &catalog_id)
         .await
@@ -239,8 +240,9 @@ pub(crate) async fn remove_templates_from_catalog(
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ChangeCatalogAppearanceRequest {
+    #[serde(default)]
     pub catalog_id: String,
     pub display: CatalogDisplay,
 }
@@ -267,7 +269,7 @@ pub struct ChangeCatalogAppearanceRequest {
 pub(crate) async fn change_catalog_appearance(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(ChangeCatalogAppearanceRequest { catalog_id, display }): Json<ChangeCatalogAppearanceRequest>,
+    JsonBody(ChangeCatalogAppearanceRequest { catalog_id, display }): JsonBody<ChangeCatalogAppearanceRequest>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor.clone()), &catalog_id)
         .await
@@ -324,7 +326,7 @@ pub struct MakeCatalogPublicRequest {
 pub(crate) async fn make_catalog_public(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(MakeCatalogPublicRequest { catalog_id }): Json<MakeCatalogPublicRequest>,
+    JsonBody(MakeCatalogPublicRequest { catalog_id }): JsonBody<MakeCatalogPublicRequest>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor.clone()), &catalog_id)
         .await
@@ -380,7 +382,7 @@ pub struct MakeCatalogPrivateRequest {
 pub(crate) async fn make_catalog_private(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(MakeCatalogPrivateRequest { catalog_id }): Json<MakeCatalogPrivateRequest>,
+    JsonBody(MakeCatalogPrivateRequest { catalog_id }): JsonBody<MakeCatalogPrivateRequest>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor.clone()), &catalog_id)
         .await
@@ -436,7 +438,7 @@ pub struct DeleteCatalogRequest {
 pub(crate) async fn delete_catalog(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(DeleteCatalogRequest { catalog_id }): Json<DeleteCatalogRequest>,
+    JsonBody(DeleteCatalogRequest { catalog_id }): JsonBody<DeleteCatalogRequest>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor.clone()), &catalog_id)
         .await
@@ -558,7 +560,7 @@ mod tests {
                 add_templates_to_catalog(
                     State(state),
                     RequestActor(Some(actor.clone())),
-                    Json(AddTemplatesRequest {
+                    JsonBody(AddTemplatesRequest {
                         catalog_id: catalog_id.to_string(),
                         template_ids: Vec::new(),
                     }),
@@ -569,7 +571,7 @@ mod tests {
                 remove_templates_from_catalog(
                     State(state),
                     RequestActor(Some(actor.clone())),
-                    Json(RemoveTemplatesRequest {
+                    JsonBody(RemoveTemplatesRequest {
                         catalog_id: catalog_id.to_string(),
                         template_ids: Vec::new(),
                     }),
@@ -650,7 +652,7 @@ mod tests {
             let catalog_id = catalog["id"].as_str().unwrap().to_string();
             assert_eq!(
                 headers[header::LOCATION],
-                format!("{API_VERSION}/catalog/{catalog_id}").as_str()
+                format!("{API_VERSION}/get-catalog-by-id/{catalog_id}").as_str()
             );
             assert_eq!(catalog["display"]["name"], name);
             assert_eq!(catalog["visibility"], "Private");

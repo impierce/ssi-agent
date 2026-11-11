@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{command_handler, query_handler};
 use crate::utils::serde_explicit_null;
 use agent_identity::profile::aggregate::Source;
@@ -37,6 +37,7 @@ pub struct PatchProfileEndpointRequest {
 #[utoipa::path(
     patch,
     path = "/profile",
+    request_body = PatchProfileEndpointRequest,
     operation_id = "update_profile",
     tags = ["Identity", "Profile"],
     responses(
@@ -50,12 +51,12 @@ pub struct PatchProfileEndpointRequest {
 pub(crate) async fn patch_profile(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(PatchProfileEndpointRequest {
+    JsonBody(PatchProfileEndpointRequest {
         display_name,
         description,
         logo,
         country,
-    }): Json<PatchProfileEndpointRequest>,
+    }): JsonBody<PatchProfileEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let profile_id = PROFILE_ID.to_string();
 
