@@ -248,7 +248,10 @@ impl Aggregate for Offer {
                         // Only JWT credentials can be stored, so anything else is refused here, before
                         // the offer is marked as having received its credentials.
                         let credential = match credential_response.credential {
-                            CredentialResponseType::Immediate { credentials, .. } => credentials[0]
+                            CredentialResponseType::Immediate { credentials, .. } => credentials
+                                .first()
+                                // OpenID4VCI requires at least one credential in an immediate response.
+                                .ok_or(CredentialResponseError)?
                                 .credential
                                 .parse::<Jwt>()
                                 .map(SignedCredential::Jwt)
@@ -682,6 +685,77 @@ pub mod tests {
                 status: Status::CredentialsReceived,
                 credentials: signed_credentials,
             }]);
+    }
+
+    /// Serves issuer metadata and answers every credential request with `credential_response`.
+    async fn bootstrap_fake_issuer(credential_response: serde_json::Value) -> reqwest::Url {
+        use axum::{routing::get, routing::post, Json};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let issuer_url: reqwest::Url = format!("http://{}", listener.local_addr().unwrap()).parse().unwrap();
+
+        let credential_issuer_metadata = json!({
+            "credential_issuer": issuer_url,
+            "credential_endpoint": issuer_url.join("credential").unwrap(),
+            "credential_configurations_supported": credential_configurations_supported(),
+        });
+        let authorization_server_metadata = json!({
+            "issuer": issuer_url,
+            "token_endpoint": issuer_url.join("token").unwrap(),
+        });
+
+        let router = axum::Router::new()
+            .route(
+                "/.well-known/openid-credential-issuer",
+                get(move || async move { Json(credential_issuer_metadata) }),
+            )
+            .route(
+                "/.well-known/oauth-authorization-server",
+                get(move || async move { Json(authorization_server_metadata) }),
+            )
+            .route("/credential", post(move || async move { Json(credential_response) }));
+
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        issuer_url
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn credential_response_without_credentials_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let issuer_url = bootstrap_fake_issuer(json!({ "credentials": [] })).await;
+        let credential_offer: CredentialOfferParameters = serde_json::from_value(json!({
+            "credential_issuer": issuer_url,
+            "credential_configuration_ids": [TEMPLATE_ID],
+            "grants": {
+                "urn:ietf:params:oauth:grant-type:pre-authorized_code": { "pre-authorized_code": "code" }
+            }
+        }))
+        .unwrap();
+
+        OfferTestFramework::with(HolderServices::default().await)
+            .given(vec![
+                OfferEvent::CredentialOfferReceived {
+                    received_offer_id: received_offer_id.clone(),
+                    credential_offer: Box::new(credential_offer),
+                    credential_configurations: credential_configurations_supported,
+                },
+                OfferEvent::CredentialOfferAccepted {
+                    received_offer_id: received_offer_id.clone(),
+                    status: Status::Accepted,
+                },
+                OfferEvent::TokenResponseReceived {
+                    received_offer_id: received_offer_id.clone(),
+                    token_response: token_response(),
+                },
+            ])
+            .when_async(OfferCommand::SendCredentialRequest { received_offer_id })
+            .await
+            .then_expect_error_message("An error occurred while requesting the credentials");
     }
 
     #[rstest]

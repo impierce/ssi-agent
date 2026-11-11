@@ -10,7 +10,7 @@ use oid4vci::credential_issuer::credential_configurations_supported::CredentialM
 use oid4vci::credential_offer::TxCodeConstraints;
 use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::VcSdJwtParameters;
-use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
+use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -250,14 +250,14 @@ pub struct ApplicationConfiguration {
                     Algorithm::EdDSA,
                     ToggleOptions {
                         enabled: true,
-                        preferred: Some(true)
+                        preferred: None
                     }
                 ),
                 (
                     Algorithm::ES256,
                     ToggleOptions {
                         enabled: true,
-                        preferred: None
+                        preferred: Some(true)
                     }
                 )
             ]
@@ -285,9 +285,7 @@ pub struct ApplicationConfiguration {
         jwt_vc_json: Some(JwtVcJsonParameters {
             alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
-        jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
-        }),
+        jwt_vp_json: None,
         dc_sd_jwt: Some(DcSdJwtParameters {
             sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
             kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
@@ -987,11 +985,11 @@ mod tests {
               },
               "signing_algorithms_supported": {
                 "EdDSA": {
-                  "enabled": true,
-                  "preferred": true
+                  "enabled": true
                 },
                 "ES256": {
-                  "enabled": true
+                  "enabled": true,
+                  "preferred": true
                 }
               },
               "display": [
@@ -1007,9 +1005,6 @@ mod tests {
               "event_publishers": {},
               "vp_formats_supported": {
                 "jwt_vc_json": {
-                  "alg_values": ["ES256", "EdDSA"]
-                },
-                "jwt_vp_json": {
                   "alg_values": ["ES256", "EdDSA"]
                 },
                 "dc+sd-jwt": {
