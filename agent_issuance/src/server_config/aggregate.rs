@@ -1,4 +1,4 @@
-use agent_shared::config::{config, Authorization, CredentialConfiguration};
+use agent_shared::config::{config, get_preferred_signing_algorithm, Authorization, CredentialConfiguration};
 use agent_shared::UrlAppendHelpers as _;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
@@ -43,6 +43,11 @@ fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[
                 .and_then(|value| value.as_str().map(|s| AlgIdentifier::String(s.to_string())))
         })
         .collect()
+}
+
+/// Credentials are signed with the preferred signing algorithm only, so that is the only one advertised.
+pub fn credential_signing_alg_values_supported() -> Vec<AlgIdentifier> {
+    into_credential_signing_alg_values_supported(&[get_preferred_signing_algorithm()])
 }
 
 fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> HashMap<ProofType, KeyProofMetadata> {
@@ -158,9 +163,7 @@ impl ServerConfig {
         let credential_configuration_object = CredentialConfigurationsSupportedObject {
             credential_format,
             cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
-            credential_signing_alg_values_supported: into_credential_signing_alg_values_supported(
-                &self.signing_algorithms_supported,
-            ),
+            credential_signing_alg_values_supported: credential_signing_alg_values_supported(),
             proof_types_supported,
             credential_metadata: Some(credential_configuration.credential_metadata),
             ..Default::default()
@@ -269,7 +272,7 @@ impl Aggregate for ServerConfig {
                     credential_configurations.iter_mut()
                 {
                     credential_configuration.credential_signing_alg_values_supported =
-                        into_credential_signing_alg_values_supported(&signing_algorithms_supported);
+                        credential_signing_alg_values_supported();
                     credential_configuration.proof_types_supported =
                         into_proof_types_supported(&signing_algorithms_supported);
                 }
