@@ -306,14 +306,20 @@ impl IdentityServices {
         let (valid, error, credentials) = match self.validated_credentials(holder_document, &url).await {
             Ok((credentials, presentation_error)) => {
                 let invalid = credentials.iter().filter(|c| !c.result.valid).count();
-                let error = presentation_error.or_else(|| {
-                    (invalid > 0).then(|| {
-                        format!(
-                            "{invalid} of {} embedded credentials failed validation",
-                            credentials.len()
-                        )
+                let error = presentation_error
+                    .or_else(|| {
+                        credentials
+                            .is_empty()
+                            .then(|| "the presentation contains no credentials".to_owned())
                     })
-                });
+                    .or_else(|| {
+                        (invalid > 0).then(|| {
+                            format!(
+                                "{invalid} of {} embedded credentials failed validation",
+                                credentials.len()
+                            )
+                        })
+                    });
                 (error.is_none(), error, credentials)
             }
             Err(error) => (false, Some(error.to_string()), Vec::new()),
@@ -1295,6 +1301,36 @@ mod tests {
             matches!(&result, Err(ServiceError::PresentationInvalid(_, reason)) if reason.contains("not the subject")),
             "{result:?}"
         );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn fetch_linked_vp_validations_reports_empty_presentations_as_invalid() {
+        for vcdm2 in [false, true] {
+            let mock_server = MockServer::start().await;
+            let mut holder = Holder::new(&mock_server);
+            let holder_did = holder.did().to_owned();
+            let method = holder.add_key().await;
+            let presentation_jwt = if vcdm2 {
+                holder.presentation_v2_jwt(&[], &method).await
+            } else {
+                holder.presentation_jwt(Vec::new(), &method).await
+            };
+            holder.serve(&mock_server, &presentation_jwt).await;
+
+            let validations = IdentityServices::default()
+                .fetch_linked_vp_validations(&[verified_linked_did(&holder_did)])
+                .await;
+
+            assert_eq!(validations.len(), 1, "vcdm2: {vcdm2}");
+            assert!(!validations[0].result.valid, "vcdm2: {vcdm2}");
+            assert_eq!(
+                validations[0].result.error.as_deref(),
+                Some("the presentation contains no credentials"),
+                "vcdm2: {vcdm2}"
+            );
+            assert!(validations[0].credentials.is_empty(), "vcdm2: {vcdm2}");
+        }
     }
 
     /// `sd_jwt` with the signature of its issuer-signed JWT replaced.
