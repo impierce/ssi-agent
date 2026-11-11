@@ -52,8 +52,8 @@ impl TemplateOrigin {
     }
 }
 
-/// `scheme ":" rest` per RFC 3986, section 3.1, with a non-empty rest, no whitespace, and every `%` starting a
-/// percent-encoded octet (section 2.1).
+/// `scheme ":" rest` per RFC 3986, section 3.1, with a non-empty rest of URI characters only (section 2: unreserved,
+/// reserved and `%`), and every `%` starting a percent-encoded octet (section 2.1).
 fn is_absolute_uri(value: &str) -> bool {
     let Some((scheme, rest)) = value.split_once(':') else {
         return false;
@@ -62,8 +62,12 @@ fn is_absolute_uri(value: &str) -> bool {
     scheme_chars.next().is_some_and(|c| c.is_ascii_alphabetic())
         && scheme_chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
         && !rest.is_empty()
-        && !value.chars().any(char::is_whitespace)
+        && rest.bytes().all(is_uri_character)
         && has_valid_percent_encoding(rest)
+}
+
+fn is_uri_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b"-._~:/?#[]@!$&'()*+,;=%".contains(&byte)
 }
 
 fn has_valid_percent_encoding(value: &str) -> bool {
@@ -103,6 +107,7 @@ mod tests {
     #[case::did("did:web:issuer.example")]
     #[case::urn("urn:uuid:0b7c7a46-2f1e-4f0b-9a57-0d7c1f8e2b6a")]
     #[case::percent_encoded("did:web:issuer.example%3A8443")]
+    #[case::query_and_fragment("https://issuer.example/templates?page=1#top")]
     fn accepts_absolute_uri_sources(#[case] source: &str) {
         assert!(origin(source, "0b7c", DIGEST).validate().is_ok());
     }
@@ -115,6 +120,8 @@ mod tests {
     #[case::whitespace("https://issuer .example")]
     #[case::invalid_percent_encoding("https://issuer.example/%GG")]
     #[case::truncated_percent_encoding("https://issuer.example/%4")]
+    #[case::not_a_uri_character("https://issuer.example/|")]
+    #[case::non_ascii("https://issuer.exämple")]
     fn rejects_other_sources(#[case] source: &str) {
         assert!(matches!(
             origin(source, "0b7c", DIGEST).validate(),
