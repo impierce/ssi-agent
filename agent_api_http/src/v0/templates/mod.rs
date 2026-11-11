@@ -307,8 +307,21 @@ pub struct UpdateTemplateEndpointRequest {
     pub holder_authorization: Option<Authorization>,
     /// Replaces the origin; `null` removes it. Applied after all other fields.
     #[serde(with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<TemplateOrigin>)]
+    // Without the `null` default the other fields get: `null` removes the origin, an absent one keeps it.
+    #[schema(schema_with = update_origin_schema)]
     pub origin: Option<Option<TemplateOrigin>>,
+}
+
+fn update_origin_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    utoipa::openapi::schema::OneOfBuilder::new()
+        .item(utoipa::openapi::Ref::from_schema_name("TemplateOrigin"))
+        .item(utoipa::openapi::schema::Object::with_type(
+            utoipa::openapi::schema::Type::Null,
+        ))
+        .description(Some(
+            "Replaces the origin; `null` removes it. Applied after all other fields.",
+        ))
+        .into()
 }
 
 /// Update a template
@@ -354,6 +367,11 @@ pub(crate) async fn update_template(
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .ok_or_else(|| TemplateError::TemplateNotFound(template_id.clone()).into_api_error())?;
+
+    // The origin is applied last, so a malformed one is refused before any other field is written.
+    if let Some(Some(origin)) = &origin {
+        origin.validate().map_err(IntoApiErrorExt::into_api_error)?;
+    }
 
     if let Some(title) = title {
         let command = TemplateCommand::UpdateTitle {
@@ -1634,6 +1652,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(stored_template(&state, template_id).await.origin, None);
+    }
+
+    #[tokio::test]
+    async fn update_template_with_an_invalid_origin_changes_nothing() {
+        let state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
+        let created = create_from_json(
+            &state,
+            json!({ "title": "Imported", "origin": origin_json(&digest_of('a')) }),
+        )
+        .await;
+        let template_id = created["id"].as_str().unwrap();
+
+        let response = update_from_json(
+            &state,
+            json!({ "id": template_id, "title": "Edited", "origin": origin_json("sha256-not-hex") }),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let template = stored_template(&state, template_id).await;
+        assert_eq!(template.title, "Imported");
+        assert_eq!(template.origin.unwrap().digest, digest_of('a'));
     }
 
     #[tokio::test]

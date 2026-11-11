@@ -4165,9 +4165,8 @@ components:
         origin:
           oneOf:
           - $ref: '#/components/schemas/TemplateOrigin'
-            description: Replaces the origin; `null` removes it. Applied after all other fields.
           - type: 'null'
-          default: null
+          description: Replaces the origin; `null` removes it. Applied after all other fields.
         schema: {}
         schemaPropertiesAttributes:
           type:

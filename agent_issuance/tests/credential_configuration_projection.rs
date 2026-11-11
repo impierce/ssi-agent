@@ -89,6 +89,38 @@ async fn test_template_created_registers_credential_configuration() {
 }
 
 #[tokio::test]
+async fn test_template_created_with_an_origin_registers_credential_configuration() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "imported-template";
+    let mut event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Imported Credential".to_string(),
+        None,
+        Status::Published,
+    );
+    let TemplateEvent::TemplateCreated { origin, .. } = &mut event.payload else {
+        unreachable!()
+    };
+    *origin = Some(Box::new(agent_library::template::origin::TemplateOrigin {
+        source: "https://issuer.example".to_string(),
+        source_template_id: "0b7c".to_string(),
+        digest: format!("sha256-{}", "a".repeat(64)),
+        check_for_updates: true,
+    }));
+
+    projection.dispatch(template_id, &[event]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
 async fn test_unchanged_credential_configuration_repairs_a_server_config_view_that_lacks_it() {
     let (issuance, _library, projection) = setup().await;
 

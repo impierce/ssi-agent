@@ -31,7 +31,8 @@ fn check_for_updates_by_default() -> bool {
 }
 
 impl TemplateOrigin {
-    pub(crate) fn validate(&self) -> Result<(), TemplateError> {
+    /// Checks the format of each field; nothing is fetched.
+    pub fn validate(&self) -> Result<(), TemplateError> {
         if !is_absolute_uri(&self.source) {
             return Err(TemplateError::InvalidOrigin(
                 "`source` must be an absolute URI".to_string(),
@@ -51,7 +52,8 @@ impl TemplateOrigin {
     }
 }
 
-/// `scheme ":" rest` per RFC 3986, section 3.1, with a non-empty rest and no whitespace.
+/// `scheme ":" rest` per RFC 3986, section 3.1, with a non-empty rest, no whitespace, and every `%` starting a
+/// percent-encoded octet (section 2.1).
 fn is_absolute_uri(value: &str) -> bool {
     let Some((scheme, rest)) = value.split_once(':') else {
         return false;
@@ -61,6 +63,17 @@ fn is_absolute_uri(value: &str) -> bool {
         && scheme_chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
         && !rest.is_empty()
         && !value.chars().any(char::is_whitespace)
+        && has_valid_percent_encoding(rest)
+}
+
+fn has_valid_percent_encoding(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.iter().enumerate().all(|(index, byte)| {
+        *byte != b'%'
+            || bytes
+                .get(index + 1..index + 3)
+                .is_some_and(|hex| hex.iter().all(u8::is_ascii_hexdigit))
+    })
 }
 
 fn is_digest(value: &str) -> bool {
@@ -89,6 +102,7 @@ mod tests {
     #[case::https("https://issuer.example")]
     #[case::did("did:web:issuer.example")]
     #[case::urn("urn:uuid:0b7c7a46-2f1e-4f0b-9a57-0d7c1f8e2b6a")]
+    #[case::percent_encoded("did:web:issuer.example%3A8443")]
     fn accepts_absolute_uri_sources(#[case] source: &str) {
         assert!(origin(source, "0b7c", DIGEST).validate().is_ok());
     }
@@ -99,6 +113,8 @@ mod tests {
     #[case::no_rest("https:")]
     #[case::scheme_starts_with_digit("1https://issuer.example")]
     #[case::whitespace("https://issuer .example")]
+    #[case::invalid_percent_encoding("https://issuer.example/%GG")]
+    #[case::truncated_percent_encoding("https://issuer.example/%4")]
     fn rejects_other_sources(#[case] source: &str) {
         assert!(matches!(
             origin(source, "0b7c", DIGEST).validate(),

@@ -358,7 +358,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     schema,
                     schema_properties_attributes,
                     holder_authorization,
-                    origin: None,
+                    origin: _,
                 } => {
                     // Only published templates have a credential configuration.
                     if *status != Status::Published {
