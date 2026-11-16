@@ -1516,10 +1516,10 @@ mod tests {
         );
     }
 
-    const ORIGIN_SOURCE: &str = "https://issuer.example";
+    const ORIGIN_SOURCE_URI: &str = "https://issuer.example";
 
     fn origin_json(digest: &str) -> serde_json::Value {
-        json!({ "source": ORIGIN_SOURCE, "sourceTemplateId": "0b7c", "digest": digest })
+        json!({ "sourceUri": ORIGIN_SOURCE_URI, "sourceTemplateId": "0b7c", "digest": digest })
     }
 
     fn digest_of(byte: char) -> String {

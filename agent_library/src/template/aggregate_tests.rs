@@ -3017,7 +3017,7 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
 
 fn origin(digest_byte: char) -> TemplateOrigin {
     TemplateOrigin {
-        source: "https://issuer.example".to_string(),
+        source_uri: "https://issuer.example".to_string(),
         source_template_id: "0b7c".to_string(),
         digest: format!("sha256-{}", digest_byte.to_string().repeat(64)),
         check_for_updates: true,
@@ -3253,12 +3253,12 @@ async fn test_update_origin_with_invalid_origin_is_rejected(template_id: String)
         .when_async(TemplateCommand::UpdateOrigin {
             template_id,
             origin: Some(TemplateOrigin {
-                source: "issuer.example".to_string(),
+                source_uri: "issuer.example".to_string(),
                 ..origin('a')
             }),
         })
         .await
-        .then_expect_error_message("Invalid origin: `source` must be an absolute URI")
+        .then_expect_error_message("Invalid origin: `sourceUri` must be an absolute URI")
 }
 
 #[rstest]

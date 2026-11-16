@@ -12,7 +12,7 @@ use super::{error::TemplateError, public_content::DIGEST_PREFIX};
 #[serde(rename_all = "camelCase")]
 pub struct TemplateOrigin {
     /// URI of the source, e.g. the identifier of the publishing entity.
-    pub source: String,
+    pub source_uri: String,
     /// Identifier of the template at the source. Opaque.
     pub source_template_id: String,
     /// Digest of the template's public content at import time: `sha256-` followed by 64 lowercase
@@ -33,9 +33,9 @@ fn check_for_updates_by_default() -> bool {
 impl TemplateOrigin {
     /// Checks the format of each field; nothing is fetched.
     pub fn validate(&self) -> Result<(), TemplateError> {
-        if !is_absolute_uri(&self.source) {
+        if !is_absolute_uri(&self.source_uri) {
             return Err(TemplateError::InvalidOrigin(
-                "`source` must be an absolute URI".to_string(),
+                "`sourceUri` must be an absolute URI".to_string(),
             ));
         }
         if self.source_template_id.trim().is_empty() {
@@ -93,9 +93,9 @@ mod tests {
 
     const DIGEST: &str = "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    fn origin(source: &str, source_template_id: &str, digest: &str) -> TemplateOrigin {
+    fn origin(source_uri: &str, source_template_id: &str, digest: &str) -> TemplateOrigin {
         TemplateOrigin {
-            source: source.to_string(),
+            source_uri: source_uri.to_string(),
             source_template_id: source_template_id.to_string(),
             digest: digest.to_string(),
             check_for_updates: true,
@@ -108,8 +108,8 @@ mod tests {
     #[case::urn("urn:uuid:0b7c7a46-2f1e-4f0b-9a57-0d7c1f8e2b6a")]
     #[case::percent_encoded("did:web:issuer.example%3A8443")]
     #[case::query_and_fragment("https://issuer.example/templates?page=1#top")]
-    fn accepts_absolute_uri_sources(#[case] source: &str) {
-        assert!(origin(source, "0b7c", DIGEST).validate().is_ok());
+    fn accepts_absolute_uris(#[case] source_uri: &str) {
+        assert!(origin(source_uri, "0b7c", DIGEST).validate().is_ok());
     }
 
     #[rstest]
@@ -122,9 +122,9 @@ mod tests {
     #[case::truncated_percent_encoding("https://issuer.example/%4")]
     #[case::not_a_uri_character("https://issuer.example/|")]
     #[case::non_ascii("https://issuer.exämple")]
-    fn rejects_other_sources(#[case] source: &str) {
+    fn rejects_anything_else_as_source_uri(#[case] source_uri: &str) {
         assert!(matches!(
-            origin(source, "0b7c", DIGEST).validate(),
+            origin(source_uri, "0b7c", DIGEST).validate(),
             Err(TemplateError::InvalidOrigin(_))
         ));
     }
@@ -158,7 +158,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(origin("https://issuer.example", "0b7c", DIGEST)).unwrap(),
             serde_json::json!({
-                "source": "https://issuer.example",
+                "sourceUri": "https://issuer.example",
                 "sourceTemplateId": "0b7c",
                 "digest": DIGEST,
                 "checkForUpdates": true,
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn checks_for_updates_unless_told_otherwise() {
         let stored: TemplateOrigin = serde_json::from_value(serde_json::json!({
-            "source": "https://issuer.example",
+            "sourceUri": "https://issuer.example",
             "sourceTemplateId": "0b7c",
             "digest": DIGEST,
         }))

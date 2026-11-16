@@ -109,7 +109,7 @@ _Avoid_: offer link, offer URL, offer URI
 ### Library
 
 **Template Origin**:
-Where a template was imported from: `source`, `sourceTemplateId` at that source, and `digest` of the
+Where a template was imported from: `sourceUri`, `sourceTemplateId` at that source, and `digest` of the
 public content at import time (`agent_library/src/template/origin.rs`). Not the same as
 `source_template_id`, which names the local template a local copy was made from.
 _Avoid_: source template, parent template
