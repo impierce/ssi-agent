@@ -19,6 +19,9 @@ pub enum KeyProviderType {
     InMemory,
     /// AWS KMS, reached with the AWS credentials and region of the environment `UniCore` runs in.
     AwsKmsAmbient,
+    /// STACKIT KMS, in a key ring of the customer's own project. It is reached as a STACKIT service account that trusts
+    /// the workload identity `UniCore` runs as, so no secret is entered for it.
+    StackitKms,
 }
 
 impl KeyProviderType {
@@ -26,6 +29,12 @@ impl KeyProviderType {
     #[must_use]
     pub fn is_development_only(self) -> bool {
         matches!(self, Self::InMemory)
+    }
+
+    /// Whether this provider needs [`KeyProviderSettings`] to be added.
+    #[must_use]
+    pub fn takes_settings(self) -> bool {
+        matches!(self, Self::StackitKms)
     }
 }
 
@@ -57,6 +66,11 @@ impl KeyProviders {
             .filter(move |(provider_type, _)| Self::is_visible(**provider_type, development_providers_allowed))
     }
 
+    /// Whether the provider of this type has been added and may be used.
+    fn is_added(&self, provider_type: KeyProviderType, development_providers_allowed: bool) -> bool {
+        self.providers.contains_key(&provider_type) && Self::is_visible(provider_type, development_providers_allowed)
+    }
+
     /// The form in which a provider name is stored.
     #[must_use]
     pub fn normalize_name(name: &str) -> String {
@@ -84,7 +98,11 @@ impl Aggregate for KeyProviders {
         info!("Handling command: {:?}", command);
 
         let events = match command {
-            AddKeyProvider { provider_type, name } => {
+            AddKeyProvider {
+                provider_type,
+                name,
+                settings,
+            } => {
                 if !Self::is_visible(provider_type, services.development_providers_allowed) {
                     return Err(KeyProviderError::DevelopmentOnly(provider_type));
                 }
@@ -104,12 +122,24 @@ impl Aggregate for KeyProviders {
                     return Err(KeyProviderError::NameTaken(name));
                 }
 
-                vec![KeyProviderAdded { provider_type, name }]
+                match &settings {
+                    Some(settings) if settings.provider_type() != provider_type => {
+                        return Err(KeyProviderError::WrongSettings(provider_type));
+                    }
+                    None if provider_type.takes_settings() => {
+                        return Err(KeyProviderError::MissingSettings(provider_type));
+                    }
+                    _ => {}
+                }
+
+                vec![KeyProviderAdded {
+                    provider_type,
+                    name,
+                    settings,
+                }]
             }
             RemoveKeyProvider { provider_type } => {
-                if !self.providers.contains_key(&provider_type)
-                    || !Self::is_visible(provider_type, services.development_providers_allowed)
-                {
+                if !self.is_added(provider_type, services.development_providers_allowed) {
                     return Err(KeyProviderError::NotFound(provider_type));
                 }
 
@@ -126,7 +156,9 @@ impl Aggregate for KeyProviders {
 
     fn apply(&mut self, event: Self::Event) {
         match event {
-            KeyProviderEvent::KeyProviderAdded { provider_type, name } => {
+            KeyProviderEvent::KeyProviderAdded {
+                provider_type, name, ..
+            } => {
                 self.providers.insert(provider_type, name);
             }
             KeyProviderEvent::KeyProviderRemoved { provider_type } => {
@@ -139,7 +171,9 @@ impl Aggregate for KeyProviders {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::key_provider::settings::{KeyProviderSettings, StackitKmsSettings, StackitRegion};
     use cqrs_es::test::TestFramework;
+    use uuid::Uuid;
 
     type KeyProviderTestFramework = TestFramework<KeyProviders>;
 
@@ -151,6 +185,32 @@ mod tests {
         KeyProviderEvent::KeyProviderAdded {
             provider_type,
             name: name.to_string(),
+            settings: None,
+        }
+    }
+
+    fn add(provider_type: KeyProviderType, name: &str) -> KeyProviderCommand {
+        KeyProviderCommand::AddKeyProvider {
+            provider_type,
+            name: name.to_string(),
+            settings: None,
+        }
+    }
+
+    fn stackit_settings() -> KeyProviderSettings {
+        KeyProviderSettings::StackitKms(StackitKmsSettings {
+            project_id: Uuid::from_u128(1),
+            region: StackitRegion::Eu01,
+            key_ring_id: Uuid::from_u128(2),
+            service_account_email: "unicore@sa.stackit.cloud".to_string(),
+        })
+    }
+
+    fn add_stackit(settings: Option<KeyProviderSettings>) -> KeyProviderCommand {
+        KeyProviderCommand::AddKeyProvider {
+            provider_type: KeyProviderType::StackitKms,
+            name: "Own keys".to_string(),
+            settings,
         }
     }
 
@@ -158,10 +218,7 @@ mod tests {
     fn adds_a_provider_with_a_trimmed_name() {
         KeyProviderTestFramework::with(services(false))
             .given_no_previous_events()
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::AwsKmsAmbient,
-                name: "  Production keys ".to_string(),
-            })
+            .when(add(KeyProviderType::AwsKmsAmbient, "  Production keys "))
             .then_expect_events(vec![added(KeyProviderType::AwsKmsAmbient, "Production keys")]);
     }
 
@@ -169,10 +226,7 @@ mod tests {
     fn rejects_a_second_provider_of_the_same_type() {
         KeyProviderTestFramework::with(services(false))
             .given(vec![added(KeyProviderType::AwsKmsAmbient, "Production keys")])
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::AwsKmsAmbient,
-                name: "Other keys".to_string(),
-            })
+            .when(add(KeyProviderType::AwsKmsAmbient, "Other keys"))
             .then_expect_error(KeyProviderError::AlreadyAdded(KeyProviderType::AwsKmsAmbient));
     }
 
@@ -180,10 +234,7 @@ mod tests {
     fn rejects_an_empty_name() {
         KeyProviderTestFramework::with(services(false))
             .given_no_previous_events()
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::AwsKmsAmbient,
-                name: "   ".to_string(),
-            })
+            .when(add(KeyProviderType::AwsKmsAmbient, "   "))
             .then_expect_error(KeyProviderError::MissingName);
     }
 
@@ -191,10 +242,7 @@ mod tests {
     fn rejects_the_in_memory_provider_outside_development() {
         KeyProviderTestFramework::with(services(false))
             .given_no_previous_events()
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::InMemory,
-                name: "Local keys".to_string(),
-            })
+            .when(add(KeyProviderType::InMemory, "Local keys"))
             .then_expect_error(KeyProviderError::DevelopmentOnly(KeyProviderType::InMemory));
     }
 
@@ -202,10 +250,7 @@ mod tests {
     fn allows_the_in_memory_provider_in_development() {
         KeyProviderTestFramework::with(services(true))
             .given_no_previous_events()
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::InMemory,
-                name: "Local keys".to_string(),
-            })
+            .when(add(KeyProviderType::InMemory, "Local keys"))
             .then_expect_events(vec![added(KeyProviderType::InMemory, "Local keys")]);
     }
 
@@ -230,10 +275,7 @@ mod tests {
                     provider_type: KeyProviderType::AwsKmsAmbient,
                 },
             ])
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::AwsKmsAmbient,
-                name: "Production keys".to_string(),
-            })
+            .when(add(KeyProviderType::AwsKmsAmbient, "Production keys"))
             .then_expect_events(vec![added(KeyProviderType::AwsKmsAmbient, "Production keys")]);
     }
 
@@ -241,10 +283,7 @@ mod tests {
     fn rejects_a_name_used_by_a_provider_of_another_type() {
         KeyProviderTestFramework::with(services(true))
             .given(vec![added(KeyProviderType::InMemory, "Keys")])
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::AwsKmsAmbient,
-                name: "Keys".to_string(),
-            })
+            .when(add(KeyProviderType::AwsKmsAmbient, "Keys"))
             .then_expect_error(KeyProviderError::NameTaken("Keys".to_string()));
     }
 
@@ -252,10 +291,7 @@ mod tests {
     fn frees_the_name_of_a_hidden_development_provider() {
         KeyProviderTestFramework::with(services(false))
             .given(vec![added(KeyProviderType::InMemory, "Keys")])
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::AwsKmsAmbient,
-                name: "Keys".to_string(),
-            })
+            .when(add(KeyProviderType::AwsKmsAmbient, "Keys"))
             .then_expect_events(vec![added(KeyProviderType::AwsKmsAmbient, "Keys")]);
     }
 
@@ -263,10 +299,7 @@ mod tests {
     fn rejects_a_hidden_development_provider_as_development_only() {
         KeyProviderTestFramework::with(services(false))
             .given(vec![added(KeyProviderType::InMemory, "Keys")])
-            .when(KeyProviderCommand::AddKeyProvider {
-                provider_type: KeyProviderType::InMemory,
-                name: "Keys".to_string(),
-            })
+            .when(add(KeyProviderType::InMemory, "Keys"))
             .then_expect_error(KeyProviderError::DevelopmentOnly(KeyProviderType::InMemory));
     }
 
@@ -288,5 +321,37 @@ mod tests {
                 provider_type: KeyProviderType::AwsKmsAmbient,
             })
             .then_expect_error(KeyProviderError::NotFound(KeyProviderType::AwsKmsAmbient));
+    }
+
+    #[test]
+    fn adds_a_provider_with_its_settings() {
+        KeyProviderTestFramework::with(services(false))
+            .given_no_previous_events()
+            .when(add_stackit(Some(stackit_settings())))
+            .then_expect_events(vec![KeyProviderEvent::KeyProviderAdded {
+                provider_type: KeyProviderType::StackitKms,
+                name: "Own keys".to_string(),
+                settings: Some(stackit_settings()),
+            }]);
+    }
+
+    #[test]
+    fn rejects_a_provider_without_the_settings_its_type_needs() {
+        KeyProviderTestFramework::with(services(false))
+            .given_no_previous_events()
+            .when(add_stackit(None))
+            .then_expect_error(KeyProviderError::MissingSettings(KeyProviderType::StackitKms));
+    }
+
+    #[test]
+    fn rejects_settings_for_another_provider_type() {
+        KeyProviderTestFramework::with(services(false))
+            .given_no_previous_events()
+            .when(KeyProviderCommand::AddKeyProvider {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                name: "Production keys".to_string(),
+                settings: Some(stackit_settings()),
+            })
+            .then_expect_error(KeyProviderError::WrongSettings(KeyProviderType::AwsKmsAmbient));
     }
 }

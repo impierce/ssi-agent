@@ -612,7 +612,8 @@ paths:
       summary: Add a key provider
       description: |-
         Connects this instance to a key provider. Only one provider of each type can be added. The in-memory provider
-        is only available in the development profile.
+        is only available in the development profile. A `stackit_kms` provider needs its settings. No provider takes a
+        secret.
       operationId: add_key_provider
       requestBody:
         content:
@@ -628,7 +629,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/KeyProvider'
         '400':
-          description: Missing name, or a provider type that is not available in this profile
+          description: Missing name or settings, settings for another provider type, or a provider type that is not available in this profile
         '409':
           description: A provider of this type, or with this name, already exists
         '422':
@@ -2621,6 +2622,11 @@ components:
           description: A name for the provider, unique among the providers this instance lists. It can't be changed later.
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+            description: Required for `stackit_kms` providers, which keep keys in a key ring of your STACKIT project.
+          - type: 'null'
     AddKeyToDocumentResponse:
       type: object
       required:
@@ -4733,6 +4739,14 @@ components:
           type: string
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+          - type: 'null'
+    KeyProviderSettings:
+      oneOf:
+      - $ref: '#/components/schemas/StackitKmsSettings'
+      description: The settings of a key provider. None of them are secret. Only `stackit_kms` providers have any.
     KeyProviderType:
       type: string
       description: |-
@@ -4741,6 +4755,7 @@ components:
       enum:
       - in_memory
       - aws_kms_ambient
+      - stackit_kms
     KeyProviderTypeRequest:
       type: object
       required:
@@ -5642,6 +5657,38 @@ components:
       - Default
       - Runtime
       - None
+    StackitKmsSettings:
+      type: object
+      description: Where STACKIT KMS keeps the keys, a key ring in your STACKIT project, and the service account UniCore signs in as.
+      required:
+      - projectId
+      - region
+      - keyRingId
+      - serviceAccountEmail
+      properties:
+        keyRingId:
+          type: string
+          description: The ID of the key ring in that project that keeps the keys.
+          example: 9c0e7b52-5d2a-4f0e-8a51-3b6d1e2f4a7c
+        projectId:
+          type: string
+          description: The ID of your STACKIT project.
+          example: 4a1d2f6e-0f33-4c55-9b56-6f8e8a2b1c3d
+        region:
+          $ref: '#/components/schemas/StackitRegion'
+        serviceAccountEmail:
+          type: string
+          description: |-
+            The service account UniCore signs in as, with access to the key ring. It must have a federated identity
+            provider that trusts the workload identity this instance runs as, and that checks the subject as well as the
+            issuer, since other workloads can share the issuer.
+          example: unicore-kms@sa.stackit.cloud
+      additionalProperties: false
+    StackitRegion:
+      type: string
+      description: The STACKIT regions that offer KMS.
+      enum:
+      - eu01
     SupportedDidMethod:
       type: string
       description: DID methods supported by UniCore

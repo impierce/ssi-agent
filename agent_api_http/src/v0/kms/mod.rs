@@ -90,6 +90,23 @@ mod tests {
         (status, body)
     }
 
+    fn stackit_settings() -> Value {
+        json!({
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "region": "eu01",
+            "keyRingId": "00000000-0000-0000-0000-000000000002",
+            "serviceAccountEmail": "unicore@sa.stackit.cloud"
+        })
+    }
+
+    fn stackit_provider() -> Value {
+        json!({ "providerType": "stackit_kms", "name": "Own keys", "settings": stackit_settings() })
+    }
+
+    async fn add_stackit(app: &Router) -> (StatusCode, Value) {
+        send(app, "POST", "/v0/add-key-provider", Some(stackit_provider())).await
+    }
+
     async fn add(app: &Router, provider_type: &str) {
         let body = json!({ "providerType": provider_type, "name": provider_type });
         assert_eq!(
@@ -229,5 +246,24 @@ mod tests {
         let response = send(&app, "GET", "/v0/get-all-keys", None).await;
 
         assert_eq!(response, (StatusCode::OK, json!([created])));
+    }
+
+    #[tokio::test]
+    async fn adding_a_provider_answers_with_its_settings() {
+        let app = app_with_kms().await;
+
+        let response = add_stackit(&app).await;
+
+        assert_eq!(response, (StatusCode::CREATED, stackit_provider()));
+    }
+
+    #[tokio::test]
+    async fn lists_a_provider_with_its_settings() {
+        let app = app_with_kms().await;
+        add_stackit(&app).await;
+
+        let response = send(&app, "GET", "/v0/get-all-key-providers", None).await;
+
+        assert_eq!(response.1, json!([stackit_provider()]));
     }
 }

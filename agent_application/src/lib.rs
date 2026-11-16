@@ -575,6 +575,7 @@ mod tests {
             KeyProviderCommand::AddKeyProvider {
                 provider_type: KeyProviderType::InMemory,
                 name: "in_memory".to_string(),
+                settings: None,
             },
         )
         .await

@@ -5,6 +5,7 @@ use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
     command::KeyProviderCommand,
+    settings::{KeyProviderSettings, StackitKmsSettings, StackitRegion},
 };
 use agent_kms::state::{get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection};
 use agent_kms::KmsState;
@@ -17,6 +18,7 @@ use http::StatusCode;
 use http_api_problem::ApiError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// A key provider this instance is connected to.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
@@ -25,14 +27,81 @@ use std::sync::Arc;
 pub struct KeyProviderDto {
     pub provider_type: KeyProviderType,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<KeyProviderSettingsDto>,
 }
 
-#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
+/// The settings of a key provider. None of them are secret. Only `stackit_kms` providers have any.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(untagged)]
+#[schema(as = KeyProviderSettings)]
+pub enum KeyProviderSettingsDto {
+    StackitKms(StackitKmsSettingsDto),
+}
+
+/// Where STACKIT KMS keeps the keys, a key ring in your STACKIT project, and the service account UniCore signs in as.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[schema(as = StackitKmsSettings)]
+pub struct StackitKmsSettingsDto {
+    /// The ID of your STACKIT project.
+    #[schema(value_type = String, example = "4a1d2f6e-0f33-4c55-9b56-6f8e8a2b1c3d")]
+    pub project_id: Uuid,
+    pub region: StackitRegion,
+    /// The ID of the key ring in that project that keeps the keys.
+    #[schema(value_type = String, example = "9c0e7b52-5d2a-4f0e-8a51-3b6d1e2f4a7c")]
+    pub key_ring_id: Uuid,
+    /// The service account UniCore signs in as, with access to the key ring. It must have a federated identity
+    /// provider that trusts the workload identity this instance runs as, and that checks the subject as well as the
+    /// issuer, since other workloads can share the issuer.
+    #[schema(example = "unicore-kms@sa.stackit.cloud")]
+    pub service_account_email: String,
+}
+
+impl From<KeyProviderSettingsDto> for KeyProviderSettings {
+    fn from(settings: KeyProviderSettingsDto) -> Self {
+        match settings {
+            KeyProviderSettingsDto::StackitKms(StackitKmsSettingsDto {
+                project_id,
+                region,
+                key_ring_id,
+                service_account_email,
+            }) => Self::StackitKms(StackitKmsSettings {
+                project_id,
+                region,
+                key_ring_id,
+                service_account_email,
+            }),
+        }
+    }
+}
+
+impl From<KeyProviderSettings> for KeyProviderSettingsDto {
+    fn from(settings: KeyProviderSettings) -> Self {
+        match settings {
+            KeyProviderSettings::StackitKms(StackitKmsSettings {
+                project_id,
+                region,
+                key_ring_id,
+                service_account_email,
+            }) => Self::StackitKms(StackitKmsSettingsDto {
+                project_id,
+                region,
+                key_ring_id,
+                service_account_email,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddKeyProviderRequest {
     pub provider_type: KeyProviderType,
     /// A name for the provider, unique among the providers this instance lists. It can't be changed later.
     pub name: String,
+    /// Required for `stackit_kms` providers, which keep keys in a key ring of your STACKIT project.
+    pub settings: Option<KeyProviderSettingsDto>,
 }
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -54,7 +123,8 @@ pub struct ConnectionTestResult {
 /// Add a key provider
 ///
 /// Connects this instance to a key provider. Only one provider of each type can be added. The in-memory provider
-/// is only available in the development profile.
+/// is only available in the development profile. A `stackit_kms` provider needs its settings. No provider takes a
+/// secret.
 #[utoipa::path(
     post,
     path = "/add-key-provider",
@@ -63,7 +133,7 @@ pub struct ConnectionTestResult {
     request_body = AddKeyProviderRequest,
     responses(
         (status = 201, description = "Key provider added", body = KeyProviderDto),
-        (status = 400, description = "Missing name, or a provider type that is not available in this profile"),
+        (status = 400, description = "Missing name or settings, settings for another provider type, or a provider type that is not available in this profile"),
         (status = 409, description = "A provider of this type, or with this name, already exists"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -72,7 +142,11 @@ pub struct ConnectionTestResult {
 pub(crate) async fn add_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(AddKeyProviderRequest { provider_type, name }): Json<AddKeyProviderRequest>,
+    Json(AddKeyProviderRequest {
+        provider_type,
+        name,
+        settings,
+    }): Json<AddKeyProviderRequest>,
 ) -> Result<Response, ApiError> {
     let name = KeyProviders::normalize_name(&name);
     command_handler(
@@ -83,13 +157,22 @@ pub(crate) async fn add_key_provider(
         KeyProviderCommand::AddKeyProvider {
             provider_type,
             name: name.clone(),
+            settings: settings.clone().map(Into::into),
         },
     )
     .await?;
 
     // Answer from the accepted command rather than the view: the event is stored at this point, but a failed view
     // update would otherwise turn a successful add into an error.
-    Ok((StatusCode::CREATED, Json(KeyProviderDto { provider_type, name })).into_response())
+    Ok((
+        StatusCode::CREATED,
+        Json(KeyProviderDto {
+            provider_type,
+            name,
+            settings,
+        }),
+    )
+        .into_response())
 }
 
 /// List all key providers
@@ -109,12 +192,17 @@ pub(crate) async fn get_all_key_providers(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let providers: Vec<KeyProviderDto> = get_key_providers(&state, caller(actor))
+    let mut view = get_key_providers(&state, caller(actor))
         .await
-        .map_err(IntoApiErrorExt::into_api_error)?
+        .map_err(IntoApiErrorExt::into_api_error)?;
+    let providers: Vec<KeyProviderDto> = view
         .providers
         .into_iter()
-        .map(|(provider_type, name)| KeyProviderDto { provider_type, name })
+        .map(|(provider_type, name)| KeyProviderDto {
+            provider_type,
+            name,
+            settings: view.settings.shift_remove(&provider_type).map(Into::into),
+        })
         .collect();
 
     Ok((StatusCode::OK, Json(providers)).into_response())

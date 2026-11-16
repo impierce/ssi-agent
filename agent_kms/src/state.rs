@@ -494,6 +494,7 @@ mod tests {
             KeyProviderCommand::AddKeyProvider {
                 provider_type,
                 name: provider_type.to_string(),
+                settings: None,
             },
         )
         .await

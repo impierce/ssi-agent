@@ -25,6 +25,8 @@ uuid.workspace = true
 [dev-dependencies]
 agent_store = { path = "../agent_store" }
 
+serde_json.workspace = true
+
 [features]
 test_utils = []
 
