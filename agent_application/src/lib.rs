@@ -34,12 +34,13 @@ use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, Cqr
 use agent_verification::services::VerificationServices;
 pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
 use kms_aws::AwsKmsAmbientKeyProvider;
+use kms_stackit::StackitKmsFactory;
 use probes::{
     liveness::{healthz, livez},
     readiness::{readyz, ReadinessState},
 };
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info};
@@ -399,7 +400,8 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
 
     info!("Key Management System enabled");
 
-    // No adapter for `stackit_kms` providers yet, so they are answered as not supported.
+    let stackit = StackitKmsFactory::new(config().stackit_federated_token_file.clone().map(PathBuf::from))
+        .unwrap_or_else(|error| panic!("STACKIT KMS providers can't be set up: {error}"));
     let factories: KeyProviderFactories = [
         (
             KeyProviderType::InMemory,
@@ -411,6 +413,7 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
                 config().deployment_alias.clone(),
             )))) as _,
         ),
+        (KeyProviderType::StackitKms, Arc::new(stackit) as _),
     ]
     .into();
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);

@@ -123,6 +123,11 @@ pub struct ApplicationConfiguration {
     /// `UNICORE__DEPLOYMENT_ALIAS`; empty means none.
     #[config(default, transform_with = "non_empty")]
     pub deployment_alias: Option<String>,
+    /// Where the host keeps the workload identity token that STACKIT KMS providers sign in with, such as a projected
+    /// Kubernetes service account token. Set through `UNICORE__STACKIT_FEDERATED_TOKEN_FILE`; empty means where
+    /// STACKIT's own SDKs look for it.
+    #[config(default, transform_with = "non_empty")]
+    pub stackit_federated_token_file: Option<String>,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();

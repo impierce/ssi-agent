@@ -148,6 +148,7 @@ dependencies = [
  "chrono",
  "identity-kit",
  "kms-aws",
+ "kms-stackit",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
@@ -6546,12 +6547,14 @@ dependencies = [
  "js-sys",
  "p256 0.13.2",
  "p384",
+ "pem",
  "rand 0.8.8",
  "rsa 0.9.10",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "signature 2.2.0",
+ "simple_asn1",
  "zeroize",
 ]
 
@@ -6631,6 +6634,25 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "kms-stackit"
+version = "0.1.0"
+dependencies = [
+ "agent_kms",
+ "async-trait",
+ "base64 0.22.1",
+ "identity-kit",
+ "jsonwebtoken",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "url",
+ "uuid",
  "wiremock",
 ]
 
@@ -10721,6 +10743,18 @@ name = "simple-server-timing-header"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16e78919e05c9b8e123d435a4ad104b488ad1585631830e413830985c214086e"
+
+[[package]]
+name = "simple_asn1"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d585997b0ac10be3c5ee635f1bab02d512760d14b7c468801ac8a01d9ae5f1d"
+dependencies = [
+ "num-bigint 0.4.8",
+ "num-traits",
+ "thiserror 2.0.21",
+ "time",
+]
 
 [[package]]
 name = "siopv2"
