@@ -278,7 +278,7 @@ mod tests {
         let app = app(vec![TemplateView {
             source_template_id: Some("the-source-template".to_string()),
             origin: Some(agent_library::template::origin::TemplateOrigin {
-                source_uri: "https://issuer.example".to_string(),
+                publisher_uri: "https://issuer.example".to_string(),
                 source_template_id: "0b7c".to_string(),
                 digest: format!("sha256-{}", "a".repeat(64)),
                 check_for_updates: true,
