@@ -239,6 +239,14 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     #[config(default = "1000")]
     pub external_server_response_timeout_ms: u64,
+    /// Maximum size, in bytes, of an HTTP request body. A request whose body exceeds this is
+    /// rejected with `413 Payload Too Large` before the body is read in full, so an
+    /// unauthenticated client cannot exhaust the process memory with a single oversized request.
+    /// Raise it for deployments that legitimately accept large requests, such as big
+    /// credential-issuance batches. The limit applies before authorization, to every request,
+    /// so keep it as low as those requests allow. There is deliberately no "unlimited" value.
+    #[config(default = "2097152")] // 2 MiB, matching axum's own default body limit.
+    pub max_request_body_bytes: usize,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
@@ -976,6 +984,7 @@ mod tests {
                 }
               },
               "external_server_response_timeout_ms": 1000,
+              "max_request_body_bytes": 2097152,
               "credential_offer_by_value_enabled": false,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
