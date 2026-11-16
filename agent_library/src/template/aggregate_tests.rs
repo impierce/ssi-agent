@@ -3563,6 +3563,66 @@ async fn test_replace_content_digests_like_its_source(template_id: String) {
     assert_eq!(replaced.origin, Some(origin('a')));
 }
 
+/// An Open Badges template, whose required properties the library marks as non-removable.
+fn open_badges_command(template_id: &str) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Badge".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::OpenBadges3_0,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: None,
+        r#type: vec![],
+        schema: Box::new(Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" },
+                        "description": { "type": "string" },
+                        "criteria": { "type": "object", "properties": { "narrative": { "type": "string" } } }
+                    }
+                }
+            }
+        }))),
+        schema_properties_attributes: None,
+        holder_authorization: Authorization::default(),
+        origin: None,
+    }
+}
+
+/// A copy whose attributes were dropped locally gets the non-removable flags back with its source's content, so it
+/// digests like the source again.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_restores_open_badges_non_removable_flags(template_id: String) {
+    let source = applied(events_after(vec![open_badges_command("source")]).await);
+    let copy = events_after(vec![
+        open_badges_command(&template_id),
+        TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes: HashMap::new(),
+        },
+    ])
+    .await;
+
+    let events = replaced(copy.clone(), replace_content(&template_id, source.public_content()))
+        .await
+        .unwrap();
+    let replaced = applied(copy.into_iter().chain(events).collect());
+
+    let attributes = replaced.schema_properties_attributes.clone().unwrap();
+    assert!(attributes["/achievement/name"].non_removable);
+    assert_eq!(replaced.public_content().digest(), source.public_content().digest());
+}
+
 /// Only the fields that change emit an event, and the origin is always set, last.
 #[rstest]
 #[serial_test::serial]

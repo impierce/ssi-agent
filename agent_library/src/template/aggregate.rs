@@ -976,8 +976,11 @@ impl Template {
 
                 // The `non_removable` flag is system-determined by the data model and cannot
                 // be altered through any command. Override it with the existing values.
-                let schema_properties_attributes =
-                    enforce_non_removable_flag(schema_properties_attributes, &self.schema_properties_attributes);
+                let schema_properties_attributes = enforce_non_removable_flag(
+                    schema_properties_attributes,
+                    &self.schema_properties_attributes,
+                    &self.data_model,
+                );
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -1200,26 +1203,27 @@ fn trim_and_deduplicate_attribute_keys(
     Ok(result)
 }
 
-/// Ensures the `non_removable` flag on each property attribute preserves the existing
-/// system-determined value. Users cannot alter `non_removable` through commands.
+/// Ensures the `non_removable` flag on each property attribute is the system-determined one. Users cannot alter
+/// `non_removable` through commands.
+///
+/// An attribute the template already has keeps its flag. One it doesn't have gets the flag the data model gives it,
+/// as on create: an Open Badges template that lost the attribute of a required property gets a non-removable one
+/// back.
 fn enforce_non_removable_flag(
     mut new_attrs: HashMap<String, PropertyAttribute>,
     existing_attrs: &Option<HashMap<String, PropertyAttribute>>,
+    data_model: &DataModel,
 ) -> HashMap<String, PropertyAttribute> {
-    if let Some(existing) = existing_attrs {
-        for (key, new_attr) in new_attrs.iter_mut() {
-            if let Some(existing_attr) = existing.get(key) {
-                new_attr.non_removable = existing_attr.non_removable;
-            } else {
-                // New properties not previously tracked default to non-removable=false.
-                new_attr.non_removable = false;
-            }
-        }
+    let required_paths = if *data_model == DataModel::OpenBadges3_0 {
+        open_badges_required_leaf_paths()
     } else {
-        // No existing attributes means no non-removable flags to preserve.
-        for attr in new_attrs.values_mut() {
-            attr.non_removable = false;
-        }
+        Vec::new()
+    };
+    for (key, new_attr) in &mut new_attrs {
+        new_attr.non_removable = match existing_attrs.as_ref().and_then(|existing| existing.get(key)) {
+            Some(existing_attr) => existing_attr.non_removable,
+            None => required_paths.contains(key),
+        };
     }
     new_attrs
 }
