@@ -2,7 +2,7 @@
 
 **Status**: Accepted  
 **Date**: 2026-11-04  
-**Context**: The optional `origin` of a template (`source`, `sourceTemplateId`, `digest`), recording
+**Context**: The optional `origin` of a template (`publisherUri`, `sourceTemplateId`, `digest`), recording
 where it was imported from.
 
 ---

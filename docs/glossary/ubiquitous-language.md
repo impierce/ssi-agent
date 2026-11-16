@@ -172,7 +172,7 @@ Issuers set up a template once and reuse it for every instance of that credentia
 
 ### Template Origin
 
-Where a credential template was imported from: the source that publishes it, the template's identifier at that source, and a fingerprint of the template's public content at the time of import. Comparing the fingerprint with the source's current content tells whether the source has changed since; comparing it with the local template tells whether the copy has been edited. A template that was created locally, or copied from another local template, has no origin.
+Where a credential template was imported from: who published it, the template's identifier at that publisher, and a fingerprint of the template's public content at the time of import. Comparing the fingerprint with the source's current content tells whether the source has changed since; comparing it with the local template tells whether the copy has been edited. A template that was created locally, or copied from another local template, has no origin.
 
 **Related**: Credential Template, Issuer
 

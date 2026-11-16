@@ -105,7 +105,7 @@ async fn test_template_created_with_an_origin_registers_credential_configuration
         unreachable!()
     };
     *origin = Some(Box::new(agent_library::template::origin::TemplateOrigin {
-        source: "https://issuer.example".to_string(),
+        publisher_uri: "https://issuer.example".to_string(),
         source_template_id: "0b7c".to_string(),
         digest: format!("sha256-{}", "a".repeat(64)),
         check_for_updates: true,

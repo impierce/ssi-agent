@@ -5772,7 +5772,7 @@ components:
         the import, and with the digest of the local template's public content to tell whether the copy
         was edited locally.
       required:
-      - source
+      - publisherUri
       - sourceTemplateId
       - digest
       properties:
@@ -5788,12 +5788,14 @@ components:
           description: |-
             Digest of the template's public content at import time: `sha256-` followed by 64 lowercase
             hexadecimal digits.
-        source:
+        publisherUri:
           type: string
-          description: URI of the source, e.g. the identifier of the publishing entity.
+          description: |-
+            URI identifying who published the template, e.g. the identifier of the publishing entity. Not an address of the
+            template itself: every template imported from one publisher carries the same value.
         sourceTemplateId:
           type: string
-          description: Identifier of the template at the source. Opaque.
+          description: Identifier of the template at the publisher. Opaque.
     TokenErrorResponse:
       type: string
       description: 'Token Error Response as described here: <https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-token-error-response>'
