@@ -115,6 +115,12 @@ impl IntoApiErrorExt for CreateKeyError {
     fn into_api_error(self) -> ApiError {
         match self {
             CreateKeyError::Provider(error) => error.into_api_error(),
+            CreateKeyError::Unreachable(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("Key Provider Unreachable")
+                .type_url(type_url("kms#key-provider-unreachable"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
             CreateKeyError::KeyStore(error) => error.into_api_error(),
             CreateKeyError::Record(error) => error.into_api_error(),
             CreateKeyError::UnsupportedAlgorithm(_) => ApiError::builder(StatusCode::BAD_REQUEST)
@@ -137,7 +143,7 @@ impl IntoApiErrorExt for CreateKeyError {
 mod tests {
     use super::*;
     use crate::error::tests::assert_problems;
-    use agent_kms::adapter::InvalidLabel;
+    use agent_kms::adapter::{ConnectionError, InvalidLabel};
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use identity_kit::{
         jose::{JwsAlgorithm, KeyType},
@@ -243,6 +249,11 @@ mod tests {
                 CreateKeyError::InvalidLabel(InvalidLabel("`aws/x` can't be an AWS KMS alias name".to_string())),
                 StatusCode::BAD_REQUEST,
                 Some("kms#invalid-key-label"),
+            ),
+            (
+                CreateKeyError::Unreachable(ConnectionError("no workload identity token".to_string())),
+                StatusCode::BAD_GATEWAY,
+                Some("kms#key-provider-unreachable"),
             ),
         ]);
     }

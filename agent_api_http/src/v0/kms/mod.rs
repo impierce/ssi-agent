@@ -37,7 +37,7 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
 mod tests {
     use crate::{app_with_base_path, ApiState};
     use agent_kms::adapter::InMemoryKeyStore;
-    use agent_kms::adapter::{test_utils::UnreachableKeyProvider, KeyProviderAdapter, KeyProviderAdapters};
+    use agent_kms::adapter::{test_utils::UnreachableKeyProvider, FixedAdapter, KeyProviderFactories};
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use agent_kms::kms_state;
     use agent_store::in_memory::InMemory;
@@ -51,15 +51,18 @@ mod tests {
     use tower::ServiceExt;
 
     async fn app_with_kms() -> Router {
-        let adapters: KeyProviderAdapters = [
+        let factories: KeyProviderFactories = [
             (
                 KeyProviderType::InMemory,
-                Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+                Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as _,
             ),
-            (KeyProviderType::AwsKmsAmbient, Arc::new(UnreachableKeyProvider)),
+            (
+                KeyProviderType::AwsKmsAmbient,
+                Arc::new(FixedAdapter(Arc::new(UnreachableKeyProvider))) as _,
+            ),
         ]
         .into();
-        let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await;
+        let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, factories).await;
 
         app_with_base_path(
             ApiState {

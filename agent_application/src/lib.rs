@@ -16,7 +16,7 @@ use agent_issuance::{
     application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
 use agent_kms::{
-    adapter::{InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters},
+    adapter::{FixedAdapter, InMemoryKeyStore, KeyProviderFactories},
     key_provider::aggregate::KeyProviderType,
     kms_state,
     state::{signing_key, signing_keys, SigningKey},
@@ -399,21 +399,24 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
 
     info!("Key Management System enabled");
 
-    let adapters: KeyProviderAdapters = [
+    // No adapter for `stackit_kms` providers yet, so they are answered as not supported.
+    let factories: KeyProviderFactories = [
         (
             KeyProviderType::InMemory,
-            Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as _,
         ),
         (
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(aws_kms_provider(config().deployment_alias.clone())),
+            Arc::new(FixedAdapter(Arc::new(aws_kms_provider(
+                config().deployment_alias.clone(),
+            )))) as _,
         ),
     ]
     .into();
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
 
     Some(Arc::new(
-        kms_state(builder, event_bus, development_providers_allowed, adapters).await,
+        kms_state(builder, event_bus, development_providers_allowed, factories).await,
     ))
 }
 
@@ -541,7 +544,9 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_kms::{key_provider::aggregate::KeyProviders, key_provider::command::KeyProviderCommand};
+    use agent_kms::{
+        adapter::KeyProviderFactory, key_provider::aggregate::KeyProviders, key_provider::command::KeyProviderCommand,
+    };
     use agent_shared::{config::set_config, handlers::command_handler};
     use identity_kit::{jose::JwsAlgorithm, keys::KeyStore as _};
     use shared_kernel::authorization::Caller;
@@ -561,12 +566,12 @@ mod tests {
 
     #[tokio::test]
     async fn a_kms_key_signs_with_the_key_its_provider_holds() {
-        let adapters: KeyProviderAdapters = [(
+        let factories: KeyProviderFactories = [(
             KeyProviderType::InMemory,
-            Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as Arc<dyn KeyProviderFactory>,
         )]
         .into();
-        let kms_state = Arc::new(kms_state(&InMemory, &Default::default(), true, adapters).await);
+        let kms_state = Arc::new(kms_state(&InMemory, &Default::default(), true, factories).await);
         command_handler(
             kms_state.authorization_checker.clone(),
             Caller::Internal,
