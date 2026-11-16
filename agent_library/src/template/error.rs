@@ -44,4 +44,6 @@ pub enum TemplateError {
     TemplateIdMissing,
     #[error("No Template found with id: `{0}`")]
     TemplateNotFound(String),
+    #[error("Invalid origin: {0}")]
+    InvalidOrigin(String),
 }

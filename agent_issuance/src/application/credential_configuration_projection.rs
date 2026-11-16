@@ -358,6 +358,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                     schema,
                     schema_properties_attributes,
                     holder_authorization,
+                    origin: _,
                 } => {
                     // Only published templates have a credential configuration.
                     if *status != Status::Published {
@@ -381,6 +382,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                         schema: schema.clone(),
                         schema_properties_attributes: schema_properties_attributes.clone(),
                         holder_authorization: holder_authorization.clone(),
+                        origin: None,
                     };
 
                     self.update_credential_configuration(
