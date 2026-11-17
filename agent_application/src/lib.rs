@@ -23,7 +23,7 @@ use agent_shared::{
     config::{config, EventStoreType},
     profile::ApplicationProfile,
 };
-use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, CqrsComponentBuilder};
+use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, CqrsComponentBuilder, WriterLease};
 use agent_verification::services::VerificationServices;
 pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
 use kms_aws::AwsKmsAmbientKeyProvider;
@@ -32,7 +32,7 @@ use probes::{
     readiness::{readyz, ReadinessState},
 };
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
-use std::sync::Arc;
+use std::{future::IntoFuture, sync::Arc};
 use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info, warn};
@@ -56,6 +56,8 @@ use agent_verification::verification_state;
 pub struct ApplicationState {
     pub api: ApiState,
     pub event_verification: EventVerification,
+    /// The event-store writer lease, held from startup on; `None` for the in-memory event store.
+    pub writer_lease: Option<WriterLease>,
     readiness: ReadinessState,
 }
 
@@ -125,7 +127,67 @@ pub async fn run() -> io::Result<()> {
     let state = state(subject).await?;
     state.verify_persisted_events().await;
 
-    serve(router(state)).await
+    let writer_lease = state.writer_lease.clone();
+    let readiness = state.readiness.clone();
+    let shutdown = shutdown_signal(writer_lease.clone());
+    let result = serve(router(state), readiness, shutdown).await;
+    if let Some(writer_lease) = writer_lease {
+        writer_lease.release().await;
+    }
+    result
+}
+
+/// How long requests in flight may take to finish once a shutdown has started.
+const SHUTDOWN_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Why the server stops.
+enum Shutdown {
+    Requested,
+    WriterLeaseLost,
+}
+
+/// Completes on SIGTERM, Ctrl+C or the loss of the writer lease.
+async fn shutdown_signal(writer_lease: Option<WriterLease>) -> Shutdown {
+    let lease_lost = async {
+        match &writer_lease {
+            Some(writer_lease) => writer_lease.lost().await,
+            None => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        () = terminate_signal() => {
+            info!("Shutdown signal received; shutting down gracefully");
+            Shutdown::Requested
+        }
+        () = lease_lost => {
+            error!("Event-store writer lease lost; shutting down");
+            Shutdown::WriterLeaseLost
+        }
+    }
+}
+
+async fn terminate_signal() {
+    let ctrl_c = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    };
+    #[cfg(unix)]
+    let sigterm = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let sigterm = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {}
+        () = sigterm => {}
+    }
 }
 
 pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
@@ -155,6 +217,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 
     let event_store_type = config().event_store.type_.clone();
     let event_verification;
+    let writer_lease;
     let kms_state;
     let readiness = ReadinessState::default();
 
@@ -163,6 +226,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         match event_store_type {
             EventStoreType::Postgres => {
                 let builder = Postgres::new().await;
+                writer_lease = Some(builder.acquire_writer_lease().await.map_err(io::Error::other)?);
 
                 let issuance_state = Arc::new(issuance_state(&builder, issuance_services, &event_bus).await);
 
@@ -213,6 +277,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
+                writer_lease = Some(builder.acquire_writer_lease().await.map_err(io::Error::other)?);
                 let mongo_source = agent_store::MongoEventSource::new(builder.client.clone());
                 // 1. Stream live database writes from MongoDB Change Stream into the local EventBus.
                 event_bus.attach_source(mongo_source.clone());
@@ -267,6 +332,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 states
             }
             EventStoreType::InMemory => {
+                writer_lease = None;
                 let issuance_state = Arc::new(issuance_state(&InMemory, issuance_services, &event_bus).await);
 
                 let (credential_configuration_projection, template_view_handle) =
@@ -342,6 +408,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             kms_state,
         },
         event_verification,
+        writer_lease,
         readiness,
     })
 }
@@ -389,6 +456,7 @@ where
     let ApplicationState {
         api,
         event_verification: _,
+        writer_lease: _,
         readiness,
     } = application_state;
     let actor_extractor = Arc::new(actor_extractor);
@@ -456,12 +524,46 @@ fn verify_persisted_events(
     }
 }
 
-async fn serve(app: axum::Router) -> io::Result<()> {
+/// Serves the HTTP API until `shutdown` completes, then lets requests in flight finish.
+async fn serve(
+    app: axum::Router,
+    readiness: ReadinessState,
+    shutdown: impl std::future::Future<Output = Shutdown> + Send + 'static,
+) -> io::Result<()> {
     let port = config().application_url.port().unwrap_or(3033);
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+    info!("HTTP API served at {}", config().application_url);
+    let app = with_cors(app);
 
-    start_server("HTTP API".to_string(), app, port).await;
+    let (stopping, reason) = tokio::sync::oneshot::channel();
+    let server = axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            let shutdown = shutdown.await;
+            readiness.mark_not_ready();
+            let _ = stopping.send(shutdown);
+        })
+        .into_future();
+    tokio::pin!(server);
 
-    Ok(())
+    let reason = tokio::select! {
+        result = &mut server => {
+            result?;
+            return Ok(());
+        }
+        Ok(reason) = reason => reason,
+    };
+    // Event streams stay open until the client disconnects: stop waiting for them after a while.
+    if tokio::time::timeout(SHUTDOWN_DRAIN_TIMEOUT, &mut server).await.is_err() {
+        warn!(
+            timeout_seconds = SHUTDOWN_DRAIN_TIMEOUT.as_secs(),
+            "Connections still open after shutdown timeout; closing them"
+        );
+    }
+
+    match reason {
+        Shutdown::WriterLeaseLost => Err(io::Error::other("event-store writer lease lost")),
+        Shutdown::Requested => Ok(()),
+    }
 }
 
 /// Start a server for a given `Router` on a given port.
@@ -474,15 +576,16 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
         info!("{alias} served at {}", listener.local_addr().unwrap());
     }
 
-    // CORS
-    let router = if config().cors_enabled {
+    axum::serve(listener, with_cors(router)).await.unwrap();
+}
+
+fn with_cors(router: axum::Router) -> axum::Router {
+    if config().cors_enabled {
         info!("CORS (permissive) enabled for all routes");
         router.layer(CorsLayer::permissive())
     } else {
         router
-    };
-
-    axum::serve(listener, router).await.unwrap();
+    }
 }
 
 #[cfg(test)]
