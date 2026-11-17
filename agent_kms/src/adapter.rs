@@ -81,6 +81,18 @@ pub trait KeyProviderAdapter: KeyStore {
     async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
         self.generate(spec).await
     }
+
+    /// Deletes a key that [`create`](Self::create) returned `created` for, when it can't be recorded, and frees
+    /// `label`, which it was created with, only while the label still names that key.
+    ///
+    /// By default the key is deleted by `created`, for providers whose label goes with the key.
+    ///
+    /// # Errors
+    ///
+    /// Fails as [`KeyStore::delete`] does.
+    async fn discard(&self, created: &KeyId, _label: Option<&str>) -> Result<(), KeyStoreError> {
+        self.delete(created).await
+    }
 }
 
 /// The adapter for each provider type this instance can use.
