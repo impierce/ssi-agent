@@ -9,6 +9,8 @@
 //! schedules its deletion: STACKIT keeps it for 30 days, during which it counts as deleted here and can still be
 //! restored in STACKIT.
 
+#[cfg(test)]
+mod fake_kms;
 mod token;
 
 pub use token::{AccessTokens, ServiceAccountKey, TokenExchange, DEFAULT_FEDERATED_TOKEN_FILE, TOKEN_URL};
@@ -574,6 +576,8 @@ impl Version {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fake_kms::{FakeStackit, ES256, SIGNING};
+    use identity_kit::keys::testsuite;
 
     const KEY: &str = "3f2c1a6e-8b7d-4c5e-9a10-2b3c4d5e6f70";
 
@@ -623,5 +627,192 @@ mod tests {
         let pem = "-----BEGIN PUBLIC KEY-----\nAAEC\nAwQ=\n-----END PUBLIC KEY-----\n";
 
         assert_eq!(spki_der_from_pem(pem), Some(vec![0, 1, 2, 3, 4]));
+    }
+
+    fn es256() -> KeySpec {
+        KeySpec::new(KeyType::P256, JwsAlgorithm::ES256)
+    }
+
+    #[tokio::test]
+    async fn passes_the_identity_kit_key_store_suite() {
+        let kms = FakeStackit::start().await;
+
+        testsuite::run(&kms.provider()).await;
+    }
+
+    #[tokio::test]
+    async fn creates_a_labelled_key_under_an_id_that_pins_its_version() {
+        let kms = FakeStackit::start().await;
+
+        let id = kms.provider().create(es256().with_label("issuer")).await.unwrap();
+
+        assert_eq!(id.as_str(), "00000000-0000-0000-0000-000000000001/1");
+    }
+
+    #[tokio::test]
+    async fn waits_until_a_new_key_has_a_version_it_can_sign_with() {
+        let kms = FakeStackit::start().await;
+        kms.create_versions_slowly(2);
+        let provider = kms.provider();
+
+        let id = provider.generate(es256()).await.unwrap();
+
+        let signed = provider.sign(&id, JwsAlgorithm::ES256, b"data").await;
+        assert!(signed.is_ok(), "{signed:?}");
+    }
+
+    #[tokio::test]
+    async fn signs_with_the_newest_usable_version_of_a_key_named_by_its_id() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("issuer", ES256, SIGNING);
+        kms.add_version(id);
+        kms.add_version(id);
+        kms.disable_version(id, 3);
+        let provider = kms.provider();
+
+        let newest = provider.public_jwk(&KeyId::new(id.to_string())).await.unwrap();
+
+        let second = provider.public_jwk(&KeyId::new(format!("{id}/2"))).await.unwrap();
+        assert_eq!(newest.thumbprint_sha256().unwrap(), second.thumbprint_sha256().unwrap());
+    }
+
+    #[tokio::test]
+    async fn reports_a_destroyed_version_as_missing() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("issuer", ES256, SIGNING);
+        kms.set_version_state(id, 1, "destroyed");
+
+        let exists = kms.provider().exists(&KeyId::new(format!("{id}/1"))).await.unwrap();
+
+        assert!(!exists);
+    }
+
+    #[tokio::test]
+    async fn gives_a_label_that_only_a_deleted_key_has() {
+        let kms = FakeStackit::start().await;
+        let deleted = kms.add_key("issuer", ES256, SIGNING);
+        kms.set_key_state(deleted, "deleted");
+
+        let id = kms.provider().generate(es256().with_label("issuer")).await.unwrap();
+
+        assert_eq!(id.as_str(), "issuer");
+    }
+
+    #[tokio::test]
+    async fn names_by_a_label_the_key_that_is_not_deleted() {
+        let kms = FakeStackit::start().await;
+        let deleted = kms.add_key("issuer", ES256, SIGNING);
+        kms.set_key_state(deleted, "deleted");
+        kms.add_key("issuer", ES256, SIGNING);
+
+        let exists = kms.provider().exists(&KeyId::new("issuer")).await.unwrap();
+
+        assert!(exists);
+    }
+
+    #[tokio::test]
+    async fn refuses_a_label_that_several_keys_have() {
+        let kms = FakeStackit::start().await;
+        kms.add_key("issuer", ES256, SIGNING);
+        kms.add_key("issuer", ES256, SIGNING);
+
+        let result = kms
+            .provider()
+            .sign(&KeyId::new("issuer"), JwsAlgorithm::ES256, b"data")
+            .await;
+
+        assert!(matches!(result, Err(KeyStoreError::InvalidKey { .. })), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn refuses_a_key_that_does_not_sign_with_es256() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("rsa", "rsa_2048_pss_sha256", SIGNING);
+
+        let result = kms
+            .provider()
+            .sign(&KeyId::new(id.to_string()), JwsAlgorithm::ES256, b"data")
+            .await;
+
+        assert!(matches!(result, Err(KeyStoreError::InvalidKey { .. })), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn lists_the_keys_that_sign_with_es256_and_whether_they_can_be_used() {
+        let kms = FakeStackit::start().await;
+        kms.add_key("active", ES256, SIGNING);
+        let deleted = kms.add_key("deleted", ES256, SIGNING);
+        kms.set_key_state(deleted, "deleted");
+        let creating = kms.add_key("creating", ES256, SIGNING);
+        kms.set_key_state(creating, "creating");
+        kms.add_key("encryption", "aes_256_gcm", "symmetric_encrypt_decrypt");
+
+        let keys = kms.provider().list_keys().await.unwrap();
+
+        let key = |id: &str, state| ProviderKey {
+            id: id.to_string(),
+            resource_name: None,
+            state,
+        };
+        assert_eq!(
+            keys,
+            ProviderKeys {
+                keys: vec![
+                    key("00000000-0000-0000-0000-000000000001", ProviderKeyState::Enabled),
+                    key(
+                        "00000000-0000-0000-0000-000000000002",
+                        ProviderKeyState::PendingDeletion
+                    ),
+                    key("00000000-0000-0000-0000-000000000003", ProviderKeyState::Unavailable),
+                ],
+                hidden_keys: 0,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn is_reachable_when_the_key_ring_exists() {
+        let kms = FakeStackit::start().await;
+
+        let result = kms.provider().test_connection().await;
+
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn is_unreachable_when_the_key_ring_does_not_exist() {
+        let kms = FakeStackit::start().await;
+        kms.remove_key_ring();
+
+        let error = kms.provider().test_connection().await.unwrap_err();
+
+        assert_eq!(error.0, "The key ring doesn't exist in this STACKIT project");
+    }
+
+    #[tokio::test]
+    async fn reports_why_stackit_refused_a_request() {
+        let kms = FakeStackit::start().await;
+        kms.refuse("quota exceeded");
+
+        let error = kms.provider().list_keys().await.unwrap_err();
+
+        assert_eq!(error.0, "STACKIT KMS answered 403 Forbidden: quota exceeded");
+    }
+
+    #[tokio::test]
+    async fn forgets_an_access_token_stackit_refuses() {
+        let kms = FakeStackit::start().await;
+        kms.expire_token();
+
+        let _ = kms.provider().test_connection().await;
+
+        assert_eq!(kms.forgotten_tokens(), 1);
+    }
+
+    #[test]
+    fn builds_no_provider_without_its_settings() {
+        let factory = StackitKmsFactory::new(None).unwrap();
+
+        assert!(factory.build(None).is_err());
     }
 }

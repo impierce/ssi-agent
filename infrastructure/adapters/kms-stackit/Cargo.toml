@@ -21,6 +21,8 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+identity-kit = { workspace = true, features = ["test-vectors"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 wiremock.workspace = true
 
 [lints]
