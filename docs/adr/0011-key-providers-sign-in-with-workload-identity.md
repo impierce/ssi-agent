@@ -1,4 +1,4 @@
-# ADR 0010: Key Providers Sign In With the Host's Workload Identity
+# ADR 0011: Key Providers Sign In With the Host's Workload Identity
 
 **Status**: Proposed
 **Date**: 2026-11-16
