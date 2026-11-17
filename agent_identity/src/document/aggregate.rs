@@ -49,6 +49,23 @@ pub struct Document {
     pub signing_methods: HashMap<Algorithm, DidUrl>,
 }
 
+impl Document {
+    /// Moves the added and selected verification methods of `previous_did` to the document's DID, which overwriting the
+    /// `did:web` moved every other verification method to.
+    pub(crate) fn move_methods_from(&mut self, previous_did: &Did) {
+        let Some(did) = self.document.as_ref().map(|document| document.id.clone()) else {
+            return;
+        };
+        let moved = |method: &mut DidUrl| {
+            if method.did() == previous_did {
+                *method = method.with_did(did.clone());
+            }
+        };
+        self.added_verification_methods.iter_mut().for_each(moved);
+        self.signing_methods.values_mut().for_each(moved);
+    }
+}
+
 impl Aggregate for Document {
     type Command = DocumentCommand;
     type Event = DocumentEvent;
@@ -329,12 +346,18 @@ impl Aggregate for Document {
                 self.document.replace(document);
                 self.with_fixed_algorithm = with_fixed_algorithm;
             }
-            PublicKeyUpdated { document_id, document }
-            | DocumentDidWebOverwritten {
-                document_id, document, ..
+            PublicKeyUpdated { document_id, document } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+            }
+            DocumentDidWebOverwritten {
+                document_id,
+                previous_did,
+                document,
             } => {
                 self.document_id = document_id;
                 self.document.replace(document);
+                self.move_methods_from(&previous_did);
             }
             PublicKeyAdded {
                 document_id,
@@ -543,6 +566,41 @@ pub mod document_tests {
             document: with_kms_verification_method(document),
             verification_method_id: kms_verification_method().id,
         }
+    }
+
+    #[rstest]
+    fn overwriting_the_did_web_moves_the_added_and_selected_methods(document_id: String, document: DidDocument) {
+        let previous_did = document.id.clone();
+        let mut aggregate = Document::default();
+        aggregate.apply(document_created(
+            &document_id,
+            SupportedDidMethod::Web,
+            document.clone(),
+        ));
+        aggregate.apply(kms_public_key_added(&document_id, document.clone()));
+        aggregate.apply(DocumentEvent::SigningKeySelected {
+            document_id: document_id.clone(),
+            algorithm: Algorithm::EdDSA,
+            verification_method_id: kms_verification_method().id,
+        });
+        let replacement: Did = "did:web:new.example.org".parse().unwrap();
+        let mut moved = with_kms_verification_method(document);
+        moved.map_dids(|did| if did == previous_did { replacement.clone() } else { did });
+
+        aggregate.apply(DocumentEvent::DocumentDidWebOverwritten {
+            document_id,
+            previous_did,
+            document: moved,
+        });
+
+        let kms_method = kms_verification_method().id.with_did(replacement);
+        assert_eq!(
+            (aggregate.added_verification_methods, aggregate.signing_methods),
+            (
+                vec![kms_method.clone()],
+                HashMap::from([(Algorithm::EdDSA, kms_method)])
+            )
+        );
     }
 
     #[rstest]

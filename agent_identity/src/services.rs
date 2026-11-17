@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use identity_kit::{
     did::{Did, DidDocument},
     domain_linkage::{DomainLinkageConfiguration, DomainLinkageValidator},
-    jose::{DefaultVerifier, Jwk},
+    jose::DefaultVerifier,
     linked_vp::{self, LinkedVpError, LinkedVpValidationOptions, LinkedVpValidator},
     resolver::{CompositeKeyResolver, DocumentKeyResolver},
     sd_jwt_vc::{SdJwtCredentialValidator, SdJwtValidationOptions},
@@ -79,7 +79,6 @@ impl LinkedVerifiablePresentationSource for NoLinkedVerifiablePresentations {
 #[derive(Clone)]
 pub struct ExternalKey {
     pub method_key: MethodKey,
-    pub public_key: Jwk,
 }
 
 /// Where the keys held outside this instance's configured key store come from.

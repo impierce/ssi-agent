@@ -332,7 +332,7 @@ Feature flags enable features that are still in development. All of them are dis
 
 Connects UniCore to external key providers, so that keys can be generated in, and sign inside, a provider instead of Stronghold. Available providers:
 
-- AWS KMS, using the AWS credentials and region of the environment UniCore runs in.
+- AWS KMS, using the AWS credentials and region of the environment UniCore runs in. AWS KMS signs at most 4096 bytes with an Ed25519 (`EdDSA`) key, so a credential whose signed form is larger, such as an Open Badge with an embedded image, can't be issued with one. ES256 keys have no such limit.
 - An in-memory provider, only available with the `development` [profile](./profiles.md).
 
 With PostgreSQL, the KMS's tables are only created with a new database. Enabling the feature on an existing database

@@ -671,7 +671,14 @@ pub mod service_tests {
         );
         services
             .subject
-            .insert_method_key(verification_method.id.clone(), MethodKey { key_store, key_id })
+            .insert_method_key(
+                verification_method.id.clone(),
+                MethodKey {
+                    key_store,
+                    key_id,
+                    public_key: public_jwk.clone(),
+                },
+            )
             .await;
 
         let events = ServiceTestFramework::with(services)

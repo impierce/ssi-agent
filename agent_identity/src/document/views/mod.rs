@@ -22,12 +22,18 @@ impl View<Document> for Document {
                 self.status.clone_from(status);
                 self.with_fixed_algorithm.clone_from(signing_algorithm);
             }
-            PublicKeyUpdated { document_id, document }
-            | DocumentDidWebOverwritten {
-                document_id, document, ..
+            PublicKeyUpdated { document_id, document } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+            }
+            DocumentDidWebOverwritten {
+                document_id,
+                previous_did,
+                document,
             } => {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
+                self.move_methods_from(previous_did);
             }
             PublicKeyAdded {
                 document_id,

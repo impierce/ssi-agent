@@ -89,8 +89,8 @@ impl KmsKeys {
             method_key: MethodKey {
                 key_store: adapter,
                 key_id: reference.provider_key_id(),
+                public_key: reference.public_key,
             },
-            public_key: reference.public_key,
         }
     }
 }
