@@ -28,7 +28,6 @@ use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
@@ -124,8 +123,6 @@ impl Aggregate for Credential {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
@@ -259,12 +256,14 @@ impl Aggregate for Credential {
                 let iat = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
                 let created_at = iat.clone();
-                let iat = identity_core::common::Timestamp::parse(&iat).expect("Could not parse issuance_date");
+                let iat = DateTime::parse_from_rfc3339(&iat)
+                    .expect("Could not parse issuance_date")
+                    .timestamp();
 
                 // iss is set to the issuer DID
                 let default_did_method = get_preferred_did_method();
 
-                let iss: identity_core::common::Url = services
+                let iss: Url = services
                     .issuer
                     .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
@@ -320,8 +319,8 @@ impl Aggregate for Credential {
 
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
                             .iss(iss.to_string())
-                            .iat(iat.to_unix())
-                            .nbf(iat.to_unix()); // setting the `nbf` to `iat` makes the JWT immediately usable
+                            .iat(iat)
+                            .nbf(iat); // setting the `nbf` to `iat` makes the JWT immediately usable
 
                         if let Some(subject_id) = subject_id {
                             vc_jwt_builder = vc_jwt_builder.sub(subject_id);
@@ -369,7 +368,7 @@ impl Aggregate for Credential {
                             credential_data,
                             jti,
                             iss,
-                            DateTime::from_timestamp(iat.to_unix(), 0).ok_or(InvalidCredentialDataError)?,
+                            DateTime::from_timestamp(iat, 0).ok_or(InvalidCredentialDataError)?,
                             status_claim,
                             self.expires_at,
                             holder_kid,
@@ -471,8 +470,6 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             UnsignedCredentialCreated {
@@ -922,7 +919,7 @@ async fn sign_dc_sd_jwt(
     issuer: &Arc<Subject>,
     credential_data: serde_json::Value,
     jti: Url,
-    iss: identity_core::common::Url,
+    iss: Url,
     iat: DateTime<Utc>,
     status_claim: identity_kit::status_list::Status,
     expires_at: Option<DateTime<Utc>>,
@@ -982,14 +979,14 @@ fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
     }
 }
 
-pub fn get_status_list_url(id: String) -> Result<identity_core::common::Url, CredentialError> {
+pub fn get_status_list_url(id: String) -> Result<Url, CredentialError> {
     let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
     status_list_url
         .path_segments_mut()
         .map_err(|_| CredentialError::InvalidCredentialStatus)?
         .push(&id);
 
-    Ok(status_list_url.into())
+    Ok(status_list_url)
 }
 
 #[cfg(test)]
@@ -1000,7 +997,6 @@ pub mod credential_tests {
     use agent_shared::config::TESTINDEX;
     use jsonwebtoken::Algorithm;
 
-    use identity_core::common::Url;
     use identity_kit::sd_jwt_vc::SdJwtVc;
     use rstest::rstest;
     use serde_json::json;
@@ -1053,6 +1049,7 @@ pub mod credential_tests {
         UNSIGNED_ELM_CREDENTIAL.clone()
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_unsigned_credential(
         #[case] credential_subject: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
@@ -1063,7 +1060,7 @@ pub mod credential_tests {
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(CredentialCommand::CreateUnsignedCredential {
+            .when_async(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
                 data: Data {
                     raw: credential_subject,
@@ -1071,6 +1068,7 @@ pub mod credential_tests {
                 credential_configuration: Box::new(credential_configuration.clone()),
                 expires_at: CredentialExpiry::Never,
             })
+            .await
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
                 data: Data {
@@ -1100,6 +1098,7 @@ pub mod credential_tests {
         JWT_VC_JSON_ELM_JWT.to_string()
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_credential(
         #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
@@ -1129,7 +1128,7 @@ pub mod credential_tests {
                 created_at: Some(created_at),
                 expires_at: None,
             }])
-            .when(CredentialCommand::SignCredential {
+            .when_async(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
@@ -1137,6 +1136,7 @@ pub mod credential_tests {
                 status_list_id: TEST_STATUS_LIST_ID.to_string(),
                 index: TESTINDEX,
             })
+            .await
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
@@ -1168,6 +1168,7 @@ pub mod credential_tests {
     )]
     #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "vc+sd-jwt")]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_sd_jwt_credential(
         #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
@@ -1189,7 +1190,7 @@ pub mod credential_tests {
                 created_at: Some(created_at),
                 expires_at: None,
             }])
-            .when(CredentialCommand::SignCredential {
+            .when_async(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
@@ -1197,6 +1198,7 @@ pub mod credential_tests {
                 status_list_id: TEST_STATUS_LIST_ID.to_string(),
                 index: TESTINDEX,
             })
+            .await
             .inspect_result()
             .unwrap();
 
@@ -1269,6 +1271,7 @@ pub mod credential_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_credential_rejects_invalid_or_missing_jti_sources() {
         let services = IssuanceServices::default().await;
         let command = |credential_id: String| CredentialCommand::SignCredential {
@@ -1299,7 +1302,8 @@ pub mod credential_tests {
                 UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
                 DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
             )])
-            .when(command(invalid_id))
+            .when_async(command(invalid_id))
+            .await
             .then_expect_error_message(&InvalidCredentialDataError.to_string());
 
         let mut w3c_without_id = UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone();
@@ -1311,7 +1315,8 @@ pub mod credential_tests {
                 w3c_without_id,
                 VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
             )])
-            .when(command(credential_id))
+            .when_async(command(credential_id))
+            .await
             .then_expect_error_message(&InvalidCredentialDataError.to_string());
     }
 
@@ -1501,10 +1506,7 @@ pub mod test_utils {
                     .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec![
-                    AlgIdentifier::String("ES256".to_string()),
-                    AlgIdentifier::String("EdDSA".to_string())
-                ],
+                credential_signing_alg_values_supported: vec![AlgIdentifier::String("EdDSA".to_string())],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {

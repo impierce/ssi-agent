@@ -67,7 +67,7 @@ pub(crate) async fn redirect(
     body: String,
 ) -> Result<Response, ApiError> {
     let authorization_response: GenericAuthorizationResponse = from_form_urlencoded_string(&body).map_err(|e| {
-        tracing::error!("Failed to deserialize form data: {:?}", e);
+        tracing::debug!(error = %e, "Failed to deserialize the authorization response");
         ApiError::new(StatusCode::BAD_REQUEST)
     })?;
 

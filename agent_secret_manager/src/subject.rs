@@ -98,7 +98,7 @@ impl Subject {
     }
 
     /// IdentityKit's signer with the configured issuer key for `algorithm`.
-    async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+    pub async fn issuer_signer(&self, algorithm: Algorithm) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
         let (key, alg) = issuer_key(algorithm)?;
 
         Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)

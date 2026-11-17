@@ -146,4 +146,39 @@ async fn traces_logs_and_metrics_are_exported_via_otlp() {
         .filter_map(|series| series["metric"]["http_route"].as_str())
         .collect();
     assert!(routes.contains(&"/v0/profile"), "{metrics}");
+
+    let buckets_query =
+        format!("http_server_request_duration_seconds_bucket{{job=\"{service_name}\",http_route=\"/v0/profile\"}}");
+    let buckets = get_json(
+        &client,
+        &format!("{prometheus}/api/v1/query"),
+        &[("query", &buckets_query)],
+    )
+    .await
+    .unwrap();
+    let mut boundaries: Vec<f64> = buckets["data"]["result"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|series| series["metric"]["le"].as_str().unwrap().parse().unwrap())
+        .collect();
+    boundaries.sort_by(f64::total_cmp);
+    assert_eq!(
+        boundaries,
+        [
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1.0,
+            2.5,
+            5.0,
+            10.0,
+            f64::INFINITY
+        ],
+        "{buckets}"
+    );
 }

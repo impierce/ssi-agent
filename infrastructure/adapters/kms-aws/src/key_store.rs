@@ -107,12 +107,12 @@ async fn create_named_key(
     Ok(metadata.arn().unwrap_or(key_id).to_string())
 }
 
-/// Whether `alias` names the key `key_id`; it doesn't when it names no key.
+/// Whether `alias` names the key `key_id`, given as a key ID or an ARN; it doesn't when it names no key.
 async fn alias_names(client: &Client, alias: &str, key_id: &str) -> Result<bool, SdkError<DescribeKeyError>> {
     match client.describe_key().key_id(alias).send().await {
         Ok(output) => Ok(output
             .key_metadata()
-            .is_some_and(|metadata| metadata.key_id() == key_id)),
+            .is_some_and(|metadata| metadata.key_id() == key_id || metadata.arn() == Some(key_id))),
         Err(error) if error.code() == Some("NotFoundException") => Ok(false),
         Err(error) => Err(error),
     }
@@ -256,6 +256,30 @@ impl AwsKmsAmbientKeyProvider {
             name: label.map_or_else(|| arn.clone(), |(label, _)| KeyId::new(label)),
             arn,
         })
+    }
+
+    /// Deletes the key `arn` names, and removes the alias of `label` only while it still names that key. Deleting by
+    /// the label instead would delete whichever key its alias was pointed at meanwhile.
+    pub(crate) async fn discard(&self, arn: &KeyId, label: Option<&str>) -> Result<(), KeyStoreError> {
+        self.delete(arn).await?;
+        let Some(label) = label else {
+            return Ok(());
+        };
+        self.bounded(async {
+            let alias = alias_for_label(self.deployment_alias.as_deref(), label).map_err(KeyStoreError::backend)?;
+            let client = self.client().await;
+            if alias_names(client, &alias, arn.as_str())
+                .await
+                .map_err(|error| backend(&error))?
+            {
+                match client.delete_alias().alias_name(&alias).send().await {
+                    Err(error) if error.code() != Some("NotFoundException") => return Err(backend(&error)),
+                    _ => {}
+                }
+            }
+            Ok(())
+        })
+        .await
     }
 
     /// Maps an error of an operation on `key`: an unknown key, or one pending deletion, is `NotFound`.
@@ -758,6 +782,40 @@ mod tests {
         let result = store.sign(&label, JwsAlgorithm::EdDSA, b"data").await;
 
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn discards_a_key_without_its_label_when_the_label_names_another_key() {
+        let kms = FakeKms::start().await;
+        let store = kms.provider();
+        let created = store
+            .create(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap();
+        let other = store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        kms.point_alias("alias/issuer", other.as_str());
+
+        store.discard(&created.arn, Some("issuer")).await.unwrap();
+
+        assert_eq!(kms.key_states(), vec!["PendingDeletion", "Enabled"]);
+        assert_eq!(kms.aliases(), vec!["alias/issuer"]);
+    }
+
+    #[tokio::test]
+    async fn frees_the_label_of_a_discarded_key() {
+        let kms = FakeKms::start().await;
+        let store = kms.provider();
+        let created = store
+            .create(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap();
+
+        store.discard(&created.arn, Some("issuer")).await.unwrap();
+
+        assert_eq!(kms.aliases(), Vec::<String>::new());
     }
 
     #[tokio::test]

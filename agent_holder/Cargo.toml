@@ -3,6 +3,9 @@ name = "agent_holder"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
@@ -45,8 +48,8 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
-async-std.workspace = true
 axum.workspace = true
+chrono.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }

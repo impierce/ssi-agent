@@ -202,6 +202,12 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
     async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
         Ok(self.create(spec).await?.arn)
     }
+
+    /// Deletes the key by its ARN, and removes its label's alias only while the alias still names it: the alias may
+    /// have been pointed at another key meanwhile.
+    async fn discard(&self, created: &KeyId, label: Option<&str>) -> Result<(), KeyStoreError> {
+        self.discard(created, label).await
+    }
 }
 
 impl AwsKmsAmbientKeyProvider {

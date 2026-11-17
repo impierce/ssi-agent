@@ -3,6 +3,9 @@ name = "agent_issuance"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
@@ -16,9 +19,7 @@ async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
 chrono.workspace = true
-derivative.workspace = true
 identity-kit.workspace = true
-identity_core.workspace = true
 indexmap.workspace = true
 iso8601.workspace = true
 jsonschema.workspace = true
@@ -52,7 +53,6 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 ] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
-async-std.workspace = true
 serial_test = "3.0"
 tokio.workspace = true
 tracing-test.workspace = true
