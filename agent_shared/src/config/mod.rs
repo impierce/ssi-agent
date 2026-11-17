@@ -129,7 +129,8 @@ pub struct ApplicationConfiguration {
     pub overwrite_previous_did_web: Option<String>,
     /// The alias the hosting environment knows this deployment by, such as `eridani`. Every key this deployment
     /// creates in AWS KMS is tagged with it, so IAM policies can limit a deployment to its own keys. Set through
-    /// `UNICORE__DEPLOYMENT_ALIAS`; empty means none.
+    /// `UNICORE__DEPLOYMENT_ALIAS`; empty means none. Left out of `docs/configuration` until how a deployment is
+    /// named is settled.
     #[config(default, transform_with = "non_empty")]
     pub deployment_alias: Option<String>,
     #[config(
