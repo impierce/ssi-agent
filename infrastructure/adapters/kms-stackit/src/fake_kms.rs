@@ -87,8 +87,11 @@ struct State {
     keys: Vec<FakeKey>,
     versions_created: u8,
     key_ring_removed: bool,
-    token_expired: bool,
+    /// How many more requests have their access token refused.
+    token_refusals: usize,
     refused: Option<String>,
+    /// An error page answered instead of STACKIT's own error.
+    page: Option<String>,
     creating_for: usize,
 }
 
@@ -212,9 +215,19 @@ impl FakeStackit {
         self.state.lock().unwrap().key_ring_removed = true;
     }
 
-    /// Refuses the access token the provider has, as when it expired.
-    pub fn expire_token(&self) {
-        self.state.lock().unwrap().token_expired = true;
+    /// Refuses the access token of the next `requests` requests, as when it was revoked.
+    pub fn refuse_tokens(&self, requests: usize) {
+        self.state.lock().unwrap().token_refusals = requests;
+    }
+
+    /// Answers every request with 502 and the HTML page `page`, as a load balancer in front of STACKIT could.
+    pub fn answer_with_page(&self, page: &str) {
+        self.state.lock().unwrap().page = Some(page.to_string());
+    }
+
+    /// The state of every key, in the order they were created.
+    pub fn key_states(&self) -> Vec<&'static str> {
+        self.state.lock().unwrap().keys.iter().map(|key| key.state).collect()
     }
 
     /// Answers every request with 403 and `message`.
@@ -241,8 +254,12 @@ impl Respond for Responder {
             .headers
             .get("authorization")
             .is_some_and(|value| value.to_str().ok() == Some(bearer.as_str()));
-        if !authorized || state.token_expired {
+        if !authorized || state.token_refusals > 0 {
+            state.token_refusals = state.token_refusals.saturating_sub(1);
             return error(401, "the access token is invalid");
+        }
+        if let Some(page) = &state.page {
+            return ResponseTemplate::new(502).set_body_raw(page.clone(), "text/html");
         }
         if let Some(message) = &state.refused {
             return error(403, message);

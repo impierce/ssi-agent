@@ -32,11 +32,19 @@ pub struct KeyProviderDto {
 }
 
 /// The settings of a key provider. None of them are secret. Only `stackit_kms` providers have any.
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 #[serde(untagged)]
 #[schema(as = KeyProviderSettings)]
 pub enum KeyProviderSettingsDto {
     StackitKms(StackitKmsSettingsDto),
+}
+
+/// Only STACKIT KMS takes settings so far, so settings are read as its settings, and a mistake in them is reported as
+/// such, such as a missing field, rather than as serde's "did not match any variant".
+impl<'de> Deserialize<'de> for KeyProviderSettingsDto {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        StackitKmsSettingsDto::deserialize(deserializer).map(Self::StackitKms)
+    }
 }
 
 /// Where STACKIT KMS keeps the keys, a key ring in your STACKIT project, and the service account UniCore signs in as.

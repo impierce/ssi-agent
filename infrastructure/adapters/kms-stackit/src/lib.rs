@@ -52,6 +52,8 @@ const SIGNING_PURPOSE: &str = "asymmetric_sign_verify";
 const PROTECTION: &str = "software";
 /// The longest display name STACKIT accepts.
 const MAX_LABEL_LENGTH: usize = 64;
+/// How much of an answer that isn't STACKIT's own error, such as a load balancer's error page, is passed on.
+const SHOWN_ANSWER_LENGTH: usize = 300;
 
 /// An error reported by STACKIT, or a request it would refuse.
 #[derive(Debug, Error)]
@@ -64,6 +66,10 @@ pub struct StackitKmsProvider {
     /// The key ring's URL, without a trailing slash.
     key_ring_url: String,
     tokens: Arc<dyn AccessTokens>,
+    key_ready_timeout: Duration,
+    /// Held while a labelled key is created, so that two creates can't both find the label free. It only covers the
+    /// creates of this instance.
+    labelling: tokio::sync::Mutex<()>,
 }
 
 impl StackitKmsProvider {
@@ -86,7 +92,15 @@ impl StackitKmsProvider {
             http,
             key_ring_url,
             tokens,
+            key_ready_timeout: KEY_READY_TIMEOUT,
+            labelling: tokio::sync::Mutex::new(()),
         }
+    }
+
+    #[cfg(test)]
+    fn with_key_ready_timeout(mut self, timeout: Duration) -> Self {
+        self.key_ready_timeout = timeout;
+        self
     }
 
     /// Sends a request to `path` within the key ring. Returns `None` when STACKIT answers that it doesn't exist.
@@ -96,37 +110,51 @@ impl StackitKmsProvider {
         path: &str,
         body: Option<Value>,
     ) -> Result<Option<T>, StackitError> {
+        #[derive(Deserialize)]
+        struct HttpError {
+            message: String,
+        }
         let url = if path.is_empty() {
             self.key_ring_url.clone()
         } else {
             format!("{}/{path}", self.key_ring_url)
         };
-        let mut request = self
-            .http
-            .request(method, url)
-            .bearer_auth(self.tokens.access_token().await?);
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let response = request
-            .send()
-            .await
-            .map_err(|error| StackitError(format!("STACKIT KMS can't be reached: {error}")))?;
+
+        let mut refused_before = false;
+        let response = loop {
+            let mut request = self
+                .http
+                .request(method.clone(), &url)
+                .bearer_auth(self.tokens.access_token().await?);
+            if let Some(body) = &body {
+                request = request.json(body);
+            }
+            let response = request
+                .send()
+                .await
+                .map_err(|error| StackitError(format!("STACKIT KMS can't be reached: {error}")))?;
+            if response.status() != StatusCode::UNAUTHORIZED {
+                break response;
+            }
+            // STACKIT refused the token, such as one revoked before it expired, so the request is sent once more
+            // with a new one. STACKIT doesn't act on a request whose token it refuses, so sending it again is safe.
+            self.tokens.forget().await;
+            if refused_before {
+                break response;
+            }
+            refused_before = true;
+        };
 
         let status = response.status();
         if status == StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        if status == StatusCode::UNAUTHORIZED {
-            self.tokens.forget().await;
-        }
         if !status.is_success() {
-            #[derive(Deserialize)]
-            struct HttpError {
-                message: String,
-            }
             let body = response.text().await.unwrap_or_default();
-            let message = serde_json::from_str::<HttpError>(&body).map_or(body, |error| error.message);
+            let message = serde_json::from_str::<HttpError>(&body).map_or_else(
+                |_| body.chars().take(SHOWN_ANSWER_LENGTH).collect(),
+                |error| error.message,
+            );
             return Err(StackitError(format!("STACKIT KMS answered {status}: {message}")));
         }
 
@@ -246,12 +274,17 @@ impl StackitKmsProvider {
         if spec.alg != JwsAlgorithm::ES256 {
             return Err(KeyStoreError::UnsupportedAlgorithm(spec.alg));
         }
-        if let Some(label) = &spec.label {
-            check_label(label).map_err(KeyStoreError::backend)?;
-            if self.find(&KeyId::new(label.as_str())).await?.is_some() {
-                return Err(KeyStoreError::AlreadyExists(KeyId::new(label.as_str())));
+        let labelling = match &spec.label {
+            Some(label) => {
+                check_label(label).map_err(KeyStoreError::backend)?;
+                let labelling = self.labelling.lock().await;
+                if self.find(&KeyId::new(label.as_str())).await?.is_some() {
+                    return Err(KeyStoreError::AlreadyExists(KeyId::new(label.as_str())));
+                }
+                Some(labelling)
             }
-        }
+            None => None,
+        };
 
         let display_name = spec
             .label
@@ -271,8 +304,9 @@ impl StackitKmsProvider {
             .await
             .map_err(KeyStoreError::backend)?
             .ok_or_else(|| KeyStoreError::backend(StackitError("The key ring doesn't exist".to_string())))?;
+        drop(labelling);
 
-        let version = tokio::time::timeout(KEY_READY_TIMEOUT, async {
+        let ready = tokio::time::timeout(self.key_ready_timeout, async {
             loop {
                 if let Some(version) = self.usable_version(created.id).await? {
                     return Ok::<_, StackitError>(version);
@@ -280,19 +314,33 @@ impl StackitKmsProvider {
                 tokio::time::sleep(KEY_READY_POLL).await;
             }
         })
-        .await
-        .map_err(|_| {
-            KeyStoreError::backend(StackitError(format!(
-                "The key `{}` was created, but had no version to sign with after {} seconds",
-                created.id,
-                KEY_READY_TIMEOUT.as_secs()
-            )))
-        })?
-        .map_err(KeyStoreError::backend)?;
+        .await;
+        let version = match ready {
+            Ok(Ok(version)) => version,
+            Ok(Err(error)) => return Err(self.discard_unready(created.id, &error.0).await),
+            Err(_) => {
+                let reason = format!(
+                    "it had no version to sign with after {} seconds",
+                    self.key_ready_timeout.as_secs_f32()
+                );
+                return Err(self.discard_unready(created.id, &reason).await);
+            }
+        };
 
         let pinned = KeyId::new(format!("{}/{}", created.id, version.number));
         let name = spec.label.map_or_else(|| pinned.clone(), KeyId::new);
         Ok((name, pinned))
+    }
+}
+
+impl StackitKmsProvider {
+    /// Deletes a new key that can't be used, so that it isn't left behind unrecorded, holding its label.
+    async fn discard_unready(&self, id: Uuid, reason: &str) -> KeyStoreError {
+        let message = match self.request::<Value>(Method::DELETE, &format!("keys/{id}"), None).await {
+            Ok(_) => format!("The key `{id}` was created, but {reason}, so it was deleted again"),
+            Err(error) => format!("The key `{id}` was created, but {reason}, and it could not be deleted: {error}"),
+        };
+        KeyStoreError::backend(StackitError(message))
     }
 }
 
@@ -800,13 +848,65 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn forgets_an_access_token_stackit_refuses() {
+    async fn signs_in_again_when_stackit_refuses_the_access_token() {
         let kms = FakeStackit::start().await;
-        kms.expire_token();
+        kms.refuse_tokens(1);
 
-        let _ = kms.provider().test_connection().await;
+        let result = kms.provider().test_connection().await;
 
-        assert_eq!(kms.forgotten_tokens(), 1);
+        assert_eq!((result.is_ok(), kms.forgotten_tokens()), (true, 1));
+    }
+
+    #[tokio::test]
+    async fn gives_up_when_stackit_refuses_the_new_access_token_too() {
+        let kms = FakeStackit::start().await;
+        kms.refuse_tokens(2);
+
+        let error = kms.provider().test_connection().await.unwrap_err();
+
+        assert_eq!(
+            error.0,
+            "STACKIT KMS answered 401 Unauthorized: the access token is invalid"
+        );
+    }
+
+    #[tokio::test]
+    async fn passes_on_only_the_start_of_an_answer_that_is_not_stackits() {
+        let kms = FakeStackit::start().await;
+        kms.answer_with_page(&"x".repeat(1000));
+
+        let error = kms.provider().list_keys().await.unwrap_err();
+
+        assert_eq!(
+            error.0,
+            format!("STACKIT KMS answered 502 Bad Gateway: {}", "x".repeat(300))
+        );
+    }
+
+    #[tokio::test]
+    async fn deletes_a_new_key_that_does_not_get_a_version_it_can_sign_with_in_time() {
+        let kms = FakeStackit::start().await;
+        kms.create_versions_slowly(usize::MAX);
+        let provider = kms.provider().with_key_ready_timeout(Duration::from_millis(100));
+        provider.generate(es256().with_label("issuer")).await.unwrap_err();
+
+        let states = kms.key_states();
+
+        assert_eq!(states, vec!["deleted"]);
+    }
+
+    #[tokio::test]
+    async fn gives_a_label_to_only_one_of_two_keys_created_with_it_at_once() {
+        let kms = FakeStackit::start().await;
+        let provider = kms.provider();
+        let _ = tokio::join!(
+            provider.generate(es256().with_label("issuer")),
+            provider.generate(es256().with_label("issuer"))
+        );
+
+        let states = kms.key_states();
+
+        assert_eq!(states, vec!["active"]);
     }
 
     #[test]

@@ -191,7 +191,7 @@ impl TokenExchange {
             let body = response.text().await.unwrap_or_default();
             return Err(StackitError(format!(
                 "STACKIT refused the sign-in ({status}): {}",
-                body.chars().take(300).collect::<String>()
+                body.chars().take(crate::SHOWN_ANSWER_LENGTH).collect::<String>()
             )));
         }
 
@@ -211,6 +211,8 @@ impl TokenExchange {
 
 #[async_trait]
 impl AccessTokens for TokenExchange {
+    /// The lock is held while signing in, so that requests that find the token expired wait for one sign-in instead
+    /// of each signing in. Each sign-in is bounded by the HTTP client's timeout.
     async fn access_token(&self) -> Result<String, StackitError> {
         let mut cached = self.cached.lock().await;
         if let Some(current) = cached

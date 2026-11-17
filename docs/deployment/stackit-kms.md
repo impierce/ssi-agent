@@ -109,7 +109,12 @@ Content-Type: application/json
 ```
 
 When it can't, the response's `message` says why, such as a missing token file, a sign-in STACKIT refused, or a key
-ring that doesn't exist in the project. To use another project or key ring, remove the provider and add it again.
+ring that doesn't exist in the project.
+
+> [!WARNING]
+> Don't move a provider that has keys to another project or key ring. A provider's settings can only change by removing
+> it and adding it again, and UniCore then looks up every key it created in the new key ring. Keys created in the
+> previous one stop signing, while their public keys stay in the DID document.
 
 ## Keys
 
