@@ -9,7 +9,10 @@ pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
     ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
 };
-use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
+use super::{
+    command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin,
+    public_content::PublicTemplateContent,
+};
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -205,6 +208,9 @@ pub struct Template {
     pub schema: Box<Option<serde_json::Value>>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     pub holder_authorization: Authorization,
+    /// Where the template was imported from. Unrelated to `source_template_id`.
+    #[serde(default)]
+    pub origin: Option<TemplateOrigin>,
 }
 
 impl Aggregate for Template {
@@ -221,404 +227,7 @@ impl Aggregate for Template {
         _services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
-        use TemplateCommand::*;
-        use TemplateEvent::*;
-
-        let events: Vec<Self::Event> = match command {
-            CreateNewTemplate {
-                template_id,
-                source_template_id,
-                title,
-                display,
-                data_model,
-                holder_type,
-                tags,
-                status,
-                visibility,
-                credential_expiration,
-                description,
-                r#type,
-                schema,
-                schema_properties_attributes,
-                holder_authorization,
-            } => {
-                // Only Draft and Published are allowed on creation.
-                if matches!(status, Status::Archived | Status::Deleted) {
-                    return Err(TemplateError::InvalidStatusOnCreate);
-                }
-
-                // Validate that a title is provided
-                let title = title.trim().to_string();
-                if title.is_empty() {
-                    return Err(TemplateError::MissingTitle);
-                }
-
-                // Normalize type (defaults, canonical order, dedup).
-                let r#type = normalize_and_validate_type(r#type, &data_model)?;
-
-                // Normalize tags.
-                let tags = normalize_tags(tags);
-
-                // Validate the credential expiration value if provided.
-                let credential_expiration = credential_expiration.unwrap_or_default();
-                validate_expiration(&credential_expiration)?;
-
-                // W3C VC 1.1 does not expose claim metadata and must not have
-                // schemaPropertiesAttributes.
-                if data_model == DataModel::W3CVcDataModelV1_1
-                    && schema_properties_attributes.as_ref().is_some_and(|a| !a.is_empty())
-                {
-                    return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
-                }
-
-                // For OpenBadges 3.0 templates, validate that the required properties are present
-                // in the user-supplied schema. They are NOT auto-added.
-                let schema = if data_model == DataModel::OpenBadges3_0 {
-                    let mut s = (*schema).unwrap_or(serde_json::json!({"type": "object"}));
-                    // Ensure schema has "type": "object" and "properties"
-                    if let Some(obj) = s.as_object_mut() {
-                        obj.entry("type").or_insert(serde_json::json!("object"));
-                        obj.entry("properties").or_insert(serde_json::json!({}));
-                    }
-                    validate_open_badges_required_properties(&s)?;
-                    // Ensure required keys are included in schema.required
-                    ensure_schema_required_keys(&mut s);
-                    Box::new(Some(s))
-                } else {
-                    schema
-                };
-
-                if let Some(ref s) = *schema {
-                    validate_json_schema(s)?;
-                    validate_schema_no_array_types(s)?;
-
-                    if data_model == DataModel::OpenBadges3_0 {
-                        validate_open_badges_schema_properties(s)?;
-                    }
-                }
-
-                if let Some(ref attrs) = schema_properties_attributes {
-                    if !attrs.is_empty() {
-                        validate_schema_properties_attributes(&schema, attrs)?;
-                    }
-                }
-
-                // For OpenBadges 3.0 templates, auto-populate non_removable attributes
-                // for schema properties. Only required standard fields are non-removable.
-                let schema_properties_attributes = if data_model == DataModel::OpenBadges3_0 {
-                    if let Some(ref s) = *schema {
-                        let leaf_paths = collect_leaf_paths(s);
-                        let required_paths = open_badges_required_leaf_paths();
-                        let mut attrs = schema_properties_attributes.unwrap_or_default();
-                        for key in leaf_paths {
-                            let is_required = required_paths.contains(&key);
-                            let attr = attrs.entry(key).or_insert(PropertyAttribute {
-                                selectively_disclosable: false,
-                                non_removable: false,
-                                r#type: None,
-                            });
-                            attr.non_removable = is_required;
-                        }
-                        Some(attrs)
-                    } else {
-                        schema_properties_attributes
-                    }
-                } else {
-                    // Normalize empty map to None.
-                    schema_properties_attributes.filter(|a| !a.is_empty())
-                };
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![TemplateCreated {
-                    template_id,
-                    source_template_id,
-                    title,
-                    display,
-                    data_model,
-                    holder_type,
-                    modified_at,
-                    tags,
-                    status,
-                    visibility,
-                    credential_expiration,
-                    description,
-                    r#type,
-                    schema,
-                    schema_properties_attributes,
-                    holder_authorization,
-                }])
-            }
-            UpdateTitle { template_id, title } => {
-                ensure_template_editable(&self.status)?;
-
-                let title = title.trim().to_string();
-                if title.is_empty() {
-                    return Err(TemplateError::MissingTitle);
-                }
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![TitleUpdated {
-                    template_id,
-                    title,
-                    modified_at,
-                }])
-            }
-            UpdateDisplay { template_id, display } => {
-                ensure_template_editable(&self.status)?;
-
-                // An empty `display.name` is stored verbatim: it means "no explicit display name",
-                // and the read paths resolve it to the current title. Materializing the title here
-                // would freeze it, so later title updates would no longer reach the wallet.
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![DisplayUpdated {
-                    template_id,
-                    display,
-                    modified_at,
-                }])
-            }
-            UpdateTags { template_id, tags } => {
-                ensure_template_editable(&self.status)?;
-
-                // Normalize: trim, dedup, drop empty.  Empty result is stored as None via apply.
-                let tags = normalize_tags(Some(tags)).unwrap_or_default();
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![TagsUpdated {
-                    template_id,
-                    tags,
-                    modified_at,
-                }])
-            }
-            UpdateStatus { template_id, status } => {
-                ensure_status_transition_allowed(&self.status, &status)?;
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![StatusUpdated {
-                    template_id,
-                    status,
-                    modified_at,
-                }])
-            }
-            UpdateVisibility {
-                template_id,
-                visibility,
-            } => {
-                ensure_template_editable(&self.status)?;
-
-                if self.status == Status::Draft && visibility == Visibility::Public {
-                    return Err(TemplateError::DraftTemplateCannotBePublic);
-                }
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![VisibilityUpdated {
-                    template_id,
-                    visibility,
-                    modified_at,
-                }])
-            }
-            UpdateDescription {
-                template_id,
-                description,
-            } => {
-                ensure_template_editable(&self.status)?;
-
-                // Trim whitespace.  An empty description clears the field (stored as None via apply).
-                let description = description.trim().to_string();
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![DescriptionUpdated {
-                    template_id,
-                    description,
-                    modified_at,
-                }])
-            }
-            UpdateType { template_id, r#type } => {
-                ensure_template_editable(&self.status)?;
-
-                let r#type = normalize_and_validate_type(r#type, &self.data_model)?;
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![TypeUpdated {
-                    template_id,
-                    r#type,
-                    modified_at,
-                }])
-            }
-            UpdateSchema { template_id, schema } => {
-                ensure_template_editable(&self.status)?;
-
-                validate_json_schema(&schema)?;
-                validate_schema_no_array_types(&schema)?;
-
-                if self.data_model == DataModel::OpenBadges3_0 {
-                    validate_open_badges_schema_properties(&schema)?;
-                    validate_open_badges_required_properties(&schema)?;
-                }
-
-                // Ensure required keys are included in schema.required for OpenBadges 3.0
-                let mut schema = schema;
-                if self.data_model == DataModel::OpenBadges3_0 {
-                    ensure_schema_required_keys(&mut schema);
-                }
-
-                // Enforce non-removable properties: reject if any property with non_removable=true
-                // is missing from the new schema.
-                if let Some(ref existing_attrs) = self.schema_properties_attributes {
-                    let new_leaf_paths = collect_leaf_paths(&schema);
-                    let immutable_missing: Vec<&str> = existing_attrs
-                        .iter()
-                        .filter(|(_, attr)| attr.non_removable)
-                        .filter(|(k, _)| !new_leaf_paths.contains(*k))
-                        .map(|(k, _)| k.as_str())
-                        .collect();
-
-                    if !immutable_missing.is_empty() {
-                        return Err(TemplateError::NonRemovablePropertyViolation(format!(
-                            "The following non-removable properties cannot be removed from the schema: [{}]",
-                            immutable_missing.join(", ")
-                        )));
-                    }
-                }
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                let mut events = vec![SchemaUpdated {
-                    template_id: template_id.clone(),
-                    schema: schema.clone(),
-                    modified_at: modified_at.clone(),
-                }];
-
-                // Prune schema_properties_attributes whose keys no longer exist in the new schema.
-                if let Some(ref existing_attrs) = self.schema_properties_attributes {
-                    let new_leaf_paths = collect_leaf_paths(&schema);
-                    let pruned: HashMap<String, PropertyAttribute> = existing_attrs
-                        .iter()
-                        .filter(|(k, _)| new_leaf_paths.contains(*k))
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect();
-
-                    if pruned.len() != existing_attrs.len() {
-                        events.push(SchemaPropertiesAttributesUpdated {
-                            template_id,
-                            schema_properties_attributes: pruned,
-                            modified_at,
-                        });
-                    }
-                }
-
-                Ok(events)
-            }
-            UpdateSchemaPropertiesAttributes {
-                template_id,
-                schema_properties_attributes,
-            } => {
-                ensure_template_editable(&self.status)?;
-
-                // W3C VC 1.1 does not expose claim metadata and must not have
-                // schemaPropertiesAttributes.
-                if self.data_model == DataModel::W3CVcDataModelV1_1 {
-                    return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
-                }
-
-                // Trim keys and detect collisions after trimming.
-                let schema_properties_attributes = trim_and_deduplicate_attribute_keys(schema_properties_attributes)?;
-
-                validate_schema_properties_attributes(&self.schema, &schema_properties_attributes)?;
-
-                // The `non_removable` flag is system-determined by the data model and cannot
-                // be altered through any command. Override it with the existing values.
-                let schema_properties_attributes =
-                    enforce_non_removable_flag(schema_properties_attributes, &self.schema_properties_attributes);
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![SchemaPropertiesAttributesUpdated {
-                    template_id,
-                    schema_properties_attributes,
-                    modified_at,
-                }])
-            }
-            DeleteTemplate { template_id } => {
-                ensure_template_can_be_deleted(&self.status)?;
-                Ok(vec![TemplateDeleted { template_id }])
-            }
-            UpdateCredentialExpiration {
-                template_id,
-                credential_expiration,
-            } => {
-                ensure_template_editable(&self.status)?;
-
-                validate_expiration(&credential_expiration)?;
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![CredentialExpirationUpdated {
-                    template_id,
-                    credential_expiration,
-                    modified_at,
-                }])
-            }
-            UpdateHolderAuthorization {
-                template_id,
-                holder_authorization,
-            } => {
-                ensure_template_editable(&self.status)?;
-
-                #[cfg(not(test))]
-                let modified_at = chrono::Utc::now().to_rfc3339();
-                #[cfg(test)]
-                let modified_at = test_utils::modified_at();
-
-                Ok(vec![HolderAuthorizationUpdated {
-                    template_id,
-                    holder_authorization,
-                    modified_at,
-                }])
-            }
-        }?;
-
-        for event in events {
+        for event in self.decide(command)? {
             sink.write(event, self).await;
         }
 
@@ -646,6 +255,7 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
                 holder_authorization,
+                origin,
             } => {
                 self.template_id = template_id;
                 self.source_template_id = source_template_id;
@@ -663,6 +273,7 @@ impl Aggregate for Template {
                 self.schema = schema;
                 self.schema_properties_attributes = schema_properties_attributes;
                 self.holder_authorization = holder_authorization;
+                self.origin = origin.map(|origin| *origin);
             }
             TitleUpdated {
                 template_id: _,
@@ -737,7 +348,9 @@ impl Aggregate for Template {
                 schema_properties_attributes,
                 modified_at,
             } => {
-                self.schema_properties_attributes = Some(schema_properties_attributes);
+                // No attributes are stored as `None`, as `CreateNewTemplate` stores them.
+                self.schema_properties_attributes =
+                    (!schema_properties_attributes.is_empty()).then_some(schema_properties_attributes);
                 self.modified_at.replace(modified_at);
             }
             CredentialExpirationUpdated {
@@ -754,6 +367,14 @@ impl Aggregate for Template {
                 modified_at,
             } => {
                 self.holder_authorization = holder_authorization;
+                self.modified_at.replace(modified_at);
+            }
+            OriginUpdated {
+                template_id: _,
+                origin,
+                modified_at,
+            } => {
+                self.origin = origin;
                 self.modified_at.replace(modified_at);
             }
             TemplateDeleted { template_id } => {
@@ -880,6 +501,13 @@ fn normalize_open_badges_type(filtered: Vec<String>) -> Result<Vec<String>, Temp
     Ok(vec![VC.to_string(), badge_type.to_string()])
 }
 
+/// Trims a description. A blank one is absent, so `CreateNewTemplate` and `UpdateDescription` store the same value for
+/// the same input.
+fn normalize_description(description: &str) -> Option<String> {
+    let description = description.trim();
+    (!description.is_empty()).then(|| description.to_string())
+}
+
 /// Normalizes a tags vector: trims each entry, drops empty entries, deduplicates
 /// preserving first-seen order.  Returns `None` when the result would be empty.
 fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
@@ -897,6 +525,538 @@ fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
         None
     } else {
         Some(normalized)
+    }
+}
+
+impl Template {
+    /// The events of `ReplaceContent`: each field's own update command, decided in turn against the template as the
+    /// earlier ones left it, so every field is validated by the same rules as on its own and nothing is emitted unless
+    /// all of them pass. A command that changes no public content emits nothing; the origin is always set, last.
+    fn replace_content(
+        &self,
+        template_id: String,
+        content: PublicTemplateContent,
+        origin: Option<TemplateOrigin>,
+    ) -> Result<Vec<TemplateEvent>, TemplateError> {
+        use TemplateCommand::*;
+
+        ensure_template_editable(&self.status)?;
+        if content.data_model != self.data_model {
+            return Err(TemplateError::DataModelImmutable);
+        }
+        if content.holder_type != self.holder_type {
+            return Err(TemplateError::HolderTypeImmutable);
+        }
+
+        let PublicTemplateContent {
+            title,
+            description,
+            display,
+            r#type,
+            tags,
+            credential_expiration,
+            schema,
+            schema_properties_attributes,
+            ..
+        } = content;
+
+        let mut commands = vec![
+            UpdateTitle {
+                template_id: template_id.clone(),
+                title,
+            },
+            UpdateDisplay {
+                template_id: template_id.clone(),
+                display,
+            },
+            // Empty tags and an empty description clear the field.
+            UpdateTags {
+                template_id: template_id.clone(),
+                tags: tags.unwrap_or_default(),
+            },
+            UpdateCredentialExpiration {
+                template_id: template_id.clone(),
+                credential_expiration,
+            },
+            UpdateDescription {
+                template_id: template_id.clone(),
+                description: description.unwrap_or_default(),
+            },
+            UpdateType {
+                template_id: template_id.clone(),
+                r#type,
+            },
+        ];
+        if let Some(schema) = schema {
+            commands.push(UpdateSchema {
+                template_id: template_id.clone(),
+                schema,
+            });
+        }
+        // No attributes clear them, except for W3C VC 1.1, which never has any.
+        let schema_properties_attributes = schema_properties_attributes.unwrap_or_default();
+        if self.data_model != DataModel::W3CVcDataModelV1_1 || !schema_properties_attributes.is_empty() {
+            commands.push(UpdateSchemaPropertiesAttributes {
+                template_id: template_id.clone(),
+                schema_properties_attributes,
+            });
+        }
+
+        let mut template = self.clone();
+        let mut events = Vec::new();
+        for command in commands {
+            let before = template.public_content();
+            let emitted = template.decide(command)?;
+            for event in &emitted {
+                template.apply(event.clone());
+            }
+            if template.public_content() != before {
+                events.extend(emitted);
+            }
+        }
+
+        events.extend(template.decide(UpdateOrigin { template_id, origin })?);
+        Ok(events)
+    }
+
+    /// The events `command` emits against this template, or why it is refused. Nothing is written.
+    fn decide(&self, command: TemplateCommand) -> Result<Vec<TemplateEvent>, TemplateError> {
+        use TemplateCommand::*;
+        use TemplateEvent::*;
+
+        match command {
+            CreateNewTemplate {
+                template_id,
+                source_template_id,
+                title,
+                display,
+                data_model,
+                holder_type,
+                tags,
+                status,
+                visibility,
+                credential_expiration,
+                description,
+                r#type,
+                schema,
+                schema_properties_attributes,
+                holder_authorization,
+                origin,
+            } => {
+                // Only Draft and Published are allowed on creation.
+                if matches!(status, Status::Archived | Status::Deleted) {
+                    return Err(TemplateError::InvalidStatusOnCreate);
+                }
+
+                // Validate that a title is provided
+                let title = title.trim().to_string();
+                if title.is_empty() {
+                    return Err(TemplateError::MissingTitle);
+                }
+
+                // Normalize type (defaults, canonical order, dedup).
+                let r#type = normalize_and_validate_type(r#type, &data_model)?;
+
+                // Normalize tags.
+                let tags = normalize_tags(tags);
+
+                // Normalized like `UpdateDescription`, so the same input stores the same description either way.
+                let description = description.as_deref().and_then(normalize_description);
+
+                // Trimmed like `UpdateSchemaPropertiesAttributes`.
+                let schema_properties_attributes = schema_properties_attributes
+                    .map(trim_and_deduplicate_attribute_keys)
+                    .transpose()?;
+
+                // Validate the credential expiration value if provided.
+                let credential_expiration = credential_expiration.unwrap_or_default();
+                validate_expiration(&credential_expiration)?;
+
+                if let Some(ref origin) = origin {
+                    origin.validate()?;
+                }
+
+                // W3C VC 1.1 does not expose claim metadata and must not have
+                // schemaPropertiesAttributes.
+                if data_model == DataModel::W3CVcDataModelV1_1
+                    && schema_properties_attributes.as_ref().is_some_and(|a| !a.is_empty())
+                {
+                    return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
+                }
+
+                // For OpenBadges 3.0 templates, validate that the required properties are present
+                // in the user-supplied schema. They are NOT auto-added.
+                let schema = if data_model == DataModel::OpenBadges3_0 {
+                    let mut s = (*schema).unwrap_or(serde_json::json!({"type": "object"}));
+                    // Ensure schema has "type": "object" and "properties"
+                    if let Some(obj) = s.as_object_mut() {
+                        obj.entry("type").or_insert(serde_json::json!("object"));
+                        obj.entry("properties").or_insert(serde_json::json!({}));
+                    }
+                    validate_open_badges_required_properties(&s)?;
+                    // Ensure required keys are included in schema.required
+                    ensure_schema_required_keys(&mut s);
+                    Box::new(Some(s))
+                } else {
+                    schema
+                };
+
+                if let Some(ref s) = *schema {
+                    validate_json_schema(s)?;
+                    validate_schema_no_array_types(s)?;
+
+                    if data_model == DataModel::OpenBadges3_0 {
+                        validate_open_badges_schema_properties(s)?;
+                    }
+                }
+
+                if let Some(ref attrs) = schema_properties_attributes {
+                    if !attrs.is_empty() {
+                        validate_schema_properties_attributes(&schema, attrs)?;
+                    }
+                }
+
+                // For OpenBadges 3.0 templates, auto-populate non_removable attributes
+                // for schema properties. Only required standard fields are non-removable.
+                let schema_properties_attributes = if data_model == DataModel::OpenBadges3_0 {
+                    if let Some(ref s) = *schema {
+                        let leaf_paths = collect_leaf_paths(s);
+                        let required_paths = open_badges_required_leaf_paths();
+                        let mut attrs = schema_properties_attributes.unwrap_or_default();
+                        for key in leaf_paths {
+                            let is_required = required_paths.contains(&key);
+                            let attr = attrs.entry(key).or_insert(PropertyAttribute {
+                                selectively_disclosable: false,
+                                non_removable: false,
+                                r#type: None,
+                            });
+                            attr.non_removable = is_required;
+                        }
+                        Some(attrs)
+                    } else {
+                        schema_properties_attributes
+                    }
+                } else {
+                    // Normalize empty map to None.
+                    schema_properties_attributes.filter(|a| !a.is_empty())
+                };
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![TemplateCreated {
+                    template_id,
+                    source_template_id,
+                    title,
+                    display,
+                    data_model,
+                    holder_type,
+                    modified_at,
+                    tags,
+                    status,
+                    visibility,
+                    credential_expiration,
+                    description,
+                    r#type,
+                    schema,
+                    schema_properties_attributes,
+                    holder_authorization,
+                    origin,
+                }])
+            }
+            UpdateTitle { template_id, title } => {
+                ensure_template_editable(&self.status)?;
+
+                let title = title.trim().to_string();
+                if title.is_empty() {
+                    return Err(TemplateError::MissingTitle);
+                }
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![TitleUpdated {
+                    template_id,
+                    title,
+                    modified_at,
+                }])
+            }
+            UpdateDisplay { template_id, display } => {
+                ensure_template_editable(&self.status)?;
+
+                // An empty `display.name` is stored verbatim: it means "no explicit display name",
+                // and the read paths resolve it to the current title. Materializing the title here
+                // would freeze it, so later title updates would no longer reach the wallet.
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![DisplayUpdated {
+                    template_id,
+                    display,
+                    modified_at,
+                }])
+            }
+            UpdateTags { template_id, tags } => {
+                ensure_template_editable(&self.status)?;
+
+                // Normalize: trim, dedup, drop empty.  Empty result is stored as None via apply.
+                let tags = normalize_tags(Some(tags)).unwrap_or_default();
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![TagsUpdated {
+                    template_id,
+                    tags,
+                    modified_at,
+                }])
+            }
+            UpdateStatus { template_id, status } => {
+                ensure_status_transition_allowed(&self.status, &status)?;
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![StatusUpdated {
+                    template_id,
+                    status,
+                    modified_at,
+                }])
+            }
+            UpdateVisibility {
+                template_id,
+                visibility,
+            } => {
+                ensure_template_editable(&self.status)?;
+
+                if self.status == Status::Draft && visibility == Visibility::Public {
+                    return Err(TemplateError::DraftTemplateCannotBePublic);
+                }
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![VisibilityUpdated {
+                    template_id,
+                    visibility,
+                    modified_at,
+                }])
+            }
+            UpdateDescription {
+                template_id,
+                description,
+            } => {
+                ensure_template_editable(&self.status)?;
+
+                // An empty description clears the field (stored as None via apply).
+                let description = normalize_description(&description).unwrap_or_default();
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![DescriptionUpdated {
+                    template_id,
+                    description,
+                    modified_at,
+                }])
+            }
+            UpdateType { template_id, r#type } => {
+                ensure_template_editable(&self.status)?;
+
+                let r#type = normalize_and_validate_type(r#type, &self.data_model)?;
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![TypeUpdated {
+                    template_id,
+                    r#type,
+                    modified_at,
+                }])
+            }
+            UpdateSchema { template_id, schema } => {
+                ensure_template_editable(&self.status)?;
+
+                validate_json_schema(&schema)?;
+                validate_schema_no_array_types(&schema)?;
+
+                if self.data_model == DataModel::OpenBadges3_0 {
+                    validate_open_badges_schema_properties(&schema)?;
+                    validate_open_badges_required_properties(&schema)?;
+                }
+
+                // Ensure required keys are included in schema.required for OpenBadges 3.0
+                let mut schema = schema;
+                if self.data_model == DataModel::OpenBadges3_0 {
+                    ensure_schema_required_keys(&mut schema);
+                }
+
+                // Enforce non-removable properties: reject if any property with non_removable=true
+                // is missing from the new schema.
+                if let Some(ref existing_attrs) = self.schema_properties_attributes {
+                    let new_leaf_paths = collect_leaf_paths(&schema);
+                    let immutable_missing: Vec<&str> = existing_attrs
+                        .iter()
+                        .filter(|(_, attr)| attr.non_removable)
+                        .filter(|(k, _)| !new_leaf_paths.contains(*k))
+                        .map(|(k, _)| k.as_str())
+                        .collect();
+
+                    if !immutable_missing.is_empty() {
+                        return Err(TemplateError::NonRemovablePropertyViolation(format!(
+                            "The following non-removable properties cannot be removed from the schema: [{}]",
+                            immutable_missing.join(", ")
+                        )));
+                    }
+                }
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                let mut events = vec![SchemaUpdated {
+                    template_id: template_id.clone(),
+                    schema: schema.clone(),
+                    modified_at: modified_at.clone(),
+                }];
+
+                // Prune schema_properties_attributes whose keys no longer exist in the new schema.
+                if let Some(ref existing_attrs) = self.schema_properties_attributes {
+                    let new_leaf_paths = collect_leaf_paths(&schema);
+                    let pruned: HashMap<String, PropertyAttribute> = existing_attrs
+                        .iter()
+                        .filter(|(k, _)| new_leaf_paths.contains(*k))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+
+                    if pruned.len() != existing_attrs.len() {
+                        events.push(SchemaPropertiesAttributesUpdated {
+                            template_id,
+                            schema_properties_attributes: pruned,
+                            modified_at,
+                        });
+                    }
+                }
+
+                Ok(events)
+            }
+            UpdateSchemaPropertiesAttributes {
+                template_id,
+                schema_properties_attributes,
+            } => {
+                ensure_template_editable(&self.status)?;
+
+                // W3C VC 1.1 does not expose claim metadata and must not have
+                // schemaPropertiesAttributes.
+                if self.data_model == DataModel::W3CVcDataModelV1_1 {
+                    return Err(TemplateError::SchemaPropertiesAttributesNotAllowed);
+                }
+
+                // Trim keys and detect collisions after trimming.
+                let schema_properties_attributes = trim_and_deduplicate_attribute_keys(schema_properties_attributes)?;
+
+                validate_schema_properties_attributes(&self.schema, &schema_properties_attributes)?;
+
+                // The `non_removable` flag is system-determined by the data model and cannot
+                // be altered through any command. Override it with the existing values.
+                let schema_properties_attributes = enforce_non_removable_flag(
+                    schema_properties_attributes,
+                    &self.schema_properties_attributes,
+                    &self.data_model,
+                );
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![SchemaPropertiesAttributesUpdated {
+                    template_id,
+                    schema_properties_attributes,
+                    modified_at,
+                }])
+            }
+            DeleteTemplate { template_id } => {
+                ensure_template_can_be_deleted(&self.status)?;
+                Ok(vec![TemplateDeleted { template_id }])
+            }
+            UpdateCredentialExpiration {
+                template_id,
+                credential_expiration,
+            } => {
+                ensure_template_editable(&self.status)?;
+
+                validate_expiration(&credential_expiration)?;
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![CredentialExpirationUpdated {
+                    template_id,
+                    credential_expiration,
+                    modified_at,
+                }])
+            }
+            UpdateHolderAuthorization {
+                template_id,
+                holder_authorization,
+            } => {
+                ensure_template_editable(&self.status)?;
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![HolderAuthorizationUpdated {
+                    template_id,
+                    holder_authorization,
+                    modified_at,
+                }])
+            }
+            ReplaceContent {
+                template_id,
+                content,
+                origin,
+            } => self.replace_content(template_id, *content, origin),
+            UpdateOrigin { template_id, origin } => {
+                ensure_template_editable(&self.status)?;
+
+                if let Some(ref origin) = origin {
+                    origin.validate()?;
+                }
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![OriginUpdated {
+                    template_id,
+                    origin,
+                    modified_at,
+                }])
+            }
+        }
     }
 }
 
@@ -1043,26 +1203,27 @@ fn trim_and_deduplicate_attribute_keys(
     Ok(result)
 }
 
-/// Ensures the `non_removable` flag on each property attribute preserves the existing
-/// system-determined value. Users cannot alter `non_removable` through commands.
+/// Ensures the `non_removable` flag on each property attribute is the system-determined one. Users cannot alter
+/// `non_removable` through commands.
+///
+/// An attribute the template already has keeps its flag. One it doesn't have gets the flag the data model gives it,
+/// as on create: an Open Badges template that lost the attribute of a required property gets a non-removable one
+/// back.
 fn enforce_non_removable_flag(
     mut new_attrs: HashMap<String, PropertyAttribute>,
     existing_attrs: &Option<HashMap<String, PropertyAttribute>>,
+    data_model: &DataModel,
 ) -> HashMap<String, PropertyAttribute> {
-    if let Some(existing) = existing_attrs {
-        for (key, new_attr) in new_attrs.iter_mut() {
-            if let Some(existing_attr) = existing.get(key) {
-                new_attr.non_removable = existing_attr.non_removable;
-            } else {
-                // New properties not previously tracked default to non-removable=false.
-                new_attr.non_removable = false;
-            }
-        }
+    let required_paths = if *data_model == DataModel::OpenBadges3_0 {
+        open_badges_required_leaf_paths()
     } else {
-        // No existing attributes means no non-removable flags to preserve.
-        for attr in new_attrs.values_mut() {
-            attr.non_removable = false;
-        }
+        Vec::new()
+    };
+    for (key, new_attr) in &mut new_attrs {
+        new_attr.non_removable = match existing_attrs.as_ref().and_then(|existing| existing.get(key)) {
+            Some(existing_attr) => existing_attr.non_removable,
+            None => required_paths.contains(key),
+        };
     }
     new_attrs
 }

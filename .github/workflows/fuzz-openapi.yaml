@@ -16,10 +16,22 @@ on:
           - published
           - full
         default: published
+      command:
+        description: "`run`: every test phase once per operation; `fuzz`: multi-step operation sequences until `max_time`"
+        required: false
+        type: choice
+        options:
+          - run
+          - fuzz
+        default: run
       max_examples:
-        description: "Test cases generated per API operation"
+        description: "Test cases generated per API operation (`run` only)"
         required: false
         default: "50"
+      max_time:
+        description: "Time budget in seconds (optional for `run`, required for `fuzz`)"
+        required: false
+        default: ""
       seed:
         description: "Random seed, to reproduce an earlier run (optional)"
         required: false
@@ -42,8 +54,8 @@ concurrency:
 jobs:
   fuzz:
     runs-on: ubuntu-latest
-    # The agent image is built from source; the fuzz run itself is the shorter half.
-    timeout-minutes: 60
+    # The agent image is built from source; a `max_time` of up to two hours still fits.
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v7
@@ -54,7 +66,9 @@ jobs:
       - name: Fuzz
         env:
           FUZZ_SPEC: ${{ inputs.spec || 'published' }}
+          FUZZ_COMMAND: ${{ inputs.command || 'run' }}
           FUZZ_MAX_EXAMPLES: ${{ inputs.max_examples || '50' }}
+          FUZZ_MAX_TIME: ${{ inputs.max_time }}
           FUZZ_SEED: ${{ inputs.seed }}
           FUZZ_EXTRA_ARGS: ${{ inputs.extra_args }}
         run: ./scripts/fuzz-openapi.sh

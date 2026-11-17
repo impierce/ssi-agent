@@ -71,7 +71,7 @@ pub fn router(enabled: bool) -> Router {
     operation_id = "openapi_yaml",
     tags = ["OpenAPI"],
     responses(
-        (status = 200, description = "OpenAPI document", body = String, content_type = "application/yaml"),
+        (status = 200, description = "OpenAPI document", body = serde_json::Value, content_type = "application/yaml"),
     )
 )]
 async fn openapi_yaml() -> Result<impl IntoResponse, StatusCode> {
