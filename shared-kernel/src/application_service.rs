@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::authorization::{
     AuthorizationCheckerFor, AuthorizationConfigurationError, AuthorizationError, AuthorizationOperation,
@@ -221,9 +221,10 @@ async fn process_command<AC: ApplicationContext>(
         .await
         .map_err(ApplicationServiceError::Context);
 
+    // Failures are returned to the caller, which tells client errors from server errors.
     match &result {
-        Ok(id) => info!(aggregate_id = %id, "Command executed successfully"),
-        Err(e) => error!(aggregate_id = %msg.aggregate_id, error = %e, "Command execution failed"),
+        Ok(id) => debug!(aggregate_id = %id, "Command executed successfully"),
+        Err(e) => debug!(aggregate_id = %msg.aggregate_id, error = %e, "Command execution failed"),
     }
 
     if msg.reply.send(result).is_err() {
@@ -259,9 +260,10 @@ async fn process_query<AC: ApplicationContext>(
         .await
         .map_err(ApplicationServiceError::Context);
 
+    // Failures are returned to the caller, which tells client errors from server errors.
     match &result {
         Ok(_) => debug!("Query executed successfully"),
-        Err(e) => error!(error = %e, "Query execution failed"),
+        Err(e) => debug!(error = %e, "Query execution failed"),
     }
 
     if msg.reply.send(result).is_err() {

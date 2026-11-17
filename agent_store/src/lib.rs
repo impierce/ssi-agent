@@ -4,10 +4,10 @@ use agent_shared::custom_queries::ListAllQuery;
 use agent_shared::generic_query::generic_query;
 use async_trait::async_trait;
 use cqrs_es::persist::ViewRepository;
-use cqrs_es::{Aggregate, CqrsFramework, EventEnvelope, EventStore, Query, View};
+use cqrs_es::{Aggregate, CqrsFramework, DomainEvent, EventEnvelope, EventStore, Query, View};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tracing::debug;
 
 pub mod event_verification;
 pub mod in_memory;
@@ -22,8 +22,12 @@ pub struct SimpleLoggingQuery;
 impl<A: Aggregate> Query<A> for SimpleLoggingQuery {
     async fn dispatch(&self, aggregate_id: &str, events: &[EventEnvelope<A>]) {
         for event in events {
-            let payload = serde_json::to_string_pretty(&event.payload).unwrap();
-            info!("{}-{} - {}", aggregate_id, event.sequence, payload);
+            debug!(
+                aggregate_id,
+                sequence = event.sequence,
+                event_type = event.payload.event_type(),
+                "Event committed"
+            );
         }
     }
 }

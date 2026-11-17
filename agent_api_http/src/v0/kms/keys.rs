@@ -58,6 +58,9 @@ pub struct CreateKeyRequest {
     pub provider_type: KeyProviderType,
     pub algorithm: CreateKeyAlgorithm,
     /// A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+    ///
+    /// A labelled request is safe to retry: when the first one created the key, the retry answers `409` instead of
+    /// creating a second key.
     pub label: Option<String>,
 }
 
@@ -80,7 +83,8 @@ impl From<CreateKeyAlgorithm> for JwsAlgorithm {
 /// Create a key
 ///
 /// Creates a key in an added key provider. The private key is generated in the provider and never leaves it.
-/// Nothing signs with the key yet.
+/// The key signs for the `did:web` document once it is added to it with `add-key-to-document` and selected with
+/// `select-signing-key`.
 #[utoipa::path(
     post,
     path = "/create-key",

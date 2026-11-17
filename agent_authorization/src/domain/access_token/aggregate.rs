@@ -3,7 +3,6 @@ use super::error::AccessTokenError;
 use super::event::AccessTokenEvent;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AccessToken {
@@ -34,8 +33,6 @@ impl Aggregate for AccessToken {
     ) -> Result<(), Self::Error> {
         use AccessTokenCommand::*;
         use AccessTokenEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             IssueAccessToken {
@@ -78,8 +75,6 @@ impl Aggregate for AccessToken {
     fn apply(&mut self, event: Self::Event) {
         use AccessTokenEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             AccessTokenIssued {
                 access_token_id,
@@ -116,6 +111,7 @@ pub mod token_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_issue_access_token(
         access_token_id: String,
         user_id: String,
@@ -130,7 +126,7 @@ pub mod token_tests {
     ) {
         AccessTokenTestFramework::with(())
             .given_no_previous_events()
-            .when(AccessTokenCommand::IssueAccessToken {
+            .when_async(AccessTokenCommand::IssueAccessToken {
                 access_token_id: access_token_id.clone(),
                 user_id: user_id.clone(),
                 client_id: client_id.clone(),
@@ -139,6 +135,7 @@ pub mod token_tests {
                 refresh_token_expires_in,
                 issuer_state: issuer_state.clone(),
             })
+            .await
             .then_expect_events(vec![AccessTokenEvent::AccessTokenIssued {
                 access_token_id,
                 user_id,

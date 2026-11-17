@@ -1,4 +1,11 @@
-use identity_kit::{sd_jwt_vc::SdJwt, vc::Jwt};
+use identity_kit::{
+    jose::DefaultVerifier,
+    sd_jwt_vc::{SdJwt, SdJwtCredentialV2, SdJwtCredentialValidator, SdJwtValidationOptions},
+    vc::{
+        validation::{KeyResolver, StatusPolicy},
+        Jwt,
+    },
+};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 use thiserror::Error;
@@ -43,6 +50,33 @@ impl From<Jwt> for SignedCredential {
     }
 }
 
+/// Why an SD-JWT credential is not one the holder keeps.
+#[derive(Error, Debug)]
+pub enum SdJwtCredentialError {
+    /// Not a VCDM 2.0 credential secured with SD-JWT (`vc+sd-jwt`), e.g. an SD-JWT VC (`dc+sd-jwt`).
+    #[error("not a `vc+sd-jwt` credential: {0}")]
+    UnsupportedFormat(String),
+    /// The issuer signature or the validity period does not hold.
+    #[error("{0}")]
+    Invalid(String),
+}
+
+/// Verifies `sd_jwt` as a VCDM 2.0 credential secured with SD-JWT (`vc+sd-jwt`): the signature of the issuer it
+/// names and its validity period, with the disclosures it carries applied. Status is not checked here.
+pub async fn verify_sd_jwt_credential(
+    sd_jwt: &SdJwt,
+    resolver: &(impl KeyResolver + ?Sized),
+) -> Result<SdJwtCredentialV2, SdJwtCredentialError> {
+    let credential = SdJwtCredentialV2::from_sd_jwt(sd_jwt.clone())
+        .map_err(|error| SdJwtCredentialError::UnsupportedFormat(error.to_string()))?;
+    let options = SdJwtValidationOptions::new().with_status(StatusPolicy::SkipAll);
+    SdJwtCredentialValidator::new(resolver, DefaultVerifier)
+        .validate_credential_v2(credential, &options)
+        .await
+        .map(|validated| validated.credential)
+        .map_err(|error| SdJwtCredentialError::Invalid(error.to_string()))
+}
+
 /// An SD-JWT without disclosures, whose signature is not checked anywhere it is used.
 #[cfg(test)]
 pub(crate) const SD_JWT: &str = concat!(
@@ -50,6 +84,46 @@ pub(crate) const SD_JWT: &str = concat!(
     "eyJfc2QiOltdLCJfc2RfYWxnIjoic2hhLTI1NiIsImlzcyI6Imh0dHBzOi8vaXNzdWVyLmV4YW1wbGUiLCJ2Y3QiOiJodHRwczovL3ZjdC5leGFtcGxlIn0.",
     "c2lnbmF0dXJl~"
 );
+
+/// A `vc+sd-jwt` credential issued by the `did:key` of `holder` about itself, valid until `valid_until`, with its
+/// `name` selectively disclosable and disclosed.
+#[cfg(test)]
+pub(crate) async fn issue_vc_sd_jwt(
+    holder: &agent_secret_manager::subject::Subject,
+    valid_until: chrono::DateTime<chrono::Utc>,
+) -> SdJwt {
+    use chrono::TimeZone as _;
+    use identity_kit::{
+        did::Did,
+        sd_jwt_vc::SdJwtCredentialV2Builder,
+        vc::{CredentialV2, Subject},
+    };
+    use oid4vc_core::{Sign as _, Subject as _};
+
+    let algorithm = jsonwebtoken::Algorithm::EdDSA;
+    let did: Did = holder.identifier("did:key", algorithm).await.unwrap().parse().unwrap();
+    let kid = holder.key_id("did:key", algorithm).await.unwrap();
+    let credential = CredentialV2::new(did.clone(), Subject::new(did).with_property("name", "Example LLC"))
+        .with_type("OrganizationCredential")
+        .with_valid_from(chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap())
+        .with_valid_until(valid_until);
+    SdJwtCredentialV2Builder::new(credential)
+        .with_kid(kid)
+        .conceal(["credentialSubject", "name"])
+        .sign(&holder.issuer_signer(algorithm).await.unwrap())
+        .await
+        .unwrap()
+        .into_sd_jwt()
+}
+
+/// `sd_jwt` with the signature of its issuer-signed JWT replaced.
+#[cfg(test)]
+pub(crate) fn with_forged_signature(sd_jwt: &SdJwt) -> SdJwt {
+    let serialized = sd_jwt.to_string();
+    let (jwt, disclosures) = serialized.split_once('~').unwrap();
+    let (signed, _signature) = jwt.rsplit_once('.').unwrap();
+    format!("{signed}.c2lnbmF0dXJl~{disclosures}").parse().unwrap()
+}
 
 #[cfg(test)]
 mod tests {

@@ -611,19 +611,18 @@ async fn cache_signing_methods(subject: &Subject, document: &Document) -> anyhow
         return Ok(());
     };
 
-    let configured_methods = did_document
+    for verification_method_id in &document.added_verification_methods {
+        subject.insert_added_method(verification_method_id.clone()).await;
+    }
+
+    let mut signing_methods = did_document
         .methods(None)
         .filter(|method| !document.added_verification_methods.contains(&method.id))
         .filter_map(|method| {
             let alg = method.public_key_jwk().and_then(|jwk| jwk.alg())?;
             Some(alg.parse().map(|algorithm| (algorithm, method.id.clone())))
         })
-        .collect::<Result<Vec<(Algorithm, DidUrl)>, _>>()?;
-    for (algorithm, verification_method_id) in configured_methods {
-        subject
-            .insert_verification_method_id(StorageKey::new(did_method, algorithm), verification_method_id)
-            .await?;
-    }
+        .collect::<Result<HashMap<Algorithm, DidUrl>, _>>()?;
 
     for (algorithm, verification_method_id) in &document.signing_methods {
         if !did_document
@@ -639,11 +638,15 @@ async fn cache_signing_methods(subject: &Subject, document: &Document) -> anyhow
             warn!(%verification_method_id, "The selected signing key is not available");
             continue;
         }
-        subject
-            .insert_verification_method_id(StorageKey::new(did_method, *algorithm), verification_method_id.clone())
-            .await?;
+        signing_methods.insert(*algorithm, verification_method_id.clone());
     }
 
+    // All at once, so that signing meanwhile never briefly uses a configured issuer key in place of a selected one.
+    subject
+        .insert_verification_method_ids(signing_methods.into_iter().map(|(algorithm, verification_method_id)| {
+            (StorageKey::new(did_method, algorithm), verification_method_id)
+        }))
+        .await;
     Ok(())
 }
 
@@ -740,13 +743,13 @@ pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Res
     .find_map(|(document_id, document)| Some((document_id, document.document?.id))) else {
         return Err(AddKeyError::DocumentNotFound);
     };
-    let ExternalKey { method_key, public_key } = state
+    let ExternalKey { method_key } = state
         .services
         .external_keys
         .key(key_id)
         .await?
         .ok_or_else(|| AddKeyError::KeyNotFound(key_id.to_string()))?;
-    let thumbprint = public_key.thumbprint_sha256().map_err(anyhow::Error::from)?;
+    let thumbprint = method_key.public_key.thumbprint_sha256().map_err(anyhow::Error::from)?;
 
     command_handler(
         state.authorization_checker.clone(),
@@ -754,7 +757,7 @@ pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Res
         &document_id,
         &state.command.document,
         DocumentCommand::AddPublicKey {
-            public_key_jwk: Box::new(public_key),
+            public_key_jwk: Box::new(method_key.public_key.clone()),
         },
     )
     .await?;
@@ -771,7 +774,8 @@ pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Res
 
 /// Makes the external key of every added verification method available to sign with again, after a restart. A
 /// verification method is named by the thumbprint of its key. When a key can't be loaded or no longer exists in its
-/// store, its verification method is unavailable and the configured issuer key signs instead.
+/// store, its verification method can't sign: a selected one gives way to the configured issuer key of its algorithm,
+/// and anything signing for it by name, such as a Domain Linkage Credential, fails.
 async fn load_external_keys(state: &IdentityState) -> anyhow::Result<()> {
     let keys = match state.services.external_keys.keys().await {
         Ok(keys) => keys,
@@ -782,7 +786,7 @@ async fn load_external_keys(state: &IdentityState) -> anyhow::Result<()> {
     };
     let keys_by_thumbprint: HashMap<String, MethodKey> = keys
         .into_iter()
-        .filter_map(|key| Some((key.public_key.thumbprint_sha256().ok()?, key.method_key)))
+        .filter_map(|key| Some((key.method_key.public_key.thumbprint_sha256().ok()?, key.method_key)))
         .collect();
 
     for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
@@ -943,7 +947,12 @@ mod tests {
             .await
             .unwrap();
 
-        MethodKey { key_store, key_id }
+        // The public key names the KMS verification method by its thumbprint.
+        MethodKey {
+            key_store,
+            key_id,
+            public_key: kms_public_key(),
+        }
     }
 
     /// A `did:web` document with the configured issuer keys and an added KMS key, signing with `signing_methods`.
@@ -1058,7 +1067,6 @@ mod tests {
     async fn kms_key() -> FakeExternalKeys {
         FakeExternalKeys(Some(ExternalKey {
             method_key: method_key().await,
-            public_key: kms_public_key(),
         }))
     }
 
@@ -1206,7 +1214,6 @@ mod tests {
     async fn does_not_load_a_key_its_store_no_longer_holds() {
         let key = ExternalKey {
             method_key: method_key().await,
-            public_key: kms_public_key(),
         };
         key.method_key.key_store.delete(&key.method_key.key_id).await.unwrap();
         let state = state_with_added_key_from(FakeExternalKeys(Some(key))).await;

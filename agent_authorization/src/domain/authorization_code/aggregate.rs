@@ -4,7 +4,6 @@ use super::event::AuthorizationCodeEvent;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vci::{authorization_request::CodeChallengeMethod, pkce};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -37,8 +36,6 @@ impl Aggregate for AuthorizationCode {
         use AuthorizationCodeCommand::*;
         use AuthorizationCodeError::*;
         use AuthorizationCodeEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateAuthorizationCode {
@@ -123,8 +120,6 @@ impl Aggregate for AuthorizationCode {
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationCodeEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             AuthorizationCodeCreated {
                 authorization_code_id,
@@ -170,6 +165,7 @@ pub mod authorization_code_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_authorization_code(
         authorization_code_id: String,
         client_id: String,
@@ -182,7 +178,7 @@ pub mod authorization_code_tests {
     ) {
         AccessTokenTestFramework::with(())
             .given_no_previous_events()
-            .when(AuthorizationCodeCommand::CreateAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::CreateAuthorizationCode {
                 authorization_code_id: authorization_code_id.clone(),
                 client_id: client_id.clone(),
                 redirect_uri: redirect_uri.clone(),
@@ -191,6 +187,7 @@ pub mod authorization_code_tests {
                 issuer_state: issuer_state.clone(),
                 expires_in,
             })
+            .await
             .then_expect_events(vec![AuthorizationCodeEvent::AuthorizationCodeCreated {
                 authorization_code_id,
                 client_id,
@@ -204,6 +201,7 @@ pub mod authorization_code_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_authorization_code(
         authorization_code_id: String,
         client_id: String,
@@ -224,11 +222,12 @@ pub mod authorization_code_tests {
                 issuer_state,
                 expires_at,
             }])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 client_id,
                 redirect_uri,
                 code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
             })
+            .await
             .then_expect_events(vec![AuthorizationCodeEvent::AuthorizationCodeRedeemed {
                 authorization_code_id,
                 redeemed: true,
@@ -237,6 +236,7 @@ pub mod authorization_code_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_authorization_code_twice(
         authorization_code_id: String,
         client_id: String,
@@ -264,16 +264,18 @@ pub mod authorization_code_tests {
                     redeemed: true,
                 },
             ])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 client_id,
                 redirect_uri,
                 code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
             })
+            .await
             .then_expect_error_message(&AuthorizationCodeError::RedeemedAuthorizationCodeError.to_string());
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_expired_authorization_code(
         authorization_code_id: String,
         client_id: String,
@@ -294,16 +296,18 @@ pub mod authorization_code_tests {
                 // The authorization code is immediately expired.
                 expires_at: -1,
             }])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 client_id,
                 redirect_uri,
                 code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
             })
+            .await
             .then_expect_error_message(&AuthorizationCodeError::ExpiredAuthorizationCodeError.to_string());
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_authorization_code_with_invalid_client_id(
         authorization_code_id: String,
         client_id: String,
@@ -324,17 +328,19 @@ pub mod authorization_code_tests {
                 issuer_state,
                 expires_at,
             }])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 // Using an invalid client_id
                 client_id: "invalid_client_id".to_string(),
                 redirect_uri,
                 code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
             })
+            .await
             .then_expect_error_message(&AuthorizationCodeError::InvalidClientIdError.to_string());
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_authorization_code_with_invalid_redirect_uri(
         authorization_code_id: String,
         client_id: String,
@@ -355,17 +361,19 @@ pub mod authorization_code_tests {
                 issuer_state,
                 expires_at,
             }])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 client_id,
                 // Using an invalid redirect_uri
                 redirect_uri: Some(Url::parse("https://invalid-redirect-uri.test").unwrap()),
                 code_verifier: Some(String::from_utf8(code_verifier.to_vec()).unwrap()),
             })
+            .await
             .then_expect_error_message(&AuthorizationCodeError::InvalidRedirectUriError.to_string());
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_authorization_code_with_missing_code_verifier(
         authorization_code_id: String,
         client_id: String,
@@ -385,17 +393,19 @@ pub mod authorization_code_tests {
                 issuer_state,
                 expires_at,
             }])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 client_id,
                 redirect_uri,
                 // Missing code_verifier
                 code_verifier: None,
             })
+            .await
             .then_expect_error_message(&AuthorizationCodeError::MissingCodeVerifierError.to_string());
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_redeem_authorization_code_with_invalid_code_verifier(
         authorization_code_id: String,
         client_id: String,
@@ -415,12 +425,13 @@ pub mod authorization_code_tests {
                 issuer_state,
                 expires_at,
             }])
-            .when(AuthorizationCodeCommand::RedeemAuthorizationCode {
+            .when_async(AuthorizationCodeCommand::RedeemAuthorizationCode {
                 client_id,
                 redirect_uri,
                 // Using an invalid code_verifier
                 code_verifier: Some("invalid_code_verifier".to_string()),
             })
+            .await
             .then_expect_error_message(&AuthorizationCodeError::InvalidCodeVerifierError.to_string());
     }
 }

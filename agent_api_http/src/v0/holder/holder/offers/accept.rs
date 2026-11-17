@@ -34,8 +34,8 @@ use std::sync::Arc;
         (status = 404, description = "Credential offer not found"),
         (status = 409, description = "The credential offer is not in a state that allows accepting it"),
         (status = 422, description = "The credential offer cannot be processed, e.g. it carries no pre-authorized code"),
-        (status = 501, description = "The credential issuer requires a flow UniCore does not support yet"),
-        (status = 502, description = "The credential issuer or its authorization server could not be reached"),
+        (status = 501, description = "The credential issuer requires a flow UniCore does not support yet, or sent a credential format other than a credential JWT or `vc+sd-jwt`"),
+        (status = 502, description = "The credential issuer or its authorization server could not be reached, or the `vc+sd-jwt` credential it sent does not verify"),
     )
 )]
 #[axum_macros::debug_handler]

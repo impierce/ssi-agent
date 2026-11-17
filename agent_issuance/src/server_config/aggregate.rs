@@ -1,8 +1,7 @@
-use agent_shared::config::{config, Authorization};
+use agent_shared::config::{config, get_preferred_signing_algorithm, Authorization, CredentialConfiguration};
 use agent_shared::UrlAppendHelpers as _;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::convert::ToJson;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt;
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json;
@@ -16,7 +15,6 @@ use oid4vci::proof::{KeyProofMetadata, ProofType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info};
 
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
@@ -40,12 +38,16 @@ fn into_credential_signing_alg_values_supported(signing_algorithms_supported: &[
     signing_algorithms_supported
         .iter()
         .filter_map(|algorithm| {
-            algorithm
-                .to_json_value()
+            serde_json::to_value(algorithm)
                 .ok()
                 .and_then(|value| value.as_str().map(|s| AlgIdentifier::String(s.to_string())))
         })
         .collect()
+}
+
+/// Credentials are signed with the preferred signing algorithm only, so that is the only one advertised.
+pub fn credential_signing_alg_values_supported() -> Vec<AlgIdentifier> {
+    into_credential_signing_alg_values_supported(&[get_preferred_signing_algorithm()])
 }
 
 fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> HashMap<ProofType, KeyProofMetadata> {
@@ -69,6 +71,130 @@ pub struct ServerConfig {
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
 
+impl ServerConfig {
+    /// The issuer metadata with the issuer and all endpoints moved to `url`. Also used on the view at
+    /// startup to tell whether the configured public URL changes anything.
+    pub fn with_issuer_url(&self, url: &url::Url) -> (AuthorizationServerMetadata, CredentialIssuerMetadata) {
+        let mut authorization_server_metadata = self.authorization_server_metadata.clone();
+        authorization_server_metadata.issuer = url.clone();
+        if authorization_server_metadata.authorization_endpoint.is_some() {
+            authorization_server_metadata.authorization_endpoint = Some(url.append_path_segment("auth/authorize"));
+        }
+        if authorization_server_metadata.token_endpoint.is_some() {
+            authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
+        }
+        if authorization_server_metadata
+            .pushed_authorization_request_endpoint
+            .is_some()
+        {
+            authorization_server_metadata.pushed_authorization_request_endpoint =
+                Some(url.append_path_segment("auth/par"));
+        }
+        if authorization_server_metadata
+            .interactive_authorization_endpoint
+            .is_some()
+        {
+            authorization_server_metadata.interactive_authorization_endpoint =
+                Some(url.append_path_segment("auth/par"));
+        }
+
+        let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
+        credential_issuer_metadata.credential_issuer = url.clone();
+        credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
+        if credential_issuer_metadata.nonce_endpoint.is_some() {
+            credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
+        }
+
+        (authorization_server_metadata, credential_issuer_metadata)
+    }
+
+    /// Whether the advertised `credential_configurations_supported` are exactly the credential
+    /// configurations. `ServerMetadataInitialized` replaces the metadata but keeps the configurations, so
+    /// an initialization that lands after a credential configuration update leaves them apart.
+    pub fn advertises_credential_configurations(&self) -> bool {
+        self.credential_issuer_metadata.credential_configurations_supported
+            == into_credential_configurations_supported(&self.credential_configurations)
+    }
+
+    /// The credential configurations with `credential_configuration` added or replaced. Also used on
+    /// the view to tell whether an update would change anything, without loading the aggregate.
+    pub fn with_credential_configuration(
+        &self,
+        credential_configuration: CredentialConfiguration,
+        provisioned: bool,
+    ) -> Result<HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>, ServerConfigError>
+    {
+        let credential_format = match credential_configuration.format.as_str() {
+            "jwt_vc_json" => CredentialFormats::JwtVcJson(Parameters {
+                parameters: (jwt_vc_json::CredentialDefinition {
+                    type_: credential_configuration.type_,
+                })
+                .into(),
+            }),
+            "dc+sd-jwt" => {
+                let vct = format!(
+                    "{}vct/{}/{version}",
+                    config().public_url,
+                    URL_SAFE_NO_PAD.encode(&credential_configuration.credential_configuration_id),
+                    // TODO: support versioning of VCTs once we support versioning of Templates
+                    version = 0
+                );
+
+                CredentialFormats::DcSdJwt(Parameters {
+                    parameters: (vct).into(),
+                })
+            }
+            "vc+sd-jwt" => CredentialFormats::VcSdJwt(Parameters {
+                parameters: (vc_sd_jwt::CredentialDefinition {
+                    type_: credential_configuration.type_,
+                })
+                .into(),
+            }),
+            _ => {
+                return Err(ServerConfigError::UnsupportedCredentialFormatIdentifierError(format!(
+                    "{:?}",
+                    credential_configuration.format
+                )))
+            }
+        };
+
+        let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
+
+        let credential_configuration_object = CredentialConfigurationsSupportedObject {
+            credential_format,
+            cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
+            credential_signing_alg_values_supported: credential_signing_alg_values_supported(),
+            proof_types_supported,
+            credential_metadata: Some(credential_configuration.credential_metadata),
+            ..Default::default()
+        };
+
+        let mut credential_configurations = self.credential_configurations.clone();
+        if let Some((existing_provisioned, existing_credential_configuration, existing_authorization_grant)) =
+            credential_configurations.get_mut(&credential_configuration.credential_configuration_id)
+        {
+            if !provisioned && *existing_provisioned {
+                return Err(ServerConfigError::UpdateProvisionedCredentialConfigurationError);
+            }
+
+            *existing_credential_configuration = credential_configuration_object;
+            *existing_provisioned = provisioned;
+            *existing_authorization_grant = credential_configuration.authorization.clone();
+        } else {
+            credential_configurations.insert(
+                credential_configuration.credential_configuration_id.clone(),
+                (
+                    provisioned,
+                    credential_configuration_object,
+                    credential_configuration.authorization.clone(),
+                ),
+            );
+        }
+
+        Ok(credential_configurations)
+    }
+}
+
 impl Aggregate for ServerConfig {
     type Command = ServerConfigCommand;
     type Event = ServerConfigEvent;
@@ -87,8 +213,6 @@ impl Aggregate for ServerConfig {
         use ServerConfigError::*;
         use ServerConfigEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             InitializeServerMetadata {
                 authorization_server_metadata,
@@ -102,36 +226,7 @@ impl Aggregate for ServerConfig {
                 signing_algorithms_supported,
             }]),
             UpdateIssuerUrl { url } => {
-                let mut authorization_server_metadata = self.authorization_server_metadata.clone();
-                authorization_server_metadata.issuer = url.clone();
-                if authorization_server_metadata.authorization_endpoint.is_some() {
-                    authorization_server_metadata.authorization_endpoint =
-                        Some(url.append_path_segment("auth/authorize"));
-                }
-                if authorization_server_metadata.token_endpoint.is_some() {
-                    authorization_server_metadata.token_endpoint = Some(url.append_path_segment("auth/token"));
-                }
-                if authorization_server_metadata
-                    .pushed_authorization_request_endpoint
-                    .is_some()
-                {
-                    authorization_server_metadata.pushed_authorization_request_endpoint =
-                        Some(url.append_path_segment("auth/par"));
-                }
-                if authorization_server_metadata
-                    .interactive_authorization_endpoint
-                    .is_some()
-                {
-                    authorization_server_metadata.interactive_authorization_endpoint =
-                        Some(url.append_path_segment("auth/par"));
-                }
-
-                let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
-                credential_issuer_metadata.credential_issuer = url.clone();
-                credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
-                if credential_issuer_metadata.nonce_endpoint.is_some() {
-                    credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
-                }
+                let (authorization_server_metadata, credential_issuer_metadata) = self.with_issuer_url(&url);
 
                 Ok(vec![IssuerUrlUpdated {
                     authorization_server_metadata: Box::new(authorization_server_metadata),
@@ -177,7 +272,7 @@ impl Aggregate for ServerConfig {
                     credential_configurations.iter_mut()
                 {
                     credential_configuration.credential_signing_alg_values_supported =
-                        into_credential_signing_alg_values_supported(&signing_algorithms_supported);
+                        credential_signing_alg_values_supported();
                     credential_configuration.proof_types_supported =
                         into_proof_types_supported(&signing_algorithms_supported);
                 }
@@ -196,81 +291,16 @@ impl Aggregate for ServerConfig {
                 credential_configuration,
                 provisioned,
             } => {
-                let credential_format = match credential_configuration.format.as_str() {
-                    "jwt_vc_json" => CredentialFormats::JwtVcJson(Parameters {
-                        parameters: (jwt_vc_json::CredentialDefinition {
-                            type_: credential_configuration.type_,
-                        })
-                        .into(),
-                    }),
-                    "dc+sd-jwt" => {
-                        let vct = format!(
-                            "{}vct/{}/{version}",
-                            config().public_url,
-                            URL_SAFE_NO_PAD.encode(&credential_configuration.credential_configuration_id),
-                            // TODO: support versioning of VCTs once we support versioning of Templates
-                            version = 0
-                        );
-
-                        CredentialFormats::DcSdJwt(Parameters {
-                            parameters: (vct).into(),
-                        })
-                    }
-                    "vc+sd-jwt" => CredentialFormats::VcSdJwt(Parameters {
-                        parameters: (vc_sd_jwt::CredentialDefinition {
-                            type_: credential_configuration.type_,
-                        })
-                        .into(),
-                    }),
-                    _ => {
-                        return Err(UnsupportedCredentialFormatIdentifierError(format!(
-                            "{:?}",
-                            credential_configuration.format
-                        )))
-                    }
-                };
-
-                let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
-
-                let credential_configuration_object = CredentialConfigurationsSupportedObject {
-                    credential_format,
-                    cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
-                    credential_signing_alg_values_supported: into_credential_signing_alg_values_supported(
-                        &self.signing_algorithms_supported,
-                    ),
-                    proof_types_supported,
-                    credential_metadata: Some(credential_configuration.credential_metadata),
-                    ..Default::default()
-                };
-
-                let mut credential_configurations = self.credential_configurations.clone();
-                if let Some((existing_provisioned, existing_credential_configuration, existing_authorization_grant)) =
-                    credential_configurations.get_mut(&credential_configuration.credential_configuration_id)
-                {
-                    if !provisioned && *existing_provisioned {
-                        return Err(UpdateProvisionedCredentialConfigurationError);
-                    }
-
-                    *existing_credential_configuration = credential_configuration_object;
-                    *existing_provisioned = provisioned;
-                    *existing_authorization_grant = credential_configuration.authorization.clone();
-                } else {
-                    credential_configurations.insert(
-                        credential_configuration.credential_configuration_id.clone(),
-                        (
-                            provisioned,
-                            credential_configuration_object,
-                            credential_configuration.authorization.clone(),
-                        ),
-                    );
-                }
+                let credential_configuration_id = credential_configuration.credential_configuration_id.clone();
+                let credential_configurations =
+                    self.with_credential_configuration(credential_configuration, provisioned)?;
 
                 let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
                 credential_issuer_metadata.credential_configurations_supported =
                     into_credential_configurations_supported(&credential_configurations);
 
                 Ok(vec![CredentialConfigurationUpdated {
-                    credential_configuration_id: credential_configuration.credential_configuration_id,
+                    credential_configuration_id,
                     credential_issuer_metadata,
                     credential_configurations,
                 }])
@@ -288,9 +318,8 @@ impl Aggregate for ServerConfig {
 
                 if !provisioned && existing_provisioned {
                     return Err(RemoveProvisionedCredentialConfigurationError);
-                } else {
-                    credential_configurations.remove(&credential_configuration_id);
                 }
+                credential_configurations.remove(&credential_configuration_id);
 
                 let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
                 credential_issuer_metadata.credential_configurations_supported =
@@ -313,8 +342,6 @@ impl Aggregate for ServerConfig {
 
     fn apply(&mut self, event: Self::Event) {
         use ServerConfigEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ServerMetadataInitialized {
@@ -396,6 +423,7 @@ pub mod server_config_tests {
     type ServerConfigTestFramework = TestFramework<ServerConfig>;
 
     #[rstest]
+    #[tokio::test]
     async fn test_load_server_metadata(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
@@ -404,12 +432,13 @@ pub mod server_config_tests {
     ) {
         ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(ServerConfigCommand::InitializeServerMetadata {
+            .when_async(ServerConfigCommand::InitializeServerMetadata {
                 authorization_server_metadata: authorization_server_metadata.clone(),
                 credential_issuer_metadata: credential_issuer_metadata.clone(),
                 cryptographic_binding_methods_supported: cryptographic_binding_methods_supported.clone(),
                 signing_algorithms_supported: signing_algorithms_supported.clone(),
             })
+            .await
             .then_expect_events(vec![ServerConfigEvent::ServerMetadataInitialized {
                 authorization_server_metadata,
                 credential_issuer_metadata,
@@ -419,6 +448,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn test_add_credential_configuration(
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
@@ -435,7 +465,7 @@ pub mod server_config_tests {
                 cryptographic_binding_methods_supported,
                 signing_algorithms_supported,
             }])
-            .when(ServerConfigCommand::UpdateCredentialConfiguration {
+            .when_async(ServerConfigCommand::UpdateCredentialConfiguration {
                 credential_configuration: CredentialConfiguration {
                     credential_configuration_id: credential_configuration_id.clone(),
                     format: "jwt_vc_json".to_string(),
@@ -462,6 +492,7 @@ pub mod server_config_tests {
                 },
                 provisioned: false,
             })
+            .await
             .then_expect_events(vec![ServerConfigEvent::CredentialConfigurationUpdated {
                 credential_configuration_id,
                 credential_issuer_metadata: credential_issuer_metadata_with_credential_configuration,
@@ -475,7 +506,8 @@ pub mod server_config_tests {
     ) -> Result<Vec<ServerConfigEvent>, ServerConfigError> {
         ServerConfigTestFramework::with(IssuanceServices::default().await)
             .given(given)
-            .when(command)
+            .when_async(command)
+            .await
             .inspect_result()
     }
 
@@ -548,6 +580,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn updating_the_issuer_url_moves_every_endpoint() {
         let old_url = static_issuer_url();
         let new_url: url::Url = "https://new-domain.example.org/unicore/".parse().unwrap();
@@ -603,6 +636,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn updating_the_issuer_url_does_not_add_unsupported_endpoints() {
         let initialized = initialized(
             AuthorizationServerMetadata {
@@ -634,6 +668,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn updating_the_issuer_display() {
         let initialized = initialized(
             *authorization_server_metadata(static_issuer_url()),
@@ -659,6 +694,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn binding_methods_and_signing_algorithms_apply_to_every_credential_configuration() {
         let given = with_credential_configuration(false).await;
 
@@ -707,6 +743,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn sd_jwt_credential_configurations_are_supported() {
         let initialized = initialized(
             *authorization_server_metadata(static_issuer_url()),
@@ -741,6 +778,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn unsupported_credential_formats_are_rejected() {
         let result = handle(
             vec![initialized(
@@ -761,6 +799,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn provisioned_credential_configurations_cannot_be_changed_at_runtime() {
         let given = with_credential_configuration(true).await;
 
@@ -808,6 +847,7 @@ pub mod server_config_tests {
     }
 
     #[rstest]
+    #[tokio::test]
     async fn runtime_credential_configurations_can_be_replaced_and_removed() {
         let given = with_credential_configuration(false).await;
 

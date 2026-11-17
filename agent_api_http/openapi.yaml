@@ -2,6 +2,8 @@ openapi: 3.1.0
 info:
   title: UniCore HTTP API
   description: ''
+  contact:
+    name: Impierce Technologies B.V.
   license:
     name: Apache 2.0
   version: 0.0.0-semantically-released
@@ -553,7 +555,8 @@ paths:
       summary: Create a key
       description: |-
         Creates a key in an added key provider. The private key is generated in the provider and never leaves it.
-        Nothing signs with the key yet.
+        The key signs for the `did:web` document once it is added to it with `add-key-to-document` and selected with
+        `select-signing-key`.
       operationId: create_key
       requestBody:
         content:
@@ -1174,7 +1177,10 @@ paths:
       - Identity
       - Holder
       summary: Store a credential in the organisation's wallet
-      description: Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+      description: |-
+        Imports a credential into the organisation's holder wallet: a credential JWT, or a VCDM 2.0 credential secured
+        with SD-JWT (`vc+sd-jwt`). The issuer signature and validity period of a `vc+sd-jwt` credential are verified
+        first; a credential JWT is stored without them being verified. The status of either is checked.
       operationId: create_holder_credential
       requestBody:
         content:
@@ -1192,7 +1198,7 @@ paths:
         '400':
           description: Malformed JSON request body
         '422':
-          description: Request body does not match the expected schema, or the credential could not be decoded
+          description: Request body does not match the expected schema, the credential could not be decoded, the issuer signature or validity period of a `vc+sd-jwt` credential does not hold, or the credential's status is not valid
   /v0/holder/credentials/{credential_id}:
     get:
       tags:
@@ -1290,9 +1296,9 @@ paths:
         '422':
           description: The credential offer cannot be processed, e.g. it carries no pre-authorized code
         '501':
-          description: The credential issuer requires a flow UniCore does not support yet
+          description: The credential issuer requires a flow UniCore does not support yet, or sent a credential format other than a credential JWT or `vc+sd-jwt`
         '502':
-          description: The credential issuer or its authorization server could not be reached
+          description: The credential issuer or its authorization server could not be reached, or the `vc+sd-jwt` credential it sent does not verify
   /v0/holder/offers/{offer_id}/reject:
     post:
       tags:
@@ -1338,7 +1344,10 @@ paths:
       - Identity
       - Holder
       summary: Create a new credential presentation
-      description: Creates and signs a new credential presentation containing the given credentials held by your organisation.
+      description: |-
+        Creates and signs a new credential presentation containing the given credentials held by your organisation:
+        credential JWTs in a VCDM 1.1 presentation, `vc+sd-jwt` credentials in a VCDM 2.0 presentation (`vp+jwt`),
+        each with every disclosure it carries.
       operationId: create_holder_presentation
       requestBody:
         content:
@@ -1358,7 +1367,7 @@ paths:
         '404':
           description: Credential not found
         '422':
-          description: Request body does not match the expected schema
+          description: Request body does not match the expected schema, or the credentials mix credential JWTs and `vc+sd-jwt` credentials
   /v0/holder/presentations/{presentation_id}:
     get:
       tags:
@@ -2519,7 +2528,11 @@ components:
           type:
           - string
           - 'null'
-          description: A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+          description: |-
+            A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+
+            A labelled request is safe to retry: when the first one created the key, the retry answers `409` instead of
+            creating a second key.
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
     CreateNewTemplateRequestBody:
@@ -2550,6 +2563,12 @@ components:
         holderType:
           $ref: '#/components/schemas/HolderType'
           default: individual
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+            description: Where the template is imported from, if it is.
+          - type: 'null'
+          default: null
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -2737,6 +2756,186 @@ components:
             minimum: 0
         status_list_url:
           type: string
+    CredentialV2:
+      type: object
+      description: A verifiable credential of the VC Data Model 2.0 (§4), the payload of a `vc+jwt` (VC-JOSE-COSE §3.1.1).
+      required:
+      - '@context'
+      - type
+      - issuer
+      - credentialSubject
+      properties:
+        '@context':
+          oneOf:
+          - type: string
+            description: The base context alone.
+            enum:
+            - https://www.w3.org/ns/credentials/v2
+          - type: array
+            items: {}
+            prefixItems:
+            - type: string
+              description: The base context.
+              enum:
+              - https://www.w3.org/ns/credentials/v2
+            description: The base context first, then further contexts.
+            minItems: 1
+          description: The JSON-LD context, carried as data (VCDM 2.0 §4.3); it begins with `https://www.w3.org/ns/credentials/v2`.
+        credentialSchema:
+          oneOf:
+          - type: object
+            description: A data schema.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A data schema.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Data schemas (VCDM 2.0 §4.11).
+        credentialStatus:
+          oneOf:
+          - type: object
+            description: A status entry.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A status entry.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Where to learn whether the credential is revoked or suspended (VCDM 2.0 §4.10).
+        credentialSubject:
+          oneOf:
+          - type: object
+            description: A subject and the claims about it.
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier of the subject.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A subject and the claims about it.
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier of the subject.
+              additionalProperties: true
+            minItems: 1
+          description: The subjects and the claims about them (VCDM 2.0 §4.8).
+        description:
+          description: A description of the credential (VCDM 2.0 §4.6).
+        id:
+          type: string
+          format: uri
+          description: The identifier of the credential (VCDM 2.0 §4.4).
+        issuer:
+          oneOf:
+          - type: string
+            format: uri
+            description: The identifier.
+          - type: object
+            description: The identifier with further properties.
+            required:
+            - id
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+            additionalProperties: true
+          description: The issuer (VCDM 2.0 §4.7).
+        name:
+          description: A name for the credential (VCDM 2.0 §4.6).
+        type:
+          oneOf:
+          - type: string
+            description: A type.
+          - type: array
+            items:
+              type: string
+              description: A type.
+            minItems: 1
+          description: The types (VCDM 2.0 §4.5), including `VerifiableCredential`.
+        validFrom:
+          type: string
+          format: date-time
+          description: When the credential becomes valid (VCDM 2.0 §4.9).
+        validUntil:
+          type: string
+          format: date-time
+          description: When the credential ceases to be valid (VCDM 2.0 §4.9).
+      additionalProperties: true
     CredentialView:
       type: object
       required:
@@ -3077,8 +3276,10 @@ components:
       - credential
       properties:
         credential:
-          $ref: '#/components/schemas/Jwt'
-          description: Compact JWT-encoded verifiable credential to add to the holder.
+          $ref: '#/components/schemas/SignedCredential'
+          description: |-
+            The credential to add to the holder: a credential JWT, or a VCDM 2.0 credential secured with SD-JWT
+            (`vc+sd-jwt`) with the disclosures to keep.
     HolderType:
       type: string
       enum:
@@ -3278,9 +3479,20 @@ components:
               The credential. Decoded from the JWT *without* verifying its signature when
               `result.valid` is `false`, and `None` when it could not be decoded at all.
           - type: 'null'
+        credential_v2:
+          oneOf:
+          - $ref: '#/components/schemas/CredentialV2'
+            description: |-
+              The credential of a VCDM 2.0 presentation (`vp+jwt`), unwrapped from its envelope, a credential secured with
+              SD-JWT with the disclosures it carries applied. Decoded *without* verifying its signature when `result.valid`
+              is `false`, and `None` when it could not be decoded at all. A VCDM 1.1 presentation's credentials are in
+              `credential`.
+          - type: 'null'
         jwt:
           type: string
-          description: The raw credential JWT exactly as it appeared in the presentation.
+          description: |-
+            The raw credential exactly as it appeared in the presentation: a JWT, or the SD-JWT of a `vc+sd-jwt`
+            credential, with the disclosures it was presented with.
         result:
           $ref: '#/components/schemas/ValidationResult'
           description: |-
@@ -4078,6 +4290,11 @@ components:
           type:
           - string
           - 'null'
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+            description: Where the template was imported from, if it was.
+          - type: 'null'
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -4119,6 +4336,40 @@ components:
           - 'null'
         uri:
           type: string
+    TemplateOrigin:
+      type: object
+      description: |-
+        Where a template was imported from.
+
+        Set by the importing caller, stored as given, and never fetched or verified. Compare `digest`
+        with the digest of the source's current public content to tell whether the source changed since
+        the import, and with the digest of the local template's public content to tell whether the copy
+        was edited locally.
+      required:
+      - publisherUri
+      - sourceTemplateId
+      - digest
+      properties:
+        checkForUpdates:
+          type: boolean
+          description: |-
+            Whether the importer wants to hear about changes at the source. Off for a copy that is meant to be taken once
+            and maintained locally. Not part of the template's public content, so it never changes its digest. Absent means
+            `true`.
+          default: true
+        digest:
+          type: string
+          description: |-
+            Digest of the template's public content at import time: `sha256-` followed by 64 lowercase
+            hexadecimal digits.
+        publisherUri:
+          type: string
+          description: |-
+            URI identifying who published the template, e.g. the identifier of the publishing entity. Not an address of the
+            template itself: every template imported from one publisher carries the same value.
+        sourceTemplateId:
+          type: string
+          description: Identifier of the template at the publisher. Opaque.
     TxCodeConstraints:
       type: object
       properties:
@@ -4143,7 +4394,7 @@ components:
           format: int32
           description: The length of the PIN must be between 0 and 255 characters.
           examples:
-          - $serde_json::private::Number: '6'
+          - 6
           maximum: 255
           minimum: 0
     UpdateTemplateEndpointRequest:
@@ -4172,6 +4423,11 @@ components:
         id:
           type: string
           default: ''
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+          - type: 'null'
+          description: Replaces the origin; `null` removes it. Applied after all other fields.
         schema: {}
         schemaPropertiesAttributes:
           type:

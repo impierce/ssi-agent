@@ -302,6 +302,12 @@ pub async fn create_key(
     if let Some(label) = &label {
         adapter.check_label(label)?;
     }
+    // Recording the key is authorized on its own id, which a checker can decide on differently than on the provider.
+    // It is checked before the key is created, so a refusal doesn't create a key only to delete it again.
+    let id = Uuid::new_v4().to_string();
+    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, &CreateKey)
+        .await
+        .map_err(|error| CreateKeyError::Record(CommandHandlerError::Authorization(error)))?;
 
     let state = state.clone();
     let spec = KeySpec::new(key_type, algorithm);
@@ -315,6 +321,7 @@ pub async fn create_key(
         let recorded = record_created_key(
             &state,
             caller,
+            id,
             adapter.as_ref(),
             provider_type,
             &provider_key_id,
@@ -323,9 +330,8 @@ pub async fn create_key(
         )
         .await;
         if recorded.is_err() {
-            // A labelled key is deleted by its label, which frees the label as well.
-            let key = label.map_or(provider_key_id, KeyId::new);
-            if let Err(error) = adapter.delete(&key).await {
+            if let Err(error) = adapter.discard(&provider_key_id, label.as_deref()).await {
+                let key = &provider_key_id;
                 error!(%key, %error, "A key was created in the `{provider_type}` key provider but neither recorded nor deleted");
             }
         }
@@ -335,9 +341,11 @@ pub async fn create_key(
     .unwrap_or_else(|error| std::panic::resume_unwind(error.into_panic()))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn record_created_key(
     state: &KmsState,
     caller: Caller,
+    id: String,
     adapter: &dyn KeyProviderAdapter,
     provider_type: KeyProviderType,
     provider_key_id: &KeyId,
@@ -352,7 +360,6 @@ async fn record_created_key(
         algorithm,
     };
 
-    let id = Uuid::new_v4().to_string();
     command_handler(
         state.authorization_checker.clone(),
         caller,
@@ -451,7 +458,11 @@ mod tests {
         jose::Jwk,
         keys::{KeyStore, KeyStoreCapabilities},
     };
-    use std::time::Duration;
+    use shared_kernel::authorization::{AuthorizationOperation, AuthorizationRequest};
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
 
     async fn state_with(factories: KeyProviderFactories) -> KmsState {
         kms_state(&InMemory, &EventBusHandle::default(), true, factories).await
@@ -466,12 +477,14 @@ mod tests {
         state_with([(KeyProviderType::AwsKmsAmbient, fixed(Arc::new(UnreachableKeyProvider)))].into()).await
     }
 
-    /// An in-memory provider that can be made slow to generate, unable to return public keys, or refusing labels.
+    /// An in-memory provider that can be made slow to generate, unable to return public keys, or refusing labels. It
+    /// counts the keys it generated.
     struct FakeProvider {
         keys: InMemoryKeyStore,
         generate_delay: Duration,
         public_keys_fail: bool,
         labels_refused: bool,
+        generated: AtomicUsize,
     }
 
     impl FakeProvider {
@@ -481,6 +494,22 @@ mod tests {
                 generate_delay: Duration::ZERO,
                 public_keys_fail: false,
                 labels_refused: false,
+                generated: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    /// Allows commands only on the in-memory provider, as a checker that decides per resource could.
+    struct ProviderOnly;
+
+    #[async_trait]
+    impl AuthorizationChecker for ProviderOnly {
+        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
+            match &request.operation {
+                AuthorizationOperation::Command { aggregate_id, .. } if aggregate_id != "in_memory" => {
+                    Err(AuthorizationError::Forbidden)
+                }
+                _ => Ok(()),
             }
         }
     }
@@ -508,6 +537,7 @@ mod tests {
 
         async fn generate(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
             tokio::time::sleep(self.generate_delay).await;
+            self.generated.fetch_add(1, Ordering::SeqCst);
             self.keys.generate(spec).await
         }
 
@@ -780,6 +810,21 @@ mod tests {
         let left = provider.exists(&KeyId::new("issuer")).await.unwrap();
 
         assert!(!left);
+    }
+
+    #[tokio::test]
+    async fn creates_no_key_that_it_may_not_record() {
+        let provider = Arc::new(FakeProvider::new());
+        let mut state = state_with_provider(provider.clone()).await;
+        state.authorization_checker = Arc::new(ProviderOnly);
+
+        let result = create_labelled(&state).await;
+
+        assert!(matches!(
+            result,
+            Err(CreateKeyError::Record(CommandHandlerError::Authorization(_)))
+        ));
+        assert_eq!(provider.generated.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

@@ -6,7 +6,7 @@ use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMeta
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::info;
 use url::Url;
 use utoipa::openapi::{RefOr, Schema};
 use utoipa::{PartialSchema, ToSchema};
@@ -61,7 +61,15 @@ pub struct LinkedCredentialValidation {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<W3cCredential>)]
     pub credential: Option<Credential>,
-    /// The raw credential JWT exactly as it appeared in the presentation.
+    /// The credential of a VCDM 2.0 presentation (`vp+jwt`), unwrapped from its envelope, a credential secured with
+    /// SD-JWT with the disclosures it carries applied. Decoded *without* verifying its signature when `result.valid`
+    /// is `false`, and `None` when it could not be decoded at all. A VCDM 1.1 presentation's credentials are in
+    /// `credential`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<identity_kit::vc::CredentialV2>)]
+    pub credential_v2: Option<identity_kit::vc::CredentialV2>,
+    /// The raw credential exactly as it appeared in the presentation: a JWT, or the SD-JWT of a `vc+sd-jwt`
+    /// credential, with the disclosures it was presented with.
     pub jwt: String,
     /// Cryptographic and semantic validity against the credential's declared issuer DID. A valid
     /// result does not establish that the issuer is trusted or associated with a known domain.
@@ -141,8 +149,6 @@ impl Aggregate for Connection {
     ) -> Result<(), Self::Error> {
         use ConnectionCommand::*;
         use ConnectionEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             AddConnection { connection_id, url } => {
@@ -248,8 +254,6 @@ impl Aggregate for Connection {
 
     fn apply(&mut self, event: Self::Event) {
         use ConnectionEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ConnectionAdded {
