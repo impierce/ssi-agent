@@ -6,4 +6,6 @@ pub enum OAuth2AuthorizationRequestError {
     OpenID4VpCreationError(anyhow::Error),
     #[error("Failed to verify OpenID4VP presentation response: {0}")]
     OpenID4VpVerificationError(anyhow::Error),
+    #[error("Consent has already been given or denied")]
+    ConsentAlreadyDecided,
 }

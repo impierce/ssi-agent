@@ -175,7 +175,8 @@ pub(crate) async fn add_templates_to_catalog(
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        // Deleted by a concurrent request after the command was accepted.
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id).into_api_error())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -236,7 +237,8 @@ pub(crate) async fn remove_templates_from_catalog(
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        // Deleted by a concurrent request after the command was accepted.
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id).into_api_error())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -295,7 +297,8 @@ pub(crate) async fn change_catalog_appearance(
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        // Deleted by a concurrent request after the command was accepted.
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id).into_api_error())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -351,7 +354,8 @@ pub(crate) async fn make_catalog_public(
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        // Deleted by a concurrent request after the command was accepted.
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id).into_api_error())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]
@@ -407,7 +411,8 @@ pub(crate) async fn make_catalog_private(
         .await
         .map_err(IntoApiErrorExt::into_api_error)?
         .map(|catalog_view| (StatusCode::OK, Json(CatalogDto::from(catalog_view))).into_response())
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR))
+        // Deleted by a concurrent request after the command was accepted.
+        .ok_or_else(|| CatalogError::CatalogNotFound(catalog_id).into_api_error())
 }
 
 #[derive(Deserialize, Serialize, Default, utoipa::ToSchema)]

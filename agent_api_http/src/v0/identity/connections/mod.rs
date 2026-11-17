@@ -45,6 +45,7 @@ pub struct AddConnectionEndpointRequest {
             )
         ),
         (status = 400, description = "Malformed JSON request body"),
+        (status = 502, description = "The credential issuer metadata of the URL could not be fetched"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -190,6 +191,8 @@ pub struct SyncConnectionRequest {
     responses(
         (status = 200, description = "Connection synced"),
         (status = 400, description = "Malformed JSON request body"),
+        (status = 404, description = "Connection not found"),
+        (status = 502, description = "The credential issuer metadata of the connection could not be fetched"),
     )
 )]
 #[axum_macros::debug_handler]
