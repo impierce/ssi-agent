@@ -157,7 +157,8 @@ pub mod tests {
             }
         };
 
-        let status_list_token = decode_status_list_token(&jwt_status_list_token, &decoding_key).unwrap();
+        let status_list_token =
+            decode_status_list_token(&jwt_status_list_token, &decoding_key, chrono::Utc::now()).unwrap();
 
         assert_eq!(jwt_header.typ.unwrap(), StatusListToken::TYP);
         assert_eq!(

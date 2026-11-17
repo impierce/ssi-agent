@@ -13,7 +13,7 @@ use identity_kit::{
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr as _, sync::Arc};
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,7 +228,7 @@ async fn issue_linked_domains(
         return Err(EmptyLinkedDidsError);
     }
 
-    info!("Configuration Resource: {configuration:#}");
+    debug!("Configuration Resource: {configuration:#}");
 
     Ok((
         linked_domains_service(service_id, origins)?,
@@ -253,8 +253,6 @@ impl Aggregate for Service {
         use ServiceCommand::*;
         use ServiceError::*;
         use ServiceEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             AddLinkedDomains {
@@ -440,8 +438,6 @@ impl Aggregate for Service {
     fn apply(&mut self, event: Self::Event) {
         use ServiceEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             LinkedDomainsAdded {
                 service_id,
@@ -575,6 +571,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_one_domain_writes_the_endpoint_as_a_bare_origin_string(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -585,11 +582,12 @@ pub mod service_tests {
 
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://my-domain.example.org")],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedDomainsAdded {
                 service_id: linked_domains_service_id,
                 // The fixture writes the flattened, single-origin form the specification allows.
@@ -602,6 +600,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_several_domains_issues_a_credential_per_domain_and_key(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -613,11 +612,12 @@ pub mod service_tests {
         let events = ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
             // Deliberately out of order, to show the stored set is normalized.
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://b.example"), url("https://a.example")],
             })
+            .await
             .inspect_result()
             .expect("linking succeeds");
 
@@ -652,6 +652,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_a_domain_that_is_already_linked_changes_nothing(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -660,16 +661,18 @@ pub mod service_tests {
 
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://a.example")],
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_a_further_domain_keeps_the_existing_ones(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -678,11 +681,12 @@ pub mod service_tests {
 
         let events = ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 origins: vec![url("https://b.example")],
             })
+            .await
             .inspect_result()
             .expect("linking succeeds");
 
@@ -702,6 +706,7 @@ pub mod service_tests {
     /// needs no signing keys at all.
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_one_domain_keeps_the_others_credentials_verbatim(linked_domains_service_id: String) {
         web_did_method();
         let given = already_linked(&linked_domains_service_id, &["https://a.example", "https://b.example"]);
@@ -709,10 +714,11 @@ pub mod service_tests {
 
         let events = ServiceTestFramework::with(IdentityServices::default())
             .given(vec![given])
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 origins: vec![url("https://b.example")],
             })
+            .await
             .inspect_result()
             .expect("unlinking succeeds");
 
@@ -739,15 +745,17 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_the_last_domain_removes_the_service(linked_domains_service_id: String) {
         web_did_method();
 
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id.clone(),
                 origins: vec![url("https://a.example")],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedDomainsRemoved {
                 service_id: linked_domains_service_id,
                 service: None,
@@ -759,34 +767,39 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_a_domain_that_is_not_linked_changes_nothing(linked_domains_service_id: String) {
         web_did_method();
 
         ServiceTestFramework::with(IdentityServices::default())
             .given(vec![already_linked(&linked_domains_service_id, &["https://a.example"])])
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id,
                 origins: vec![url("https://elsewhere.example")],
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn unlinking_when_nothing_is_linked_changes_nothing(linked_domains_service_id: String) {
         web_did_method();
 
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(ServiceCommand::RemoveLinkedDomains {
+            .when_async(ServiceCommand::RemoveLinkedDomains {
                 service_id: linked_domains_service_id,
                 origins: vec![url("https://a.example")],
             })
+            .await
             .then_expect_events(vec![])
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn renewal_re_issues_the_linked_set_without_changing_it(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -798,11 +811,12 @@ pub mod service_tests {
                 &linked_domains_service_id,
                 &["https://a.example", "https://b.example"],
             )])
-            .when(ServiceCommand::RenewLinkedDomainsCredentials {
+            .when_async(ServiceCommand::RenewLinkedDomainsCredentials {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 only_if_expiring: false,
             })
+            .await
             .inspect_result()
             .expect("renewal succeeds");
 
@@ -823,6 +837,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn linking_without_an_origin_is_rejected(
         linked_domains_service_id: String,
         both_verification_methods: Vec<VerificationMethod>,
@@ -831,16 +846,18 @@ pub mod service_tests {
 
         ServiceTestFramework::with(IdentityServices::default())
             .given_no_previous_events()
-            .when(ServiceCommand::AddLinkedDomains {
+            .when_async(ServiceCommand::AddLinkedDomains {
                 service_id: linked_domains_service_id,
                 verification_methods: both_verification_methods,
                 origins: vec![],
             })
+            .await
             .then_expect_error_message("At least one origin is required.")
     }
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn removing_presentations_keeps_the_remaining_order(linked_verifiable_presentation_service_id: String) {
         let presentations = ["a", "b", "c"].map(|id| LinkedVerifiablePresentation {
             presentation_id: id.into(),
@@ -854,9 +871,10 @@ pub mod service_tests {
                 service_id: linked_verifiable_presentation_service_id.clone(),
                 presentations: presentations.to_vec(),
             }])
-            .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
+            .when_async(ServiceCommand::RemoveLinkedVerifiablePresentations {
                 presentation_ids: vec!["b".into(), "missing".into()],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
                 service_id: linked_verifiable_presentation_service_id,
                 presentation_ids: vec!["b".into()],
@@ -909,6 +927,7 @@ pub mod service_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn removing_the_last_presentations_deletes_the_service(linked_verifiable_presentation_service_id: String) {
         let presentation = LinkedVerifiablePresentation {
             presentation_id: "a".into(),
@@ -922,9 +941,10 @@ pub mod service_tests {
                 service_id: linked_verifiable_presentation_service_id.clone(),
                 presentations: vec![presentation],
             }])
-            .when(ServiceCommand::RemoveLinkedVerifiablePresentations {
+            .when_async(ServiceCommand::RemoveLinkedVerifiablePresentations {
                 presentation_ids: vec!["a".into(), "a".into()],
             })
+            .await
             .then_expect_events(vec![ServiceEvent::LinkedVerifiablePresentationsRemoved {
                 service_id: linked_verifiable_presentation_service_id,
                 presentation_ids: vec!["a".into()],

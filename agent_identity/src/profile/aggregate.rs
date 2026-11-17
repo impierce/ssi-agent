@@ -2,7 +2,7 @@ use agent_shared::config::Logo;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::services::IdentityServices;
 
@@ -44,8 +44,6 @@ impl Aggregate for Profile {
     ) -> Result<(), Self::Error> {
         use ProfileCommand::*;
         use ProfileEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateProfile {
@@ -123,8 +121,6 @@ impl Aggregate for Profile {
 
     fn apply(&mut self, event: Self::Event) {
         use ProfileEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             ProfileCreated {
