@@ -58,6 +58,9 @@ pub struct CreateKeyRequest {
     pub provider_type: KeyProviderType,
     pub algorithm: CreateKeyAlgorithm,
     /// A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+    ///
+    /// A labelled request is safe to retry: when the first one created the key, the retry answers `409` instead of
+    /// creating a second key.
     pub label: Option<String>,
 }
 

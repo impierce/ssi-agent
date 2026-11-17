@@ -2427,7 +2427,11 @@ components:
           type:
           - string
           - 'null'
-          description: A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+          description: |-
+            A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+
+            A labelled request is safe to retry: when the first one created the key, the retry answers `409` instead of
+            creating a second key.
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
     CreateNewTemplateRequestBody:

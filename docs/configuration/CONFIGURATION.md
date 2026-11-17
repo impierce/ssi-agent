@@ -317,6 +317,9 @@ Connects UniCore to external key providers, so that keys can be generated in, an
 - AWS KMS, using the AWS credentials and region of the environment UniCore runs in.
 - An in-memory provider, only available with the `development` [profile](./profiles.md).
 
+With PostgreSQL, the KMS's tables are only created with a new database. Enabling the feature on an existing database
+needs them created by hand, until the KMS leaves development and gets an upgrade note.
+
 Progress:
 
 - [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
