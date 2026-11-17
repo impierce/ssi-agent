@@ -315,11 +315,19 @@ Feature flags enable features that are still in development. All of them are dis
 Connects UniCore to external key providers, so that keys can be generated in, and sign inside, a provider instead of Stronghold. Available providers:
 
 - AWS KMS, using the AWS credentials and region of the environment UniCore runs in.
+- STACKIT KMS, in a key ring of a STACKIT project, which can be the customer's own. UniCore signs in with the
+  workload identity of the environment it runs in, so no secret is entered. See [STACKIT KMS](../deployment/stackit-kms.md).
 - An in-memory provider, only available with the `development` [profile](./profiles.md).
+
+| Environment variable                     | `config.yaml`                   | Default                                               |
+| ---------------------------------------- | ------------------------------- | ----------------------------------------------------- |
+| `UNICORE__STACKIT_FEDERATED_TOKEN_FILE` | `stackit_federated_token_file` | `/var/run/secrets/stackit.cloud/serviceaccount/token` |
+
+`stackit_federated_token_file` is where UniCore reads the workload identity token it signs in to STACKIT with.
 
 Progress:
 
-- [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
+- [x] Connect key providers, test the connection, and list the keys a provider may use
 - [x] Generate keys in a provider
 - [x] Sign credentials and presentations with provider keys, for `did:web`
 - [x] Use provider keys in DID documents, for `did:web`
