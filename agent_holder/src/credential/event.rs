@@ -1,16 +1,16 @@
 use cqrs_es::DomainEvent;
-use identity_kit::vc::Jwt;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
 use super::aggregate::Data;
+use super::signed::SignedCredential;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Display)]
 pub enum CredentialEvent {
     CredentialAdded {
         holder_credential_id: String,
         received_offer_id: Option<String>,
-        credential: Jwt,
+        credential: SignedCredential,
         data: Data,
     },
 }

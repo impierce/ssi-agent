@@ -1,4 +1,4 @@
-use identity_kit::vc::Jwt;
+use crate::credential::signed::SignedCredential;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
 
@@ -7,7 +7,7 @@ use shared_kernel::authorization::CommandOperation;
 pub enum PresentationCommand {
     CreatePresentation {
         presentation_id: String,
-        signed_credentials: Vec<Jwt>,
+        signed_credentials: Vec<SignedCredential>,
     },
 }
 

@@ -114,8 +114,8 @@ where
             .await
             .map_err(|rejection| match rejection.status() {
                 StatusCode::PAYLOAD_TOO_LARGE => ApiError::builder(StatusCode::PAYLOAD_TOO_LARGE)
-                    .title("Request Body Too Large")
-                    .type_url(type_url("request#body-too-large"))
+                    .title("Payload Too Large")
+                    .type_url(type_url("request#payload-too-large"))
                     .message(rejection.body_text())
                     .finish(),
                 _ => malformed_body(rejection.body_text()),
@@ -280,7 +280,7 @@ mod tests {
         let (status, problem) = send(Some("application/json"), &body).await;
 
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-        assert_eq!(problem.unwrap()["type"], type_url("request#body-too-large"));
+        assert_eq!(problem.unwrap()["type"], type_url("request#payload-too-large"));
     }
 
     #[tokio::test]

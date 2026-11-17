@@ -13,11 +13,11 @@ use agent_identity::state::IdentityState;
 use agent_issuance::state::IssuanceState;
 use agent_kms::KmsState;
 use agent_library::state::LibraryState;
-use agent_shared::config::config;
+use agent_shared::config::{config, log_sensitive_values};
 use agent_verification::state::VerificationState;
 use axum::{
     body::{Body, HttpBody as _},
-    extract::{MatchedPath, Request, State},
+    extract::{DefaultBodyLimit, MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     Router,
@@ -27,7 +27,7 @@ use http::{
     HeaderMap, HeaderName,
 };
 use http_api_problem::ApiError;
-use http_body_util::{BodyExt as _, Collected};
+use http_body_util::{BodyExt as _, Collected, Limited};
 use hyper::StatusCode;
 use shared_kernel::authorization::{ActorExtractor, ToActor};
 use std::{sync::Arc, time::Instant};
@@ -90,59 +90,32 @@ where
         .clone()
         .map(v0::identity::well_known_router)
         .unwrap_or_default();
-    let app = Router::new()
-        .merge(identity_state.map(v0::identity::router).unwrap_or_default())
-        .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
-        .merge(
-            authorization_state
-                // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
-                // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
-                // the Issuance Bounded Context.
-                .zip(issuance_state.clone())
-                .map(v0::authorization::router)
-                .unwrap_or_default(),
-        )
-        .merge(
-            issuance_state
-                .zip(library_state.clone())
-                .map(v0::issuance::router)
-                .unwrap_or_default(),
-        )
-        .merge(holder_state.map(v0::holder::router).unwrap_or_default())
-        .merge(verification_state.map(v0::verification::router).unwrap_or_default())
-        .merge(kms_state.map(v0::kms::router).unwrap_or_default())
-        .merge(public::router(library_state))
-        // Trace layers
-        .layer(
-            ServiceBuilder::new()
-                .layer(
-                    TraceLayer::new_for_http()
-                        .make_span_with(|request: &Request<_>| {
-                            let path = request
-                                .extensions()
-                                .get::<MatchedPath>()
-                                .map(MatchedPath::as_str)
-                                // The raw path of an unmatched request is client input and may carry personal data.
-                                .unwrap_or("<unmatched>");
-                            info_span!(
-                                "HTTP Request",
-                                method = ?request.method(),
-                                path,
-                                "http.response.status_code" = field::Empty,
-                                "otel.status_code" = field::Empty,
-                            )
-                        })
-                        .on_request(())
-                        .on_response(())
-                        .on_body_chunk(())
-                        .on_eos(())
-                        .on_failure(()),
-                )
-                .layer(middleware::from_fn(log_response))
-                .layer(middleware::from_fn(reject_null_bytes)),
-        )
-        // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
-        .merge(events_state.map(v0::events::router).unwrap_or_default());
+    let app = with_request_logging(
+        Router::new()
+            .merge(identity_state.map(v0::identity::router).unwrap_or_default())
+            .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
+            .merge(
+                authorization_state
+                    // The `IssuanceState` is cloned here to ensure that the authorization router can access it. This is
+                    // necessary since for the Pre-Authorized Code flow, the Token Endpoint requires a shared state with
+                    // the Issuance Bounded Context.
+                    .zip(issuance_state.clone())
+                    .map(v0::authorization::router)
+                    .unwrap_or_default(),
+            )
+            .merge(
+                issuance_state
+                    .zip(library_state.clone())
+                    .map(v0::issuance::router)
+                    .unwrap_or_default(),
+            )
+            .merge(holder_state.map(v0::holder::router).unwrap_or_default())
+            .merge(verification_state.map(v0::verification::router).unwrap_or_default())
+            .merge(kms_state.map(v0::kms::router).unwrap_or_default())
+            .merge(public::router(library_state)),
+    )
+    // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
+    .merge(events_state.map(v0::events::router).unwrap_or_default());
 
     let app = if application_base_path == "/" {
         app
@@ -151,7 +124,69 @@ where
     };
     app.merge(well_known)
         .layer(middleware::from_fn_with_state(actor_extractor, extract_actor::<E>))
-        .layer(SetSensitiveHeadersLayer::new(SENSITIVE_HEADERS))
+        .layer(sensitive_headers())
+}
+
+/// Logs the requests to `router`. Used for the built-in routes and exported for custom routes:
+/// - every request gets a span named after its route template (never its raw path), which records the response status;
+/// - every response gets one line ([`log_response`]): `debug` for success, `info` for client errors and `error` for
+///   server errors, with the problem type and title but without headers or bodies;
+/// - requests carrying a `NUL` are turned away ([`reject_null_bytes`]), since the event store cannot hold one;
+/// - request bodies larger than `max_request_body_bytes` are turned away with `413 Payload Too Large`.
+///
+/// Merge routes whose traffic must not be logged, such as event streams, after calling this.
+pub fn with_request_logging<S>(router: Router<S>) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    with_request_logging_and_body_limit(router, config().max_request_body_bytes)
+}
+
+fn with_request_logging_and_body_limit<S>(router: Router<S>, max_request_body_bytes: usize) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router.layer(
+        ServiceBuilder::new()
+            .layer(
+                TraceLayer::new_for_http()
+                    .make_span_with(|request: &Request<Body>| {
+                        let path = request
+                            .extensions()
+                            .get::<MatchedPath>()
+                            .map(MatchedPath::as_str)
+                            // The raw path of an unmatched request is client input and may carry personal data.
+                            .unwrap_or("<unmatched>");
+                        info_span!(
+                            "HTTP Request",
+                            method = ?request.method(),
+                            path,
+                            "http.response.status_code" = field::Empty,
+                            "otel.status_code" = field::Empty,
+                        )
+                    })
+                    .on_request(())
+                    .on_response(())
+                    .on_body_chunk(())
+                    .on_eos(())
+                    .on_failure(()),
+            )
+            .layer(middleware::from_fn(log_response))
+            .layer(middleware::from_fn_with_state(
+                max_request_body_bytes,
+                reject_null_bytes,
+            ))
+            // `reject_null_bytes` already caps the body, but extractors such as `Json` apply their own default
+            // limit of 2 MiB on top. Raising it to the same value keeps a single limit in charge.
+            .layer(DefaultBodyLimit::max(max_request_body_bytes)),
+    )
+}
+
+/// Marks the headers that carry credentials as sensitive, so that their values are redacted wherever headers are
+/// printed. Apply it as the outermost layer.
+#[must_use]
+pub fn sensitive_headers() -> SetSensitiveHeadersLayer {
+    SetSensitiveHeadersLayer::new(SENSITIVE_HEADERS)
 }
 
 /// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
@@ -190,7 +225,12 @@ async fn log_response(request: Request, next: Next) -> Response {
             "Request failed"
         );
         if let Some(detail) = problem.detail.as_deref() {
-            debug!(problem_detail = redact_urls(detail), "Request failure detail");
+            let detail = if log_sensitive_values() {
+                detail.to_string()
+            } else {
+                redact_urls(detail)
+            };
+            debug!(problem_detail = detail, "Request failure detail");
         }
         response
     } else if status.is_client_error() {
@@ -202,6 +242,10 @@ async fn log_response(request: Request, next: Next) -> Response {
             problem_title = problem.title,
             "Request rejected"
         );
+        // The detail can echo client input, including personal data.
+        if let Some(detail) = problem.detail.as_deref().filter(|_| log_sensitive_values()) {
+            debug!(problem_detail = detail, "Request rejection detail");
+        }
         response
     } else {
         debug!(status = status.as_u16(), latency_ms, "Request completed");
@@ -285,19 +329,27 @@ async fn problem_summary(response: Response) -> (Response, ProblemSummary) {
 
 /// Buffers the request body to turn away requests carrying a `NUL` (see [`uri_contains_null_byte`]
 /// and [`body_contains_null_byte`]).
-async fn reject_null_bytes(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
+///
+/// This runs before authorization, so the body is read through a limit: without one, an
+/// unauthenticated client could exhaust the process memory with a single oversized request.
+async fn reject_null_bytes(
+    State(max_request_body_bytes): State<usize>,
+    request: Request,
+    next: Next,
+) -> Result<impl IntoResponse, Response> {
     let (parts, body) = request.into_parts();
 
     if uri_contains_null_byte(&parts.uri) {
         return Err(null_byte_rejection().into_axum_response());
     }
 
-    // Convert the request body into bytes.
-    let bytes = body
-        .collect()
-        .await
-        .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()).into_response())?
-        .to_bytes();
+    let bytes = match Limited::new(body, max_request_body_bytes).collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(err) if err.is::<http_body_util::LengthLimitError>() => {
+            return Err(payload_too_large_rejection(max_request_body_bytes).into_axum_response());
+        }
+        Err(err) => return Err((StatusCode::BAD_REQUEST, err.to_string()).into_response()),
+    };
 
     if body_contains_null_byte(&bytes) {
         return Err(null_byte_rejection().into_axum_response());
@@ -347,6 +399,16 @@ fn null_byte_rejection() -> ApiError {
         .title("Unsupported Character")
         .type_url(error::type_url("request#unsupported-character"))
         .message("The request contains a NUL character, which cannot be stored.")
+        .finish()
+}
+
+fn payload_too_large_rejection(max_request_body_bytes: usize) -> ApiError {
+    ApiError::builder(StatusCode::PAYLOAD_TOO_LARGE)
+        .title("Payload Too Large")
+        .type_url(error::type_url("request#payload-too-large"))
+        .message(format!(
+            "The request body exceeds the maximum allowed size of {max_request_body_bytes} bytes."
+        ))
         .finish()
 }
 
@@ -446,6 +508,78 @@ mod tests {
         // A backslash that is itself escaped leaves the text `\u0000`, which stores fine.
         assert!(!body_contains_null_byte(br#"{"id": "a\\u0000b"}"#));
         assert!(body_contains_null_byte(br#"{"id": "a\\\u0000b"}"#));
+    }
+
+    async fn post_body(app: Router, body: Vec<u8>) -> Response {
+        app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/")
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    }
+
+    /// A JSON string literal of `len` bytes, including its quotes.
+    fn json_body(len: usize) -> Vec<u8> {
+        let mut body = vec![b'a'; len];
+        body[0] = b'"';
+        body[len - 1] = b'"';
+        body
+    }
+
+    // `reject_null_bytes` runs before authorization and buffers the body, so a body beyond the limit must be turned
+    // away before it is read in full, even by a route whose handler never reads the body.
+    #[tokio::test]
+    async fn reject_null_bytes_rejects_oversized_request_body() {
+        let app = Router::new()
+            .route("/", axum::routing::post(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(1024, reject_null_bytes));
+
+        let response = post_body(app, vec![b'a'; 1025]).await;
+
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+    }
+
+    #[tokio::test]
+    async fn reject_null_bytes_allows_request_body_within_limit() {
+        let app = Router::new()
+            .route("/", axum::routing::post(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(1024, reject_null_bytes));
+
+        let response = post_body(app, vec![b'a'; 1024]).await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // `Json` applies axum's own default limit of 2 MiB, so raising the configured limit must raise that one too.
+    #[tokio::test]
+    async fn raised_body_limit_applies_to_json_extractor() {
+        let three_mib = 3 * 1024 * 1024;
+        let json_route = || {
+            Router::new().route(
+                "/",
+                axum::routing::post(|axum::Json(_): axum::Json<serde_json::Value>| async { StatusCode::OK }),
+            )
+        };
+
+        let raised = with_request_logging_and_body_limit(json_route(), 4 * 1024 * 1024);
+        assert_eq!(post_body(raised, json_body(three_mib)).await.status(), StatusCode::OK);
+
+        let default = with_request_logging_and_body_limit(json_route(), 2 * 1024 * 1024);
+        let response = post_body(default, json_body(three_mib)).await;
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(
+            response.headers()[http::header::CONTENT_TYPE],
+            "application/problem+json"
+        );
     }
 
     lazy_static::lazy_static! {
@@ -724,6 +858,40 @@ mod tests {
         assert!(!logs_contain("jane.doe@example.org"));
     }
 
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn custom_routers_are_logged_like_built_in_routes() {
+        #[derive(Clone)]
+        struct ItemState;
+
+        let router = with_request_logging(Router::<ItemState>::new().route(
+            "/items/{item_id}",
+            get(|State(ItemState)| async {
+                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                    .title("Item Error")
+                    .finish()
+            }),
+        ))
+        .with_state(ItemState);
+
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri("/items/42").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(logs_contain("Request failed"));
+        assert!(logs_contain("Item Error"));
+        assert!(logs_contain("/items/{item_id}"));
+        assert!(!logs_contain("/items/42"));
+
+        let response = router
+            .oneshot(Request::builder().uri("/items/a%00b").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
     fn problem_router(status: StatusCode) -> Router {
         Router::new()
             .route(
@@ -772,6 +940,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn urls_in_server_error_details_are_logged_redacted() {
         let router = Router::new()
@@ -797,6 +966,36 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    async fn error_details_are_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = agent_shared::sensitive_logging::SensitiveValuesLogged::enable();
+        let server_error = Router::new()
+            .route(
+                "/",
+                get(|| async {
+                    ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                        .title("Send Credential Offer Error")
+                        .message("error sending request for url (https://wallet.example/credential_offer?credential_offer=secret-code)")
+                        .finish()
+                }),
+            )
+            .layer(middleware::from_fn(log_response));
+
+        for router in [server_error, problem_router(StatusCode::CONFLICT)] {
+            router
+                .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+        }
+
+        assert!(logs_contain("credential_offer=secret-code"));
+        assert!(logs_contain("Request rejection detail"));
+        assert!(logs_contain("detail with personal data"));
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn client_errors_are_logged_at_info_with_the_problem_type() {
         let response = problem_router(StatusCode::CONFLICT)
@@ -831,6 +1030,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[tracing_test::traced_test]
     async fn server_errors_are_logged_at_error_with_the_problem_type_and_the_detail_at_debug() {
         let response = problem_router(StatusCode::INTERNAL_SERVER_ERROR)

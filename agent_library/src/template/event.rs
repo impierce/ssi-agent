@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 pub use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttribute, Status, Visibility};
+pub use super::origin::TemplateOrigin;
 use agent_shared::config::Authorization;
 use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,9 @@ pub enum TemplateEvent {
         schema: Box<Option<serde_json::Value>>,
         schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
         holder_authorization: Authorization,
+        // Absent from events stored before origins existed, and from those of templates without one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<Box<TemplateOrigin>>,
     },
     TitleUpdated {
         template_id: String,
@@ -79,6 +83,11 @@ pub enum TemplateEvent {
     HolderAuthorizationUpdated {
         template_id: String,
         holder_authorization: Authorization,
+        modified_at: String,
+    },
+    OriginUpdated {
+        template_id: String,
+        origin: Option<TemplateOrigin>,
         modified_at: String,
     },
     TemplateDeleted {
