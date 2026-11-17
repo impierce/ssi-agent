@@ -1,5 +1,5 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, command_handler};
 use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
@@ -9,7 +9,7 @@ use agent_kms::key_provider::{
 use agent_kms::state::{get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection};
 use agent_kms::KmsState;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -32,6 +32,7 @@ pub struct KeyProviderDto {
 pub struct AddKeyProviderRequest {
     pub provider_type: KeyProviderType,
     /// A name for the provider, unique among the providers this instance lists. It can't be changed later.
+    #[schema(min_length = 1)]
     pub name: String,
 }
 
@@ -72,7 +73,7 @@ pub struct ConnectionTestResult {
 pub(crate) async fn add_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(AddKeyProviderRequest { provider_type, name }): Json<AddKeyProviderRequest>,
+    JsonBody(AddKeyProviderRequest { provider_type, name }): JsonBody<AddKeyProviderRequest>,
 ) -> Result<Response, ApiError> {
     let name = KeyProviders::normalize_name(&name);
     command_handler(
@@ -139,7 +140,7 @@ pub(crate) async fn get_all_key_providers(
 pub(crate) async fn remove_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(KeyProviderTypeRequest { provider_type }): Json<KeyProviderTypeRequest>,
+    JsonBody(KeyProviderTypeRequest { provider_type }): JsonBody<KeyProviderTypeRequest>,
 ) -> Result<Response, ApiError> {
     command_handler(
         state.authorization_checker.clone(),
@@ -173,7 +174,7 @@ pub(crate) async fn remove_key_provider(
 pub(crate) async fn test_key_provider_connection(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(KeyProviderTypeRequest { provider_type }): Json<KeyProviderTypeRequest>,
+    JsonBody(KeyProviderTypeRequest { provider_type }): JsonBody<KeyProviderTypeRequest>,
 ) -> Result<Response, ApiError> {
     let result = match test_connection(&state, caller(actor), provider_type)
         .await
@@ -204,6 +205,7 @@ pub(crate) async fn test_key_provider_connection(
     params(("provider_type" = KeyProviderType, Path, description = "The type of the added key provider")),
     responses(
         (status = 200, description = "The keys this instance may use, and how many more it may not", body = ProviderKeys),
+        (status = 400, description = "Unknown key provider type"),
         (status = 404, description = "No provider of this type has been added"),
         (status = 502, description = "The provider could not be reached"),
     )
@@ -212,7 +214,7 @@ pub(crate) async fn test_key_provider_connection(
 pub(crate) async fn get_key_provider_keys(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Path(provider_type): Path<KeyProviderType>,
+    PathParams(provider_type): PathParams<KeyProviderType>,
 ) -> Result<Response, ApiError> {
     let keys = list_key_provider_keys(&state, caller(actor), provider_type)
         .await

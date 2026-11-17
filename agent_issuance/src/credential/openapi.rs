@@ -58,8 +58,9 @@ pub(crate) fn credential_configurations_supported() -> Object {
     ObjectBuilder::new()
         .schema_type(SchemaType::Type(Type::Object))
         .property(
-            "credential_format",
+            "format",
             ObjectBuilder::new()
+                .schema_type(SchemaType::Type(Type::String))
                 .enum_values(Some(["jwt_vc_json", "dc+sd-jwt", "vc+sd-jwt"]))
                 .build(),
         )
@@ -84,7 +85,7 @@ pub(crate) fn credential_configurations_supported() -> Object {
                 .property("display", display())
                 .build(),
         )
-        .required("credential_format")
+        .required("format")
         .build()
 }
 
