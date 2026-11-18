@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, command_handler, query_handler};
 use crate::API_VERSION;
 use agent_library::queries;
@@ -12,7 +12,7 @@ use agent_library::template::error::TemplateError;
 use agent_library::template::origin::TemplateOrigin;
 use agent_shared::config::Authorization;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -83,6 +83,7 @@ impl From<Template> for TemplateDto {
 #[derive(Debug, Deserialize, Serialize, Default, utoipa::ToSchema)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct CreateNewTemplateRequestBody {
+    #[schema(min_length = 1)]
     pub title: String,
     pub display: Option<Display>,
     pub data_model: DataModel,
@@ -101,10 +102,17 @@ pub struct CreateNewTemplateRequestBody {
     pub origin: Option<TemplateOrigin>,
 }
 
+/// A template is created as a draft or published; it can only be archived or deleted afterwards.
 fn status_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
     let mut schema = <Status as utoipa::PartialSchema>::schema();
     if let utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(object)) = &mut schema {
         object.default = serde_json::to_value(Status::default()).ok();
+        object.enum_values = Some(
+            [Status::Draft, Status::Published]
+                .iter()
+                .filter_map(|status| serde_json::to_value(status).ok())
+                .collect(),
+        );
     }
     schema
 }
@@ -131,7 +139,7 @@ fn status_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
     ),
     responses(
         (status = 201, description = "New template created successfully", headers(("Location", description = "The path of the newly created template")), body = TemplateDto),
-        (status = 400, description = "Malformed JSON request body, or an invalid template definition"),
+        (status = 400, description = "Malformed JSON request body, an empty `title`, or an invalid template definition"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -139,7 +147,7 @@ fn status_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
 pub(crate) async fn create_template(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(CreateNewTemplateRequestBody {
+    JsonBody(CreateNewTemplateRequestBody {
         title,
         display,
         data_model,
@@ -154,7 +162,7 @@ pub(crate) async fn create_template(
         schema_properties_attributes,
         holder_authorization,
         origin,
-    }): Json<CreateNewTemplateRequestBody>,
+    }): JsonBody<CreateNewTemplateRequestBody>,
 ) -> Result<Response, ApiError> {
     let template_id = Uuid::new_v4().to_string();
 
@@ -209,6 +217,7 @@ pub(crate) async fn create_template(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DuplicateTemplateEndpointRequest {
+    #[schema(min_length = 1)]
     pub source_template_id: String,
 }
 
@@ -233,7 +242,7 @@ pub struct DuplicateTemplateEndpointRequest {
 pub(crate) async fn duplicate_template(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(DuplicateTemplateEndpointRequest { source_template_id }): Json<DuplicateTemplateEndpointRequest>,
+    JsonBody(DuplicateTemplateEndpointRequest { source_template_id }): JsonBody<DuplicateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let new_template_id = Uuid::new_v4().to_string();
 
@@ -292,7 +301,9 @@ pub(crate) async fn duplicate_template(
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct UpdateTemplateEndpointRequest {
     #[serde(rename = "id")]
+    #[schema(min_length = 1, required = true)]
     pub template_id: String,
+    #[schema(min_length = 1)]
     pub title: Option<String>,
     pub display: Option<Display>,
     pub tags: Option<Vec<String>>,
@@ -330,12 +341,14 @@ fn update_origin_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Sch
 #[utoipa::path(
     post,
     path = "/update-template",
+    request_body = UpdateTemplateEndpointRequest,
     operation_id = "update_template",
     tags = ["Library", "Templates"],
     responses(
         (status = 204, description = "Template updated successfully"),
-        (status = 400, description = "Malformed JSON request body, or a missing template ID"),
+        (status = 400, description = "Malformed JSON request body, a missing template ID, or an empty `title`"),
         (status = 404, description = "Template not found"),
+        (status = 409, description = "The template is deleted, or the requested status change is not allowed"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -343,7 +356,7 @@ fn update_origin_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Sch
 pub(crate) async fn update_template(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(UpdateTemplateEndpointRequest {
+    JsonBody(UpdateTemplateEndpointRequest {
         template_id,
         title,
         display,
@@ -357,7 +370,7 @@ pub(crate) async fn update_template(
         schema_properties_attributes,
         holder_authorization,
         origin,
-    }): Json<UpdateTemplateEndpointRequest>,
+    }): JsonBody<UpdateTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
         return Err(TemplateError::TemplateIdMissing.into_api_error());
@@ -616,6 +629,7 @@ pub(crate) async fn get_templates(
     get,
     path = "/get-template-by-id/{id}",
     operation_id = "get_template_by_id",
+    params(("id" = String, Path, description = "Template ID")),
     tags = ["Library", "Templates"],
     responses(
         (status = 200, description = "Template retrieved successfully", body = TemplateDto),
@@ -627,7 +641,7 @@ pub(crate) async fn get_templates(
 pub(crate) async fn get_template(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Path(template_id): Path<String>,
+    PathParams(template_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     queries::get_template(&state, caller(actor), &template_id)
         .await
@@ -640,6 +654,7 @@ pub(crate) async fn get_template(
 #[serde(rename_all = "camelCase")]
 pub struct DeleteTemplateEndpointRequest {
     #[serde(rename = "id")]
+    #[schema(min_length = 1)]
     pub template_id: String,
 }
 
@@ -649,12 +664,14 @@ pub struct DeleteTemplateEndpointRequest {
 #[utoipa::path(
     post,
     path = "/delete-template",
+    request_body = DeleteTemplateEndpointRequest,
     operation_id = "delete_template_by_id",
     tags = ["Library", "Templates"],
     responses(
         (status = 204, description = "Template deleted successfully"),
         (status = 400, description = "Malformed JSON request body, or a missing template ID"),
         (status = 404, description = "Template not found"),
+        (status = 409, description = "The template is published and must be archived first, or it is already deleted"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -662,7 +679,7 @@ pub struct DeleteTemplateEndpointRequest {
 pub(crate) async fn delete_template(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Json(DeleteTemplateEndpointRequest { template_id }): Json<DeleteTemplateEndpointRequest>,
+    JsonBody(DeleteTemplateEndpointRequest { template_id }): JsonBody<DeleteTemplateEndpointRequest>,
 ) -> Result<Response, ApiError> {
     if template_id.is_empty() {
         return Err(TemplateError::TemplateIdMissing.into_api_error());
@@ -872,7 +889,7 @@ mod tests {
         let response = duplicate_template(
             State(state),
             RequestActor(None),
-            Json(DuplicateTemplateEndpointRequest {
+            JsonBody(DuplicateTemplateEndpointRequest {
                 source_template_id: "source-template".to_string(),
             }),
         )
@@ -908,7 +925,7 @@ mod tests {
         let response = duplicate_template(
             State(state),
             RequestActor(None),
-            Json(DuplicateTemplateEndpointRequest {
+            JsonBody(DuplicateTemplateEndpointRequest {
                 source_template_id: "deleted-source".to_string(),
             }),
         )
@@ -933,7 +950,7 @@ mod tests {
             schema["properties"]["status"],
             json!({
                 "type": "string",
-                "enum": ["draft", "published", "archived", "deleted"],
+                "enum": ["draft", "published"],
                 "default": "draft"
             })
         );
@@ -946,7 +963,7 @@ mod tests {
         let response = create_template(
             State(state),
             RequestActor(None),
-            Json(CreateNewTemplateRequestBody {
+            JsonBody(CreateNewTemplateRequestBody {
                 title: "Created Template".to_string(),
                 display: None,
                 data_model: DataModel::W3CVcDataModelV1_1,
@@ -983,7 +1000,7 @@ mod tests {
         let response = create_template(
             State(state),
             RequestActor(None),
-            Json(CreateNewTemplateRequestBody {
+            JsonBody(CreateNewTemplateRequestBody {
                 title: "Created Template".to_string(),
                 display: Some(Display {
                     name: String::new(),
@@ -1019,7 +1036,7 @@ mod tests {
         let response = update_template(
             State(state),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: String::new(),
                 title: Some("Updated title".to_string()),
                 display: None,
@@ -1065,7 +1082,7 @@ mod tests {
         let response = update_template(
             State(state),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: "deleted-template".to_string(),
                 title: Some("Updated title".to_string()),
                 display: None,
@@ -1101,7 +1118,7 @@ mod tests {
         let response = update_template(
             State(state.clone()),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: None,
                 display: None,
@@ -1143,7 +1160,7 @@ mod tests {
         let response = update_template(
             State(state.clone()),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: Some("Updated title".to_string()),
                 display: Some(Display {
@@ -1178,7 +1195,7 @@ mod tests {
         update_template(
             State(state.clone()),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: Some("Renamed title".to_string()),
                 display: None,
@@ -1212,7 +1229,7 @@ mod tests {
         update_template(
             State(state.clone()),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: None,
                 display: Some(Display {
@@ -1244,7 +1261,7 @@ mod tests {
         update_template(
             State(state.clone()),
             RequestActor(None),
-            Json(UpdateTemplateEndpointRequest {
+            JsonBody(UpdateTemplateEndpointRequest {
                 template_id: "template-to-update".to_string(),
                 title: Some("Updated title".to_string()),
                 display: None,
@@ -1335,7 +1352,7 @@ mod tests {
             update_template(
                 State(state.clone()),
                 RequestActor(None),
-                Json(UpdateTemplateEndpointRequest {
+                JsonBody(UpdateTemplateEndpointRequest {
                     template_id: "template-to-update".to_string(),
                     ..request
                 }),
@@ -1417,7 +1434,7 @@ mod tests {
         let response = delete_template(
             State(state.clone()),
             RequestActor(None),
-            Json(DeleteTemplateEndpointRequest {
+            JsonBody(DeleteTemplateEndpointRequest {
                 template_id: String::new(),
             }),
         )
@@ -1435,7 +1452,7 @@ mod tests {
         let response = delete_template(
             State(state.clone()),
             RequestActor(None),
-            Json(DeleteTemplateEndpointRequest {
+            JsonBody(DeleteTemplateEndpointRequest {
                 template_id: "template-to-delete".to_string(),
             }),
         )
@@ -1444,10 +1461,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        let response = get_template(State(state), RequestActor(None), Path("template-to-delete".to_string()))
-            .await
-            .unwrap_err()
-            .into_response();
+        let response = get_template(
+            State(state),
+            RequestActor(None),
+            PathParams("template-to-delete".to_string()),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
@@ -1463,7 +1484,7 @@ mod tests {
         let response = create_template(
             State(state.clone()),
             RequestActor(None),
-            Json(CreateNewTemplateRequestBody {
+            JsonBody(CreateNewTemplateRequestBody {
                 title: "Country Template".to_string(),
                 display: None,
                 data_model: DataModel::W3CVcDataModelV2_0,
@@ -1501,7 +1522,7 @@ mod tests {
         let created: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let template_id = created["id"].as_str().unwrap().to_string();
 
-        let response = get_template(State(state), RequestActor(None), Path(template_id))
+        let response = get_template(State(state), RequestActor(None), PathParams(template_id))
             .await
             .unwrap();
 
@@ -1530,7 +1551,7 @@ mod tests {
         let response = create_template(
             State(state.clone()),
             RequestActor(None),
-            Json(serde_json::from_value(body).unwrap()),
+            JsonBody(serde_json::from_value(body).unwrap()),
         )
         .await
         .unwrap();
@@ -1543,7 +1564,7 @@ mod tests {
         update_template(
             State(state.clone()),
             RequestActor(None),
-            Json(serde_json::from_value(body).unwrap()),
+            JsonBody(serde_json::from_value(body).unwrap()),
         )
         .await
     }
@@ -1605,7 +1626,7 @@ mod tests {
         let response = create_template(
             State(state),
             RequestActor(None),
-            Json(
+            JsonBody(
                 serde_json::from_value(json!({ "title": "Imported", "origin": origin_json("sha256-not-hex") }))
                     .unwrap(),
             ),
@@ -1714,7 +1735,7 @@ mod tests {
         let response = duplicate_template(
             State(state),
             RequestActor(None),
-            Json(DuplicateTemplateEndpointRequest {
+            JsonBody(DuplicateTemplateEndpointRequest {
                 source_template_id: created["id"].as_str().unwrap().to_string(),
             }),
         )
