@@ -3,7 +3,10 @@
 use crate::key_provider::aggregate::KeyProviderType;
 use async_trait::async_trait;
 pub use identity_kit::keys::InMemoryKeyStore;
-use identity_kit::keys::{KeyId, KeySpec, KeyStore, KeyStoreError};
+use identity_kit::{
+    jose::JwsAlgorithm,
+    keys::{KeyId, KeySpec, KeyStore, KeyStoreError},
+};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -16,6 +19,12 @@ pub struct ConnectionError(pub String);
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct InvalidLabel(pub String);
+
+/// Why a provider refuses to create or adopt keys for an algorithm it can sign with. The message is shown to the
+/// operator.
+#[derive(Debug, Error)]
+#[error("{0}")]
+pub struct RefusedAlgorithm(pub String);
 
 /// A key that exists in a key provider, as reported by the provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
@@ -72,6 +81,15 @@ pub trait KeyProviderAdapter: KeyStore {
         Ok(())
     }
 
+    /// Checks, before anything is created or adopted, that keys of this provider may sign with `algorithm`.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the provider can sign with `algorithm`, but not in a way credentials can rely on.
+    fn check_algorithm(&self, _algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
+        Ok(())
+    }
+
     /// Generates a key as [`KeyStore::generate`] does, but returns an id that names this key for good, also where
     /// the provider lets a label be moved to another key. A labelled key can still be deleted by its label.
     ///
@@ -82,8 +100,25 @@ pub trait KeyProviderAdapter: KeyStore {
         self.generate(spec).await
     }
 
-    /// Deletes a key that [`create`](Self::create) returned `created` for, when it can't be recorded, and frees
-    /// `label`, which it was created with, only while the label still names that key.
+    /// Returns the id that names the key labelled `label` for good, as [`create`](Self::create) does, to record a key
+    /// that exists in the provider but that this instance didn't record.
+    ///
+    /// By default a label is the key's id.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`KeyStoreError::NotFound`] when no key has the label, or as [`KeyStore::exists`] does.
+    async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
+        let key = KeyId::new(label);
+        if self.exists(&key).await? {
+            Ok(key)
+        } else {
+            Err(KeyStoreError::NotFound(key))
+        }
+    }
+
+    /// Deletes the key [`create`](Self::create) or [`adopt`](Self::adopt) returned `created` for, and frees `label`,
+    /// which names it, only while the label still names that key.
     ///
     /// By default the key is deleted by `created`, for providers whose label goes with the key.
     ///

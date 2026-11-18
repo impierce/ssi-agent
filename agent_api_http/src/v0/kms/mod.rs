@@ -14,7 +14,7 @@ use axum::{
 use key_providers::{
     add_key_provider, get_all_key_providers, get_key_provider_keys, remove_key_provider, test_key_provider_connection,
 };
-use keys::{create_key, get_all_keys};
+use keys::{adopt_key, create_key, delete_key, get_all_keys};
 use std::sync::Arc;
 
 pub fn router(kms_state: Arc<KmsState>) -> Router {
@@ -23,7 +23,9 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
             API_VERSION,
             Router::new()
                 .route("/add-key-provider", post(add_key_provider))
+                .route("/adopt-key", post(adopt_key))
                 .route("/create-key", post(create_key))
+                .route("/delete-key", post(delete_key))
                 .route("/get-all-keys", get(get_all_keys))
                 .route("/get-all-key-providers", get(get_all_key_providers))
                 .route("/get-key-provider-keys/{provider_type}", get(get_key_provider_keys))
@@ -219,6 +221,27 @@ mod tests {
         let (status, _) = send(&app, "POST", "/v0/create-key", Some(body)).await;
 
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn deleting_a_key_answers_without_content() {
+        let app = app_with_kms().await;
+        let (_, created) = create_in_memory_key(&app).await;
+
+        let response = send(&app, "POST", "/v0/delete-key", Some(json!({ "id": created["id"] }))).await;
+
+        assert_eq!(response, (StatusCode::NO_CONTENT, Value::Null));
+    }
+
+    #[tokio::test]
+    async fn adopting_an_unknown_label_is_not_found() {
+        let app = app_with_kms().await;
+        add(&app, "in_memory").await;
+
+        let body = json!({ "providerType": "in_memory", "label": "issuer" });
+        let (status, _) = send(&app, "POST", "/v0/adopt-key", Some(body)).await;
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

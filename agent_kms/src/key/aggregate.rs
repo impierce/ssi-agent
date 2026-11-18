@@ -31,10 +31,12 @@ impl KeyReference {
     }
 }
 
-/// A key this instance created in one of its key providers.
+/// A key this instance created or adopted in one of its key providers.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Key {
     pub reference: Option<KeyReference>,
+    #[serde(default)]
+    pub deleted: bool,
 }
 
 impl Aggregate for Key {
@@ -60,6 +62,18 @@ impl Aggregate for Key {
                 }
                 KeyEvent::KeyCreated { reference }
             }
+            KeyCommand::RecordAdoptedKey { reference } => {
+                if self.reference.is_some() {
+                    return Err(KeyError::AlreadyRecorded);
+                }
+                KeyEvent::KeyAdopted { reference }
+            }
+            KeyCommand::DeleteKey => {
+                if self.reference.is_none() || self.deleted {
+                    return Err(KeyError::NotFound);
+                }
+                KeyEvent::KeyDeleted
+            }
         };
         sink.write(event, self).await;
 
@@ -68,7 +82,8 @@ impl Aggregate for Key {
 
     fn apply(&mut self, event: Self::Event) {
         match event {
-            KeyEvent::KeyCreated { reference } => self.reference = Some(reference),
+            KeyEvent::KeyCreated { reference } | KeyEvent::KeyAdopted { reference } => self.reference = Some(reference),
+            KeyEvent::KeyDeleted => self.deleted = true,
         }
     }
 }
@@ -103,5 +118,18 @@ mod tests {
                 reference: reference("second"),
             })
             .then_expect_error(KeyError::AlreadyRecorded);
+    }
+
+    #[test]
+    fn a_deleted_key_cannot_be_deleted_again() {
+        TestFramework::<Key>::with(())
+            .given(vec![
+                KeyEvent::KeyCreated {
+                    reference: reference("first"),
+                },
+                KeyEvent::KeyDeleted,
+            ])
+            .when(KeyCommand::DeleteKey)
+            .then_expect_error(KeyError::NotFound);
     }
 }

@@ -1,13 +1,16 @@
-use crate::adapter::{ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
+use crate::adapter::{
+    ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys, RefusedAlgorithm,
+};
 use crate::key::{
     aggregate::{Key, KeyReference},
-    command::{CreateKey, KeyCommand},
+    command::{AdoptKey, CreateKey, KeyCommand},
     error::KeyError,
     views::{AllKeysView, KeyView},
 };
 use crate::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
-    command::{ListKeyProviderKeys, TestKeyProviderConnection},
+    command::{KeyProviderCommand, ListKeyProviderKeys, TestKeyProviderConnection},
+    error::KeyProviderError,
     services::KeyProviderServices,
     views::KeyProvidersView,
 };
@@ -210,11 +213,73 @@ async fn added_provider_adapter<C: CommandOperation>(
 }
 
 #[derive(Debug, Error)]
+pub enum RemoveKeyProviderError {
+    #[error(
+        "The `{provider_type}` key provider still has {keys} key(s). Delete them with `delete-key` before removing it"
+    )]
+    HasKeys {
+        provider_type: KeyProviderType,
+        keys: usize,
+    },
+    #[error(transparent)]
+    Query(#[from] QueryHandlerError),
+    #[error(transparent)]
+    Command(#[from] CommandHandlerError<KeyProviderError>),
+}
+
+/// Removes an added provider. A provider that still has keys isn't removed, so that its keys aren't left without the
+/// provider that holds them; deleting them first is the caller's choice.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, the provider hasn't been added, or keys of the provider exist.
+pub async fn remove_key_provider(
+    state: &KmsState,
+    caller: Caller,
+    provider_type: KeyProviderType,
+) -> Result<(), RemoveKeyProviderError> {
+    let command = KeyProviderCommand::RemoveKeyProvider { provider_type };
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        KeyProviders::ID,
+        &command,
+    )
+    .await
+    .map_err(CommandHandlerError::Authorization)?;
+
+    let keys = get_keys(state, caller.clone())
+        .await?
+        .keys
+        .values()
+        .filter(|reference| reference.provider_type == provider_type)
+        .count();
+    if keys > 0 {
+        return Err(RemoveKeyProviderError::HasKeys { provider_type, keys });
+    }
+
+    Ok(command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        KeyProviders::ID,
+        &state.command.key_providers,
+        command,
+    )
+    .await?)
+}
+
+#[derive(Debug, Error)]
 pub enum CreateKeyError {
     #[error(transparent)]
     Provider(#[from] TestConnectionError),
     #[error("Keys that sign with {0} can't be created")]
     UnsupportedAlgorithm(JwsAlgorithm),
+    #[error(transparent)]
+    AlgorithmRefused(#[from] RefusedAlgorithm),
+    #[error("The key `{0}` is neither a P-256 nor an Ed25519 key")]
+    UnsupportedKey(KeyId),
+    #[error("The key `{0}` has already been recorded")]
+    AlreadyRecorded(KeyId),
     #[error(transparent)]
     InvalidLabel(#[from] InvalidLabel),
     #[error(transparent)]
@@ -245,6 +310,7 @@ pub async fn create_key(
         algorithm => return Err(CreateKeyError::UnsupportedAlgorithm(algorithm)),
     };
     let adapter = added_provider_adapter(state, caller.clone(), provider_type, &CreateKey).await?;
+    adapter.check_algorithm(algorithm)?;
     if let Some(label) = &label {
         adapter.check_label(label)?;
     }
@@ -320,6 +386,130 @@ async fn record_created_key(
     Ok((id, reference))
 }
 
+/// Records the key labelled `label` in an added provider, which exists there but which this instance didn't record,
+/// such as a key whose creation was interrupted before it was recorded. Returns its key ID and its reference.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, the provider hasn't been added or has no adapter, no key has the label,
+/// the key is already recorded, or it isn't a key of an algorithm keys can be created for.
+pub async fn adopt_key(
+    state: &KmsState,
+    caller: Caller,
+    provider_type: KeyProviderType,
+    label: String,
+) -> Result<(String, KeyReference), CreateKeyError> {
+    let adapter = added_provider_adapter(state, caller.clone(), provider_type, &AdoptKey).await?;
+    let id = Uuid::new_v4().to_string();
+    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, &AdoptKey)
+        .await
+        .map_err(|error| CreateKeyError::Record(CommandHandlerError::Authorization(error)))?;
+
+    let provider_key_id = adapter.adopt(&label).await?;
+    let recorded = get_keys(state, caller.clone())
+        .await
+        .map_err(TestConnectionError::from)?;
+    if recorded.keys.values().any(|reference| {
+        reference.provider_type == provider_type && reference.provider_key_id == provider_key_id.as_str()
+    }) {
+        return Err(CreateKeyError::AlreadyRecorded(provider_key_id));
+    }
+
+    let public_key = adapter.public_jwk(&provider_key_id).await?;
+    let algorithm = match (public_key.kty(), public_key.crv()) {
+        ("EC", Some("P-256")) => JwsAlgorithm::ES256,
+        ("OKP", Some("Ed25519")) => JwsAlgorithm::EdDSA,
+        _ => return Err(CreateKeyError::UnsupportedKey(provider_key_id)),
+    };
+    adapter.check_algorithm(algorithm)?;
+
+    let reference = KeyReference {
+        provider_type,
+        provider_key_id: provider_key_id.as_str().to_string(),
+        label: Some(label),
+        algorithm,
+        public_key,
+    };
+    command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        &id,
+        &state.command.keys,
+        KeyCommand::RecordAdoptedKey {
+            reference: reference.clone(),
+        },
+    )
+    .await?;
+
+    Ok((id, reference))
+}
+
+#[derive(Debug, Error)]
+pub enum DeleteKeyError {
+    #[error("There is no key `{0}`")]
+    NotFound(String),
+    #[error("This instance has no adapter for `{0}` key providers")]
+    Unsupported(KeyProviderType),
+    #[error(transparent)]
+    KeyStore(#[from] KeyStoreError),
+    #[error(transparent)]
+    Query(#[from] QueryHandlerError),
+    #[error(transparent)]
+    Record(#[from] CommandHandlerError<KeyError>),
+}
+
+/// Deletes the key `id` from its provider, which schedules its deletion where the provider does, and frees its label.
+/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, there is no such key, or the provider can't delete it.
+pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<(), DeleteKeyError> {
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        id,
+        &KeyCommand::DeleteKey,
+    )
+    .await
+    .map_err(CommandHandlerError::Authorization)?;
+    let reference = query_handler(
+        state.authorization_checker.clone(),
+        caller.clone(),
+        id,
+        Some(id),
+        &state.query.key,
+    )
+    .await?
+    .filter(|key| !key.deleted)
+    .and_then(|key| key.reference)
+    .ok_or_else(|| DeleteKeyError::NotFound(id.to_string()))?;
+    let adapter = state
+        .adapters
+        .get(&reference.provider_type)
+        .ok_or(DeleteKeyError::Unsupported(reference.provider_type))?;
+
+    match adapter
+        .discard(
+            &KeyId::new(reference.provider_key_id.as_str()),
+            reference.label.as_deref(),
+        )
+        .await
+    {
+        Ok(()) | Err(KeyStoreError::NotFound(_)) => {}
+        Err(error) => return Err(error.into()),
+    }
+
+    Ok(command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        id,
+        &state.command.keys,
+        KeyCommand::DeleteKey,
+    )
+    .await?)
+}
+
 /// Returns every key this instance created, by key ID, in the order they were created.
 ///
 /// # Errors
@@ -344,8 +534,8 @@ pub struct SigningKey {
     pub adapter: Arc<dyn KeyProviderAdapter>,
 }
 
-/// Returns the key `key_id` to sign with, or `None` when there is no such key or this instance has no adapter for its
-/// provider.
+/// Returns the key `key_id` to sign with, or `None` when there is no such key, it was deleted, or this instance has no
+/// adapter for its provider.
 ///
 /// # Errors
 ///
@@ -353,7 +543,8 @@ pub struct SigningKey {
 pub async fn signing_key(state: &KmsState, key_id: &str) -> Result<Option<SigningKey>, PersistenceError> {
     Ok(public_query_handler(key_id, &state.query.key)
         .await?
-        .and_then(|KeyView { reference }| with_adapter(state, reference?)))
+        .filter(|key| !key.deleted)
+        .and_then(|KeyView { reference, .. }| with_adapter(state, reference?)))
 }
 
 /// Returns every key this instance created and has an adapter for, to sign with.
@@ -417,6 +608,7 @@ mod tests {
         generate_delay: Duration,
         public_keys_fail: bool,
         labels_refused: bool,
+        algorithms_refused: bool,
         generated: AtomicUsize,
     }
 
@@ -427,6 +619,7 @@ mod tests {
                 generate_delay: Duration::ZERO,
                 public_keys_fail: false,
                 labels_refused: false,
+                algorithms_refused: false,
                 generated: AtomicUsize::new(0),
             }
         }
@@ -487,6 +680,13 @@ mod tests {
 
         async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
             Ok(ProviderKeys::default())
+        }
+
+        fn check_algorithm(&self, algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
+            if self.algorithms_refused {
+                return Err(RefusedAlgorithm(format!("{algorithm} is refused")));
+            }
+            Ok(())
         }
 
         fn check_label(&self, label: &str) -> Result<(), InvalidLabel> {
@@ -628,6 +828,96 @@ mod tests {
         let left = provider.exists(&KeyId::new("issuer")).await.unwrap();
 
         assert!(!left);
+    }
+
+    #[tokio::test]
+    async fn refuses_an_algorithm_the_provider_refuses() {
+        let state = state_with_provider(Arc::new(FakeProvider {
+            algorithms_refused: true,
+            ..FakeProvider::new()
+        }))
+        .await;
+
+        let result = create_labelled(&state).await;
+
+        assert!(matches!(result, Err(CreateKeyError::AlgorithmRefused(_))), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn refuses_to_remove_a_provider_that_has_keys() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        create_labelled(&state).await.unwrap();
+
+        let result = remove_key_provider(&state, Caller::Internal, KeyProviderType::InMemory).await;
+
+        assert!(
+            matches!(result, Err(RemoveKeyProviderError::HasKeys { keys: 1, .. })),
+            "{result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn deletes_a_key_from_its_provider() {
+        let provider = Arc::new(FakeProvider::new());
+        let state = state_with_provider(provider.clone()).await;
+        let (id, _) = create_labelled(&state).await.unwrap();
+
+        delete_key(&state, Caller::Internal, &id).await.unwrap();
+
+        assert!(!provider.exists(&KeyId::new("issuer")).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn records_a_key_its_provider_no_longer_has_as_deleted() {
+        let provider = Arc::new(FakeProvider::new());
+        let state = state_with_provider(provider.clone()).await;
+        let (id, _) = create_labelled(&state).await.unwrap();
+        provider.delete(&KeyId::new("issuer")).await.unwrap();
+
+        delete_key(&state, Caller::Internal, &id).await.unwrap();
+
+        assert!(get_keys(&state, Caller::Internal).await.unwrap().keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn adopts_a_key_its_provider_has_under_the_label() {
+        let provider = Arc::new(FakeProvider::new());
+        let state = state_with_provider(provider.clone()).await;
+        provider
+            .keys
+            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA).with_label("issuer"))
+            .await
+            .unwrap();
+
+        let (_, reference) = adopt_key(
+            &state,
+            Caller::Internal,
+            KeyProviderType::InMemory,
+            "issuer".to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            (reference.provider_key_id.as_str(), reference.algorithm),
+            ("issuer", JwsAlgorithm::EdDSA)
+        );
+    }
+
+    #[tokio::test]
+    async fn refuses_to_adopt_a_recorded_key() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        create_labelled(&state).await.unwrap();
+
+        let result = adopt_key(
+            &state,
+            Caller::Internal,
+            KeyProviderType::InMemory,
+            "issuer".to_string(),
+        )
+        .await;
+
+        assert!(matches!(result, Err(CreateKeyError::AlreadyRecorded(_))), "{result:?}");
     }
 
     #[tokio::test]
