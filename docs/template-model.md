@@ -143,7 +143,7 @@ This field is separate because the metadata is operational policy, not structura
 
 ### What a key addresses
 
-A key addresses a property of the schema: a leaf, or an object or an array as a whole. An attribute on an object or an array is for everything inside it. An SD-JWT credential conceals its claims one level deep (each property of `credentialSubject` in `vc+sd-jwt`, each top-level claim in `dc+sd-jwt`), so an object, a list or a table at that level is disclosed as one.
+A key addresses a property of the schema: a leaf, or an object or an array as a whole. An attribute on an object or an array is for everything inside it. An SD-JWT credential conceals its claims one level deep (each property of `credentialSubject` in `vc+sd-jwt`, each top-level claim of its own in `dc+sd-jwt`, where registered claims such as `vct` stay in the clear), so an object, a list or a table at that level is disclosed as one.
 
 With the schema of the lists and tables above, `/skills` and `/classes` are keys; `/classes/code` and `/classes/0/code` are not.
 

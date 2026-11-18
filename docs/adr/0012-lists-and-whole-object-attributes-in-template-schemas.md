@@ -34,8 +34,9 @@ Two rules stood in the way:
 - **Issuer metadata**: the leaves of nested objects are claims, an array is one claim at its own
   path. This is what `credential_configuration_projection` already did.
 - **Issuance**: unchanged. An SD-JWT credential conceals its claims one level deep: each property
-  of `credentialSubject` in `vc+sd-jwt`, each top-level claim in `dc+sd-jwt`. An object, a list or
-  a table at that level is one disclosure, with everything inside it.
+  of `credentialSubject` in `vc+sd-jwt`, each top-level claim of its own in `dc+sd-jwt` (registered
+  claims such as `vct` stay in the clear). An object, a list or a table at that level is one
+  disclosure, with everything inside it.
 
 ## Rationale
 

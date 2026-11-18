@@ -270,8 +270,9 @@ fn collect_claim_descriptions(
     };
 
     for (property_name, property_schema) in properties {
+        // A property name is one path element, whatever characters it holds.
         let mut property_segments = current_segments.to_vec();
-        property_segments.extend(split_path_segments(property_name));
+        property_segments.push(property_name.clone());
 
         // An array is one claim, also when its schema carries `properties`, which say nothing about an array.
         if !is_array_schema(property_schema) && has_nested_object_properties(property_schema) {
@@ -315,13 +316,6 @@ fn build_claim_description(
         mandatory,
         display: vec![],
     })
-}
-
-fn split_path_segments(path: &str) -> Vec<String> {
-    path.split('.')
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| segment.to_string())
-        .collect()
 }
 
 fn has_nested_object_properties(schema: &serde_json::Value) -> bool {
@@ -617,18 +611,23 @@ mod tests {
         assert!(!claim.mandatory);
     }
 
+    /// The credential holds one key named `No. of credits`, so the path to it has one element for it.
     #[test]
-    fn test_vc_sd_jwt_dotted_keys_become_path_elements() {
+    fn test_property_name_with_dots_is_one_path_element() {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
-                "achievement.name": { "type": "string" }
+                "No. of credits": { "type": "string" },
+                "grades": {
+                    "type": "object",
+                    "properties": { "v1.2": { "type": "string" } }
+                }
             }
         });
 
         let template = Template {
             template_id: "t8".to_string(),
-            data_model: DataModel::OpenBadges3_0,
+            data_model: DataModel::W3CVcDataModelV2_0,
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             ..Default::default()
@@ -636,13 +635,20 @@ mod tests {
 
         let config = credential_configuration_from_template(&template);
         let claims = config.credential_metadata.claims.expect("claims should be present");
-        assert_eq!(claims.len(), 1);
+        let path = |segments: &[&str]| -> Vec<ClaimPathElement> {
+            segments
+                .iter()
+                .map(|segment| ClaimPathElement::String(segment.to_string()))
+                .collect()
+        };
+        let mut paths: Vec<Vec<ClaimPathElement>> = claims.iter().map(|claim| claim.path.as_ref().to_vec()).collect();
+        paths.sort_by_key(Vec::len);
+
         assert_eq!(
-            claims[0].path.as_ref(),
-            &[
-                ClaimPathElement::String("credentialSubject".to_string()),
-                ClaimPathElement::String("achievement".to_string()),
-                ClaimPathElement::String("name".to_string()),
+            paths,
+            vec![
+                path(&["credentialSubject", "No. of credits"]),
+                path(&["credentialSubject", "grades", "v1.2"]),
             ]
         );
     }
