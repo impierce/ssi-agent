@@ -114,6 +114,52 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/add-key-to-document:
+    post:
+      tags:
+      - Identity
+      summary: Add key to document
+      description: |-
+        Adds the public key of a key created in the Key Management System to your organisation's `did:web` document, as a
+        verification method. The key is available to sign with right away, but only signs once it is selected as the
+        signing key. Adding a key again changes nothing.
+      operationId: add_key_to_document
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - keyId
+              properties:
+                keyId:
+                  type: string
+                  description: The ID of a key created in the Key Management System.
+                  example: 0b6a7f8e-3f4c-4d2a-9b1e-5c8d7e6f5a4b
+        required: true
+      responses:
+        '200':
+          description: Key added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddKeyToDocumentResponse'
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: No key has the given ID
+        '409':
+          description: There is no enabled `did:web` document to add the key to
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/add-linked-domains:
     post:
       tags:
@@ -604,7 +650,8 @@ paths:
       summary: Create a key
       description: |-
         Creates a key in an added key provider. The private key is generated in the provider and never leaves it.
-        Nothing signs with the key yet.
+        The key signs for the `did:web` document once it is added to it with `add-key-to-document` and selected with
+        `select-signing-key`.
       operationId: create_key
       requestBody:
         content:
@@ -968,6 +1015,45 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/deselect-signing-key:
+    post:
+      tags:
+      - Identity
+      summary: Deselect signing key
+      description: |-
+        Signs with the configured key of the given algorithm again in your organisation's `did:web` document. Deselecting
+        an algorithm without a selected key is a no-op.
+      operationId: deselect_signing_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - algorithm
+              properties:
+                algorithm:
+                  type: string
+                  description: The algorithm whose configured key signs again.
+                  example: ES256
+        required: true
+      responses:
+        '204':
+          description: Signing key deselected
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: There is no enabled `did:web` document
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/documents:
     get:
       tags:
@@ -1261,6 +1347,28 @@ paths:
           description: No provider of this type has been added
         '502':
           description: The provider could not be reached
+  /v0/get-signing-keys:
+    get:
+      tags:
+      - Identity
+      summary: Get signing keys
+      description: |-
+        Lists, per algorithm, the key your organisation's `did:web` document signs with now, the key selected to sign, and
+        why that key can't sign, if it can't.
+      operationId: get_signing_keys
+      responses:
+        '200':
+          description: The signing keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SigningKey'
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -1869,6 +1977,46 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/remove-key-from-document:
+    post:
+      tags:
+      - Identity
+      summary: Remove key from document
+      description: |-
+        Removes the verification method of a key added with `add-key-to-document` from your organisation's `did:web`
+        document. Credentials it signed no longer verify. The selected signing key of an algorithm can't be removed:
+        select another key or deselect it first.
+      operationId: remove_key_from_document
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationMethodId
+              properties:
+                verificationMethodId:
+                  type: string
+                  description: The verification method of an added key.
+                  example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+        required: true
+      responses:
+        '204':
+          description: Key removed
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: The key is the selected signing key, not an added key, or there is no enabled `did:web` document
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-key-provider:
     post:
       tags:
@@ -1997,6 +2145,47 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+  /v0/select-signing-key:
+    post:
+      tags:
+      - Identity
+      summary: Select signing key
+      description: |-
+        Signs with the given verification method from now on, for the algorithm of its key, in the DID document it belongs
+        to. Selecting the key that is already selected is a no-op.
+      operationId: select_signing_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationMethodId
+              properties:
+                verificationMethodId:
+                  type: string
+                  description: The verification method to sign with, in one of your organisation's DID documents.
+                  example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+        required: true
+      responses:
+        '204':
+          description: Signing key selected
+        '400':
+          description: The verification method's key names no supported algorithm
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: No DID document has the verification method
+        '409':
+          description: The verification method's key is not available to sign with
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':
@@ -2273,6 +2462,15 @@ components:
           minLength: 1
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
+    AddKeyToDocumentResponse:
+      type: object
+      required:
+      - verificationMethodId
+      properties:
+        verificationMethodId:
+          type: string
+          description: The verification method of the key, named by the thumbprint of its public key.
+          example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
     AddTemplatesRequest:
       type: object
       properties:
@@ -3328,6 +3526,20 @@ components:
       - id
       - status
       properties:
+        added_keys:
+          type: object
+          description: The ID in the Key Management System of the key of each added verification method, where it was recorded.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
+        added_verification_methods:
+          type: array
+          items:
+            type: string
+          description: |-
+            The verification methods of keys that aren't configured issuer keys, such as KMS keys, in the order they were
+            added.
         did_method:
           oneOf:
           - $ref: '#/components/schemas/SupportedDidMethod'
@@ -3338,6 +3550,15 @@ components:
           - type: 'null'
         id:
           type: string
+        signing_methods:
+          type: object
+          description: |-
+            The verification method selected to sign with, per algorithm. Without one, an algorithm signs with the
+            configured issuer key.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
         status:
           type: string
           enum:
@@ -4360,6 +4581,34 @@ components:
       - $ref: '#/components/schemas/Jwt'
       - $ref: '#/components/schemas/SdJwt'
       description: 'A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.'
+    SigningKey:
+      type: object
+      description: The key an algorithm of your organisation's `did:web` document signs with.
+      required:
+      - algorithm
+      - verificationMethodId
+      properties:
+        algorithm:
+          type: string
+          example: ES256
+        problem:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Why the selected key, or else the signing key, can't sign: it isn't available, or it failed the last time it
+            signed. Selecting another key with `select-signing-key`, or the configured one with `deselect-signing-key`,
+            resolves it.
+        selectedVerificationMethodId:
+          type:
+          - string
+          - 'null'
+          description: |-
+            The verification method selected to sign. When it differs from `verificationMethodId`, its key isn't available
+            and the configured key signs instead.
+        verificationMethodId:
+          type: string
+          description: The verification method that signs now.
     Source:
       type: string
       enum:
