@@ -426,6 +426,33 @@ mod tests {
             .unwrap();
     }
 
+    /// A list or a table is fixed by a `const` of its own; what its items say does not fix it.
+    #[test]
+    fn a_list_is_fixed_by_its_own_const() {
+        let schema = |skills: Value| {
+            Some(serde_json::json!({
+                "type": "object",
+                "properties": { "name": { "const": "Alice" }, "skills": skills }
+            }))
+        };
+
+        let fixed = schema(serde_json::json!({
+            "type": "array",
+            "items": { "type": "string" },
+            "const": ["Rust"]
+        }));
+        assert!(super::validate_schema_has_only_consts(&fixed).is_ok());
+
+        let open = schema(serde_json::json!({ "type": "array", "items": { "type": "string" } }));
+        assert!(super::validate_schema_has_only_consts(&open).is_err());
+
+        let fixed_items_only = schema(serde_json::json!({
+            "type": "array",
+            "items": { "type": "object", "properties": { "name": { "const": "Rust" } } }
+        }));
+        assert!(super::validate_schema_has_only_consts(&fixed_items_only).is_err());
+    }
+
     fn const_only_schema() -> Value {
         serde_json::json!({
             "type": "object",

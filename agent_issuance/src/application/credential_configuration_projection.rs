@@ -782,6 +782,62 @@ mod tests {
         assert!(claim.mandatory);
     }
 
+    /// The leaves of nested objects are claims of their own; a list or a table is one claim, whatever its items hold.
+    #[test]
+    fn test_structured_schema_claims_are_leaves_and_whole_arrays() {
+        use agent_library::template::aggregate::test_utils::{
+            structured_schema, structured_schema_properties_attributes,
+        };
+
+        let template = Template {
+            template_id: "t_structured".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(structured_schema())),
+            schema_properties_attributes: Some(structured_schema_properties_attributes()),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "vc+sd-jwt");
+
+        let mut paths: Vec<String> = config
+            .credential_metadata
+            .claims
+            .expect("claims should be present")
+            .iter()
+            .map(|claim| {
+                claim
+                    .path
+                    .as_ref()
+                    .iter()
+                    .map(|element| match element {
+                        ClaimPathElement::String(segment) => segment.as_str(),
+                        other => panic!("unexpected path element: {other:?}"),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" > ")
+            })
+            .collect();
+        paths.sort();
+
+        assert_eq!(
+            paths,
+            vec![
+                "credentialSubject > Accreditations",
+                "credentialSubject > Address > City",
+                "credentialSubject > Address > Coordinates > Latitude",
+                "credentialSubject > Address > Coordinates > Longitude",
+                "credentialSubject > Address > Country",
+                "credentialSubject > Address > Street",
+                "credentialSubject > Completed classes",
+                "credentialSubject > Credits",
+                "credentialSubject > Full name",
+                "credentialSubject > Skills",
+                "credentialSubject > Work experience",
+            ]
+        );
+    }
+
     #[test]
     fn test_jwt_vc_json_format_does_not_include_claims() {
         let schema = serde_json::json!({

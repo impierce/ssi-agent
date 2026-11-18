@@ -646,7 +646,7 @@ async fn test_create_open_badges_template_with_array_type_in_schema(template_id:
             origin: None,
         }).await
         .then_expect_error_message(
-            "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields."
+            "Invalid JSON Schema: Array types are not supported in Open Badges template schemas. Define only object and scalar fields."
         )
 }
 
@@ -2021,8 +2021,8 @@ async fn test_create_open_badges_template_rejects_non_object_profile(
 ) {
     // `profile` itself must be an object. Without checking the node's own type, a non-object
     // `profile` would carry no children to validate and slip through untouched.
-    // (`"type": "array"` never reaches this check — arrays are rejected for every template
-    // schema, see `test_create_open_badges_template_rejects_array_profile`.)
+    // (`"type": "array"` never reaches this check — arrays are rejected for every Open Badges
+    // template schema, see `test_create_open_badges_template_rejects_array_profile`.)
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -2089,7 +2089,7 @@ async fn test_create_open_badges_template_rejects_array_profile(template_id: Str
             origin: None,
         }).await
         .then_expect_error_message(
-            "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.",
+            "Invalid JSON Schema: Array types are not supported in Open Badges template schemas. Define only object and scalar fields.",
         )
 }
 
@@ -2702,80 +2702,6 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
         }])
 }
 
-// ── array-type rejection ─────────────────────────────────────────────────────
-
-#[rstest]
-#[serial_test::serial]
-#[tokio::test]
-async fn test_create_template_rejects_array_type(template_id: String) {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "tags": { "type": "array", "items": { "type": "string" } }
-        }
-    });
-
-    TemplateTestFramework::with(())
-        .given_no_previous_events()
-        .when_async(TemplateCommand::CreateNewTemplate {
-            template_id,
-            source_template_id: None,
-            title: "Test".to_string(),
-            display: Box::new(None),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            holder_type: HolderType::Individual,
-            tags: None,
-            status: Status::Draft,
-            visibility: Visibility::Private,
-            credential_expiration: None,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(Some(schema)),
-            schema_properties_attributes: None,
-            holder_authorization: Authorization::default(),
-            origin: None,
-        }).await
-        .then_expect_error_message("Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.")
-}
-
-#[rstest]
-#[serial_test::serial]
-#[tokio::test]
-async fn test_update_schema_rejects_array_type(template_id: String) {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "items": { "type": "array", "items": { "type": "string" } }
-        }
-    });
-
-    TemplateTestFramework::with(())
-        .given(vec![TemplateEvent::TemplateCreated {
-            template_id: template_id.clone(),
-            source_template_id: None,
-            title: "Test".to_string(),
-            display: Box::new(None),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            holder_type: HolderType::Individual,
-            modified_at: test_utils::modified_at(),
-            tags: None,
-            status: Status::Draft,
-            visibility: Visibility::Private,
-            credential_expiration: Expiration::default(),
-            description: None,
-            r#type: vec![],
-            schema: Box::new(None),
-            schema_properties_attributes: None,
-            holder_authorization: Authorization::default(),
-            origin: None,
-        }])
-        .when_async(TemplateCommand::UpdateSchema {
-            template_id,
-            schema,
-        }).await
-        .then_expect_error_message("Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.")
-}
-
 #[rstest]
 #[serial_test::serial]
 #[tokio::test]
@@ -2866,56 +2792,6 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             holder_authorization: Authorization::default(),
             origin: None,
         }])
-}
-
-#[rstest]
-#[serial_test::serial]
-#[tokio::test]
-async fn test_create_template_rejects_attribute_key_pointing_to_object_node(template_id: String) {
-    // The intermediate `address` node is not a leaf and must not be addressed.
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "address": {
-                "type": "object",
-                "properties": {
-                    "city": { "type": "string" }
-                }
-            }
-        }
-    });
-
-    let mut attrs = HashMap::new();
-    attrs.insert(
-        "/address".to_string(),
-        PropertyAttribute {
-            selectively_disclosable: true,
-            non_removable: false,
-            r#type: None,
-        },
-    );
-
-    TemplateTestFramework::with(())
-        .given_no_previous_events()
-        .when_async(TemplateCommand::CreateNewTemplate {
-            template_id,
-            source_template_id: None,
-            title: "Test".to_string(),
-            display: Box::new(None),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            holder_type: HolderType::Individual,
-            tags: None,
-            status: Status::Draft,
-            visibility: Visibility::Private,
-            credential_expiration: None,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(Some(schema)),
-            schema_properties_attributes: Some(attrs),
-            holder_authorization: Authorization::default(),
-            origin: None,
-        }).await
-        .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [/address]")
 }
 
 #[rstest]
@@ -3654,7 +3530,7 @@ async fn test_replace_content_emits_only_changed_fields_and_the_origin_last(temp
 })]
 #[case::blank_title(|content: &mut PublicTemplateContent| content.title = "  ".to_string())]
 #[case::invalid_schema(|content: &mut PublicTemplateContent| {
-    content.schema = Some(serde_json::json!({ "type": "object", "properties": { "tags": { "type": "array" } } }));
+    content.schema = Some(serde_json::json!({ "type": "object", "properties": { "tags": { "type": "list" } } }));
 })]
 #[case::attribute_of_no_field(|content: &mut PublicTemplateContent| {
     content.schema_properties_attributes = Some(HashMap::from([("/missing".to_string(), disclosable())]));
@@ -3765,4 +3641,231 @@ async fn replace_content_and_update_origin_deserialize_apart() {
     let command: TemplateCommand =
         serde_json::from_value(serde_json::json!({ "template_id": "copy", "origin": origin('a') })).unwrap();
     assert!(matches!(command, TemplateCommand::UpdateOrigin { .. }), "{command:?}");
+}
+
+// ── structured schemas: nested objects, lists and tables ────────────────────
+
+/// `create_command` for a template of `data_model` with `schema`.
+fn create_command_with_schema(
+    template_id: &str,
+    data_model: DataModel,
+    schema: serde_json::Value,
+    schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+) -> TemplateCommand {
+    let mut command = create_command(template_id, None, schema_properties_attributes);
+    if let TemplateCommand::CreateNewTemplate {
+        data_model: created_data_model,
+        schema: created_schema,
+        ..
+    } = &mut command
+    {
+        *created_data_model = data_model;
+        **created_schema = Some(schema);
+    }
+    command
+}
+
+fn update_schema(template_id: &str, schema: serde_json::Value) -> TemplateCommand {
+    TemplateCommand::UpdateSchema {
+        template_id: template_id.to_string(),
+        schema,
+    }
+}
+
+/// The structured schema without its property `key`.
+fn structured_schema_without(key: &str) -> serde_json::Value {
+    let mut schema = structured_schema();
+    schema["properties"].as_object_mut().unwrap().remove(key);
+    schema["required"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|required| required != key);
+    schema
+}
+
+/// A template keeps nested objects, lists and tables as they were written, with the attributes of its top-level
+/// properties: an object or an array carries one for the whole of it.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_template_with_nested_objects_lists_and_tables(template_id: String) {
+    let attributes = structured_schema_properties_attributes();
+    assert!(attributes.contains_key("/Address") && attributes.contains_key("/Completed classes"));
+
+    let template = applied(
+        events_after(vec![create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            structured_schema(),
+            Some(attributes.clone()),
+        )])
+        .await,
+    );
+
+    assert_eq!(*template.schema, Some(structured_schema()));
+    assert_eq!(template.schema_properties_attributes, Some(attributes));
+}
+
+/// Every data model but Open Badges takes arrays, on create and on a later schema update.
+#[rstest]
+#[case::w3c_vc_1_1(DataModel::W3CVcDataModelV1_1)]
+#[case::w3c_vc_2_0(DataModel::W3CVcDataModelV2_0)]
+#[case::european_learning_model(DataModel::EuropeanLearningModelV3_3)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_arrays_are_accepted_outside_open_badges(template_id: String, #[case] data_model: DataModel) {
+    let created = events_after(vec![create_command_with_schema(
+        &template_id,
+        data_model.clone(),
+        structured_schema(),
+        None,
+    )])
+    .await;
+    assert_eq!(*applied(created).schema, Some(structured_schema()));
+
+    let flat = serde_json::json!({ "type": "object", "properties": { "name": { "type": "string" } } });
+    let updated = events_after(vec![
+        create_command_with_schema(&template_id, data_model, flat, None),
+        update_schema(&template_id, structured_schema()),
+    ])
+    .await;
+    assert_eq!(event_names(&updated), vec!["TemplateCreated", "SchemaUpdated"]);
+    assert_eq!(*applied(updated).schema, Some(structured_schema()));
+}
+
+/// An attribute addresses a property: a leaf, or an object or an array as a whole.
+#[rstest]
+#[case::leaf("/Full name")]
+#[case::object("/Address")]
+#[case::leaf_in_object("/Address/Street")]
+#[case::object_in_object("/Address/Coordinates")]
+#[case::leaf_in_nested_object("/Address/Coordinates/Latitude")]
+#[case::list("/Skills")]
+#[case::list_of_objects("/Work experience")]
+#[case::table("/Completed classes")]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_attribute_key_addresses_a_property(template_id: String, #[case] key: &str) {
+    let attributes = HashMap::from([(key.to_string(), disclosable())]);
+
+    let template = applied(
+        events_after(vec![create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            structured_schema(),
+            Some(attributes.clone()),
+        )])
+        .await,
+    );
+
+    assert_eq!(template.schema_properties_attributes, Some(attributes));
+}
+
+/// What is inside an array is not addressable: a key never leads into `items`.
+#[rstest]
+#[case::property_of_list_item("/Work experience/Employer")]
+#[case::indexed_property_of_list_item("/Work experience/0/Employer")]
+#[case::column_of_table("/Completed classes/Code")]
+#[case::list_item("/Skills/0")]
+#[case::items_keyword("/Skills/items")]
+#[case::missing_property_of_object("/Address/Postcode")]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_attribute_key_must_address_a_property(template_id: String, #[case] key: &str) {
+    let command = create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        Some(HashMap::from([(key.to_string(), disclosable())])),
+    );
+
+    let error = replaced(vec![], command).await.unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "Invalid schema_properties_attributes key(s): The following keys do not match any field in \
+             schema.properties: [{key}]"
+        )
+    );
+}
+
+/// A schema update drops the attribute of an object that is gone, and keeps the one of an object whose inside
+/// changed.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_schema_prunes_attribute_of_removed_object(template_id: String) {
+    let attributes = structured_schema_properties_attributes();
+    let created = events_after(vec![create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        Some(attributes.clone()),
+    )])
+    .await;
+
+    let mut changed_inside = structured_schema();
+    changed_inside["properties"]["Address"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("Coordinates");
+    let events = replaced(created.clone(), update_schema(&template_id, changed_inside))
+        .await
+        .unwrap();
+    assert_eq!(event_names(&events), vec!["SchemaUpdated"]);
+
+    let mut events = created;
+    events.extend(
+        replaced(
+            events.clone(),
+            update_schema(&template_id, structured_schema_without("Address")),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(
+        event_names(&events),
+        vec!["TemplateCreated", "SchemaUpdated", "SchemaPropertiesAttributesUpdated"]
+    );
+    let mut expected = attributes;
+    expected.remove("/Address");
+    assert_eq!(applied(events).schema_properties_attributes, Some(expected));
+}
+
+/// A non-removable object or array has to stay in the schema, like a non-removable leaf.
+#[rstest]
+#[case::object("Address")]
+#[case::table("Completed classes")]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_schema_keeps_non_removable_object_and_array(template_id: String, #[case] key: &str) {
+    let mut created = events_after(vec![create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        Some(structured_schema_properties_attributes()),
+    )])
+    .await;
+    // Only the system sets the flag, so it is set on the event.
+    let TemplateEvent::TemplateCreated {
+        schema_properties_attributes: Some(attributes),
+        ..
+    } = &mut created[0]
+    else {
+        panic!("the template was not created with attributes");
+    };
+    attributes.get_mut(&format!("/{key}")).unwrap().non_removable = true;
+
+    let error = replaced(created, update_schema(&template_id, structured_schema_without(key)))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "Cannot remove immutable schema properties: The following non-removable properties cannot be removed from the \
+             schema: [/{key}]"
+        )
+    );
 }
