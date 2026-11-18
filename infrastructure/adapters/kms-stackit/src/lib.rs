@@ -470,6 +470,13 @@ impl KeyProviderAdapter for StackitKmsProvider {
     async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
         Ok(self.create_key(spec).await?.1)
     }
+
+    /// Returns the id that pins the newest usable version of the key labelled `label`.
+    async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
+        let key = KeyId::new(label);
+        let (found, version) = self.signing_version(&key).await?;
+        Ok(KeyId::new(format!("{}/{}", found.id, version.number)))
+    }
 }
 
 /// Builds STACKIT KMS providers that sign in with the workload identity token the host keeps in a file.
@@ -695,6 +702,17 @@ mod tests {
         let id = kms.provider().create(es256().with_label("issuer")).await.unwrap();
 
         assert_eq!(id.as_str(), "00000000-0000-0000-0000-000000000001/1");
+    }
+
+    #[tokio::test]
+    async fn adopts_a_labelled_key_by_its_newest_usable_version() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("issuer", ES256, SIGNING);
+        kms.add_version(id);
+
+        let adopted = kms.provider().adopt("issuer").await.unwrap();
+
+        assert_eq!(adopted.as_str(), format!("{id}/2"));
     }
 
     #[tokio::test]

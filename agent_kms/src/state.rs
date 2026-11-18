@@ -186,7 +186,10 @@ pub async fn test_key_provider_connection(
     provider_type: KeyProviderType,
 ) -> Result<Result<(), ConnectionError>, TestConnectionError> {
     Ok(
-        match added_provider_adapter(state, caller, provider_type, &TestKeyProviderConnection).await?.0 {
+        match added_provider_adapter(state, caller, provider_type, &TestKeyProviderConnection)
+            .await?
+            .0
+        {
             Ok(adapter) => adapter.test_connection().await,
             Err(error) => Err(error),
         },
@@ -206,7 +209,10 @@ pub async fn list_key_provider_keys(
     provider_type: KeyProviderType,
 ) -> Result<Result<ProviderKeys, ConnectionError>, TestConnectionError> {
     Ok(
-        match added_provider_adapter(state, caller, provider_type, &ListKeyProviderKeys).await?.0 {
+        match added_provider_adapter(state, caller, provider_type, &ListKeyProviderKeys)
+            .await?
+            .0
+        {
             Ok(adapter) => adapter.list_keys().await,
             Err(error) => Err(error),
         },
@@ -234,7 +240,8 @@ async fn added_provider_adapter<C: CommandOperation>(
         return Err(TestConnectionError::NotFound(provider_type));
     }
     let settings = providers.settings.shift_remove(&provider_type);
-    let adapter = adapter(state, provider_type, settings.clone()).ok_or(TestConnectionError::Unsupported(provider_type))?;
+    let adapter =
+        adapter(state, provider_type, settings.clone()).ok_or(TestConnectionError::Unsupported(provider_type))?;
     Ok((adapter, settings))
 }
 
@@ -564,7 +571,8 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
     let providers = providers(state)
         .await
         .map_err(|error| DeleteKeyError::Query(QueryHandlerError::Persistence(error)))?;
-    let adapter = key_adapter(state, &providers, &reference).ok_or(DeleteKeyError::Unsupported(reference.provider_type))??;
+    let adapter =
+        key_adapter(state, &providers, &reference).ok_or(DeleteKeyError::Unsupported(reference.provider_type))??;
 
     match adapter
         .discard(
@@ -932,6 +940,54 @@ mod tests {
         test_stackit(&state).await.unwrap();
 
         assert_eq!(factory.builds().last(), Some(&Some(stackit_settings(3))));
+    }
+
+    async fn create_stackit_key(state: &KmsState) -> (String, KeyReference) {
+        create_key(
+            state,
+            Caller::Internal,
+            KeyProviderType::StackitKms,
+            JwsAlgorithm::ES256,
+            None,
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn remove_stackit(state: &KmsState) {
+        // Bypasses the refusal to remove a provider with keys, as for providers removed before it existed.
+        change(
+            state,
+            KeyProviderCommand::RemoveKeyProvider {
+                provider_type: KeyProviderType::StackitKms,
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn a_key_signs_with_the_settings_it_was_created_with() {
+        let state = stackit_state(Arc::new(RecordingFactory::default())).await;
+        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
+        let (id, reference) = create_stackit_key(&state).await;
+        remove_stackit(&state).await;
+        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(3))).await;
+
+        let key = signing_key(&state, &id).await.unwrap().unwrap();
+
+        assert!(key.adapter.public_jwk(&reference.provider_key_id()).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_key_signs_after_its_provider_is_removed() {
+        let state = stackit_state(Arc::new(RecordingFactory::default())).await;
+        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
+        let (id, _) = create_stackit_key(&state).await;
+        remove_stackit(&state).await;
+
+        let key = signing_key(&state, &id).await.unwrap();
+
+        assert!(key.is_some());
     }
 
     #[tokio::test]

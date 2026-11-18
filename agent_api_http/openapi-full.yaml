@@ -5093,6 +5093,11 @@ components:
           $ref: '#/components/schemas/KeyProviderType'
         publicKey:
           $ref: '#/components/schemas/Jwk'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+            description: The settings the provider had when the key was recorded, which say where in the provider the key is.
+          - type: 'null'
     KeyProofMetadata:
       type: object
       description: Algorithms supported by the Credential Issuer for a key proof type.

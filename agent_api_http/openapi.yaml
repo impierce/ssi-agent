@@ -3605,6 +3605,11 @@ components:
           $ref: '#/components/schemas/KeyProviderType'
         publicKey:
           $ref: '#/components/schemas/Jwk'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+            description: The settings the provider had when the key was recorded, which say where in the provider the key is.
+          - type: 'null'
     KeyProvider:
       type: object
       description: A key provider this instance is connected to.

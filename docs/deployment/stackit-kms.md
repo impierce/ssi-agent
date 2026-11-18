@@ -111,10 +111,9 @@ Content-Type: application/json
 When it can't, the response's `message` says why, such as a missing token file, a sign-in STACKIT refused, or a key
 ring that doesn't exist in the project.
 
-> [!WARNING]
-> Don't move a provider that has keys to another project or key ring. A provider's settings can only change by removing
-> it and adding it again, and UniCore then looks up every key it created in the new key ring. Keys created in the
-> previous one stop signing, while their public keys stay in the DID document.
+Each key stays in the project and key ring it was created in, also when the provider is added again with other
+settings. A provider's settings only change by removing it and adding it again, and a provider that still has keys
+isn't removed: delete its keys with `delete-key` first.
 
 ## Keys
 
@@ -126,6 +125,8 @@ ring that doesn't exist in the project.
   and not a UUID. STACKIT doesn't keep display names unique, so UniCore only gives a label that no key in the key
   ring has, apart from deleted ones.
 - UniCore waits, up to 30 seconds, until a new key has a version that can sign before it answers.
-- Deleting a key schedules its deletion: STACKIT keeps it for 30 days, during which it can be restored in STACKIT.
-  UniCore treats it as deleted right away.
+- Deleting a key with `delete-key` schedules its deletion: STACKIT keeps it for 30 days, during which it can be
+  restored in STACKIT. UniCore treats it as deleted right away.
+- A key in the key ring that UniCore didn't record, such as one whose creation was interrupted, is recorded with
+  `adopt-key` and its label.
 - Listing a provider's keys shows the key ring's ES256 signing keys, and whether each can be used.

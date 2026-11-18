@@ -1,8 +1,8 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
 use crate::handlers::caller;
-use agent_kms::key::aggregate::KeyReference;
 use crate::v0::kms::key_providers::KeyProviderSettingsDto;
+use agent_kms::key::aggregate::KeyReference;
 use agent_kms::key_provider::aggregate::KeyProviderType;
 use agent_kms::state::{adopt_key as adopt, create_key as create, delete_key as delete, get_keys};
 use agent_kms::KmsState;
