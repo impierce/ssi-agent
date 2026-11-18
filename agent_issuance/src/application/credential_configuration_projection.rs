@@ -277,7 +277,16 @@ fn collect_claim_descriptions(
 
         // An array is one claim, also when its schema carries `properties`, which say nothing about an array.
         if !is_array_schema(property_schema) && has_nested_object_properties(property_schema) {
-            collect_claim_descriptions(property_schema, prefix_segments, &property_segments, mandatory, claims);
+            // What is inside is always there only if the property has to be an object: `null`, or any value where
+            // no type is given, satisfies the schema without it.
+            let always_present = mandatory && is_object_only_schema(property_schema);
+            collect_claim_descriptions(
+                property_schema,
+                prefix_segments,
+                &property_segments,
+                always_present,
+                claims,
+            );
             continue;
         }
 
@@ -322,6 +331,17 @@ fn has_nested_object_properties(schema: &serde_json::Value) -> bool {
 
 fn is_object_schema(schema: &serde_json::Value) -> bool {
     schema.get("type").and_then(|value| value.as_str()) == Some("object")
+}
+
+/// Whether a value of this schema has to be an object: its `type` is `"object"` and nothing else.
+fn is_object_only_schema(schema: &serde_json::Value) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(r#type)) => r#type == "object",
+        Some(serde_json::Value::Array(types)) => {
+            !types.is_empty() && types.iter().all(|r#type| r#type.as_str() == Some("object"))
+        }
+        _ => false,
+    }
 }
 
 #[async_trait]
@@ -789,6 +809,48 @@ mod tests {
             .expect("claim should exist");
 
         assert_eq!(claim.mandatory, mandatory);
+    }
+
+    /// A required property that may be something else than an object, such as `null`, need not hold what the schema
+    /// requires of an object.
+    #[rstest::rstest]
+    #[case::object(serde_json::json!("object"), true)]
+    #[case::object_in_type_list(serde_json::json!(["object"]), true)]
+    #[case::nullable_object(serde_json::json!(["object", "null"]), false)]
+    #[case::no_type(serde_json::Value::Null, false)]
+    fn test_claim_in_required_property_is_mandatory_only_in_an_object(
+        #[case] address_type: serde_json::Value,
+        #[case] mandatory: bool,
+    ) {
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "required": ["address"],
+            "properties": {
+                "address": {
+                    "type": address_type,
+                    "required": ["street"],
+                    "properties": { "street": { "type": "string" } }
+                }
+            }
+        });
+        if schema["properties"]["address"]["type"].is_null() {
+            schema["properties"]["address"].as_object_mut().unwrap().remove("type");
+        }
+
+        let template = Template {
+            template_id: "t_nullable_object".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(schema)),
+            ..Default::default()
+        };
+
+        let claims = credential_configuration_from_template(&template)
+            .credential_metadata
+            .claims
+            .expect("claims should be present");
+
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].mandatory, mandatory);
     }
 
     /// The leaves of nested objects are claims of their own; a list or a table is one claim, whatever its items hold.
