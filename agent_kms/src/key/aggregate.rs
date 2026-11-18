@@ -1,5 +1,5 @@
 use crate::key::{command::KeyCommand, error::KeyError, event::KeyEvent};
-use crate::key_provider::aggregate::KeyProviderType;
+use crate::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::{
     jose::{Jwk, JwsAlgorithm},
@@ -14,6 +14,10 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct KeyReference {
     pub provider_type: KeyProviderType,
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Object>)]
+    pub settings: Option<KeyProviderSettings>,
     /// The provider's identifier for the key, which names this key for good.
     pub provider_key_id: String,
     /// The label the key was created with, which also names it in the provider unless it is moved to another key.
@@ -31,10 +35,12 @@ impl KeyReference {
     }
 }
 
-/// A key this instance created in one of its key providers.
+/// A key this instance created or adopted in one of its key providers.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Key {
     pub reference: Option<KeyReference>,
+    #[serde(default)]
+    pub deleted: bool,
 }
 
 impl Aggregate for Key {
@@ -60,6 +66,18 @@ impl Aggregate for Key {
                 }
                 KeyEvent::KeyCreated { reference }
             }
+            KeyCommand::RecordAdoptedKey { reference } => {
+                if self.reference.is_some() {
+                    return Err(KeyError::AlreadyRecorded);
+                }
+                KeyEvent::KeyAdopted { reference }
+            }
+            KeyCommand::DeleteKey => {
+                if self.reference.is_none() || self.deleted {
+                    return Err(KeyError::NotFound);
+                }
+                KeyEvent::KeyDeleted
+            }
         };
         sink.write(event, self).await;
 
@@ -68,7 +86,8 @@ impl Aggregate for Key {
 
     fn apply(&mut self, event: Self::Event) {
         match event {
-            KeyEvent::KeyCreated { reference } => self.reference = Some(reference),
+            KeyEvent::KeyCreated { reference } | KeyEvent::KeyAdopted { reference } => self.reference = Some(reference),
+            KeyEvent::KeyDeleted => self.deleted = true,
         }
     }
 }
@@ -81,6 +100,7 @@ mod tests {
     fn reference(provider_key_id: &str) -> KeyReference {
         KeyReference {
             provider_type: KeyProviderType::InMemory,
+            settings: None,
             provider_key_id: provider_key_id.to_string(),
             label: None,
             algorithm: JwsAlgorithm::EdDSA,
@@ -103,5 +123,18 @@ mod tests {
                 reference: reference("second"),
             })
             .then_expect_error(KeyError::AlreadyRecorded);
+    }
+
+    #[test]
+    fn a_deleted_key_cannot_be_deleted_again() {
+        TestFramework::<Key>::with(())
+            .given(vec![
+                KeyEvent::KeyCreated {
+                    reference: reference("first"),
+                },
+                KeyEvent::KeyDeleted,
+            ])
+            .when(KeyCommand::DeleteKey)
+            .then_expect_error(KeyError::NotFound);
     }
 }

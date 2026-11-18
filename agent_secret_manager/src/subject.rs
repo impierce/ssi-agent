@@ -28,6 +28,8 @@ pub struct Subject {
     method_keys: Arc<Mutex<HashMap<DidUrl, MethodKey>>>,
     /// The verification methods that the configured issuer keys don't back, also those whose key isn't available.
     added_methods: Arc<Mutex<HashSet<DidUrl>>>,
+    /// Why the key of a verification method last failed to sign, until it signs again.
+    failures: Arc<Mutex<HashMap<DidUrl, String>>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
 }
@@ -98,6 +100,7 @@ impl Subject {
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
             method_keys: Arc::new(Mutex::new(HashMap::new())),
             added_methods: Arc::new(Mutex::new(HashSet::new())),
+            failures: Arc::new(Mutex::new(HashMap::new())),
             key_resolver: key_resolver(),
         }
     }
@@ -157,15 +160,34 @@ impl Subject {
         algorithm: Algorithm,
         message: &[u8],
     ) -> anyhow::Result<Vec<u8>> {
-        self.method_signer(verification_method_id, algorithm)
-            .await?
-            .sign(message)
-            .await
-            .map_err(|error| {
+        let signed = match self.method_signer(verification_method_id, algorithm).await {
+            Ok(signer) => signer.sign(message).await.map_err(|error| {
                 anyhow!(error).context(format!(
                     "The key of the verification method `{verification_method_id}` can't sign"
                 ))
-            })
+            }),
+            Err(error) => Err(error),
+        };
+
+        let mut failures = self.failures.lock().await;
+        match &signed {
+            Ok(_) => failures.remove(verification_method_id),
+            Err(error) => failures.insert(verification_method_id.clone(), format!("{error:#}")),
+        };
+        signed
+    }
+
+    /// Why the key of the verification method `verification_method_id` can't sign: it isn't available, or it failed
+    /// the last time it signed. `None` when it can sign as far as is known.
+    pub async fn signing_problem(&self, verification_method_id: &DidUrl) -> Option<String> {
+        if self.added_methods.lock().await.contains(verification_method_id)
+            && !self.method_keys.lock().await.contains_key(verification_method_id)
+        {
+            return Some(format!(
+                "The key of the verification method `{verification_method_id}` isn't available to sign with"
+            ));
+        }
+        self.failures.lock().await.get(verification_method_id).cloned()
     }
 
     /// Whether a key was inserted for the verification method `verification_method_id`.
@@ -177,6 +199,13 @@ impl Subject {
     pub async fn insert_method_key(&self, verification_method_id: DidUrl, key: MethodKey) {
         self.added_methods.lock().await.insert(verification_method_id.clone());
         self.method_keys.lock().await.insert(verification_method_id, key);
+    }
+
+    /// Replaces the keys of all verification methods at once, such as after loading them again, so that keys no longer
+    /// available stop being used.
+    pub async fn replace_method_keys(&self, keys: HashMap<DidUrl, MethodKey>) {
+        self.added_methods.lock().await.extend(keys.keys().cloned());
+        *self.method_keys.lock().await = keys;
     }
 
     /// Never signs for the verification method `verification_method_id` with a configured issuer key, as it isn't one
@@ -314,6 +343,7 @@ mod default_subject {
                 verification_method_ids,
                 method_keys: Arc::new(Mutex::new(HashMap::new())),
                 added_methods: Arc::new(Mutex::new(HashSet::new())),
+                failures: Arc::new(Mutex::new(HashMap::new())),
                 key_resolver: key_resolver(),
             }
         }

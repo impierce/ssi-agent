@@ -16,7 +16,7 @@ use agent_issuance::{
     application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
 };
 use agent_kms::{
-    adapter::{FixedAdapter, InMemoryKeyStore, KeyProviderFactories},
+    adapter::{FixedAdapter, InMemoryKeyStore, KeyProviderFactories, KeyUsage},
     key_provider::aggregate::KeyProviderType,
     kms_state,
     state::{signing_key, signing_keys, SigningKey},
@@ -108,6 +108,28 @@ impl ExternalKeySource for KmsKeys {
             .into_iter()
             .map(Self::external_key)
             .collect())
+    }
+}
+
+/// Tells the Key Management System which of its keys DID documents sign with. Holds the identity state weakly, as the
+/// identity state holds the Key Management System through [`KmsKeys`].
+struct DocumentKeys(std::sync::Weak<agent_identity::state::IdentityState>);
+
+#[async_trait::async_trait]
+impl KeyUsage for DocumentKeys {
+    async fn selected_method(
+        &self,
+        key_id: &str,
+        public_key: &identity_kit::jose::Jwk,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let Some(identity_state) = self.0.upgrade() else {
+            return Ok(None);
+        };
+        Ok(
+            agent_identity::state::selected_method_of_key(&identity_state, key_id, public_key)
+                .await?
+                .map(|method| method.to_string()),
+        )
     }
 }
 
@@ -370,6 +392,12 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         .await
         .map_err(io::Error::other)?;
     agent_identity::service::lifecycle::spawn_maintenance(&identity_state);
+    if let Some(kms_state) = &kms_state {
+        let _ = kms_state
+            .key_usage
+            .set(Arc::new(DocumentKeys(Arc::downgrade(&identity_state))));
+        agent_identity::state::spawn_signing_keys_refresh(&identity_state);
+    }
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
     Ok(ApplicationState {

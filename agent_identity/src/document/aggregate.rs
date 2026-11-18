@@ -47,6 +47,10 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     #[schema(value_type = HashMap<String, String>)]
     pub signing_methods: HashMap<Algorithm, DidUrl>,
+    /// The ID in the Key Management System of the key of each added verification method, where it was recorded.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[schema(value_type = HashMap<String, String>)]
+    pub added_keys: HashMap<DidUrl, String>,
 }
 
 impl Document {
@@ -63,6 +67,13 @@ impl Document {
         };
         self.added_verification_methods.iter_mut().for_each(moved);
         self.signing_methods.values_mut().for_each(moved);
+        self.added_keys = std::mem::take(&mut self.added_keys)
+            .into_iter()
+            .map(|(mut method, key_id)| {
+                moved(&mut method);
+                (method, key_id)
+            })
+            .collect();
     }
 }
 
@@ -203,7 +214,7 @@ impl Aggregate for Document {
 
                 Ok(events)
             }
-            AddPublicKey { public_key_jwk } => {
+            AddPublicKey { public_key_jwk, key_id } => {
                 let did_method = self.did_method.ok_or(MissingDidMethodError)?;
                 if did_method != SupportedDidMethod::Web {
                     return Err(AddPublicKeyUnsupportedError(did_method));
@@ -233,6 +244,37 @@ impl Aggregate for Document {
                     document_id: self.document_id.clone(),
                     document,
                     verification_method_id,
+                    key_id,
+                }])
+            }
+            RemovePublicKey { verification_method_id } => {
+                if !self.added_verification_methods.contains(&verification_method_id) {
+                    return Err(NotAnAddedKeyError(verification_method_id.to_string()));
+                }
+                if self
+                    .signing_methods
+                    .values()
+                    .any(|method| *method == verification_method_id)
+                {
+                    return Err(SelectedSigningKeyError(verification_method_id.to_string()));
+                }
+                let mut document = self.document.clone().ok_or(MissingDocumentError)?;
+                document.remove_verification_method(&verification_method_id);
+
+                Ok(vec![PublicKeyRemoved {
+                    document_id: self.document_id.clone(),
+                    document,
+                    verification_method_id,
+                }])
+            }
+            DeselectSigningKey { algorithm } => {
+                if !self.signing_methods.contains_key(&algorithm) {
+                    return Ok(());
+                }
+
+                Ok(vec![SigningKeyDeselected {
+                    document_id: self.document_id.clone(),
+                    algorithm,
                 }])
             }
             SelectSigningKey { verification_method_id } => {
@@ -363,10 +405,29 @@ impl Aggregate for Document {
                 document_id,
                 document,
                 verification_method_id,
+                key_id,
             } => {
                 self.document_id = document_id;
                 self.document.replace(document);
+                if let Some(key_id) = key_id {
+                    self.added_keys.insert(verification_method_id.clone(), key_id);
+                }
                 self.added_verification_methods.push(verification_method_id);
+            }
+            PublicKeyRemoved {
+                document_id,
+                document,
+                verification_method_id,
+            } => {
+                self.document_id = document_id;
+                self.document.replace(document);
+                self.added_verification_methods
+                    .retain(|method| *method != verification_method_id);
+                self.added_keys.remove(&verification_method_id);
+            }
+            SigningKeyDeselected { document_id, algorithm } => {
+                self.document_id = document_id;
+                self.signing_methods.remove(&algorithm);
             }
             SigningKeySelected {
                 document_id,
@@ -565,6 +626,7 @@ pub mod document_tests {
             document_id: document_id.to_string(),
             document: with_kms_verification_method(document),
             verification_method_id: kms_verification_method().id,
+            key_id: None,
         }
     }
 
@@ -615,6 +677,7 @@ pub mod document_tests {
             )])
             .when_async(DocumentCommand::AddPublicKey {
                 public_key_jwk: Box::new(kms_public_key()),
+                key_id: None,
             })
             .await
             .then_expect_events(vec![kms_public_key_added(&document_id, document)])
@@ -631,6 +694,7 @@ pub mod document_tests {
             ])
             .when_async(DocumentCommand::AddPublicKey {
                 public_key_jwk: Box::new(kms_public_key()),
+                key_id: None,
             })
             .await
             .then_expect_events(vec![])
@@ -644,9 +708,96 @@ pub mod document_tests {
             .given(vec![document_created(&document_id, SupportedDidMethod::Jwk, document)])
             .when_async(DocumentCommand::AddPublicKey {
                 public_key_jwk: Box::new(kms_public_key()),
+                key_id: None,
             })
             .await
             .then_expect_error_message("Only `did:web` documents can add public keys, not `did:jwk` documents")
+    }
+
+    fn kms_signing_key_selected(document_id: &str) -> DocumentEvent {
+        DocumentEvent::SigningKeySelected {
+            document_id: document_id.to_string(),
+            algorithm: Algorithm::EdDSA,
+            verification_method_id: kms_verification_method().id,
+        }
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn removes_an_added_public_key(document_id: String, document: DidDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                document_created(&document_id, SupportedDidMethod::Web, document.clone()),
+                kms_public_key_added(&document_id, document.clone()),
+            ])
+            .when_async(DocumentCommand::RemovePublicKey {
+                verification_method_id: kms_verification_method().id,
+            })
+            .await
+            .then_expect_events(vec![DocumentEvent::PublicKeyRemoved {
+                document_id,
+                document,
+                verification_method_id: kms_verification_method().id,
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn refuses_to_remove_the_selected_signing_key(document_id: String, document: DidDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                document_created(&document_id, SupportedDidMethod::Web, document.clone()),
+                kms_public_key_added(&document_id, document),
+                kms_signing_key_selected(&document_id),
+            ])
+            .when_async(DocumentCommand::RemovePublicKey {
+                verification_method_id: kms_verification_method().id,
+            })
+            .await
+            .then_expect_error_message(&format!(
+                "The verification method `{}` is the selected signing key of its algorithm. Select another key, or \
+                 deselect it with `deselect-signing-key`, before removing it",
+                kms_verification_method().id
+            ))
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn refuses_to_remove_a_configured_key(document_id: String, document: DidDocument) {
+        let configured = document.id.to_url().with_fragment("configured");
+
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![document_created(&document_id, SupportedDidMethod::Web, document)])
+            .when_async(DocumentCommand::RemovePublicKey {
+                verification_method_id: configured.clone(),
+            })
+            .await
+            .then_expect_error_message(&format!(
+                "The verification method `{configured}` is not of an added key, so it can't be removed"
+            ))
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn deselects_the_signing_key_of_an_algorithm(document_id: String, document: DidDocument) {
+        DocumentTestFramework::with(IdentityServices::default())
+            .given(vec![
+                document_created(&document_id, SupportedDidMethod::Web, document.clone()),
+                kms_public_key_added(&document_id, document),
+                kms_signing_key_selected(&document_id),
+            ])
+            .when_async(DocumentCommand::DeselectSigningKey {
+                algorithm: Algorithm::EdDSA,
+            })
+            .await
+            .then_expect_events(vec![DocumentEvent::SigningKeyDeselected {
+                document_id,
+                algorithm: Algorithm::EdDSA,
+            }])
     }
 
     #[rstest]
@@ -664,6 +815,7 @@ pub mod document_tests {
             .given(vec![document_created(&document_id, SupportedDidMethod::Web, document)])
             .when_async(DocumentCommand::AddPublicKey {
                 public_key_jwk: Box::new(public_key_jwk),
+                key_id: None,
             })
             .await
             .then_expect_error_message("The public key to add is invalid: it names no algorithm")

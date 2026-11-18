@@ -4,7 +4,7 @@
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
 use agent_kms::adapter::{
-    ConnectionError, InvalidLabel, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys,
+    ConnectionError, InvalidLabel, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys, RefusedAlgorithm,
 };
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
@@ -201,6 +201,24 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
     /// Returns the new key's ARN: a label's alias can be pointed at another key.
     async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
         Ok(self.create(spec).await?.arn)
+    }
+
+    /// Refuses Ed25519: AWS KMS signs at most 4096 bytes with it, as it must be given the whole message, which
+    /// credentials such as Open Badges with embedded images exceed.
+    fn check_algorithm(&self, algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
+        if algorithm == JwsAlgorithm::EdDSA {
+            return Err(RefusedAlgorithm(format!(
+                "AWS KMS signs at most {} bytes with Ed25519 keys, too little for credentials such as Open Badges \
+                 with embedded images. Use ES256 instead",
+                key_store::MAX_RAW_MESSAGE
+            )));
+        }
+        Ok(())
+    }
+
+    /// Returns the ARN of the key the label's alias names.
+    async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
+        self.adopt(label).await
     }
 
     /// Deletes the key by its ARN, and removes its label's alias only while the alias still names it: the alias may

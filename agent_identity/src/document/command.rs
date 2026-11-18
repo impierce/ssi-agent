@@ -28,10 +28,21 @@ pub enum DocumentCommand {
     /// documents can add keys, and the keys stay when the configured ones are updated.
     AddPublicKey {
         public_key_jwk: Box<Jwk>,
+        /// The ID of the key in the Key Management System, if it is one of its keys.
+        key_id: Option<String>,
+    },
+    /// Removes the verification method of an added key. Credentials it signed no longer verify. The selected signing
+    /// key of an algorithm can't be removed.
+    RemovePublicKey {
+        verification_method_id: DidUrl,
     },
     /// Signs with the verification method `verification_method_id` from now on, for the algorithm of its key.
     SelectSigningKey {
         verification_method_id: DidUrl,
+    },
+    /// Signs with the configured issuer key of `algorithm` again.
+    DeselectSigningKey {
+        algorithm: Algorithm,
     },
     AddService {
         service_id: String,
@@ -50,7 +61,9 @@ impl CommandOperation for DocumentCommand {
             Self::UpdateDocumentStatus { .. } => "identity.documents.status.update",
             Self::UpdatePublicKeys { .. } => "identity.documents.public_keys.update",
             Self::AddPublicKey { .. } => "identity.documents.public_keys.add",
+            Self::RemovePublicKey { .. } => "identity.documents.public_keys.remove",
             Self::SelectSigningKey { .. } => "identity.documents.signing_key.select",
+            Self::DeselectSigningKey { .. } => "identity.documents.signing_key.deselect",
             Self::AddService { .. } => "identity.documents.services.add",
             Self::RemoveService { .. } => "identity.documents.services.remove",
         }

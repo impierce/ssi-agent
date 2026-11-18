@@ -15,14 +15,16 @@ use crate::{
     service::{aggregate::Service, views::ServiceView},
 };
 use agent_secret_manager::subject::{MethodKey, StorageKey, Subject};
-use agent_shared::config::{config, config_mut, Display, SupportedDidMethod, ToggleOptions};
-use agent_shared::handlers::{authorize_command, command_handler, CommandHandlerError};
+use agent_shared::config::{
+    config, config_mut, get_all_enabled_signing_algorithms_supported, Display, SupportedDidMethod, ToggleOptions,
+};
+use agent_shared::handlers::{authorize_command, authorize_query, command_handler, CommandHandlerError};
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
     handlers::public_query_handler,
 };
 use cqrs_es::persist::PersistenceError;
-use identity_kit::{did::DidUrl, keys::KeyStore as _};
+use identity_kit::{did::DidUrl, jose::Jwk, keys::KeyStore as _};
 use itertools::iproduct;
 use jsonwebtoken::Algorithm;
 use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, Caller, QueryOperation};
@@ -31,7 +33,7 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 /// The fixed identifier for the `Profile` aggregate, which is treated as a singleton.
 ///
@@ -582,7 +584,7 @@ pub async fn initialize_documents(
         }
     }
 
-    load_external_keys(state).await?;
+    load_external_keys(state, true).await?;
     cache_verification_method_ids(state).await?;
 
     if did_web_overwritten {
@@ -758,6 +760,7 @@ pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Res
         &state.command.document,
         DocumentCommand::AddPublicKey {
             public_key_jwk: Box::new(method_key.public_key.clone()),
+            key_id: Some(key_id.to_string()),
         },
     )
     .await?;
@@ -776,14 +779,23 @@ pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Res
 /// verification method is named by the thumbprint of its key. When a key can't be loaded or no longer exists in its
 /// store, its verification method can't sign: a selected one gives way to the configured issuer key of its algorithm,
 /// and anything signing for it by name, such as a Domain Linkage Credential, fails.
-async fn load_external_keys(state: &IdentityState) -> anyhow::Result<()> {
+///
+/// All keys are replaced at once, so a key deleted meanwhile stops signing. Problems are logged as warnings at
+/// startup, and only at `debug` when the keys are loaded again periodically.
+async fn load_external_keys(state: &IdentityState, at_startup: bool) -> anyhow::Result<()> {
+    macro_rules! report {
+        ($($arg:tt)*) => {
+            if at_startup { warn!($($arg)*) } else { debug!($($arg)*) }
+        };
+    }
     let keys = match state.services.external_keys.keys().await {
         Ok(keys) => keys,
         Err(error) => {
-            warn!(%error, "The external keys could not be loaded");
+            report!(%error, "The external keys could not be loaded");
             return Ok(());
         }
     };
+    let mut method_keys = HashMap::new();
     let keys_by_thumbprint: HashMap<String, MethodKey> = keys
         .into_iter()
         .filter_map(|key| Some((key.method_key.public_key.thumbprint_sha256().ok()?, key.method_key)))
@@ -802,21 +814,207 @@ async fn load_external_keys(state: &IdentityState) -> anyhow::Result<()> {
             };
             match method_key.key_store.exists(&method_key.key_id).await {
                 Ok(true) => {
-                    state
-                        .services
-                        .subject
-                        .insert_method_key(verification_method_id.clone(), method_key.clone())
-                        .await
+                    method_keys.insert(verification_method_id.clone(), method_key.clone());
                 }
-                Ok(false) => warn!(%verification_method_id, "The key of the verification method no longer exists"),
+                Ok(false) => report!(%verification_method_id, "The key of the verification method no longer exists"),
                 Err(error) => {
-                    warn!(%verification_method_id, %error, "The key of the verification method could not be reached")
+                    report!(%verification_method_id, %error, "The key of the verification method could not be reached")
                 }
             }
         }
     }
 
+    state.services.subject.replace_method_keys(method_keys).await;
     Ok(())
+}
+
+/// How often every instance loads the external keys and the selected signing keys again. Keys added, selected or
+/// deleted through another instance take effect here within this time, and a key that couldn't be loaded is tried
+/// again.
+pub const SIGNING_KEYS_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Loads the external keys and the selected signing keys again, as at startup.
+///
+/// # Errors
+///
+/// Fails when the documents can't be loaded.
+pub async fn refresh_signing_keys(state: &IdentityState) -> anyhow::Result<()> {
+    load_external_keys(state, false).await?;
+    cache_verification_method_ids(state).await
+}
+
+/// Refreshes the signing keys every [`SIGNING_KEYS_REFRESH_INTERVAL`] until the state is dropped.
+pub fn spawn_signing_keys_refresh(state: &Arc<IdentityState>) -> tokio::task::JoinHandle<()> {
+    let state = Arc::downgrade(state);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(SIGNING_KEYS_REFRESH_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let Some(state) = state.upgrade() else { break };
+            if let Err(error) = refresh_signing_keys(&state).await {
+                warn!("Refreshing the signing keys failed: {error:#}");
+            }
+        }
+    })
+}
+
+/// The key an algorithm of the `did:web` document signs with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SigningKeyStatus {
+    pub algorithm: Algorithm,
+    /// The verification method that signs now.
+    pub verification_method_id: DidUrl,
+    /// The verification method selected to sign, when one is. It differs from the one that signs while its key isn't
+    /// available, and the configured issuer key signs instead.
+    pub selected_verification_method_id: Option<DidUrl>,
+    /// Why the selected key, or else the signing key, can't sign: it isn't available, or it failed the last time.
+    pub problem: Option<String>,
+}
+
+/// The key each algorithm of the enabled `did:web` document signs with, and any problem with it, so that another key
+/// can be selected when the selected one can't sign.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized or the documents can't be loaded.
+pub async fn get_signing_keys(state: &IdentityState, caller: Caller) -> anyhow::Result<Vec<SigningKeyStatus>> {
+    authorize_query::<DocumentView>(state.authorization_checker.as_ref(), caller, None).await?;
+    let Some(document) = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    })
+    .await?
+    .into_values()
+    .next() else {
+        return Ok(vec![]);
+    };
+
+    let subject = &state.services.subject;
+    let mut statuses = vec![];
+    for algorithm in get_all_enabled_signing_algorithms_supported() {
+        let Some(verification_method_id) = subject
+            .get_verification_method_id(StorageKey::new(SupportedDidMethod::Web, algorithm))
+            .await
+        else {
+            continue;
+        };
+        let selected_verification_method_id = document.signing_methods.get(&algorithm).cloned();
+        let problem = subject
+            .signing_problem(
+                selected_verification_method_id
+                    .as_ref()
+                    .unwrap_or(&verification_method_id),
+            )
+            .await;
+        statuses.push(SigningKeyStatus {
+            algorithm,
+            verification_method_id,
+            selected_verification_method_id,
+            problem,
+        });
+    }
+    Ok(statuses)
+}
+
+/// The verification method of an enabled document that is selected to sign and whose key is the external key
+/// `key_id`, with the public key `public_key`, if any.
+///
+/// # Errors
+///
+/// Fails when the documents can't be loaded.
+pub async fn selected_method_of_key(
+    state: &IdentityState,
+    key_id: &str,
+    public_key: &Jwk,
+) -> anyhow::Result<Option<DidUrl>> {
+    let thumbprint = public_key.thumbprint_sha256().ok();
+    Ok(
+        query_all_documents(state, |(_, document)| document.status != Status::Disabled)
+            .await?
+            .into_values()
+            .flat_map(|document| {
+                document
+                    .signing_methods
+                    .into_values()
+                    .filter(|method| {
+                        document.added_keys.get(method).map(String::as_str) == Some(key_id)
+                            || (thumbprint.is_some() && method.fragment() == thumbprint.as_deref())
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .next(),
+    )
+}
+
+#[derive(Debug, Error)]
+pub enum ChangeDocumentKeyError {
+    #[error("There is no enabled `did:web` document")]
+    DocumentNotFound,
+    #[error(transparent)]
+    Command(#[from] CommandHandlerError<DocumentError>),
+    #[error(transparent)]
+    Infrastructure(#[from] anyhow::Error),
+}
+
+/// Runs `command` on the enabled `did:web` document, then signs as the document now says.
+async fn change_signing_keys(
+    state: &IdentityState,
+    caller: Caller,
+    command: DocumentCommand,
+) -> Result<(), ChangeDocumentKeyError> {
+    let Some(document_id) = query_all_documents(state, |(_, document)| {
+        document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
+    })
+    .await?
+    .into_keys()
+    .next() else {
+        return Err(ChangeDocumentKeyError::DocumentNotFound);
+    };
+
+    command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        &document_id,
+        &state.command.document,
+        command,
+    )
+    .await?;
+
+    Ok(cache_verification_method_ids(state).await?)
+}
+
+/// Removes the verification method of an added key from the `did:web` document. Credentials it signed no longer
+/// verify.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, there is no enabled `did:web` document, the verification method isn't of
+/// an added key, or it is the selected signing key of its algorithm.
+pub async fn remove_key_from_document(
+    state: &IdentityState,
+    caller: Caller,
+    verification_method_id: DidUrl,
+) -> Result<(), ChangeDocumentKeyError> {
+    change_signing_keys(
+        state,
+        caller,
+        DocumentCommand::RemovePublicKey { verification_method_id },
+    )
+    .await
+}
+
+/// Signs with the configured issuer key of `algorithm` again in the `did:web` document.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized or there is no enabled `did:web` document.
+pub async fn deselect_signing_key(
+    state: &IdentityState,
+    caller: Caller,
+    algorithm: Algorithm,
+) -> Result<(), ChangeDocumentKeyError> {
+    change_signing_keys(state, caller, DocumentCommand::DeselectSigningKey { algorithm }).await
 }
 
 /// Constructs pairs of configured DID methods with their associated signing algorithms.
@@ -1106,6 +1304,7 @@ mod tests {
             &state,
             DocumentCommand::AddPublicKey {
                 public_key_jwk: Box::new(kms_public_key()),
+                key_id: None,
             },
         )
         .await;
@@ -1128,6 +1327,99 @@ mod tests {
             .unwrap();
 
         assert_eq!(eddsa_signing_method(&state.services.subject).await, KMS_METHOD);
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn deselecting_a_key_signs_with_the_configured_key_right_away() {
+        let state = state_with_added_key().await;
+        state
+            .services
+            .subject
+            .insert_method_key(KMS_METHOD.parse().unwrap(), method_key().await)
+            .await;
+        select_signing_key(&state, Caller::Internal, KMS_METHOD.parse().unwrap())
+            .await
+            .unwrap();
+
+        deselect_signing_key(&state, Caller::Internal, Algorithm::EdDSA)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            eddsa_signing_method(&state.services.subject).await,
+            CONFIGURED_EDDSA_METHOD
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn reports_a_selected_key_that_is_not_available() {
+        let state = state_with_added_key_from(FakeExternalKeys(None)).await;
+        handle(
+            &state,
+            DocumentCommand::SelectSigningKey {
+                verification_method_id: KMS_METHOD.parse().unwrap(),
+            },
+        )
+        .await;
+        cache_verification_method_ids(&state).await.unwrap();
+
+        let statuses = get_signing_keys(&state, Caller::Internal).await.unwrap();
+
+        let eddsa = statuses.into_iter().find(|status| status.algorithm == Algorithm::EdDSA);
+        assert_eq!(
+            eddsa,
+            Some(SigningKeyStatus {
+                algorithm: Algorithm::EdDSA,
+                verification_method_id: CONFIGURED_EDDSA_METHOD.parse().unwrap(),
+                selected_verification_method_id: Some(KMS_METHOD.parse().unwrap()),
+                problem: Some(format!(
+                    "The key of the verification method `{KMS_METHOD}` isn't available to sign with"
+                )),
+            })
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn refreshing_stops_signing_with_a_key_deleted_meanwhile() {
+        let method_key = method_key().await;
+        let state = state_with_added_key_from(FakeExternalKeys(Some(ExternalKey {
+            method_key: method_key.clone(),
+        })))
+        .await;
+        load_external_keys(&state, true).await.unwrap();
+        method_key.key_store.delete(&method_key.key_id).await.unwrap();
+
+        refresh_signing_keys(&state).await.unwrap();
+
+        assert!(
+            !state
+                .services
+                .subject
+                .has_method_key(&KMS_METHOD.parse().unwrap())
+                .await
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn finds_the_selected_verification_method_of_a_key() {
+        let state = state_with_added_key().await;
+        handle(
+            &state,
+            DocumentCommand::SelectSigningKey {
+                verification_method_id: KMS_METHOD.parse().unwrap(),
+            },
+        )
+        .await;
+
+        let method = selected_method_of_key(&state, "kms-key", &kms_public_key())
+            .await
+            .unwrap();
+
+        assert_eq!(method, Some(KMS_METHOD.parse().unwrap()));
     }
 
     #[tokio::test]
@@ -1198,7 +1490,7 @@ mod tests {
     async fn loads_the_key_of_an_added_verification_method() {
         let state = state_with_added_key().await;
 
-        load_external_keys(&state).await.unwrap();
+        load_external_keys(&state, true).await.unwrap();
 
         assert!(
             state
@@ -1218,7 +1510,7 @@ mod tests {
         key.method_key.key_store.delete(&key.method_key.key_id).await.unwrap();
         let state = state_with_added_key_from(FakeExternalKeys(Some(key))).await;
 
-        load_external_keys(&state).await.unwrap();
+        load_external_keys(&state, true).await.unwrap();
 
         assert!(
             !state
@@ -1234,7 +1526,7 @@ mod tests {
     async fn keys_that_fail_to_load_leave_the_added_verification_methods_without_a_key() {
         let state = state_with_added_key_from(FakeExternalKeys(None)).await;
 
-        load_external_keys(&state).await.unwrap();
+        load_external_keys(&state, true).await.unwrap();
 
         assert!(
             !state

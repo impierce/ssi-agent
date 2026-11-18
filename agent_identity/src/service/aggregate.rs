@@ -3,6 +3,7 @@ use crate::{
     services::{validate_linked_verifiable_presentation, IdentityServices},
     state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
 };
+use agent_secret_manager::signer::SubjectSigner;
 use chrono::{DateTime, TimeDelta, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::{
@@ -202,10 +203,9 @@ async fn issue_linked_domains(
             let algorithm =
                 Algorithm::from_str(alg).map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
 
-            let signer = subject
-                .method_signer(verification_method_id, algorithm)
-                .await
-                .map_err(|err| SigningError(err.to_string()))?;
+            // Signing through the subject records why a key failed, which the signing keys report.
+            let signer = SubjectSigner::for_method(subject.clone(), verification_method_id.clone(), algorithm)
+                .ok_or_else(|| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
             let credential = DomainLinkageCredentialBuilder::new(
                 verification_method_id.did().clone(),
                 origin,

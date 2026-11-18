@@ -332,7 +332,7 @@ Feature flags enable features that are still in development. All of them are dis
 
 Connects UniCore to external key providers, so that keys can be generated in, and sign inside, a provider instead of Stronghold. Available providers:
 
-- AWS KMS, using the AWS credentials and region of the environment UniCore runs in. AWS KMS signs at most 4096 bytes with an Ed25519 (`EdDSA`) key, so a credential whose signed form is larger, such as an Open Badge with an embedded image, can't be issued with one. ES256 keys have no such limit.
+- AWS KMS, using the AWS credentials and region of the environment UniCore runs in. Its keys are ES256 keys: AWS KMS signs at most 4096 bytes with an Ed25519 (`EdDSA`) key, too little for credentials such as Open Badges with embedded images, so such keys are refused (see [problem details](../problem-details/kms.md#key-algorithm-refused-by-provider)).
 - STACKIT KMS, in a key ring of a STACKIT project, which can be the customer's own. UniCore signs in with the
   workload identity of the environment it runs in, so no secret is entered. See [STACKIT KMS](../deployment/stackit-kms.md).
 - An in-memory provider, only available with the `development` [profile](./profiles.md).
@@ -342,6 +342,9 @@ Connects UniCore to external key providers, so that keys can be generated in, an
 | `UNICORE__STACKIT_FEDERATED_TOKEN_FILE` | `stackit_federated_token_file` | `/var/run/secrets/stackit.cloud/serviceaccount/token` |
 
 `stackit_federated_token_file` is where UniCore reads the workload identity token it signs in to STACKIT with.
+
+
+Every instance loads the KMS keys of the `did:web` document, and the keys selected to sign, again every 30 seconds. A key added, selected or deleted through another instance signs, or stops signing, there within that time, and a key that couldn't be loaded is tried again. Until then, a selected key that isn't available gives way to the configured key of its algorithm; `get-signing-keys` shows which key signs.
 
 With PostgreSQL, the KMS's tables are only created with a new database. Enabling the feature on an existing database
 needs them created by hand, until the KMS leaves development and gets an upgrade note.

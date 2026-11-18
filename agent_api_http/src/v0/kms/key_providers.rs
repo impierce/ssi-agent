@@ -7,7 +7,10 @@ use agent_kms::key_provider::{
     command::KeyProviderCommand,
     settings::{KeyProviderSettings, StackitKmsSettings, StackitRegion},
 };
-use agent_kms::state::{get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection};
+use agent_kms::state::{
+    get_key_providers, list_key_provider_keys, remove_key_provider as remove,
+    test_key_provider_connection as test_connection,
+};
 use agent_kms::KmsState;
 use axum::{
     extract::{Path, State},
@@ -218,7 +221,8 @@ pub(crate) async fn get_all_key_providers(
 
 /// Remove a key provider
 ///
-/// Disconnects this instance from a key provider. No keys are deleted at the provider.
+/// Disconnects this instance from a key provider. A provider that still has keys isn't removed: delete its keys with
+/// `delete-key` first.
 #[utoipa::path(
     post,
     path = "/remove-key-provider",
@@ -228,6 +232,7 @@ pub(crate) async fn get_all_key_providers(
     responses(
         (status = 204, description = "Key provider removed"),
         (status = 404, description = "No provider of this type has been added"),
+        (status = 409, description = "The provider still has keys"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -237,14 +242,9 @@ pub(crate) async fn remove_key_provider(
     RequestActor(actor): RequestActor,
     Json(KeyProviderTypeRequest { provider_type }): Json<KeyProviderTypeRequest>,
 ) -> Result<Response, ApiError> {
-    command_handler(
-        state.authorization_checker.clone(),
-        actor,
-        KeyProviders::ID,
-        &state.command.key_providers,
-        KeyProviderCommand::RemoveKeyProvider { provider_type },
-    )
-    .await?;
+    remove(&state, caller(actor), provider_type)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }

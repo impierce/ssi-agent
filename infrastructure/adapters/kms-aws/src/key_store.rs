@@ -27,7 +27,7 @@ use thiserror::Error;
 /// The algorithms the store signs with.
 const ALGORITHMS: [JwsAlgorithm; 2] = [JwsAlgorithm::ES256, JwsAlgorithm::EdDSA];
 /// AWS KMS signs at most this many bytes of a message it is given whole, which Ed25519 requires.
-const MAX_RAW_MESSAGE: usize = 4096;
+pub(crate) const MAX_RAW_MESSAGE: usize = 4096;
 
 /// An error reported by AWS KMS, or a request it would refuse.
 #[derive(Debug, Error)]
@@ -256,6 +256,19 @@ impl AwsKmsAmbientKeyProvider {
             name: label.map_or_else(|| arn.clone(), |(label, _)| KeyId::new(label)),
             arn,
         })
+    }
+
+    /// The ARN of the key the label `label` names.
+    pub(crate) async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
+        let alias = alias_for_label(self.deployment_alias.as_deref(), label).map_err(KeyStoreError::backend)?;
+        self.bounded(async {
+            let metadata = self
+                .metadata(&KeyId::new(alias.as_str()))
+                .await?
+                .ok_or_else(|| KeyStoreError::NotFound(KeyId::new(label)))?;
+            Ok(KeyId::new(metadata.arn().unwrap_or(metadata.key_id())))
+        })
+        .await
     }
 
     /// Deletes the key `arn` names, and removes the alias of `label` only while it still names that key. Deleting by
@@ -802,6 +815,29 @@ mod tests {
 
         assert_eq!(kms.key_states(), vec!["PendingDeletion", "Enabled"]);
         assert_eq!(kms.aliases(), vec!["alias/issuer"]);
+    }
+
+    #[tokio::test]
+    async fn refuses_ed25519_keys_for_credentials() {
+        let kms = FakeKms::start().await;
+
+        let result = agent_kms::adapter::KeyProviderAdapter::check_algorithm(&kms.provider(), JwsAlgorithm::EdDSA);
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn adopts_a_labelled_key_by_its_arn() {
+        let kms = FakeKms::start().await;
+        let store = kms.provider();
+        let created = store
+            .create(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap();
+
+        let adopted = store.adopt("issuer").await.unwrap();
+
+        assert_eq!(adopted, created.arn);
     }
 
     #[tokio::test]

@@ -3,7 +3,10 @@ use crate::extractors::RequestActor;
 use crate::handlers::query_handler;
 use agent_identity::{
     document::aggregate::Document,
-    state::{add_key, select_signing_key, IdentityState},
+    state::{
+        add_key, deselect_signing_key, get_signing_keys, remove_key_from_document, select_signing_key, IdentityState,
+        SigningKeyStatus,
+    },
 };
 use agent_shared::config::SupportedDidMethod;
 use axum::{
@@ -199,6 +202,158 @@ pub(crate) async fn post_add_key_to_document(
     }))
 }
 
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeselectSigningKeyRequest {
+    /// The algorithm whose configured key signs again.
+    #[schema(value_type = String, example = "ES256")]
+    pub algorithm: jsonwebtoken::Algorithm,
+}
+
+/// Deselect signing key
+///
+/// Signs with the configured key of the given algorithm again in your organisation's `did:web` document. Deselecting
+/// an algorithm without a selected key is a no-op.
+#[utoipa::path(
+    post,
+    path = "/deselect-signing-key",
+    operation_id = "deselect_signing_key",
+    tags = ["Identity"],
+    request_body(content = inline(DeselectSigningKeyRequest), content_type = "application/json"),
+    responses(
+        (status = 204, description = "Signing key deselected"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
+        (status = 409, description = "There is no enabled `did:web` document"),
+        (status = 422, description = "Request body does not match the expected schema"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn post_deselect_signing_key(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+    Json(DeselectSigningKeyRequest { algorithm }): Json<DeselectSigningKeyRequest>,
+) -> Result<StatusCode, ApiError> {
+    deselect_signing_key(&state, actor.map_or(Caller::Anonymous, Caller::Actor), algorithm)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveKeyFromDocumentRequest {
+    /// The verification method of an added key.
+    #[schema(value_type = String, example = "did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k")]
+    pub verification_method_id: DidUrl,
+}
+
+/// Remove key from document
+///
+/// Removes the verification method of a key added with `add-key-to-document` from your organisation's `did:web`
+/// document. Credentials it signed no longer verify. The selected signing key of an algorithm can't be removed:
+/// select another key or deselect it first.
+#[utoipa::path(
+    post,
+    path = "/remove-key-from-document",
+    operation_id = "remove_key_from_document",
+    tags = ["Identity"],
+    request_body(content = inline(RemoveKeyFromDocumentRequest), content_type = "application/json"),
+    responses(
+        (status = 204, description = "Key removed"),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
+        (status = 409, description = "The key is the selected signing key, not an added key, or there is no enabled `did:web` document"),
+        (status = 422, description = "Request body does not match the expected schema"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn post_remove_key_from_document(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+    Json(RemoveKeyFromDocumentRequest { verification_method_id }): Json<RemoveKeyFromDocumentRequest>,
+) -> Result<StatusCode, ApiError> {
+    remove_key_from_document(
+        &state,
+        actor.map_or(Caller::Anonymous, Caller::Actor),
+        verification_method_id,
+    )
+    .await
+    .map_err(IntoApiErrorExt::into_api_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The key an algorithm of your organisation's `did:web` document signs with.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(as = SigningKey)]
+pub struct SigningKeyDto {
+    #[schema(value_type = String, example = "ES256")]
+    pub algorithm: jsonwebtoken::Algorithm,
+    /// The verification method that signs now.
+    #[schema(value_type = String)]
+    pub verification_method_id: DidUrl,
+    /// The verification method selected to sign. When it differs from `verificationMethodId`, its key isn't available
+    /// and the configured key signs instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>)]
+    pub selected_verification_method_id: Option<DidUrl>,
+    /// Why the selected key, or else the signing key, can't sign: it isn't available, or it failed the last time it
+    /// signed. Selecting another key with `select-signing-key`, or the configured one with `deselect-signing-key`,
+    /// resolves it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+}
+
+/// Get signing keys
+///
+/// Lists, per algorithm, the key your organisation's `did:web` document signs with now, the key selected to sign, and
+/// why that key can't sign, if it can't.
+#[utoipa::path(
+    get,
+    path = "/get-signing-keys",
+    operation_id = "get_signing_keys",
+    tags = ["Identity"],
+    responses(
+        (status = 200, description = "The signing keys", body = [SigningKeyDto]),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Operation forbidden"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn get_signing_keys_endpoint(
+    State(state): State<Arc<IdentityState>>,
+    RequestActor(actor): RequestActor,
+) -> Result<Json<Vec<SigningKeyDto>>, ApiError> {
+    let statuses = get_signing_keys(&state, actor.map_or(Caller::Anonymous, Caller::Actor))
+        .await
+        .map_err(|error| {
+            tracing::error!("Listing the signing keys failed: {error:#}");
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        })?;
+
+    Ok(Json(
+        statuses
+            .into_iter()
+            .map(
+                |SigningKeyStatus {
+                     algorithm,
+                     verification_method_id,
+                     selected_verification_method_id,
+                     problem,
+                 }| SigningKeyDto {
+                    algorithm,
+                    verification_method_id,
+                    selected_verification_method_id,
+                    problem,
+                },
+            )
+            .collect(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,6 +449,67 @@ mod tests {
         let (status, body) = add_key_to_document(app(false).await).await;
 
         assert_eq!((status, body.is_empty()), (StatusCode::NOT_FOUND, true));
+    }
+
+    async fn get_signing_keys(app: axum::Router) -> (StatusCode, Vec<u8>) {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v0/get-signing-keys")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        (
+            status,
+            axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+    }
+
+    #[tokio::test]
+    async fn the_document_key_routes_do_not_exist_without_the_key_management_system() {
+        let responses = [
+            get_signing_keys(app(false).await).await,
+            post(app(false).await, "/v0/deselect-signing-key", r#"{"algorithm":"ES256"}"#).await,
+            post(
+                app(false).await,
+                "/v0/remove-key-from-document",
+                r#"{"verificationMethodId":"did:web:example.org#key"}"#,
+            )
+            .await,
+        ];
+
+        assert!(responses
+            .iter()
+            .all(|(status, body)| *status == StatusCode::NOT_FOUND && body.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn lists_no_signing_keys_without_a_did_web_document() {
+        let response = get_signing_keys(app(true).await).await;
+
+        assert_eq!(response, (StatusCode::OK, b"[]".to_vec()));
+    }
+
+    #[tokio::test]
+    async fn removing_a_key_without_a_did_web_document_answers_conflict() {
+        let (_, body) = post(
+            app(true).await,
+            "/v0/remove-key-from-document",
+            r#"{"verificationMethodId":"did:web:example.org#key"}"#,
+        )
+        .await;
+
+        let problem: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            problem["type"],
+            crate::error::type_url("identity#did-web-document-not-found")
+        );
     }
 
     #[tokio::test]

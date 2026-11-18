@@ -2,8 +2,9 @@ use crate::error::IntoApiErrorExt;
 use crate::extractors::RequestActor;
 use crate::handlers::caller;
 use agent_kms::key::aggregate::KeyReference;
+use crate::v0::kms::key_providers::KeyProviderSettingsDto;
 use agent_kms::key_provider::aggregate::KeyProviderType;
-use agent_kms::state::{create_key as create, get_keys};
+use agent_kms::state::{adopt_key as adopt, create_key as create, delete_key as delete, get_keys};
 use agent_kms::KmsState;
 use axum::{
     extract::State,
@@ -23,6 +24,9 @@ use std::sync::Arc;
 pub struct KeyDto {
     pub id: String,
     pub provider_type: KeyProviderType,
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<KeyProviderSettingsDto>,
     /// The provider's identifier for the key, which names this key for good.
     pub provider_key_id: String,
     /// The label the key was created with, which also names it in the provider unless it is moved to another key.
@@ -36,6 +40,7 @@ impl KeyDto {
     fn new(id: String, reference: KeyReference) -> Self {
         let KeyReference {
             provider_type,
+            settings,
             provider_key_id,
             label,
             algorithm,
@@ -44,6 +49,7 @@ impl KeyDto {
         Self {
             id,
             provider_type,
+            settings: settings.map(Into::into),
             provider_key_id,
             label,
             algorithm,
@@ -117,9 +123,85 @@ pub(crate) async fn create_key(
     Ok((StatusCode::CREATED, Json(KeyDto::new(id, reference))).into_response())
 }
 
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AdoptKeyRequest {
+    pub provider_type: KeyProviderType,
+    /// The label that names the key in the provider.
+    pub label: String,
+}
+
+/// Adopt a key
+///
+/// Records a key that exists in an added key provider under `label`, but that this instance didn't record, such as a
+/// key whose creation was interrupted after the provider created it. `create-key` answers `409` for its label.
+#[utoipa::path(
+    post,
+    path = "/adopt-key",
+    operation_id = "adopt_key",
+    tags = ["Key Management"],
+    request_body = AdoptKeyRequest,
+    responses(
+        (status = 201, description = "Key adopted", body = KeyDto),
+        (status = 400, description = "The key isn't of an algorithm keys can be created for, or the provider refuses it"),
+        (status = 404, description = "No provider of this type has been added, or no key has this label"),
+        (status = 409, description = "The key is already recorded"),
+        (status = 422, description = "Request body does not match the expected schema"),
+        (status = 502, description = "The provider could not be asked for the key"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn adopt_key(
+    State(state): State<Arc<KmsState>>,
+    RequestActor(actor): RequestActor,
+    Json(AdoptKeyRequest { provider_type, label }): Json<AdoptKeyRequest>,
+) -> Result<Response, ApiError> {
+    let (id, reference) = adopt(&state, caller(actor), provider_type, label)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
+
+    Ok((StatusCode::CREATED, Json(KeyDto::new(id, reference))).into_response())
+}
+
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteKeyRequest {
+    pub id: String,
+}
+
+/// Delete a key
+///
+/// Deletes a key from its provider, which schedules its deletion where the provider does so, and frees its label. It
+/// no longer signs. The provider doesn't need to be added anymore.
+#[utoipa::path(
+    post,
+    path = "/delete-key",
+    operation_id = "delete_key",
+    tags = ["Key Management"],
+    request_body = DeleteKeyRequest,
+    responses(
+        (status = 204, description = "Key deleted"),
+        (status = 404, description = "There is no such key"),
+        (status = 422, description = "Request body does not match the expected schema"),
+        (status = 502, description = "The provider could not delete the key"),
+    )
+)]
+#[axum_macros::debug_handler]
+pub(crate) async fn delete_key(
+    State(state): State<Arc<KmsState>>,
+    RequestActor(actor): RequestActor,
+    Json(DeleteKeyRequest { id }): Json<DeleteKeyRequest>,
+) -> Result<Response, ApiError> {
+    delete(&state, caller(actor), &id)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
+
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
 /// List all keys
 ///
-/// Lists the keys this instance created, in the order they were created.
+/// Lists the keys this instance created or adopted and didn't delete, in the order they were recorded.
 #[utoipa::path(
     get,
     path = "/get-all-keys",

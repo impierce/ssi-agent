@@ -4,7 +4,7 @@ use agent_identity::{
     document::error::DocumentError,
     profile::error::ProfileError,
     service::error::ServiceError,
-    state::{AddKeyError, SelectSigningKeyError},
+    state::{AddKeyError, ChangeDocumentKeyError, SelectSigningKeyError},
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
@@ -56,6 +56,16 @@ impl IntoApiErrorExt for DocumentError {
             VerificationMethodAlgorithmError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Unsupported Verification Method Algorithm")
                 .type_url(type_url("identity#unsupported-verification-method-algorithm"))
+                .message(self.to_string())
+                .finish(),
+            NotAnAddedKeyError(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Not An Added Key")
+                .type_url(type_url("identity#not-an-added-key"))
+                .message(self.to_string())
+                .finish(),
+            SelectedSigningKeyError(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Selected Signing Key")
+                .type_url(type_url("identity#selected-signing-key"))
                 .message(self.to_string())
                 .finish(),
             // TODO: Implement appropriate Problem Details responses
@@ -112,6 +122,23 @@ impl IntoApiErrorExt for AddKeyError {
     }
 }
 
+impl IntoApiErrorExt for ChangeDocumentKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            ChangeDocumentKeyError::DocumentNotFound => ApiError::builder(StatusCode::CONFLICT)
+                .title("No did:web Document")
+                .type_url(type_url("identity#did-web-document-not-found"))
+                .message(self.to_string())
+                .finish(),
+            ChangeDocumentKeyError::Command(error) => error.into_api_error(),
+            ChangeDocumentKeyError::Infrastructure(error) => {
+                tracing::error!("Changing the keys of a document failed: {error:#}");
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+}
+
 impl IntoApiErrorExt for ProfileError {
     fn into_api_error(self) -> ApiError {
         use ProfileError::*;
@@ -149,6 +176,11 @@ impl IntoApiErrorExt for ServiceError {
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "Presentation Invalid",
                 "presentation-invalid",
+            ),
+            ServiceError::SigningError(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Signing Key Failed",
+                "signing-key-failed",
             ),
             // TODO: Implement appropriate Problem Details responses
             _ => (
@@ -330,6 +362,11 @@ mod tests {
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Some("identity#presentation-invalid"),
             ),
+            (
+                SigningError(error()),
+                StatusCode::SERVICE_UNAVAILABLE,
+                Some("identity#signing-key-failed"),
+            ),
         ]);
 
         assert_problems(
@@ -341,7 +378,6 @@ mod tests {
                 InvalidDidError(error()),
                 DomainLinkageCredentialBuilderError(error()),
                 SerializationError(error()),
-                SigningError(error()),
                 InvalidTimestampError,
                 InvalidServiceEndpointError(error()),
                 ProduceDocumentError(error()),

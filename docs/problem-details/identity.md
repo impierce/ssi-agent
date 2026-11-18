@@ -26,3 +26,15 @@ This error occurs when an origin supplied to `add-linked-domains` or `remove-lin
 ## No Origins Given
 
 This error occurs when `add-linked-domains` or `remove-linked-domains` is called with an empty `origins` array. At least one origin is required; there is no request that links or unlinks nothing.
+
+## Signing Key Failed
+
+This error occurs when a key of your organisation's DID document can't sign, such as when its key provider can't be reached or the key was deleted from it. The message names the verification method. `get-signing-keys` shows which key each algorithm signs with and why the selected one can't; select another key with `select-signing-key`, or the configured one with `deselect-signing-key`. Domain linkage signs with every key of the document, so a key that can't sign stops it until the key is removed with `remove-key-from-document`.
+
+## Not An Added Key
+
+This error occurs when `remove-key-from-document` names a verification method that wasn't added with `add-key-to-document`, such as one of the configured keys.
+
+## Selected Signing Key
+
+This error occurs when `remove-key-from-document` names the key selected to sign for its algorithm. Removing it would leave the algorithm without the key it signs with. Select another key with `select-signing-key`, or the configured one with `deselect-signing-key`, then remove it.

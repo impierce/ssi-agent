@@ -38,6 +38,12 @@ pub enum DocumentError {
     UnknownVerificationMethodError(String),
     #[error("The key of verification method `{0}` names no supported algorithm")]
     VerificationMethodAlgorithmError(String),
+    #[error("The verification method `{0}` is not of an added key, so it can't be removed")]
+    NotAnAddedKeyError(String),
+    #[error(
+        "The verification method `{0}` is the selected signing key of its algorithm. Select another key, or deselect it with `deselect-signing-key`, before removing it"
+    )]
+    SelectedSigningKeyError(String),
 
     // did:web specific Errors
     #[error("Opaque origin not supported")]

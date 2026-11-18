@@ -1,69 +1,12 @@
 pub mod all_documents;
 
 use super::aggregate::Document;
-use cqrs_es::{EventEnvelope, View};
+use cqrs_es::{Aggregate as _, EventEnvelope, View};
 
 pub type DocumentView = Document;
 impl View<Document> for Document {
+    /// The view is the aggregate itself, so it changes as the aggregate does.
     fn update(&mut self, event: &EventEnvelope<Document>) {
-        use crate::document::event::DocumentEvent::*;
-
-        match &event.payload {
-            DocumentCreated {
-                document_id,
-                did_method,
-                document,
-                status,
-                with_fixed_algorithm: signing_algorithm,
-            } => {
-                self.document_id = document_id.clone();
-                self.did_method.replace(*did_method);
-                self.document.replace(document.clone());
-                self.status.clone_from(status);
-                self.with_fixed_algorithm.clone_from(signing_algorithm);
-            }
-            PublicKeyUpdated { document_id, document } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-            }
-            DocumentDidWebOverwritten {
-                document_id,
-                previous_did,
-                document,
-            } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-                self.move_methods_from(previous_did);
-            }
-            PublicKeyAdded {
-                document_id,
-                document,
-                verification_method_id,
-            } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-                self.added_verification_methods.push(verification_method_id.clone());
-            }
-            SigningKeySelected {
-                document_id,
-                algorithm,
-                verification_method_id,
-            } => {
-                self.document_id.clone_from(document_id);
-                self.signing_methods.insert(*algorithm, verification_method_id.clone());
-            }
-            DocumentStatusUpdated { document_id, status } => {
-                self.document_id.clone_from(document_id);
-                self.status.clone_from(status);
-            }
-            ServiceAdded { document_id, document } | ServiceRemoved { document_id, document } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-            }
-            DocumentDeleted { document_id, document } => {
-                self.document_id.clone_from(document_id);
-                self.document.replace(document.clone());
-            }
-        }
+        self.apply(event.payload.clone());
     }
 }

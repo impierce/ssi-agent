@@ -6,7 +6,7 @@ use strum::Display;
 use uuid::Uuid;
 
 /// The settings of a key provider, for the provider types that have any.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyProviderSettings {
     StackitKms(StackitKmsSettings),
@@ -24,7 +24,7 @@ impl KeyProviderSettings {
 
 /// Where STACKIT KMS keeps the keys, a key ring in the customer's project, and the service account `UniCore` acts as
 /// there.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StackitKmsSettings {
     pub project_id: Uuid,
     pub region: StackitRegion,
@@ -34,7 +34,7 @@ pub struct StackitKmsSettings {
 }
 
 /// The STACKIT regions that offer KMS.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, utoipa::ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, utoipa::ToSchema)]
 pub enum StackitRegion {
     #[serde(rename = "eu01")]
     #[strum(serialize = "eu01")]
