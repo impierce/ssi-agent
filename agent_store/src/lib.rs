@@ -15,6 +15,7 @@ pub mod mongodb;
 mod mongodb_lease;
 pub mod postgres;
 mod postgres_lease;
+pub mod replay;
 pub mod writer_lease;
 
 pub use mongodb::MongoEventSource;
@@ -115,6 +116,29 @@ where
             self.append_query(SimpleLoggingQuery)
                 .append_query(generic_query(aggregate.clone()))
                 .append_query(ListAllQuery::new(all_aggregates.clone(), all_aggregates_name)),
+            |aggregate_handler, query| aggregate_handler.append_boxed_query(query),
+        )
+    }
+
+    /// Like [`Self::with_parameters`], with both views held in memory and updated in place.
+    fn with_in_memory_views<V, AV>(
+        self,
+        aggregate: Arc<in_memory::InMemoryViewRepository<V, A>>,
+        all_aggregates: Arc<in_memory::InMemoryViewRepository<AV, A>>,
+        queries: Vec<Box<dyn Query<A>>>,
+        all_aggregates_name: &str,
+    ) -> Self
+    where
+        V: View<A> + 'static,
+        AV: View<A> + 'static,
+    {
+        queries.into_iter().fold(
+            self.append_query(SimpleLoggingQuery)
+                .append_query(in_memory::InMemoryViewQuery::new(aggregate))
+                .append_query(in_memory::InMemoryListAllQuery::new(
+                    all_aggregates,
+                    all_aggregates_name,
+                )),
             |aggregate_handler, query| aggregate_handler.append_boxed_query(query),
         )
     }

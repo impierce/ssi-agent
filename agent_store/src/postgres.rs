@@ -83,7 +83,7 @@ fn raw_stored_event(row: &sqlx::postgres::PgRow) -> RawStoredEvent {
 }
 
 impl CqrsComponentBuilder for Postgres {
-    async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+    async fn commands_and_queries<V: View<A> + Clone + 'static, A: Aggregate + 'static, AV: View<A> + Clone + 'static>(
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,

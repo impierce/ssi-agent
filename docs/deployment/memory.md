@@ -19,11 +19,15 @@ longer bursts; see [What memory grows with](#what-memory-grows-with).
   the PostgreSQL event store, a load holds the whole history of the aggregate in memory. The server config is the
   largest aggregate: each of its events carries every credential configuration, so it grows with the number of
   published templates.
-- **List views.** Lists such as all credentials or all offers are stored as one document each. Every command that
-  changes an item of that list, and every request for the list, loads the whole document, so it grows with the number
-  of credentials and offers issued.
-- **Startup.** Persisted events are verified at startup while they are read, so verification does not hold the event
-  store in memory.
+- **Views.** With the MongoDB event store, all views are held in memory and rebuilt from the events at startup (see
+  [ADR 0012](../adr/0012-in-memory-views-rebuilt-from-mongodb-events.md)), so memory grows with the number of
+  credentials, offers, templates and other items. The view collections of an existing deployment (`credential`,
+  `all_credentials`, `offer`, ...) give an estimate: their combined size (`db.<collection>.stats().size`), times the
+  overhead of the in-memory representation. With PostgreSQL, lists such as all credentials or all offers are stored as
+  one document each; every command that changes an item of that list, and every request for the list, loads the whole
+  document.
+- **Startup.** Persisted events are verified, and with MongoDB views rebuilt, while they are read, so neither holds the
+  event store in memory.
 
 The server config only gets a new event when a credential configuration actually changes: publishing, unpublishing or
 deleting a template, or changing the title, display, type, schema, schema attributes or holder authorization of a

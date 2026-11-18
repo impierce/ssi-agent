@@ -23,7 +23,12 @@ impl View<Catalog> for CatalogView {
     fn update(&mut self, event: &EventEnvelope<Catalog>) {
         use CatalogEvent::*;
 
-        self.modified_at = Utc::now();
+        // The time of the command, also when the view is rebuilt from stored events.
+        self.modified_at = event
+            .metadata
+            .get("timestamp")
+            .and_then(|timestamp| DateTime::parse_from_rfc3339(timestamp).ok())
+            .map_or_else(Utc::now, |timestamp| timestamp.with_timezone(&Utc));
 
         match &event.payload {
             CatalogCreated {

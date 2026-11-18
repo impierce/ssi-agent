@@ -1,20 +1,23 @@
 use crate::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
+use crate::in_memory::InMemoryViewRepository;
 use crate::mongodb_lease::{LeasedMongoEventRepository, MongoWriterLease};
+use crate::replay::{Replay, ReplayJob, ReplayProjection, ReplaySummary, StoredEvent};
 use crate::{writer_lease::WriterLease, AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use async_trait::async_trait;
 use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
-use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
+use mongo_es::{default_mongo_client, Client, MongoEventRepository};
 use mongodb::bson::{self, doc, Document};
 use mongodb::options::FindOptions;
+use mongodb::IndexModel;
 use shared_kernel::event_bus::{
     build_cloud_event, CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource, EventSourceStream,
     HistoryAscendingResult, Position, SourceEvent, SubscribePosition,
 };
 use shared_kernel::streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS};
 use shared_kernel::view_repository::DynViewRepository;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio_stream::StreamExt;
 
 impl<A> AggregateHandler<A, StreamingEventStore<LeasedMongoEventRepository, A>>
@@ -67,9 +70,12 @@ async fn new_event_repository(client: Client) -> MongoEventRepository {
     }
 }
 
+/// MongoDB event store. Views are held in memory and rebuilt from the events at startup
+/// ([`MongoDB::replay_views`]).
 pub struct MongoDB {
     pub client: Client,
     writer_lease: Arc<MongoWriterLease>,
+    replay_jobs: Mutex<Vec<Arc<dyn ReplayJob>>>,
 }
 
 impl MongoDB {
@@ -79,7 +85,38 @@ impl MongoDB {
         );
         let client = default_mongo_client(&connection_string).await;
         let writer_lease = MongoWriterLease::new(client.clone());
-        Self { client, writer_lease }
+        Self {
+            client,
+            writer_lease,
+            replay_jobs: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Rebuilds the views of all aggregate types built so far from the stored events, in insertion
+    /// order per aggregate type. Run before any command is executed.
+    pub async fn replay_views(&self) -> Result<ReplaySummary, EventVerificationError> {
+        let Some(database) = self.client.default_database() else {
+            return Err(EventVerificationError::MissingMongoDefaultDatabase);
+        };
+        let events = database.collection::<Document>("events");
+        events
+            .create_index(
+                IndexModel::builder()
+                    .keys(doc! { "aggregate_type": 1, "_id": 1 })
+                    .build(),
+            )
+            .await?;
+
+        let jobs = self.replay_jobs.lock().expect("replay jobs lock poisoned").clone();
+        let mut replay = Replay::new(&jobs);
+        let options = FindOptions::builder()
+            .sort(doc! { "aggregate_type": 1, "_id": 1 })
+            .build();
+        let mut cursor = events.find(doc! {}).with_options(options).await?;
+        while cursor.advance().await? {
+            replay.apply(stored_event(cursor.deserialize_current()?)?).await;
+        }
+        Ok(replay.finish())
     }
 
     /// Waits for the event-store writer lease. Events can only be appended while it is held.
@@ -141,7 +178,7 @@ impl MongoDB {
 }
 
 impl CqrsComponentBuilder for MongoDB {
-    async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+    async fn commands_and_queries<V: View<A> + Clone + 'static, A: Aggregate + 'static, AV: View<A> + Clone + 'static>(
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,
@@ -155,22 +192,62 @@ impl CqrsComponentBuilder for MongoDB {
     {
         let all_aggregates_name = format!("all_{}s", A::TYPE);
 
-        // Initialize the MongoDB repositories.
-        let aggregate: Arc<MongoViewRepository<V, A>> =
-            Arc::new(MongoViewRepository::new(A::TYPE, self.client.clone()));
-        let all_aggregates: Arc<MongoViewRepository<AV, A>> =
-            Arc::new(MongoViewRepository::new(&all_aggregates_name, self.client.clone()));
+        let aggregate: Arc<InMemoryViewRepository<V, A>> = Arc::new(InMemoryViewRepository::default());
+        let all_aggregates: Arc<InMemoryViewRepository<AV, A>> = Arc::new(InMemoryViewRepository::default());
+        self.replay_jobs
+            .lock()
+            .expect("replay jobs lock poisoned")
+            .push(Arc::new(ReplayProjection::new(
+                aggregate.clone(),
+                all_aggregates.clone(),
+                &all_aggregates_name,
+            )));
 
         (
             Arc::new(
                 AggregateHandler::new(self.client.clone(), self.writer_lease.clone(), services)
                     .await
-                    .with_parameters(aggregate.clone(), all_aggregates.clone(), queries, &all_aggregates_name),
+                    .with_in_memory_views(aggregate.clone(), all_aggregates.clone(), queries, &all_aggregates_name),
             ),
             aggregate,
             all_aggregates,
         )
     }
+}
+
+/// Reads a document of the `events` collection, as written by `mongo_es`.
+fn stored_event(document: Document) -> Result<StoredEvent, EventVerificationError> {
+    #[derive(serde::Deserialize)]
+    struct StoredEventDocument {
+        aggregate_type: String,
+        aggregate_id: String,
+        sequence: i64,
+        event_type: String,
+        event_version: String,
+        payload: serde_json::Value,
+        #[serde(default)]
+        metadata: Option<Document>,
+    }
+
+    let event: StoredEventDocument = bson::from_document(document)?;
+    let metadata = event
+        .metadata
+        .map(|metadata| {
+            metadata
+                .into_iter()
+                .filter_map(|(key, value)| value.as_str().map(|value| (key, value.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(StoredEvent {
+        aggregate_type: event.aggregate_type,
+        aggregate_id: event.aggregate_id,
+        sequence: event.sequence,
+        event_type: event.event_type,
+        event_version: event.event_version,
+        payload: event.payload,
+        metadata,
+    })
 }
 
 /// Converts a raw MongoDB BSON document from the `events` collection into a standard [`CloudEvent`].
@@ -560,6 +637,37 @@ impl EventHistoryReader for MongoEventSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stored_events_keep_their_string_metadata() {
+        let event = stored_event(doc! {
+            "aggregate_id": "catalog-1",
+            "aggregate_type": "catalog",
+            "sequence": 2_i64,
+            "event_type": "CatalogCreated",
+            "event_version": "1",
+            "payload": { "CatalogCreated": { "id": "catalog-1" } },
+            "metadata": { "timestamp": "2026-11-18T00:00:00Z", "callertype": "", "count": 1_i32 },
+        })
+        .unwrap();
+
+        assert_eq!(event.aggregate_type, "catalog");
+        assert_eq!(event.sequence, 2);
+        assert_eq!(event.payload["CatalogCreated"]["id"], "catalog-1");
+        assert_eq!(event.metadata.len(), 2);
+        assert_eq!(event.metadata["timestamp"], "2026-11-18T00:00:00Z");
+
+        let without_metadata = stored_event(doc! {
+            "aggregate_id": "catalog-1",
+            "aggregate_type": "catalog",
+            "sequence": 1_i64,
+            "event_type": "CatalogCreated",
+            "event_version": "1",
+            "payload": {},
+        })
+        .unwrap();
+        assert!(without_metadata.metadata.is_empty());
+    }
 
     #[test]
     fn test_document_to_cloud_event_with_timestamp() {
