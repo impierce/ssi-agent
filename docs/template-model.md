@@ -80,13 +80,13 @@ A typical schema looks like this:
 - Root object schemas are supported.
 - Nested object properties are supported.
 - Scalar leaf fields such as `string`, `integer`, `number`, and `boolean` are supported.
-- Arrays are supported, of scalars or of objects, at any depth. Open Badges 3.0 templates are the exception.
+- Properties may be arrays, of scalars or of objects, at any depth. Open Badges 3.0 templates are the exception. The schema itself must not be an array.
 - Standard JSON Schema keywords such as `$schema`, `format`, and `const` are accepted when the JSON Schema validator accepts them.
 - For some data models, `schema` may be omitted entirely.
 
 ### Lists and tables
 
-A list is an array, and a table is an array of objects that share their properties:
+A list is an array, and a table is an array of objects with one schema for its rows. A column is optional unless that schema lists it in `required`:
 
 ```json
 {
@@ -143,7 +143,7 @@ This field is separate because the metadata is operational policy, not structura
 
 ### What a key addresses
 
-A key addresses a property of the schema: a leaf, or an object or an array as a whole. An attribute on an object or an array is for everything inside it. UniCore conceals each top-level claim of an SD-JWT credential, so an object, a list or a table is disclosed as one.
+A key addresses a property of the schema: a leaf, or an object or an array as a whole. An attribute on an object or an array is for everything inside it. An SD-JWT credential conceals its claims one level deep (each property of `credentialSubject` in `vc+sd-jwt`, each top-level claim in `dc+sd-jwt`), so an object, a list or a table at that level is disclosed as one.
 
 With the schema of the lists and tables above, `/skills` and `/classes` are keys; `/classes/code` and `/classes/0/code` are not.
 

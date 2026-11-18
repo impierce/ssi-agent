@@ -23,23 +23,24 @@ Two rules stood in the way:
 
 ## Decision
 
-- **Arrays**: a template schema may hold arrays at any depth, of scalars or of objects, for every
-  data model except Open Badges 3.0. UniCore stores the schema as given, with the keywords it
+- **Arrays**: the properties of a template schema may be arrays at any depth, of scalars or of
+  objects, for every data model except Open Badges 3.0. The schema itself stays an object. UniCore stores the schema as given, with the keywords it
   attaches no meaning to (`examples`, an unknown `format`, ...). JSON Schema validation of the
   claims enforces `items`, `minItems`, `maxItems` and `const`.
 - **Attribute keys address properties**: a key is a JSON Pointer that walks `properties` to a leaf,
   an object or an array. An attribute on an object or an array is for the whole of it.
-- **Nothing inside an array is addressable**: a key never leads into `items`. There is no index
-  and no wildcard.
+- **Nothing inside an array is addressable**: a key never leads into `items`, nor through
+  `properties` an array schema may carry. There is no index and no wildcard.
 - **Issuer metadata**: the leaves of nested objects are claims, an array is one claim at its own
   path. This is what `credential_configuration_projection` already did.
-- **Issuance**: unchanged. UniCore conceals each top-level claim of an SD-JWT credential, so an
-  object, a list or a table is one disclosure, with everything inside it.
+- **Issuance**: unchanged. An SD-JWT credential conceals its claims one level deep: each property
+  of `credentialSubject` in `vc+sd-jwt`, each top-level claim in `dc+sd-jwt`. An object, a list or
+  a table at that level is one disclosure, with everything inside it.
 
 ## Rationale
 
-- **A group is disclosed as one today.** Concealing stops at the top-level claims. An attribute on
-  the object says what happens; attributes on its leaves describe a granularity UniCore does not
+- **A group is disclosed as one today.** Concealing stops one level into the claims. An attribute
+  for the group matches that unit; attributes on its leaves describe a granularity UniCore does not
   have.
 - **Objects and lists of objects behave alike.** An array was already a leaf to the key check, so
   `/positions` (a list of objects) would have been addressable while `/address` (one object) was
@@ -70,7 +71,7 @@ that does not exist yet.
 - A template can describe credentials with nested objects, lists and tables, and credentials are
   issued from it in every format a template gives: `jwt_vc_json` and `vc+sd-jwt`.
 - An object and a property inside it can both carry an attribute. UniCore stores both. Which one
-  governs disclosure is left open until UniCore discloses below the top-level claims.
+  governs disclosure is left open until UniCore discloses deeper than one level.
 - A schema update that removes an object or an array drops its attribute. A non-removable one
   cannot be removed, like a non-removable leaf.
 - A public offer needs every leaf fixed by `const`. A list or a table with a `const` is fixed; one

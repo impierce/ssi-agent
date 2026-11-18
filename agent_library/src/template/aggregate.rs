@@ -389,7 +389,26 @@ impl Aggregate for Template {
 fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
     jsonschema::validator_for(schema)
         .map(|_| ())
-        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))?;
+
+    // The schema describes the claims of a credential, which are an object. Arrays belong to its properties.
+    if is_array_schema(schema) {
+        return Err(TemplateError::InvalidSchema(
+            "The schema of a template describes an object and cannot be an array. \
+             Define arrays as properties of the schema."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Whether a schema node describes an array: its `type` is `"array"`, or a list of types that has it.
+pub fn is_array_schema(schema: &serde_json::Value) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(r#type)) => r#type == "array",
+        Some(serde_json::Value::Array(types)) => types.iter().any(|r#type| r#type.as_str() == Some("array")),
+        _ => false,
+    }
 }
 
 /// Validates that no property of an Open Badges template schema (at any nesting level) has `"type": "array"`.
@@ -397,14 +416,12 @@ fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError>
 /// The shape of an Open Badges credential is given by the standard, and UniCore checks the schema against it property
 /// by property. Templates of the other data models may hold arrays, see ADR 0012.
 fn validate_open_badges_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    if let Some(type_val) = schema.get("type").and_then(|t| t.as_str()) {
-        if type_val == "array" {
-            return Err(TemplateError::InvalidSchema(
-                "Array types are not supported in Open Badges template schemas. \
-                 Define only object and scalar fields."
-                    .to_string(),
-            ));
-        }
+    if is_array_schema(schema) {
+        return Err(TemplateError::InvalidSchema(
+            "Array types are not supported in Open Badges template schemas. \
+             Define only object and scalar fields."
+                .to_string(),
+        ));
     }
 
     if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
@@ -1113,7 +1130,8 @@ fn validate_expiration(expiration: &Expiration) -> Result<(), TemplateError> {
 ///
 /// - An object with defined, non-empty sub-properties is not a leaf; its descendants are collected instead.
 /// - An object without sub-properties is a leaf.
-/// - An array is a leaf, whatever its items are: paths never descend into `items`.
+/// - An array is a leaf, whatever else its schema holds: paths never descend into `items`, and `properties` say
+///   nothing about an array.
 fn collect_leaf_paths(schema: &serde_json::Value) -> std::collections::HashSet<String> {
     let mut paths = std::collections::HashSet::new();
     collect_paths_with_prefix(schema, "", false, &mut paths);
@@ -1145,10 +1163,11 @@ fn collect_paths_with_prefix(
         let escaped_key = key.replace('~', "~0").replace('/', "~1");
         let path = format!("{}/{}", prefix, escaped_key);
 
-        let has_sub_properties = value
-            .get("properties")
-            .and_then(|p| p.as_object())
-            .is_some_and(|p| !p.is_empty());
+        let has_sub_properties = !is_array_schema(value)
+            && value
+                .get("properties")
+                .and_then(|p| p.as_object())
+                .is_some_and(|p| !p.is_empty());
 
         if has_sub_properties {
             collect_paths_with_prefix(value, &path, include_objects, paths);

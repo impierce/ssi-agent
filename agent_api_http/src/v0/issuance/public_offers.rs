@@ -7,6 +7,7 @@ use agent_issuance::public_offer::error::PublicOfferError;
 use agent_issuance::state::IssuanceState;
 use agent_library::queries;
 use agent_library::state::LibraryState;
+use agent_library::template::aggregate::is_array_schema;
 use axum::Extension;
 use axum::{
     extract::State,
@@ -56,8 +57,13 @@ fn validate_leaf_is_const(prop: &Value) -> Result<(), PublicOfferError> {
 
     let obj = prop.as_object().unwrap();
 
-    // If this has nested properties, it's a container—recurse into children.
-    if let Some(nested_props) = obj.get("properties").and_then(|p| p.as_object()) {
+    // If this has nested properties, it's a container—recurse into children. An array is no container: `properties`
+    // say nothing about it, so it is fixed only by a `const` of its own.
+    if let Some(nested_props) = obj
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .filter(|_| !is_array_schema(prop))
+    {
         for (_key, nested) in nested_props {
             validate_leaf_is_const(nested)?;
         }
@@ -451,6 +457,19 @@ mod tests {
             "items": { "type": "object", "properties": { "name": { "const": "Rust" } } }
         }));
         assert!(super::validate_schema_has_only_consts(&fixed_items_only).is_err());
+
+        // `properties` say nothing about an array, so they don't make it a container of fixed values.
+        for properties in [
+            serde_json::json!({}),
+            serde_json::json!({ "label": { "const": "Rust" } }),
+        ] {
+            let open_with_properties = schema(serde_json::json!({
+                "type": "array",
+                "items": { "type": "string" },
+                "properties": properties
+            }));
+            assert!(super::validate_schema_has_only_consts(&open_with_properties).is_err());
+        }
     }
 
     fn const_only_schema() -> Value {

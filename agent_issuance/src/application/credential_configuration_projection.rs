@@ -1,7 +1,9 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
-use agent_library::template::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Template};
+use agent_library::template::aggregate::{
+    is_array_schema, DataModel, Display, HolderType, PropertyAttribute, Template,
+};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -271,7 +273,8 @@ fn collect_claim_descriptions(
         let mut property_segments = current_segments.to_vec();
         property_segments.extend(split_path_segments(property_name));
 
-        if has_nested_object_properties(property_schema) {
+        // An array is one claim, also when its schema carries `properties`, which say nothing about an array.
+        if !is_array_schema(property_schema) && has_nested_object_properties(property_schema) {
             collect_claim_descriptions(property_schema, prefix_segments, &property_segments, attributes, claims);
             continue;
         }
@@ -834,6 +837,39 @@ mod tests {
                 "credentialSubject > Full name",
                 "credentialSubject > Skills",
                 "credentialSubject > Work experience",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_array_with_properties_is_one_claim() {
+        let template = Template {
+            template_id: "t_array_properties".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "skills": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "properties": { "label": { "type": "string" } }
+                    }
+                }
+            }))),
+            ..Default::default()
+        };
+
+        let claims = credential_configuration_from_template(&template)
+            .credential_metadata
+            .claims
+            .expect("claims should be present");
+
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            claims[0].path.as_ref(),
+            &[
+                ClaimPathElement::String("credentialSubject".to_string()),
+                ClaimPathElement::String("skills".to_string()),
             ]
         );
     }

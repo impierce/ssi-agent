@@ -601,9 +601,14 @@ async fn test_create_open_badges_template_missing_required_achievement_propertie
 }
 
 #[rstest]
+#[case::array(serde_json::json!({ "type": "array" }))]
+#[case::array_in_type_list(serde_json::json!({ "type": ["array", "null"] }))]
 #[serial_test::serial]
 #[tokio::test]
-async fn test_create_open_badges_template_with_array_type_in_schema(template_id: String) {
+async fn test_create_open_badges_template_with_array_type_in_schema(
+    template_id: String,
+    #[case] tags: serde_json::Value,
+) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
         .when_async(TemplateCommand::CreateNewTemplate {
@@ -634,7 +639,7 @@ async fn test_create_open_badges_template_with_array_type_in_schema(template_id:
                                 "type": "object",
                                 "properties": {
                                     "narrative": { "type": "string" },
-                                    "tags": { "type": "array" }
+                                    "tags": tags
                                 }
                             }
                         }
@@ -3868,4 +3873,77 @@ async fn test_update_schema_keeps_non_removable_object_and_array(template_id: St
              schema: [/{key}]"
         )
     );
+}
+
+/// The schema of a template describes the claims, an object: an array is refused at its root, on create and on a
+/// schema update. An Open Badges template refuses it by its own rules, before this one.
+#[rstest]
+#[case::array(serde_json::json!({ "type": "array", "items": { "type": "string" } }))]
+#[case::array_in_type_list(serde_json::json!({ "type": ["array", "null"], "items": { "type": "string" } }))]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_schema_root_cannot_be_an_array(
+    template_id: String,
+    #[case] schema: serde_json::Value,
+    #[values(
+        DataModel::W3CVcDataModelV1_1,
+        DataModel::W3CVcDataModelV2_0,
+        DataModel::EuropeanLearningModelV3_3
+    )]
+    data_model: DataModel,
+) {
+    let message = "Invalid JSON Schema: The schema of a template describes an object and cannot be an array. Define \
+                   arrays as properties of the schema.";
+
+    let create = create_command_with_schema(&template_id, data_model, schema.clone(), None);
+    assert_eq!(replaced(vec![], create).await.unwrap_err().to_string(), message);
+
+    let created = events_after(vec![create_command(&template_id, None, None)]).await;
+    let error = replaced(created, update_schema(&template_id, schema))
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), message);
+}
+
+/// `properties` say nothing about an array, so a key can't lead through them either.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_array_with_properties_is_addressed_as_a_whole(template_id: String) {
+    let schema =
+        |skills: serde_json::Value| serde_json::json!({ "type": "object", "properties": { "Skills": skills } });
+    let object = schema(serde_json::json!({
+        "type": "object",
+        "properties": { "Label": { "type": "string" } }
+    }));
+    let array = schema(serde_json::json!({
+        "type": "array",
+        "items": { "type": "string" },
+        "properties": { "Label": { "type": "string" } }
+    }));
+    let attributes = |key: &str| Some(HashMap::from([(key.to_string(), disclosable())]));
+    let create = |schema: &serde_json::Value, key: &str| {
+        create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            schema.clone(),
+            attributes(key),
+        )
+    };
+
+    assert!(replaced(vec![], create(&array, "/Skills")).await.is_ok());
+    assert!(replaced(vec![], create(&array, "/Skills/Label")).await.is_err());
+
+    // An object that becomes such an array loses the attributes of what was inside it.
+    let mut events = events_after(vec![create(&object, "/Skills/Label")]).await;
+    events.extend(
+        replaced(events.clone(), update_schema(&template_id, array))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(
+        event_names(&events),
+        vec!["TemplateCreated", "SchemaUpdated", "SchemaPropertiesAttributesUpdated"]
+    );
+    assert_eq!(applied(events).schema_properties_attributes, None);
 }

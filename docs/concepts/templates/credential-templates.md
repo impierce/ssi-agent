@@ -131,7 +131,7 @@ The `schema` field is a **JSON Schema document** that defines the _input surface
 
 - The top-level type must always be `"object"` with a `"properties"` map.
 - The schema uses **real nested JSON Schema objects** — dotted flat keys are not supported.
-- **Arrays are allowed**, of scalars or of objects, at any nesting level: a list is an array, a table is an array of objects with the same properties. Open Badges 3.0 templates are the exception and reject `"type": "array"` at any nesting level.
+- **Arrays are allowed**, of scalars or of objects, at any nesting level: a list is an array, a table is an array of objects with one schema for its rows. Open Badges 3.0 templates are the exception and reject `"type": "array"` at any nesting level.
 - Dots in property names are allowed but have no special meaning; they are treated as literal characters.
 
 ### Canonicalization
