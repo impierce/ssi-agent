@@ -38,7 +38,7 @@ pub type CqrsComponents<A, V, AV> = (
 /// for creating the full set of components needed to interact with an aggregate,
 /// including the command handler and view repositories.
 pub trait CqrsComponentBuilder {
-    fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
+    fn commands_and_queries<V: View<A> + Clone + 'static, A: Aggregate + 'static, AV: View<A> + Clone + 'static>(
         &self,
         services: A::Services,
         queries: Vec<Box<dyn Query<A>>>,

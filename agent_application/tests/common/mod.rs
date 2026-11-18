@@ -80,6 +80,17 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     .await;
     assert_eq!(status, StatusCode::CREATED);
     let catalog_id = catalog["id"].as_str().unwrap().to_string();
+    let (status, _) = send(
+        &app,
+        Request::post("/v0/create-new-catalog")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                json!({ "display": { "name": "Newer Catalog", "description": "" } }).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
 
     // Restart: a new application state on the same event store, which waits for the writer lease.
     let restart = application_state();
@@ -122,6 +133,20 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(catalog["display"]["name"], "Persisted Catalog");
+
+    let (status, catalogs) = send(&app, Request::get("/v0/get-all-catalogs").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let names: Vec<_> = catalogs
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|catalog| catalog["display"]["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        ["Newer Catalog", "Persisted Catalog"],
+        "newest first after a restart"
+    );
 
     let (status, profile) = send(&app, Request::get("/v0/profile").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);

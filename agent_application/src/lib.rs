@@ -35,7 +35,7 @@ use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
 use std::{future::IntoFuture, sync::Arc};
 use tokio::io;
 use tower_http::cors::CorsLayer;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use verification_authorization::VerificationAuthorizationAdapter;
 
 // Re-export states
@@ -328,6 +328,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     verification_state,
                 );
                 kms_state = kms_state_if_enabled(&builder, &event_bus).await;
+                log_replay(&builder.replay_views().await.map_err(io::Error::other)?);
                 event_verification = EventVerification::MongoDb(builder);
                 states
             }
@@ -411,6 +412,27 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         writer_lease,
         readiness,
     })
+}
+
+fn log_replay(summary: &agent_store::replay::ReplaySummary) {
+    for (aggregate_type, replay) in &summary.replayed {
+        debug!(
+            aggregate_type,
+            events = replay.events,
+            aggregates = replay.aggregates,
+            rejected = replay.rejected,
+            "Views rebuilt"
+        );
+    }
+    for (aggregate_type, events) in &summary.skipped {
+        info!(aggregate_type, events, "Stored events without views skipped");
+    }
+    info!(
+        events = summary.events(),
+        rejected = summary.rejected(),
+        duration_ms = u64::try_from(summary.duration.as_millis()).unwrap_or(u64::MAX),
+        "Views rebuilt from stored events"
+    );
 }
 
 /// Builds the Key Management System, which stays hidden unless the `kms` feature flag is enabled.
