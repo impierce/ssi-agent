@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, query_handler};
 use agent_issuance::{
     credential::aggregate::CredentialExpiry,
@@ -12,7 +12,7 @@ use agent_issuance::{
 use agent_library::state::LibraryState;
 use axum::Extension;
 use axum::{
-    extract::{Json, Path, State},
+    extract::{Json, State},
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
@@ -48,10 +48,16 @@ pub struct CreateCredentialReissuanceResponse {
 #[utoipa::path(
     post,
     path = "/reissue-credential",
+    request_body = CreateCredentialReissuanceRequest,
     operation_id = "reissue_credential",
     tags = ["Issuance"],
     responses(
-        (status = 201, description = "Credential reissuance prepared successfully", body = CreateCredentialReissuanceResponse)
+        (status = 201, description = "Credential reissuance prepared successfully", body = CreateCredentialReissuanceResponse),
+        (status = 400, description = "Malformed JSON request body, the original credential has not been issued, or the credential payload or configuration does not fit the original credential"),
+        (status = 403, description = "The reissuance policy does not allow this reissuance"),
+        (status = 404, description = "Original credential or credential configuration not found"),
+        (status = 409, description = "A reissuance of the original credential already exists"),
+        (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
 #[axum_macros::debug_handler]
@@ -59,7 +65,7 @@ pub(crate) async fn credential_reissuances(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(CreateCredentialReissuanceRequest {
+    JsonBody(CreateCredentialReissuanceRequest {
         original_credential_id,
         credential_configuration_id,
         credential,
@@ -67,7 +73,7 @@ pub(crate) async fn credential_reissuances(
         reason,
         trigger_type,
         triggered_by,
-    }): Json<CreateCredentialReissuanceRequest>,
+    }): JsonBody<CreateCredentialReissuanceRequest>,
 ) -> Result<Response, ApiError> {
     let service = ReissuanceService::default();
 
@@ -135,6 +141,7 @@ pub(crate) async fn all_credential_reissuances(
     get,
     path = "/get-credential-reissuance/{id}",
     operation_id = "get_credential_reissuance",
+    params(("id" = String, Path, description = "Reissuance ID")),
     tags = ["Issuance"],
     responses(
         (status = 200, description = "Credential reissuance relation retrieved successfully", body = ReissuanceView),
@@ -145,7 +152,7 @@ pub(crate) async fn all_credential_reissuances(
 pub(crate) async fn credential_reissuance(
     State(state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Path(reissuance_id): Path<String>,
+    PathParams(reissuance_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),

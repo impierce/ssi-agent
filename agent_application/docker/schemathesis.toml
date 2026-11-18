@@ -1,0 +1,71 @@
+# Schemathesis configuration used by `scripts/fuzz-openapi.sh`. Run options (checks, phases, example
+# counts, exclusions) stay on the command line in that script; this file holds what the CLI cannot
+# express.
+
+[generation]
+# The API rejects a NUL anywhere in a request on purpose (`request#unsupported-character`): the event
+# stores cannot hold one. Generating them would only hit that guard in front of every handler.
+allow-x00 = false
+
+[output.sanitization]
+# Reproduction commands must show the request that was sent. The fuzz instance only holds throwaway
+# data and secrets.
+enabled = false
+
+[checks.positive_data_acceptance]
+# A schema-valid request can still be refused for what it refers to: a template that is not published, an identifier
+# that names no resource, a DCQL query that is not satisfiable. The API answers those with `422`, which a schema cannot
+# express. `400` stays a finding: it means the request did not match the documented schema after all.
+expected-statuses = ["2xx", "401", "403", "404", "409", "422"]
+
+# Identifiers of resources that `scripts/fuzz-seed.py` created before the run. Without them every
+# operation taking an identifier answers 404 and its handler logic is never reached.
+[dictionaries.templates]
+from-file = "/reports/seed/templates.dict"
+
+[dictionaries.catalogs]
+from-file = "/reports/seed/catalogs.dict"
+
+[dictionaries.offers]
+from-file = "/reports/seed/offers.dict"
+
+[dictionaries.credentials]
+from-file = "/reports/seed/credentials.dict"
+
+[dictionaries.authorization_requests]
+from-file = "/reports/seed/authorization_requests.dict"
+
+[dictionaries.documents]
+from-file = "/reports/seed/documents.dict"
+
+# Half of the generated values come from the dictionaries, the other half stays random so that unknown
+# and malformed identifiers are still exercised.
+[parameters]
+"body.templateId" = { dictionary = "templates", probability = 0.5 }
+"body.templateIds[*]" = { dictionary = "templates", probability = 0.5 }
+"body.sourceTemplateId" = { dictionary = "templates", probability = 0.5 }
+"body.catalogId" = { dictionary = "catalogs", probability = 0.5 }
+"body.offerId" = { dictionary = "offers", probability = 0.5 }
+"path.catalog_id" = { dictionary = "catalogs", probability = 0.5 }
+"path.authorization_request_id" = { dictionary = "authorization_requests", probability = 0.5 }
+"path.document_id" = { dictionary = "documents", probability = 0.5 }
+
+# `id`, `offer_id` and `credential_id` name different resources depending on the operation.
+[[operations]]
+include-operation-id-regex = "^(get_template_by_id|delete_template_by_id|update_template)$"
+parameters = { "path.id" = { dictionary = "templates", probability = 0.5 }, "body.id" = { dictionary = "templates", probability = 0.5 } }
+
+[[operations]]
+include-operation-id = "get_offer_by_id"
+parameters = { "path.offer_id" = { dictionary = "offers", probability = 0.5 } }
+
+[[operations]]
+include-operation-id-regex = "^(get_credential_by_id|update_credential_status)$"
+parameters = { "path.credential_id" = { dictionary = "credentials", probability = 0.5 } }
+
+# OAuth 2.0 and OpenID4VC answer well-formed requests with wrong values (an unknown code, an expired `request_uri`, an
+# unregistered client) with `400` and an error code, and finish authorization with a redirect: both are part of those
+# protocols' contracts rather than findings.
+[[operations]]
+include-tag = "Protocol"
+checks.positive_data_acceptance.expected-statuses = ["2xx", "3xx", "400", "401", "403", "404", "409", "422"]

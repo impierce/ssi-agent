@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{PathParams, QueryParams, RequestActor};
 use crate::handlers::query_handler;
 use agent_identity::{
     document::aggregate::Document,
@@ -10,7 +10,7 @@ use agent_identity::{
 };
 use agent_shared::config::SupportedDidMethod;
 use axum::{
-    extract::{Path, Query, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -23,6 +23,7 @@ use std::sync::Arc;
 use tracing::debug;
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct GetDocumentsEndpoint {
     #[serde(default)]
     pub did_method: Option<SupportedDidMethod>,
@@ -46,7 +47,7 @@ pub struct GetDocumentsEndpoint {
 pub(crate) async fn get_documents(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Query(GetDocumentsEndpoint { did_method }): Query<GetDocumentsEndpoint>,
+    QueryParams(GetDocumentsEndpoint { did_method }): QueryParams<GetDocumentsEndpoint>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
 
@@ -81,6 +82,7 @@ pub(crate) async fn get_documents(
     get,
     path = "/documents/{document_id}",
     operation_id = "get_document_by_id",
+    params(("document_id" = String, Path, description = "Document ID")),
     tags = ["Identity"],
     responses(
         (status = 200, description = "Document retrieved successfully", body = Document),
@@ -92,7 +94,7 @@ pub(crate) async fn get_documents(
 pub(crate) async fn get_document(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Path(document_id): Path<String>,
+    PathParams(document_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
