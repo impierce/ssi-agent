@@ -818,7 +818,12 @@ async fn load_external_keys(state: &IdentityState, at_startup: bool) -> anyhow::
                 }
                 Ok(false) => report!(%verification_method_id, "The key of the verification method no longer exists"),
                 Err(error) => {
-                    report!(%verification_method_id, %error, "The key of the verification method could not be reached")
+                    report!(%verification_method_id, %error, "The key of the verification method could not be reached");
+                    // A key that signed until now keeps signing: its provider may only be briefly unreachable, and a
+                    // failure to sign is reported then.
+                    if state.services.subject.has_method_key(verification_method_id).await {
+                        method_keys.insert(verification_method_id.clone(), method_key.clone());
+                    }
                 }
             }
         }
@@ -985,7 +990,7 @@ async fn change_signing_keys(
 }
 
 /// Removes the verification method of an added key from the `did:web` document. Credentials it signed no longer
-/// verify.
+/// verify. The Domain Linkage Credentials are signed again, without the removed verification method.
 ///
 /// # Errors
 ///
@@ -1001,7 +1006,9 @@ pub async fn remove_key_from_document(
         caller,
         DocumentCommand::RemovePublicKey { verification_method_id },
     )
-    .await
+    .await?;
+
+    Ok(crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?)
 }
 
 /// Signs with the configured issuer key of `algorithm` again in the `did:web` document.
@@ -1396,6 +1403,65 @@ mod tests {
 
         assert!(
             !state
+                .services
+                .subject
+                .has_method_key(&KMS_METHOD.parse().unwrap())
+                .await
+        );
+    }
+
+    /// A key store that can't be reached.
+    struct UnreachableKeyStore;
+
+    #[async_trait::async_trait]
+    impl KeyStore for UnreachableKeyStore {
+        fn capabilities(&self) -> identity_kit::keys::KeyStoreCapabilities {
+            identity_kit::keys::KeyStoreCapabilities::new([JwsAlgorithm::EdDSA]).remote()
+        }
+
+        async fn public_jwk(&self, _key: &identity_kit::keys::KeyId) -> Result<Jwk, identity_kit::keys::KeyStoreError> {
+            Err(unreachable_store())
+        }
+
+        async fn sign(
+            &self,
+            _key: &identity_kit::keys::KeyId,
+            _alg: JwsAlgorithm,
+            _data: &[u8],
+        ) -> Result<Vec<u8>, identity_kit::keys::KeyStoreError> {
+            Err(unreachable_store())
+        }
+
+        async fn exists(&self, _key: &identity_kit::keys::KeyId) -> Result<bool, identity_kit::keys::KeyStoreError> {
+            Err(unreachable_store())
+        }
+    }
+
+    fn unreachable_store() -> identity_kit::keys::KeyStoreError {
+        identity_kit::keys::KeyStoreError::backend(std::io::Error::other("connection refused"))
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn refreshing_keeps_a_key_whose_provider_is_briefly_unreachable() {
+        let mut key = method_key().await;
+        let state = state_with_added_key_from(FakeExternalKeys(Some(ExternalKey {
+            method_key: key.clone(),
+        })))
+        .await;
+        load_external_keys(&state, true).await.unwrap();
+        key.key_store = Arc::new(UnreachableKeyStore);
+        let mut services = Arc::unwrap_or_clone(state.services.clone());
+        services.external_keys = Arc::new(FakeExternalKeys(Some(ExternalKey { method_key: key })));
+
+        let state = IdentityState {
+            services: Arc::new(services),
+            ..state
+        };
+        refresh_signing_keys(&state).await.unwrap();
+
+        assert!(
+            state
                 .services
                 .subject
                 .has_method_key(&KMS_METHOD.parse().unwrap())
