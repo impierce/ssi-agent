@@ -28,11 +28,23 @@ pub enum DocumentEvent {
         document_id: String,
         document: DidDocument,
         verification_method_id: DidUrl,
+        /// The ID of the key in the Key Management System. Absent for keys added before it was recorded.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key_id: Option<String>,
+    },
+    PublicKeyRemoved {
+        document_id: String,
+        document: DidDocument,
+        verification_method_id: DidUrl,
     },
     SigningKeySelected {
         document_id: String,
         algorithm: Algorithm,
         verification_method_id: DidUrl,
+    },
+    SigningKeyDeselected {
+        document_id: String,
+        algorithm: Algorithm,
     },
     DocumentStatusUpdated {
         document_id: String,

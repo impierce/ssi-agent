@@ -1,5 +1,5 @@
 use crate::adapter::{
-    ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys, RefusedAlgorithm,
+    ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, KeyUsage, ProviderKeys, RefusedAlgorithm,
 };
 use crate::key::{
     aggregate::{Key, KeyReference},
@@ -55,6 +55,8 @@ pub struct KmsState {
     pub adapters: Arc<KeyProviderAdapters>,
     /// Whether development-only providers, such as the in-memory provider, may be used.
     pub development_providers_allowed: bool,
+    /// What signs with the keys, set once the contexts that use them exist.
+    pub key_usage: Arc<std::sync::OnceLock<Arc<dyn KeyUsage>>>,
 }
 
 #[derive(Clone)]
@@ -103,6 +105,7 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
         },
         adapters: Arc::new(adapters),
         development_providers_allowed,
+        key_usage: Arc::default(),
     }
 }
 
@@ -450,6 +453,12 @@ pub enum DeleteKeyError {
     NotFound(String),
     #[error("This instance has no adapter for `{0}` key providers")]
     Unsupported(KeyProviderType),
+    #[error(
+        "The key `{id}` is the selected signing key of the verification method `{verification_method}`. Select another key, or deselect it with `deselect-signing-key`, before deleting it"
+    )]
+    InUse { id: String, verification_method: String },
+    #[error("Whether the key `{0}` signs can't be told: {1}")]
+    Usage(String, Box<dyn std::error::Error + Send + Sync>),
     #[error(transparent)]
     KeyStore(#[from] KeyStoreError),
     #[error(transparent)]
@@ -459,11 +468,13 @@ pub enum DeleteKeyError {
 }
 
 /// Deletes the key `id` from its provider, which schedules its deletion where the provider does, and frees its label.
-/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore.
+/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore. A key
+/// selected to sign isn't deleted, so that signing doesn't break; selecting another key first is the caller's choice.
 ///
 /// # Errors
 ///
-/// Fails when the caller isn't authorized, there is no such key, or the provider can't delete it.
+/// Fails when the caller isn't authorized, there is no such key, it is selected to sign, or the provider can't delete
+/// it.
 pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<(), DeleteKeyError> {
     authorize_command(
         state.authorization_checker.as_ref(),
@@ -484,6 +495,18 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
     .filter(|key| !key.deleted)
     .and_then(|key| key.reference)
     .ok_or_else(|| DeleteKeyError::NotFound(id.to_string()))?;
+    if let Some(usage) = state.key_usage.get() {
+        if let Some(verification_method) = usage
+            .selected_method(id, &reference.public_key)
+            .await
+            .map_err(|error| DeleteKeyError::Usage(id.to_string(), error))?
+        {
+            return Err(DeleteKeyError::InUse {
+                id: id.to_string(),
+                verification_method,
+            });
+        }
+    }
     let adapter = state
         .adapters
         .get(&reference.provider_type)
@@ -865,6 +888,31 @@ mod tests {
         delete_key(&state, Caller::Internal, &id).await.unwrap();
 
         assert!(!provider.exists(&KeyId::new("issuer")).await.unwrap());
+    }
+
+    /// Every key signs for the verification method `did:web:example.org#kms`.
+    struct SelectedEverywhere;
+
+    #[async_trait]
+    impl KeyUsage for SelectedEverywhere {
+        async fn selected_method(
+            &self,
+            _key_id: &str,
+            _public_key: &Jwk,
+        ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(Some("did:web:example.org#kms".to_string()))
+        }
+    }
+
+    #[tokio::test]
+    async fn refuses_to_delete_a_key_selected_to_sign() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let _ = state.key_usage.set(Arc::new(SelectedEverywhere));
+        let (id, _) = create_labelled(&state).await.unwrap();
+
+        let result = delete_key(&state, Caller::Internal, &id).await;
+
+        assert!(matches!(result, Err(DeleteKeyError::InUse { .. })), "{result:?}");
     }
 
     #[tokio::test]

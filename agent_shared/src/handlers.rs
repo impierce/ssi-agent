@@ -72,7 +72,7 @@ where
     })
 }
 
-async fn authorize_query<V: QueryOperation>(
+pub async fn authorize_query<V: QueryOperation>(
     authorization_checker: &dyn AuthorizationChecker,
     caller: Caller,
     resource_id: Option<&str>,

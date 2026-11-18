@@ -335,6 +335,8 @@ Connects UniCore to external key providers, so that keys can be generated in, an
 - AWS KMS, using the AWS credentials and region of the environment UniCore runs in. Its keys are ES256 keys: AWS KMS signs at most 4096 bytes with an Ed25519 (`EdDSA`) key, too little for credentials such as Open Badges with embedded images, so such keys are refused (see [problem details](../problem-details/kms.md#key-algorithm-refused-by-provider)).
 - An in-memory provider, only available with the `development` [profile](./profiles.md).
 
+Every instance loads the KMS keys of the `did:web` document, and the keys selected to sign, again every 30 seconds. A key added, selected or deleted through another instance signs, or stops signing, there within that time, and a key that couldn't be loaded is tried again. Until then, a selected key that isn't available gives way to the configured key of its algorithm; `get-signing-keys` shows which key signs.
+
 With PostgreSQL, the KMS's tables are only created with a new database. Enabling the feature on an existing database
 needs them created by hand, until the KMS leaves development and gets an upgrade note.
 

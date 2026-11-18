@@ -171,6 +171,18 @@ impl IntoApiErrorExt for DeleteKeyError {
             DeleteKeyError::Query(error) => error.into_api_error(),
             DeleteKeyError::Record(error) => error.into_api_error(),
             DeleteKeyError::NotFound(_) => KeyError::NotFound.into_api_error(),
+            DeleteKeyError::InUse { .. } => ApiError::builder(StatusCode::CONFLICT)
+                .title("Key In Use")
+                .type_url(type_url("kms#key-in-use"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+            DeleteKeyError::Usage(..) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Unexpected Error")
+                .type_url(type_url("unexpected#unexpected-error"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
             DeleteKeyError::Unsupported(provider_type) => {
                 TestConnectionError::Unsupported(provider_type).into_api_error()
             }
@@ -316,10 +328,20 @@ mod tests {
 
     #[test]
     fn delete_key_errors_successfully_convert_to_problem_details() {
-        assert_problems([(
-            DeleteKeyError::NotFound("key".to_string()),
-            StatusCode::NOT_FOUND,
-            Some("kms#key-not-found"),
-        )]);
+        assert_problems([
+            (
+                DeleteKeyError::NotFound("key".to_string()),
+                StatusCode::NOT_FOUND,
+                Some("kms#key-not-found"),
+            ),
+            (
+                DeleteKeyError::InUse {
+                    id: "key".to_string(),
+                    verification_method: "did:web:example.org#kms".to_string(),
+                },
+                StatusCode::CONFLICT,
+                Some("kms#key-in-use"),
+            ),
+        ]);
     }
 }

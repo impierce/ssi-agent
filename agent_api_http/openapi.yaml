@@ -903,6 +903,39 @@ paths:
           description: Template not found
         '422':
           description: Request body does not match the expected schema
+  /v0/deselect-signing-key:
+    post:
+      tags:
+      - Identity
+      summary: Deselect signing key
+      description: |-
+        Signs with the configured key of the given algorithm again in your organisation's `did:web` document. Deselecting
+        an algorithm without a selected key is a no-op.
+      operationId: deselect_signing_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - algorithm
+              properties:
+                algorithm:
+                  type: string
+                  description: The algorithm whose configured key signs again.
+                  example: ES256
+        required: true
+      responses:
+        '204':
+          description: Signing key deselected
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: There is no enabled `did:web` document
+        '422':
+          description: Request body does not match the expected schema
   /v0/documents:
     get:
       tags:
@@ -1185,6 +1218,28 @@ paths:
           description: No provider of this type has been added
         '502':
           description: The provider could not be reached
+  /v0/get-signing-keys:
+    get:
+      tags:
+      - Identity
+      summary: Get signing keys
+      description: |-
+        Lists, per algorithm, the key your organisation's `did:web` document signs with now, the key selected to sign, and
+        why that key can't sign, if it can't.
+      operationId: get_signing_keys
+      responses:
+        '200':
+          description: The signing keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SigningKey'
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -1736,6 +1791,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
+  /v0/remove-key-from-document:
+    post:
+      tags:
+      - Identity
+      summary: Remove key from document
+      description: |-
+        Removes the verification method of a key added with `add-key-to-document` from your organisation's `did:web`
+        document. Credentials it signed no longer verify. The selected signing key of an algorithm can't be removed:
+        select another key or deselect it first.
+      operationId: remove_key_from_document
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationMethodId
+              properties:
+                verificationMethodId:
+                  type: string
+                  description: The verification method of an added key.
+                  example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+        required: true
+      responses:
+        '204':
+          description: Key removed
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: The key is the selected signing key, not an added key, or there is no enabled `did:web` document
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-key-provider:
     post:
       tags:
@@ -3179,6 +3268,13 @@ components:
       - id
       - status
       properties:
+        added_keys:
+          type: object
+          description: The ID in the Key Management System of the key of each added verification method, where it was recorded.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
         added_verification_methods:
           type: array
           items:
@@ -4240,6 +4336,34 @@ components:
       - $ref: '#/components/schemas/Jwt'
       - $ref: '#/components/schemas/SdJwt'
       description: 'A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.'
+    SigningKey:
+      type: object
+      description: The key an algorithm of your organisation's `did:web` document signs with.
+      required:
+      - algorithm
+      - verificationMethodId
+      properties:
+        algorithm:
+          type: string
+          example: ES256
+        problem:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Why the selected key, or else the signing key, can't sign: it isn't available, or it failed the last time it
+            signed. Selecting another key with `select-signing-key`, or the configured one with `deselect-signing-key`,
+            resolves it.
+        selectedVerificationMethodId:
+          type:
+          - string
+          - 'null'
+          description: |-
+            The verification method selected to sign. When it differs from `verificationMethodId`, its key isn't available
+            and the configured key signs instead.
+        verificationMethodId:
+          type: string
+          description: The verification method that signs now.
     Source:
       type: string
       enum:

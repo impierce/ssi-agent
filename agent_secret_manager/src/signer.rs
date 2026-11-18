@@ -8,7 +8,7 @@ use identity_kit::{
 use jsonwebtoken::Algorithm;
 use std::{str::FromStr, sync::Arc};
 
-/// Signs with the [`Subject`]'s key for one DID method and algorithm, as IdentityKit's [`Signer`].
+/// Signs with the [`Subject`]'s key for one verification method, as IdentityKit's [`Signer`].
 pub struct SubjectSigner {
     subject: Arc<Subject>,
     algorithm: Algorithm,
@@ -23,15 +23,22 @@ impl SubjectSigner {
     /// A signer for the key `subject` holds for `did_method` and `algorithm`, with the key's verification method as
     /// `kid`. `None` if `algorithm` is neither `EdDSA` nor `ES256`, or if `subject` has no such key.
     pub async fn new(subject: Arc<Subject>, did_method: impl Into<String>, algorithm: Algorithm) -> Option<Self> {
+        let did_method = SupportedDidMethod::from_str(&did_method.into()).ok()?;
+        let verification_method_id = subject
+            .get_verification_method_id(StorageKey::new(did_method, algorithm))
+            .await?;
+
+        Self::for_method(subject, verification_method_id, algorithm)
+    }
+
+    /// A signer for the verification method `verification_method_id`, as `kid`, with its key for `algorithm`. `None` if
+    /// `algorithm` is neither `EdDSA` nor `ES256`.
+    pub fn for_method(subject: Arc<Subject>, verification_method_id: DidUrl, algorithm: Algorithm) -> Option<Self> {
         let alg = match algorithm {
             Algorithm::EdDSA => JwsAlgorithm::EdDSA,
             Algorithm::ES256 => JwsAlgorithm::ES256,
             _ => return None,
         };
-        let did_method = SupportedDidMethod::from_str(&did_method.into()).ok()?;
-        let verification_method_id = subject
-            .get_verification_method_id(StorageKey::new(did_method, algorithm))
-            .await?;
 
         Some(Self {
             subject,

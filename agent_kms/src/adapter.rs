@@ -26,6 +26,17 @@ pub struct InvalidLabel(pub String);
 #[error("{0}")]
 pub struct RefusedAlgorithm(pub String);
 
+/// What signs with the keys of this instance, outside the Key Management System, such as DID documents.
+#[async_trait]
+pub trait KeyUsage: Send + Sync {
+    /// The verification method selected to sign with the key `key_id`, whose public key is `public_key`, if any.
+    async fn selected_method(
+        &self,
+        key_id: &str,
+        public_key: &identity_kit::jose::Jwk,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
+}
+
 /// A key that exists in a key provider, as reported by the provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]

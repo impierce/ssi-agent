@@ -38,6 +38,10 @@ This error occurs when the provider fails a request that should have worked. The
 
 This error occurs when `create-key` is called with a label that already names a key in the provider. A retried request whose first attempt created the key gets this error instead of a second key. When this instance never recorded that key, such as when its creation was interrupted, record it with `adopt-key`.
 
+## Key In Use
+
+This error occurs when `delete-key` names a key that a DID document has selected to sign with. Deleting it would stop that document from signing. Select another key with `select-signing-key`, or go back to the configured key with `deselect-signing-key`, then delete it.
+
 ## Key Already Recorded
 
 This error occurs when `adopt-key` names a key that this instance has already recorded.

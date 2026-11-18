@@ -16,7 +16,10 @@ use axum::{
 use connections::{
     accept_connection_changes, get_connection, get_connections, post_connection, remove_connection, sync_connection,
 };
-use documents::{get_document, get_documents, post_add_key_to_document, post_select_signing_key};
+use documents::{
+    get_document, get_documents, get_signing_keys_endpoint, post_add_key_to_document, post_deselect_signing_key,
+    post_remove_key_from_document, post_select_signing_key,
+};
 use services::{
     linked_domains::{add_linked_domains, remove_linked_domains, verify_linked_domains},
     linked_vp::{
@@ -75,6 +78,9 @@ pub fn kms_router(identity_state: Arc<IdentityState>) -> Router {
             API_VERSION,
             Router::new()
                 .route("/add-key-to-document", post(post_add_key_to_document))
+                .route("/deselect-signing-key", post(post_deselect_signing_key))
+                .route("/get-signing-keys", get(get_signing_keys_endpoint))
+                .route("/remove-key-from-document", post(post_remove_key_from_document))
                 .route("/select-signing-key", post(post_select_signing_key)),
         )
         .with_state(identity_state)
