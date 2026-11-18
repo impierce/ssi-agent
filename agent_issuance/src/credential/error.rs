@@ -22,4 +22,6 @@ pub enum CredentialError {
     InvalidIssuerDidError,
     #[error("Failed to get a key identifier for signing the credential")]
     KeyIdError,
+    #[error("The key proof does not belong to the intended holder of the credential")]
+    RecipientMismatchError,
 }
