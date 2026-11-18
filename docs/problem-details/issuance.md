@@ -110,7 +110,7 @@ credential does not expire.
 
 ## Missing Credential Offer
 
-This error occurs when UniCore cannot locate a Credential Offer for the provided `offerId`. It typically indicates that an operation is being attempted on a Credential Offer that has not been created or is otherwise unavailable.
+This error occurs when UniCore cannot locate a Credential Offer for the provided `offerId`. It typically indicates that an operation is being attempted on a Credential Offer that has not been created or is otherwise unavailable. Returned with status `404 Not Found`.
 
 ### Resolution
 

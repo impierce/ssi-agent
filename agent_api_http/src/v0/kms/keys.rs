@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::caller;
 use crate::v0::kms::key_providers::KeyProviderSettingsDto;
 use agent_kms::key::aggregate::KeyReference;
@@ -110,11 +110,11 @@ impl From<CreateKeyAlgorithm> for JwsAlgorithm {
 pub(crate) async fn create_key(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(CreateKeyRequest {
+    JsonBody(CreateKeyRequest {
         provider_type,
         algorithm,
         label,
-    }): Json<CreateKeyRequest>,
+    }): JsonBody<CreateKeyRequest>,
 ) -> Result<Response, ApiError> {
     let (id, reference) = create(&state, caller(actor), provider_type, algorithm.into(), label)
         .await
@@ -154,7 +154,7 @@ pub struct AdoptKeyRequest {
 pub(crate) async fn adopt_key(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(AdoptKeyRequest { provider_type, label }): Json<AdoptKeyRequest>,
+    JsonBody(AdoptKeyRequest { provider_type, label }): JsonBody<AdoptKeyRequest>,
 ) -> Result<Response, ApiError> {
     let (id, reference) = adopt(&state, caller(actor), provider_type, label)
         .await
@@ -190,7 +190,7 @@ pub struct DeleteKeyRequest {
 pub(crate) async fn delete_key(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    Json(DeleteKeyRequest { id }): Json<DeleteKeyRequest>,
+    JsonBody(DeleteKeyRequest { id }): JsonBody<DeleteKeyRequest>,
 ) -> Result<Response, ApiError> {
     delete(&state, caller(actor), &id)
         .await

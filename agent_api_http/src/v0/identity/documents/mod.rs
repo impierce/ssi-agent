@@ -1,5 +1,5 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, QueryParams, RequestActor};
 use crate::handlers::query_handler;
 use agent_identity::{
     document::aggregate::Document,
@@ -10,7 +10,7 @@ use agent_identity::{
 };
 use agent_shared::config::SupportedDidMethod;
 use axum::{
-    extract::{Path, Query, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -23,6 +23,7 @@ use std::sync::Arc;
 use tracing::debug;
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct GetDocumentsEndpoint {
     #[serde(default)]
     pub did_method: Option<SupportedDidMethod>,
@@ -46,7 +47,7 @@ pub struct GetDocumentsEndpoint {
 pub(crate) async fn get_documents(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Query(GetDocumentsEndpoint { did_method }): Query<GetDocumentsEndpoint>,
+    QueryParams(GetDocumentsEndpoint { did_method }): QueryParams<GetDocumentsEndpoint>,
 ) -> Result<Response, ApiError> {
     debug!("Request Params - did_method: {did_method:?}");
 
@@ -81,6 +82,7 @@ pub(crate) async fn get_documents(
     get,
     path = "/documents/{document_id}",
     operation_id = "get_document_by_id",
+    params(("document_id" = String, Path, description = "Document ID")),
     tags = ["Identity"],
     responses(
         (status = 200, description = "Document retrieved successfully", body = Document),
@@ -92,7 +94,7 @@ pub(crate) async fn get_documents(
 pub(crate) async fn get_document(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Path(document_id): Path<String>,
+    PathParams(document_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
@@ -138,7 +140,7 @@ pub struct SelectSigningKeyRequest {
 pub(crate) async fn post_select_signing_key(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(SelectSigningKeyRequest { verification_method_id }): Json<SelectSigningKeyRequest>,
+    JsonBody(SelectSigningKeyRequest { verification_method_id }): JsonBody<SelectSigningKeyRequest>,
 ) -> Result<StatusCode, ApiError> {
     select_signing_key(
         &state,
@@ -191,7 +193,7 @@ pub struct AddKeyToDocumentResponse {
 pub(crate) async fn post_add_key_to_document(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(AddKeyToDocumentRequest { key_id }): Json<AddKeyToDocumentRequest>,
+    JsonBody(AddKeyToDocumentRequest { key_id }): JsonBody<AddKeyToDocumentRequest>,
 ) -> Result<Json<AddKeyToDocumentResponse>, ApiError> {
     let verification_method_id = add_key(&state, actor.map_or(Caller::Anonymous, Caller::Actor), &key_id)
         .await
@@ -232,7 +234,7 @@ pub struct DeselectSigningKeyRequest {
 pub(crate) async fn post_deselect_signing_key(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(DeselectSigningKeyRequest { algorithm }): Json<DeselectSigningKeyRequest>,
+    JsonBody(DeselectSigningKeyRequest { algorithm }): JsonBody<DeselectSigningKeyRequest>,
 ) -> Result<StatusCode, ApiError> {
     deselect_signing_key(&state, actor.map_or(Caller::Anonymous, Caller::Actor), algorithm)
         .await
@@ -272,7 +274,7 @@ pub struct RemoveKeyFromDocumentRequest {
 pub(crate) async fn post_remove_key_from_document(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(RemoveKeyFromDocumentRequest { verification_method_id }): Json<RemoveKeyFromDocumentRequest>,
+    JsonBody(RemoveKeyFromDocumentRequest { verification_method_id }): JsonBody<RemoveKeyFromDocumentRequest>,
 ) -> Result<StatusCode, ApiError> {
     remove_key_from_document(
         &state,

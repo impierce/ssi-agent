@@ -292,7 +292,10 @@ mod tests {
 
         let (_, error) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
 
-        assert!(error.as_str().unwrap().contains("missing field `keyRingId`"), "{error}");
+        assert!(
+            error["detail"].as_str().unwrap().contains("missing field `keyRingId`"),
+            "{error}"
+        );
     }
 
     #[tokio::test]

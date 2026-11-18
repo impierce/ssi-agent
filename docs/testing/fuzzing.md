@@ -35,22 +35,26 @@ report the intended design. Everything else is in scope:
 ```
 
 The script builds the agent image, starts it against a throwaway Postgres via
-`agent_application/docker/compose.fuzz.yaml`, waits for `/readyz`, runs Schemathesis inside the same
-compose network, and tears everything down. It needs Docker and nothing else — no local Python or
-Schemathesis installation.
+`agent_application/docker/compose.fuzz.yaml`, seeds it with resources (see below), runs Schemathesis
+inside the same compose network, and tears everything down. It needs Docker and nothing else — no
+local Python or Schemathesis installation.
 
-The stack uses its own compose project name and publishes the agent on port `3099` rather than
-`3033`, so a run never disturbs a local development instance.
+The stack uses its own compose project name and publishes no port, so a run never disturbs a local
+development instance.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `FUZZ_SPEC` | `published` | `published` fuzzes `openapi.yaml`; `full` fuzzes `openapi-full.yaml`, which adds the standardized protocol endpoints |
-| `FUZZ_MAX_EXAMPLES` | `50` | Test cases generated per operation |
+| `FUZZ_COMMAND` | `run` | `run` executes the examples, coverage, fuzzing and stateful phases once per operation; `fuzz` generates multi-step operation sequences until `FUZZ_MAX_TIME` |
+| `FUZZ_MAX_EXAMPLES` | `50` | Test cases generated per operation (`run` only) |
+| `FUZZ_MAX_TIME` | _(none)_ | Time budget in seconds; with `run`, the fuzzing and stateful phases repeat until it is spent. Required for `fuzz` |
 | `FUZZ_SEED` | _(none)_ | Reproduce an earlier run |
 | `FUZZ_KEEP_UP` | `0` | Leave the stack running afterwards for inspection |
 | `FUZZ_EXTRA_ARGS` | _(none)_ | Extra Schemathesis flags, e.g. `--include-path /v0/credentials` |
-| `UNICORE_FUZZ_PORT` | `3099` | Host port the agent is published on |
-| `SCHEMATHESIS_VERSION` | `4.9.4` | Pinned Schemathesis image tag |
+| `FUZZ_READY_TIMEOUT` | `120` | Seconds to wait for `/readyz` before seeding |
+| `FUZZ_TRAFFIC_REPORTS` | `1`, or `0` with `FUZZ_MAX_TIME` | Write `traffic.har` and `events.ndjson`; they record every request, several gigabytes in a 30-minute run |
+| `FUZZ_AGENT_LOG_LEVEL` | `warn` | `RUST_LOG` of the agent, whose output is saved to `reports/fuzz/agent.log` |
+| `SCHEMATHESIS_VERSION` | `v4.33.1` | Pinned `schemathesis/schemathesis` image tag |
 
 To narrow a run down to one operation while fixing a finding:
 
@@ -58,9 +62,18 @@ To narrow a run down to one operation while fixing a finding:
 FUZZ_SEED=12345 FUZZ_EXTRA_ARGS="--include-path /v0/create-new-template" ./scripts/fuzz-openapi.sh
 ```
 
+For an in-depth run, give it time instead of examples:
+
+```bash
+FUZZ_MAX_TIME=3600 FUZZ_MAX_EXAMPLES=500 ./scripts/fuzz-openapi.sh
+FUZZ_COMMAND=fuzz FUZZ_MAX_TIME=3600 ./scripts/fuzz-openapi.sh
+```
+
 Reports land in `reports/fuzz/` (gitignored): `junit.xml` for the summary, `traffic.har` for the
-exact requests and responses, `events.ndjson` for the raw event stream. Schemathesis prints a
-reproducing `curl` command for every finding, and the run's seed, so any failure can be replayed.
+exact requests and responses, `events.ndjson` for the raw event stream, `agent.log` for the agent's
+warnings and errors (`FUZZ_AGENT_LOG_LEVEL`, default `warn`), and `seed/` for the seeded identifiers. Schemathesis prints a reproducing `curl` command for every finding, and the run's seed,
+so any failure can be replayed. Output sanitization is off, so the reproductions show the request
+that was actually sent.
 
 To render the same Markdown breakdown CI produces:
 
@@ -68,19 +81,55 @@ To render the same Markdown breakdown CI produces:
 python3 scripts/fuzz-summary.py reports/fuzz/junit.xml
 ```
 
+## Seeded resources
+
+Most operations take the identifier of an existing resource. Without any, they answer `404` and their
+handler logic is never reached. Before fuzzing, `scripts/fuzz-seed.py` creates a few published
+templates (some with constant values only, as public offers require), catalogs, offers, credentials,
+public offers, authorization requests and an in-memory key provider, and writes their identifiers,
+together with the DID documents created at startup, to `reports/fuzz/seed/`.
+`agent_application/docker/schemathesis.toml` binds the identifier parameters (`templateId`,
+`catalogId`, `offerId`, `catalog_id`, ...) to these dictionaries with a probability of 0.5, so half of
+the generated values refer to resources that exist and the other half stays random.
+
+Holder credentials, holder offers, presentations, connections and reissuances are not seeded: they
+need a remote issuer, wallet or agent.
+
+## Configuration
+
+`agent_application/docker/schemathesis.toml` holds what the command line cannot express:
+
+- The dictionaries above.
+- No `NUL` characters: the API rejects them in front of every handler on purpose
+  (`request#unsupported-character`), because the event stores cannot hold them.
+- No output sanitization: the fuzz instance only holds throwaway data and secrets.
+- `422` counts as an accepted answer to a schema-valid request (`positive_data_acceptance`): a request
+  can match the schema and still refer to a template that is not published or a resource that does
+  not exist, which the API answers with `422`. A `400` for schema-valid input stays a finding.
+- On the protocol endpoints (tag `Protocol`), `400` and redirects count as accepted too: OAuth 2.0 and
+  OpenID4VC answer well-formed requests with wrong values (an unknown code, an expired `request_uri`)
+  with `400` and an error code, and finish authorization with a redirect.
+
+`agent_application/docker/schemathesis_hooks.py` replaces the JSON deserializer so that compact JWT
+responses (`application/jwt`), which Schemathesis counts as JSON, are checked as text. It is loaded through
+`SCHEMATHESIS_HOOKS`.
+
+`agent_application/docker/fuzz.config.yaml` enables every switch that hides documented operations
+(`serve_openapi_enabled`, `feature.kms`), every DID method and signing algorithm that works without a
+remote service, and disables both event publishers.
+
 ## Hermeticity
 
-A fuzzer sends arbitrary data to every operation it is given, including operations that would
-normally reach third parties. Two measures keep a run self-contained:
+A fuzzer sends arbitrary data to every operation, including URLs and domains that would make the
+agent call third parties: credential-issuer metadata (`POST /v0/connections`), linked domain
+verification, sending offers to a `targetUrl`, resolving `did:web`. The compose project therefore runs
+on an internal Docker network without a route to the outside. Every operation is fuzzed, and outbound
+calls fail at the network boundary instead of reaching whatever host the generated input names. For
+the same reason, readiness checks and seeding run from the Schemathesis container inside that network,
+and no port is published.
 
-- `agent_application/docker/fuzz.config.yaml` disables both event publishers and the `did:web`
-  method, so nothing leaves the compose project through configuration.
-- The runner excludes the three operations that reach out regardless of configuration:
-  `GET /v0/verify-linked-domains` (resolves each linked origin's DID configuration and does a CNAME
-  lookup), `POST /v0/connections` (fetches credential-issuer metadata from the supplied URL), and
-  `POST /v0/connections/sync-connection` (fetches state from the remote agent). With
-  `FUZZ_SPEC=full`, it also excludes `GET /credential_offer`, which fetches the offer from
-  `credential_offer_uri` and the issuer's metadata.
+`agent_application/docker/fuzz.config.yaml` also disables both event publishers and the `did:web`
+method, so a run does not depend on them.
 
 ## Published or full specification
 
@@ -101,6 +150,6 @@ testing explores different inputs on every run, so a failure is a finding to tri
 verdict on whichever commit happened to trigger it — gating pull requests on it would produce flakes
 and, soon after, a disabled workflow.
 
-Trigger a run from the Actions tab; `spec`, `max_examples`, `seed`, and `extra_args` are exposed as
-inputs.
+Trigger a run from the Actions tab; `spec`, `command`, `max_examples`, `max_time`, `seed`, and
+`extra_args` are exposed as inputs.
 Findings appear in the job summary, with the full reports attached as a `fuzz-reports` artifact.

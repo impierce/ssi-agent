@@ -1,12 +1,13 @@
+use crate::extractors::JsonBody;
+use crate::extractors::PathParams;
 use crate::{error::IntoApiErrorExt, extractors::RequestActor, v0::openapi::PROTOCOL_TAG};
 use agent_identity::{
     service::{command::ServiceCommand, lifecycle},
     state::IdentityState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
-    Json,
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
@@ -43,7 +44,7 @@ pub struct LinkedVerifiablePresentationsRequest {
 pub(crate) async fn add_linked_verifiable_presentations(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(LinkedVerifiablePresentationsRequest { presentation_ids }): Json<LinkedVerifiablePresentationsRequest>,
+    JsonBody(LinkedVerifiablePresentationsRequest { presentation_ids }): JsonBody<LinkedVerifiablePresentationsRequest>,
 ) -> Result<StatusCode, ApiError> {
     lifecycle::execute(
         &state,
@@ -80,7 +81,7 @@ pub(crate) async fn add_linked_verifiable_presentations(
 pub(crate) async fn remove_linked_verifiable_presentations(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(LinkedVerifiablePresentationsRequest { presentation_ids }): Json<LinkedVerifiablePresentationsRequest>,
+    JsonBody(LinkedVerifiablePresentationsRequest { presentation_ids }): JsonBody<LinkedVerifiablePresentationsRequest>,
 ) -> Result<StatusCode, ApiError> {
     lifecycle::execute(
         &state,
@@ -113,7 +114,7 @@ pub(crate) async fn remove_linked_verifiable_presentations(
 )]
 pub(crate) async fn get_linked_verifiable_presentation_by_id(
     State(state): State<Arc<IdentityState>>,
-    Path(presentation_id): Path<String>,
+    PathParams(presentation_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     match lifecycle::published_linked_verifiable_presentation(&state, &presentation_id)
         .await
