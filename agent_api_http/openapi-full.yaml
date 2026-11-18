@@ -728,6 +728,38 @@ paths:
           description: Catalog not found
         '422':
           description: Request body does not match the expected schema
+  /v0/adopt-key:
+    post:
+      tags:
+      - Key Management
+      summary: Adopt a key
+      description: |-
+        Records a key that exists in an added key provider under `label`, but that this instance didn't record, such as a
+        key whose creation was interrupted after the provider created it. `create-key` answers `409` for its label.
+      operationId: adopt_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdoptKeyRequest'
+        required: true
+      responses:
+        '201':
+          description: Key adopted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: The key isn't of an algorithm keys can be created for, or the provider refuses it
+        '404':
+          description: No provider of this type has been added, or no key has this label
+        '409':
+          description: The key is already recorded
+        '422':
+          description: Request body does not match the expected schema
+        '502':
+          description: The provider could not be asked for the key
   /v0/authorization_requests:
     get:
       tags:
@@ -1286,6 +1318,30 @@ paths:
           description: Catalog not found
         '422':
           description: Request body does not match the expected schema
+  /v0/delete-key:
+    post:
+      tags:
+      - Key Management
+      summary: Delete a key
+      description: |-
+        Deletes a key from its provider, which schedules its deletion where the provider does so, and frees its label. It
+        no longer signs. The provider doesn't need to be added anymore.
+      operationId: delete_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteKeyRequest'
+        required: true
+      responses:
+        '204':
+          description: Key deleted
+        '404':
+          description: There is no such key
+        '422':
+          description: Request body does not match the expected schema
+        '502':
+          description: The provider could not delete the key
   /v0/delete-public-offer:
     post:
       tags:
@@ -1514,7 +1570,7 @@ paths:
       tags:
       - Key Management
       summary: List all keys
-      description: Lists the keys this instance created, in the order they were created.
+      description: Lists the keys this instance created or adopted and didn't delete, in the order they were recorded.
       operationId: get_all_keys
       responses:
         '200':
@@ -2168,7 +2224,9 @@ paths:
       tags:
       - Key Management
       summary: Remove a key provider
-      description: Disconnects this instance from a key provider. No keys are deleted at the provider.
+      description: |-
+        Disconnects this instance from a key provider. A provider that still has keys isn't removed: delete its keys with
+        `delete-key` first.
       operationId: remove_key_provider
       requestBody:
         content:
@@ -2181,6 +2239,8 @@ paths:
           description: Key provider removed
         '404':
           description: No provider of this type has been added
+        '409':
+          description: The provider still has keys
         '422':
           description: Request body does not match the expected schema
   /v0/remove-linked-domains:
@@ -2563,6 +2623,17 @@ components:
           items:
             type: string
           default: []
+    AdoptKeyRequest:
+      type: object
+      required:
+      - providerType
+      - label
+      properties:
+        label:
+          type: string
+          description: The label that names the key in the provider.
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     AlgIdentifier:
       oneOf:
       - type: string
@@ -4188,6 +4259,13 @@ components:
         catalogId:
           type: string
           default: ''
+    DeleteKeyRequest:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
     DeletePublicOfferRequest:
       type: object
       required:

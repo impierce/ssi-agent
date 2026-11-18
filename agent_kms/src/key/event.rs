@@ -6,6 +6,8 @@ use strum::Display;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Display)]
 pub enum KeyEvent {
     KeyCreated { reference: KeyReference },
+    KeyAdopted { reference: KeyReference },
+    KeyDeleted,
 }
 
 impl DomainEvent for KeyEvent {
