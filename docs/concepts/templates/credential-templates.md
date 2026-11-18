@@ -125,7 +125,7 @@ The `schema` field is a **JSON Schema document** that defines the _input surface
 
 1. **Input validation** — UniCore validates every unsigned issuance request against the template schema before issuing the credential. Requests that do not conform are rejected.
 2. **Client-side validation** — API consumers and frontends can use the schema directly with any standard JSON Schema library to validate data before sending it to the server.
-3. **Claim projection** — the schema's leaf fields determine which claims appear in the issued credential's claim set and are eligible for selective disclosure.
+3. **Claim projection** — the schema's leaf fields determine which claims appear in the issued credential's claim set and are eligible for selective disclosure. The issuer metadata announces a claim as `mandatory` when the schema requires it: its property, and every object above it, is listed in `required`.
 
 ### Shape Rules
 

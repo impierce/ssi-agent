@@ -32,7 +32,8 @@ Two rules stood in the way:
 - **Nothing inside an array is addressable**: a key never leads into `items`, nor through
   `properties` an array schema may carry. There is no index and no wildcard.
 - **Issuer metadata**: the leaves of nested objects are claims, an array is one claim at its own
-  path. This is what `credential_configuration_projection` already did.
+  path. This is what `credential_configuration_projection` already did. A claim is `mandatory`
+  when the schema requires it at every level down to it; attributes play no part in that.
 - **Issuance**: unchanged. An SD-JWT credential conceals its claims one level deep: each property
   of `credentialSubject` in `vc+sd-jwt`, each top-level claim of its own in `dc+sd-jwt` (registered
   claims such as `vct` stay in the clear). An object, a list or a table at that level is one
