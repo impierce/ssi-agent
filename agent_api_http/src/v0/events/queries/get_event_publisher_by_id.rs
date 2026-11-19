@@ -1,13 +1,9 @@
 use crate::{
     error::type_url,
-    extractors::RequestActor,
+    extractors::{PathParams, RequestActor},
     v0::events::{config::EventPublisherConfigDto, EventsState},
 };
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Json};
 use bc_event_publishing::{
     application::{
         query::EventPublishingQuery,
@@ -103,7 +99,7 @@ impl TryFrom<EventPublishingView> for EventPublisherDto {
 )]
 pub async fn get_event_publisher_by_id(
     State(state): State<Arc<EventsState>>,
-    Path(id): Path<String>,
+    PathParams(id): PathParams<String>,
     RequestActor(actor): RequestActor,
 ) -> Result<Json<EventPublisherDto>, ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);

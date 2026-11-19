@@ -1,6 +1,6 @@
+use crate::extractors::QueryParams;
 use agent_shared::config::config;
 use axum::{
-    extract::Query,
     response::{IntoResponse, Response},
     Json,
 };
@@ -10,6 +10,7 @@ use utoipa::OpenApi;
 
 /// Controls whether the response includes all configuration values or only values explicitly provisioned at startup.
 #[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct ConfigurationQuery {
     pub provisioned: Option<bool>,
 }
@@ -30,7 +31,9 @@ pub struct ConfigurationQuery {
         (status = 400, description = "Invalid query parameter"),
     )
 )]
-pub async fn configuration(Query(ConfigurationQuery { provisioned }): Query<ConfigurationQuery>) -> Response {
+pub async fn configuration(
+    QueryParams(ConfigurationQuery { provisioned }): QueryParams<ConfigurationQuery>,
+) -> Response {
     debug!(provisioned, "Configuration query");
 
     if provisioned.unwrap_or(false) {

@@ -24,7 +24,7 @@ pub enum EventPublisherType {
 pub struct EventPublisherFilter {
     /// `CloudEvent` `type` patterns to subscribe to (exact types, prefix globs like
     /// `com.impierce.unicore.issuance.*`, or `*`).
-    #[schema(example = json!(["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.issued"]))]
+    #[schema(min_items = 1, example = json!(["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.issued"]))]
     pub types: Vec<String>,
 }
 

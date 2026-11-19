@@ -1,5 +1,8 @@
-use crate::{extractors::RequestActor, v0::events::EventsState};
-use axum::{extract::State, http::StatusCode, Json};
+use crate::{
+    extractors::{JsonBody, RequestActor},
+    v0::events::EventsState,
+};
+use axum::{extract::State, http::StatusCode};
 use bc_event_publishing::domain::event_publisher::command::EventPublisherCommand;
 use http_api_problem::ApiError;
 use serde::{Deserialize, Serialize};
@@ -41,7 +44,7 @@ pub struct ActivateEventPublisherRequest {
 pub async fn activate_event_publisher(
     State(state): State<Arc<EventsState>>,
     RequestActor(actor): RequestActor,
-    Json(payload): Json<ActivateEventPublisherRequest>,
+    JsonBody(payload): JsonBody<ActivateEventPublisherRequest>,
 ) -> Result<(StatusCode, String), ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
 

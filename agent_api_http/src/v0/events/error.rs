@@ -29,7 +29,7 @@ impl IntoApiErrorExt for EventPublisherError {
             }
             EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::EmptyName)
             | EventPublisherError::UpdateEventPublisherError(UpdateEventPublisherError::EmptyName) => {
-                ApiError::builder(StatusCode::BAD_REQUEST)
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
                     .title("Invalid Event Publisher Name")
                     .type_url(type_url("events#invalid-event-publisher-name"))
                     .message(message)
@@ -37,7 +37,7 @@ impl IntoApiErrorExt for EventPublisherError {
             }
             EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::InvalidEvents(_))
             | EventPublisherError::UpdateEventPublisherError(UpdateEventPublisherError::InvalidEvents(_)) => {
-                ApiError::builder(StatusCode::BAD_REQUEST)
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
                     .title("Invalid Event Types")
                     .type_url(type_url("events#invalid-event-types"))
                     .message(message)
@@ -45,7 +45,7 @@ impl IntoApiErrorExt for EventPublisherError {
             }
             EventPublisherError::CreateEventPublisherError(CreateEventPublisherError::InvalidConfiguration(_))
             | EventPublisherError::UpdateEventPublisherError(UpdateEventPublisherError::InvalidConfiguration(_)) => {
-                ApiError::builder(StatusCode::BAD_REQUEST)
+                ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
                     .title("Invalid Event Publisher Configuration")
                     .type_url(type_url("events#invalid-event-publisher-configuration"))
                     .message(message)
@@ -97,12 +97,12 @@ mod tests {
             ),
             (
                 CreateEventPublisherError::EmptyName.into(),
-                StatusCode::BAD_REQUEST,
+                StatusCode::UNPROCESSABLE_ENTITY,
                 Some("events#invalid-event-publisher-name"),
             ),
             (
                 CreateEventPublisherError::InvalidEvents(InvalidEventTypes::EmptyEvents).into(),
-                StatusCode::BAD_REQUEST,
+                StatusCode::UNPROCESSABLE_ENTITY,
                 Some("events#invalid-event-types"),
             ),
             (
@@ -111,7 +111,7 @@ mod tests {
                     reason: "invalid".to_string(),
                 })
                 .into(),
-                StatusCode::BAD_REQUEST,
+                StatusCode::UNPROCESSABLE_ENTITY,
                 Some("events#invalid-event-publisher-configuration"),
             ),
         ]);

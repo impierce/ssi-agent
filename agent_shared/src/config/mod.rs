@@ -10,7 +10,7 @@ use oid4vci::credential_issuer::credential_configurations_supported::CredentialM
 use oid4vci::credential_offer::TxCodeConstraints;
 use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::VcSdJwtParameters;
-use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
+use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -239,6 +239,14 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     #[config(default = "1000")]
     pub external_server_response_timeout_ms: u64,
+    /// Maximum size, in bytes, of an HTTP request body. A request whose body exceeds this is
+    /// rejected with `413 Payload Too Large` before the body is read in full, so an
+    /// unauthenticated client cannot exhaust the process memory with a single oversized request.
+    /// Raise it for deployments that legitimately accept large requests, such as big
+    /// credential-issuance batches. The limit applies before authorization, to every request,
+    /// so keep it as low as those requests allow. There is deliberately no "unlimited" value.
+    #[config(default = "2097152")] // 2 MiB, matching axum's own default body limit.
+    pub max_request_body_bytes: usize,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
@@ -250,14 +258,14 @@ pub struct ApplicationConfiguration {
                     Algorithm::EdDSA,
                     ToggleOptions {
                         enabled: true,
-                        preferred: Some(true)
+                        preferred: None
                     }
                 ),
                 (
                     Algorithm::ES256,
                     ToggleOptions {
                         enabled: true,
-                        preferred: None
+                        preferred: Some(true)
                     }
                 )
             ]
@@ -283,9 +291,7 @@ pub struct ApplicationConfiguration {
         jwt_vc_json: Some(JwtVcJsonParameters {
             alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
-        jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
-        }),
+        jwt_vp_json: None,
         dc_sd_jwt: Some(DcSdJwtParameters {
             sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
             kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
@@ -637,15 +643,16 @@ pub struct Display {
     VariantArray,
     utoipa::ToSchema,
 )]
+/// Serialized as `did:jwk`, `did:key`, `did:web` (`Display`); `did_jwk` etc. are accepted as input too.
 #[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
-    #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
+    #[serde(rename = "did:jwk", alias = "did_jwk")]
     #[strum(serialize = "did:jwk")]
     Jwk,
-    #[serde(alias = "did_key", alias = "did:key", rename = "did_key")]
+    #[serde(rename = "did:key", alias = "did_key")]
     #[strum(serialize = "did:key")]
     Key,
-    #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
+    #[serde(rename = "did:web", alias = "did_web")]
     #[strum(serialize = "did:web")]
     Web,
 }
@@ -878,6 +885,7 @@ mod tests {
                 }
               },
               "external_server_response_timeout_ms": 1000,
+              "max_request_body_bytes": 2097152,
               "credential_offer_by_value_enabled": false,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
@@ -887,11 +895,11 @@ mod tests {
               },
               "signing_algorithms_supported": {
                 "EdDSA": {
-                  "enabled": true,
-                  "preferred": true
+                  "enabled": true
                 },
                 "ES256": {
-                  "enabled": true
+                  "enabled": true,
+                  "preferred": true
                 }
               },
               "display": [
@@ -906,9 +914,6 @@ mod tests {
               ],
               "vp_formats_supported": {
                 "jwt_vc_json": {
-                  "alg_values": ["ES256", "EdDSA"]
-                },
-                "jwt_vp_json": {
                   "alg_values": ["ES256", "EdDSA"]
                 },
                 "dc+sd-jwt": {

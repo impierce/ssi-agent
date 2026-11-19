@@ -8,19 +8,26 @@ ignore = [
     # TODO: revisit when a patched version of the rsa crate is published and adopted upstream.
     "RUSTSEC-2023-0071",
 
-    # RUSTSEC-2026-0367, RUSTSEC-2026-0368, RUSTSEC-2026-0369, RUSTSEC-2026-0429: zip v8.6.0
-    # All four are about `ZipArchive::extract` / `ZipStreamReader::extract` handling a malicious
-    # archive (symlinks, Unix permissions, SUID/SGID bits, oversized symlink entries).
+    # RUSTSEC-2026-0367, RUSTSEC-2026-0368, RUSTSEC-2026-0369, RUSTSEC-2026-0429,
+    # RUSTSEC-2026-0545, RUSTSEC-2026-0546, RUSTSEC-2026-0547, RUSTSEC-2026-0548: zip v8.6.0
+    # All eight are about reading or extracting a malicious archive: `ZipArchive::extract` /
+    # `ZipStreamReader::extract` (symlinks and symlink targets, Unix permissions, SUID/SGID bits,
+    # oversized symlink entries, local-header names), AES entries returned without checking their
+    # authentication code, and legacy decoders preallocating the declared size.
     # zip is only a build-dependency of libsodium-sys-stable (via Stronghold) and is not linked
     # into any binary. Its build script only extracts a zip archive on `*-windows-msvc` targets,
     # when building libsodium from source fails, and only after verifying the archive's minisign
     # signature against a public key hard-coded in the build script. UniCore is built for
     # Linux (`rust:1-trixie`), where this code never runs.
-    # TODO: remove once libsodium-sys-stable depends on zip >= 9.0.0.
+    # TODO: remove once libsodium-sys-stable depends on zip >= 9.0.5.
     "RUSTSEC-2026-0367",
     "RUSTSEC-2026-0368",
     "RUSTSEC-2026-0369",
     "RUSTSEC-2026-0429",
+    "RUSTSEC-2026-0545",
+    "RUSTSEC-2026-0546",
+    "RUSTSEC-2026-0547",
+    "RUSTSEC-2026-0548",
 
     # RUSTSEC-2026-0387: crypto-bigint v0.5.5 — timing variability in operations intended to be
     # constant-time. It affects arithmetic on secret integers. Patched in 0.7.6, which needs the

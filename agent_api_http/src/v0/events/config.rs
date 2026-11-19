@@ -31,7 +31,7 @@ pub struct HttpEventPublisherConfigDto {
     pub publisher_type: HttpEventPublisherType,
     /// Destination HTTP or HTTPS URL that receives `CloudEvents` via `POST` with
     /// `Content-Type: application/cloudevents+json`.
-    #[schema(example = "https://example.test/webhooks/unicore")]
+    #[schema(min_length = 1, example = "https://example.test/webhooks/unicore")]
     pub target_url: String,
     /// Optional HTTP headers attached to every outgoing webhook request.
     /// Header values are redacted as `"****"` in query responses.
@@ -61,10 +61,10 @@ impl std::fmt::Debug for HttpEventPublisherConfigDto {
 pub struct NatsEventPublisherConfigDto {
     pub publisher_type: NatsEventPublisherType,
     /// NATS server URL (`nats://host:port` or `tls://host:port`).
-    #[schema(example = "nats://127.0.0.1:4222")]
+    #[schema(min_length = 1, example = "nats://127.0.0.1:4222")]
     pub nats_url: String,
     /// NATS subject to which matching `CloudEvents` are published.
-    #[schema(example = "unicore.events")]
+    #[schema(min_length = 1, example = "unicore.events")]
     pub subject: String,
 }
 

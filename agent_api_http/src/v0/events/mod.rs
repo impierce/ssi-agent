@@ -5,7 +5,7 @@ pub mod openapi;
 pub mod queries;
 
 use axum::{
-    extract::{Query, State},
+    extract::State,
     response::sse::{self, KeepAlive, Sse},
     routing::{get, post},
     Router,
@@ -27,7 +27,7 @@ use shared_kernel::{
 use std::time::Duration;
 
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
+use crate::extractors::{QueryParams, RequestActor};
 use http_api_problem::ApiError;
 use shared_kernel::authorization::{
     AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationOperation, AuthorizationRequest,
@@ -144,6 +144,18 @@ const DEFAULT_CATCHUP_LIMIT: usize = 100;
 /// rejected. Catch-up is fully materialised before anything streams, so this bounds memory.
 const MAX_CATCHUP_LIMIT: usize = 1000;
 
+/// One Server-Sent Event of `GET /v0/events`: the SSE fields, with the CloudEvent serialized as JSON in `data`.
+#[derive(utoipa::ToSchema)]
+#[allow(dead_code)]
+pub struct CloudEventStreamEvent {
+    /// The `id` of the CloudEvent; absent on `lagged` and `error` frames.
+    id: Option<String>,
+    /// The `type` of the CloudEvent, or `lagged`, `truncated` or `error`.
+    event: String,
+    /// The CloudEvent (schema `CloudEvent`), serialized as JSON; a JSON warning or an error message on the other frames.
+    data: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct EventQueryParams {
     pub types: Option<String>,
@@ -229,7 +241,7 @@ pub fn sse_router(state: Arc<EventsState>) -> Router {
         ("until" = Option<DateTime<Utc>>, Query, description = "Filter events before RFC 3339 timestamp")
     ),
     responses(
-        (status = 200, description = "Server-Sent Events stream of CloudEvents", body = shared_kernel::event_bus::CloudEvent, content_type = "text/event-stream"),
+        (status = 200, description = "Server-Sent Events stream of CloudEvents", body = CloudEventStreamEvent, content_type = "text/event-stream"),
         (status = 400, description = "Invalid query parameter"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden")
@@ -239,7 +251,7 @@ pub async fn events_sse_handler(
     State(state): State<Arc<EventsState>>,
     RequestActor(actor): RequestActor,
     headers: axum::http::HeaderMap,
-    Query(params): Query<EventQueryParams>,
+    QueryParams(params): QueryParams<EventQueryParams>,
 ) -> Result<Sse<impl Stream<Item = Result<sse::Event, axum::Error>>>, ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
     let auth_request = AuthorizationRequest {
@@ -887,7 +899,7 @@ mod tests {
         let explicit_id_resp = tower::ServiceExt::oneshot(app.clone(), explicit_id_req).await.unwrap();
         assert_eq!(explicit_id_resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
 
-        // 2. Invalid targetUrl, reserved HTTP header, and NATS wildcard subject are rejected with 400
+        // 2. Invalid targetUrl, reserved HTTP header, and NATS wildcard subject are rejected with 422
         for bad_config in [
             json!({
                 "publisherType": "http",
@@ -920,7 +932,7 @@ mod tests {
                 ))
                 .unwrap();
             let invalid_resp = tower::ServiceExt::oneshot(app.clone(), invalid_req).await.unwrap();
-            assert_eq!(invalid_resp.status(), axum::http::StatusCode::BAD_REQUEST);
+            assert_eq!(invalid_resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
         }
 
         // 3. Create valid HTTP publisher -> 200 OK with redacted secret header

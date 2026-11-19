@@ -72,7 +72,7 @@ Retry `POST /v0/create-event-publisher` to generate a new publisher identifier, 
 
 ## Invalid Event Publisher Name
 
-This error occurs when the `name` field for an event publisher is empty or contains only whitespace. The system returns a `400 Bad Request` error.
+This error occurs when the `name` field for an event publisher is empty or contains only whitespace. The system returns a `422 Unprocessable Content` error.
 
 ### Resolution
 
@@ -80,7 +80,7 @@ Provide a non-empty human-readable `name` for the event publisher.
 
 ## Invalid Event Types
 
-This error occurs when `filter.types` is empty, contains a blank entry, or includes a pattern that does not match any registered integration event type. The system returns a `400 Bad Request` error.
+This error occurs when `filter.types` is empty, contains a blank entry, or includes a pattern that does not match any registered integration event type. The system returns a `422 Unprocessable Content` error.
 
 ### Resolution
 
@@ -88,7 +88,7 @@ Specify at least one valid CloudEvent `type` pattern in `filter.types` (an exact
 
 ## Invalid Event Publisher Configuration
 
-This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS `targetUrl`, a reserved HTTP header such as `Content-Type`/`Content-Length`/`Host`, an invalid HTTP header name or unpreserved `"****"` placeholder value, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed/wildcard NATS `subject` containing `*` or `>`). The system returns a `400 Bad Request` error.
+This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS `targetUrl`, a reserved HTTP header such as `Content-Type`/`Content-Length`/`Host`, an invalid HTTP header name or unpreserved `"****"` placeholder value, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed/wildcard NATS `subject` containing `*` or `>`). The system returns a `422 Unprocessable Content` error.
 
 ### Resolution
 

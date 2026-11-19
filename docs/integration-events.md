@@ -336,6 +336,18 @@ Credential template holder authorization settings updated.
 | :--- | :--- | :--- | :--- |
 | `template_id` | `String` | Yes | Unique identifier of the updated template. |
 
+#### `com.impierce.unicore.template.origin_updated`
+
+Credential template origin metadata updated.
+
+- **Variant**: `TemplateIntegrationEvent::OriginUpdated`
+- **CloudEvent `source`**: `/services/template`
+- **CloudEvent `subject`**: `template_id`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `template_id` | `String` | Yes | Unique identifier of the updated template. |
+
 #### `com.impierce.unicore.template.deleted`
 
 Credential template deleted from library.

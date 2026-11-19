@@ -15,6 +15,7 @@ use crate::v0::events::{
         get_event_publisher_by_id::{__path_get_event_publisher_by_id, EventPublisherDto},
         get_event_publisher_list::{__path_get_event_publisher_list, EventPublisherListDto},
     },
+    CloudEventStreamEvent,
 };
 use bc_event_publishing::domain::event_publisher::config::{EventPublisherFilter, EventPublisherType};
 use shared_kernel::event_bus::CloudEvent;
@@ -41,6 +42,7 @@ use utoipa::{
     ),
     components(schemas(
         CloudEvent,
+        CloudEventStreamEvent,
         EventPublisherType,
         EventPublisherFilter,
         HttpEventPublisherType,

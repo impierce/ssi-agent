@@ -1,11 +1,12 @@
 use super::{command::PresentationCommand, error::PresentationError, event::PresentationEvent};
+use crate::credential::signed::SignedCredential;
 use crate::services::HolderServices;
 use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algorithm};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::{
     did::Did,
-    vc::{Jwt, Presentation as VerifiablePresentation},
+    vc::{EnvelopedVc, Jwt, JwtClaims, Presentation as VerifiablePresentation, PresentationV2},
 };
 use jsonwebtoken::Header;
 use oid4vc_core::{Sign as _, Subject as _};
@@ -56,14 +57,7 @@ impl Aggregate for Presentation {
                 let holder_did: Did = subject_did
                     .parse()
                     .map_err(|err: identity_kit::did::DidError| InvalidUrlError(err.to_string()))?;
-                let verifiable_presentation = signed_credentials.into_iter().fold(
-                    VerifiablePresentation::new().with_holder(holder_did),
-                    VerifiablePresentation::with_credential,
-                );
-
-                let mut claims = verifiable_presentation
-                    .to_jwt_claims()
-                    .map_err(|err| PresentationBuilderError(err.to_string()))?;
+                let (mut claims, typ) = presentation_claims(holder_did, signed_credentials)?;
                 #[cfg(feature = "test_utils")]
                 {
                     claims.nbf = Some(0);
@@ -93,7 +87,7 @@ impl Aggregate for Presentation {
                 // Compose JWT
                 let header = Header {
                     alg: get_preferred_signing_algorithm(),
-                    typ: Some("JWT".to_string()),
+                    typ: Some(typ.to_string()),
                     kid: Some(kid),
                     ..Default::default()
                 };
@@ -145,15 +139,60 @@ impl Aggregate for Presentation {
     }
 }
 
+/// The claims of a presentation of `credentials` by `holder`, and the `typ` to sign them under: credential JWTs in a
+/// VCDM 1.1 presentation (`vp` claim, `JWT`), `vc+sd-jwt` credentials enveloped with every disclosure they carry in
+/// a VCDM 2.0 presentation (`vp+jwt`). A presentation of both kinds is refused.
+fn presentation_claims(
+    holder: Did,
+    credentials: Vec<SignedCredential>,
+) -> Result<(JwtClaims, &'static str), PresentationError> {
+    let (jwts, sd_jwts): (Vec<_>, Vec<_>) = credentials
+        .into_iter()
+        .partition(|credential| matches!(credential, SignedCredential::Jwt(_)));
+    if sd_jwts.is_empty() {
+        let presentation = jwts
+            .into_iter()
+            .filter_map(|credential| match credential {
+                SignedCredential::Jwt(jwt) => Some(jwt),
+                SignedCredential::SdJwt(_) => None,
+            })
+            .fold(
+                VerifiablePresentation::new().with_holder(holder),
+                VerifiablePresentation::with_credential,
+            );
+        let claims = presentation
+            .to_jwt_claims()
+            .map_err(|err| PresentationError::PresentationBuilderError(err.to_string()))?;
+        return Ok((claims, "JWT"));
+    }
+    if !jwts.is_empty() {
+        return Err(PresentationError::MixedCredentialFormatsError);
+    }
+    let presentation = sd_jwts
+        .into_iter()
+        .filter_map(|credential| match credential {
+            SignedCredential::SdJwt(sd_jwt) => Some(EnvelopedVc::from_sd_jwt(&sd_jwt)),
+            SignedCredential::Jwt(_) => None,
+        })
+        .fold(
+            PresentationV2::new().with_holder(holder.clone()),
+            PresentationV2::with_credential,
+        );
+    Ok((
+        presentation.to_jwt_claims().with_iss(holder.as_str()),
+        PresentationV2::JWT_TYP,
+    ))
+}
+
 #[cfg(test)]
 pub mod presentation_tests {
 
-    use crate::credential::signed::SignedCredential;
     use crate::offer::aggregate::test_utils::signed_credentials;
     use crate::offer::aggregate::OfferCredential;
 
     use super::test_utils::*;
     use super::*;
+    use crate::credential::signed::issue_vc_sd_jwt;
     use agent_secret_manager::service::Service;
     use cqrs_es::test::TestFramework;
     use rstest::rstest;
@@ -172,19 +211,81 @@ pub mod presentation_tests {
             .given_no_previous_events()
             .when_async(PresentationCommand::CreatePresentation {
                 presentation_id: presentation_id.clone(),
-                signed_credentials: signed_credentials
-                    .into_iter()
-                    .map(|c| match c.credential {
-                        SignedCredential::Jwt(jwt) => jwt,
-                        SignedCredential::SdJwt(_) => unreachable!("the fixture credentials are JWTs"),
-                    })
-                    .collect(),
+                signed_credentials: signed_credentials.into_iter().map(|c| c.credential).collect(),
             })
             .await
             .then_expect_events(vec![PresentationEvent::PresentationCreated {
                 presentation_id,
                 signed_presentation,
             }])
+    }
+
+    /// `vc+sd-jwt` credentials are presented in a VCDM 2.0 presentation (`vp+jwt`), each enveloped with every
+    /// disclosure it carries.
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_create_presentation_of_sd_jwt_credentials(presentation_id: String) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+        let holder = services
+            .holder
+            .identifier("did:key", jsonwebtoken::Algorithm::EdDSA)
+            .await
+            .unwrap();
+
+        let events = PresentationTestFramework::with(services)
+            .given_no_previous_events()
+            .when_async(PresentationCommand::CreatePresentation {
+                presentation_id: presentation_id.clone(),
+                signed_credentials: vec![SignedCredential::SdJwt(sd_jwt.clone())],
+            })
+            .await
+            .inspect_result()
+            .unwrap();
+        let [PresentationEvent::PresentationCreated {
+            presentation_id: created,
+            signed_presentation,
+        }] = events.as_slice()
+        else {
+            panic!("one presentation created");
+        };
+        assert_eq!(*created, presentation_id);
+
+        let decoded = identity_kit::vc::validation::decode_presentation_v2(signed_presentation).unwrap();
+        assert_eq!(decoded.header.typ.as_deref(), Some(PresentationV2::JWT_TYP));
+        assert_eq!(decoded.claims.iss.as_deref(), Some(holder.as_str()));
+        assert_eq!(decoded.holder().map(|holder| holder.as_str()), Some(holder.as_str()));
+        assert_eq!(
+            decoded.presentation.verifiable_credential,
+            vec![EnvelopedVc::from_sd_jwt(&sd_jwt)]
+        );
+        assert_eq!(
+            decoded.credentials[0].credential().subject().unwrap().properties["name"],
+            "Example LLC"
+        );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_create_presentation_of_mixed_credential_formats(
+        presentation_id: String,
+        signed_credentials: Vec<OfferCredential>,
+    ) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+        let mut credentials: Vec<_> = signed_credentials.into_iter().map(|c| c.credential).collect();
+        credentials.push(SignedCredential::SdJwt(sd_jwt));
+
+        PresentationTestFramework::with(services)
+            .given_no_previous_events()
+            .when_async(PresentationCommand::CreatePresentation {
+                presentation_id,
+                signed_credentials: credentials,
+            })
+            .await
+            .then_expect_error_message(&PresentationError::MixedCredentialFormatsError.to_string());
     }
 }
 

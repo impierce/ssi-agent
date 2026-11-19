@@ -104,6 +104,13 @@ pub enum TemplateIntegrationEvent {
         #[integration_event(subject)]
         template_id: String,
     },
+    /// Credential template origin metadata updated.
+    #[serde(rename = "com.impierce.unicore.template.origin_updated")]
+    OriginUpdated {
+        /// Unique identifier of the updated template.
+        #[integration_event(subject)]
+        template_id: String,
+    },
     /// Credential template deleted from library.
     #[serde(rename = "com.impierce.unicore.template.deleted")]
     TemplateDeleted {
@@ -177,6 +184,7 @@ impl From<TemplateEvent> for TemplateIntegrationEvent {
             TemplateEvent::HolderAuthorizationUpdated { template_id, .. } => {
                 Self::HolderAuthorizationUpdated { template_id }
             }
+            TemplateEvent::OriginUpdated { template_id, .. } => Self::OriginUpdated { template_id },
             TemplateEvent::TemplateDeleted { template_id } => Self::TemplateDeleted { template_id },
         }
     }

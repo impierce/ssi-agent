@@ -1,5 +1,5 @@
 use crate::{
-    extractors::RequestActor,
+    extractors::{JsonBody, RequestActor},
     v0::events::{config::EventPublisherConfigDto, queries::get_event_publisher_by_id::EventPublisherDto, EventsState},
 };
 use axum::{extract::State, http::StatusCode, Json};
@@ -24,6 +24,7 @@ pub struct UpdateEventPublisherRequest {
     #[schema(pattern = r"^[^\x00]+$")]
     pub id: String,
     #[serde(default)]
+    #[schema(min_length = 1)]
     pub name: Option<String>,
     #[serde(default, with = "::serde_with::rust::double_option")]
     #[schema(value_type = Option<String>)]
@@ -65,17 +66,17 @@ pub struct UpdateEventPublisherRequest {
     ),
     responses(
         (status = 200, description = "Event publisher updated successfully", body = EventPublisherDto),
-        (status = 400, description = "Invalid event publisher configuration or event types"),
+        (status = 400, description = "Malformed JSON request body"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden"),
         (status = 404, description = "Event publisher not found"),
-        (status = 422, description = "Request body does not match the expected schema")
+        (status = 422, description = "Request body does not match the expected schema, or invalid event publisher configuration or event types")
     )
 )]
 pub async fn update_event_publisher(
     State(state): State<Arc<EventsState>>,
     RequestActor(actor): RequestActor,
-    Json(payload): Json<UpdateEventPublisherRequest>,
+    JsonBody(payload): JsonBody<UpdateEventPublisherRequest>,
 ) -> Result<(StatusCode, Json<EventPublisherDto>), ApiError> {
     let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
     let id = payload.id;
