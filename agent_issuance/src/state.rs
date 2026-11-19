@@ -24,7 +24,7 @@ use crate::public_offer::views::{AllPublicOffersView, PublicOfferView};
 use crate::reissuance::aggregate::Reissuance;
 use crate::reissuance::views::all_reissuances::AllReissuancesView;
 use crate::reissuance::views::ReissuanceView;
-use crate::server_config::aggregate::ServerConfig;
+use crate::server_config::aggregate::{credential_signing_alg_values_supported, ServerConfig};
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
 use crate::status_list::aggregate::StatusListAggregate;
@@ -338,7 +338,17 @@ pub async fn update_signing_algorithms(state: &IssuanceState) -> anyhow::Result<
     if let Some(server_config_view) = public_query_handler(SERVER_CONFIG_ID, &state.query.server_config).await? {
         let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
 
-        if server_config_view.signing_algorithms_supported != signing_algorithms_supported {
+        let credential_signing_alg_values_supported = credential_signing_alg_values_supported();
+        let advertises_other_credential_signing_algorithms = server_config_view.credential_configurations.values().any(
+            |(_provisioned, credential_configuration, _authorization_grant)| {
+                credential_configuration.credential_signing_alg_values_supported
+                    != credential_signing_alg_values_supported
+            },
+        );
+
+        if server_config_view.signing_algorithms_supported != signing_algorithms_supported
+            || advertises_other_credential_signing_algorithms
+        {
             let command = ServerConfigCommand::UpdateSigningAlgorithms {
                 signing_algorithms_supported,
             };

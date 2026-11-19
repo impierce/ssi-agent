@@ -49,6 +49,9 @@ pub enum TemplateIntegrationEvent {
     HolderAuthorizationUpdated {
         template_id: String,
     },
+    OriginUpdated {
+        template_id: String,
+    },
     TemplateDeleted {
         template_id: String,
     },
@@ -73,6 +76,7 @@ impl IntegrationEvent for TemplateIntegrationEvent {
             }
             Self::CredentialExpirationUpdated { .. } => "com.impierce.unicore.template.credential_expiration_updated",
             Self::HolderAuthorizationUpdated { .. } => "com.impierce.unicore.template.holder_authorization_updated",
+            Self::OriginUpdated { .. } => "com.impierce.unicore.template.origin_updated",
             Self::TemplateDeleted { .. } => "com.impierce.unicore.template.deleted",
         }
     }
@@ -91,6 +95,7 @@ impl IntegrationEvent for TemplateIntegrationEvent {
             | Self::SchemaPropertiesAttributesUpdated { template_id }
             | Self::CredentialExpirationUpdated { template_id }
             | Self::HolderAuthorizationUpdated { template_id }
+            | Self::OriginUpdated { template_id }
             | Self::TemplateDeleted { template_id } => template_id,
         };
         Some(template_id.clone())
@@ -161,6 +166,7 @@ impl From<TemplateEvent> for TemplateIntegrationEvent {
             TemplateEvent::HolderAuthorizationUpdated { template_id, .. } => {
                 Self::HolderAuthorizationUpdated { template_id }
             }
+            TemplateEvent::OriginUpdated { template_id, .. } => Self::OriginUpdated { template_id },
             TemplateEvent::TemplateDeleted { template_id } => Self::TemplateDeleted { template_id },
         }
     }

@@ -54,8 +54,7 @@ paths:
           description: OpenAPI document
           content:
             application/yaml:
-              schema:
-                type: string
+              schema: {}
   /public/templates:
     get:
       tags:
@@ -109,6 +108,10 @@ paths:
           description: Missing name, or a provider type that is not available in this profile
         '409':
           description: A provider of this type, or with this name, already exists
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/add-linked-domains:
@@ -148,6 +151,10 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/add-linked-verifiable-presentations:
@@ -175,6 +182,10 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Empty list, missing presentation, or invalid presentation
   /v0/add-templates-to-catalog:
@@ -202,6 +213,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/authorization_requests:
@@ -245,6 +260,10 @@ paths:
                 type: string
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/authorization_requests/{authorization_request_id}:
@@ -296,6 +315,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/configuration:
@@ -312,9 +335,7 @@ paths:
         in: query
         required: false
         schema:
-          type:
-          - boolean
-          - 'null'
+          type: boolean
       responses:
         '200':
           description: Application configuration
@@ -331,12 +352,20 @@ paths:
       summary: List all connections
       description: List all available connections.
       operationId: get_all_connections
-      requestBody:
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/GetConnectionsEndpointRequest'
-        required: true
+      parameters:
+      - name: url
+        in: query
+        description: Only connections with this URL.
+        required: false
+        schema:
+          type: string
+          format: uri
+      - name: did
+        in: query
+        description: Only connections that include this DID.
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: All connections retrieved successfully
@@ -374,6 +403,12 @@ paths:
                 $ref: '#/components/schemas/Connection'
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -394,6 +429,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Connection not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/connections/remove-connection:
@@ -416,6 +455,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Connection not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/connections/sync-connection:
@@ -436,6 +479,12 @@ paths:
           description: Connection synced
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/connections/{connection_id}:
     get:
       tags:
@@ -446,6 +495,7 @@ paths:
       parameters:
       - name: connection_id
         in: path
+        description: Connection ID
         required: true
         schema:
           type: string
@@ -501,6 +551,10 @@ paths:
           description: Missing `templateId`, empty batch, or batch exceeds size limit
         '404':
           description: Template or its credential configuration not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Template not published, or no row could be created (`results` says why for each)
           content:
@@ -530,6 +584,10 @@ paths:
                 $ref: '#/components/schemas/Catalog'
         '400':
           description: Malformed JSON request body, or an empty catalog name
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/create-new-template:
@@ -587,7 +645,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Malformed JSON request body, or an invalid template definition
+          description: Malformed JSON request body, an empty `title`, or an invalid template definition
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/create-public-offer:
@@ -609,6 +671,12 @@ paths:
           description: Template schema invalid for public offers
         '404':
           description: Template or offer not found
+        '409':
+          description: A public offer with this ID already exists
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/credentials:
@@ -652,6 +720,10 @@ paths:
           description: Missing or empty `templateId`
         '404':
           description: Template not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/credentials/{credential_id}:
@@ -664,6 +736,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Credential ID
         required: true
         schema:
           type: string
@@ -687,6 +760,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Credential ID
         required: true
         schema:
           type: string
@@ -705,6 +779,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema, or the status list can't hold the status
   /v0/delete-catalog:
@@ -728,6 +806,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/delete-public-offer:
@@ -749,6 +831,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/delete-template:
@@ -772,6 +858,12 @@ paths:
           description: Malformed JSON request body, or a missing template ID
         '404':
           description: Template not found
+        '409':
+          description: The template is published and must be archived first, or it is already deleted
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/documents:
@@ -786,9 +878,7 @@ paths:
         in: query
         required: false
         schema:
-          oneOf:
-          - $ref: '#/components/schemas/SupportedDidMethod'
-          - type: 'null'
+          $ref: '#/components/schemas/SupportedDidMethod'
       responses:
         '200':
           description: Documents retrieved successfully
@@ -810,6 +900,7 @@ paths:
       parameters:
       - name: document_id
         in: path
+        description: Document ID
         required: true
         schema:
           type: string
@@ -854,6 +945,10 @@ paths:
                 $ref: '#/components/schemas/Template'
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Source template not found, or the request body does not match the expected schema
   /v0/events:
@@ -919,7 +1014,7 @@ paths:
           content:
             text/event-stream:
               schema:
-                $ref: '#/components/schemas/CloudEvent'
+                $ref: '#/components/schemas/CloudEventStreamEvent'
         '400':
           description: Invalid query parameter
         '401':
@@ -986,6 +1081,7 @@ paths:
       parameters:
       - name: catalog_id
         in: path
+        description: Catalog ID
         required: true
         schema:
           type: string
@@ -1008,6 +1104,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: Reissuance ID
         required: true
         schema:
           type: string
@@ -1043,6 +1140,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderKeys'
+        '400':
+          description: Unknown key provider type
         '404':
           description: No provider of this type has been added
         '502':
@@ -1058,6 +1157,7 @@ paths:
       parameters:
       - name: id
         in: path
+        description: Template ID
         required: true
         schema:
           type: string
@@ -1094,7 +1194,10 @@ paths:
       - Identity
       - Holder
       summary: Store a credential in the organisation's wallet
-      description: Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+      description: |-
+        Imports a credential into the organisation's holder wallet: a credential JWT, or a VCDM 2.0 credential secured
+        with SD-JWT (`vc+sd-jwt`). The issuer signature and validity period of a `vc+sd-jwt` credential are verified
+        first; a credential JWT is stored without them being verified. The status of either is checked.
       operationId: create_holder_credential
       requestBody:
         content:
@@ -1111,8 +1214,12 @@ paths:
                 $ref: '#/components/schemas/CredentialView'
         '400':
           description: Malformed JSON request body
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
-          description: Request body does not match the expected schema, or the credential could not be decoded
+          description: Request body does not match the expected schema, the credential could not be decoded, the issuer signature or validity period of a `vc+sd-jwt` credential does not hold, or the credential's status is not valid
   /v0/holder/credentials/{credential_id}:
     get:
       tags:
@@ -1124,6 +1231,7 @@ paths:
       parameters:
       - name: credential_id
         in: path
+        description: Holder credential ID
         required: true
         schema:
           type: string
@@ -1166,6 +1274,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1191,6 +1300,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1210,9 +1320,9 @@ paths:
         '422':
           description: The credential offer cannot be processed, e.g. it carries no pre-authorized code
         '501':
-          description: The credential issuer requires a flow UniCore does not support yet
+          description: The credential issuer requires a flow UniCore does not support yet, or sent a credential format other than a credential JWT or `vc+sd-jwt`
         '502':
-          description: The credential issuer or its authorization server could not be reached
+          description: The credential issuer or its authorization server could not be reached, or the `vc+sd-jwt` credential it sent does not verify
   /v0/holder/offers/{offer_id}/reject:
     post:
       tags:
@@ -1224,6 +1334,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Received offer ID
         required: true
         schema:
           type: string
@@ -1258,7 +1369,10 @@ paths:
       - Identity
       - Holder
       summary: Create a new credential presentation
-      description: Creates and signs a new credential presentation containing the given credentials held by your organisation.
+      description: |-
+        Creates and signs a new credential presentation containing the given credentials held by your organisation:
+        credential JWTs in a VCDM 1.1 presentation, `vc+sd-jwt` credentials in a VCDM 2.0 presentation (`vp+jwt`),
+        each with every disclosure it carries.
       operationId: create_holder_presentation
       requestBody:
         content:
@@ -1277,8 +1391,12 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
-          description: Request body does not match the expected schema
+          description: Request body does not match the expected schema, or the credentials mix credential JWTs and `vc+sd-jwt` credentials
   /v0/holder/presentations/{presentation_id}:
     get:
       tags:
@@ -1290,6 +1408,7 @@ paths:
       parameters:
       - name: presentation_id
         in: path
+        description: Presentation ID
         required: true
         schema:
           type: string
@@ -1390,6 +1509,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/make-catalog-public:
@@ -1417,6 +1540,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/offers:
@@ -1469,6 +1596,10 @@ paths:
                 type: string
         '400':
           description: Template IDs are missing or invalid
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: A template was not found or is not published
   /v0/offers/send-offer-to-individual:
@@ -1488,7 +1619,13 @@ paths:
         '200':
           description: Offer sent successfully
         '400':
+          description: Malformed JSON request body
+        '404':
           description: The credential offer does not exist
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/offers/send-offer-to-organization:
@@ -1508,7 +1645,13 @@ paths:
         '200':
           description: Offer sent successfully
         '400':
+          description: Malformed JSON request body
+        '404':
           description: The credential offer does not exist
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/offers/{offer_id}:
@@ -1521,6 +1664,7 @@ paths:
       parameters:
       - name: offer_id
         in: path
+        description: Offer ID
         required: true
         schema:
           type: string
@@ -1572,6 +1716,10 @@ paths:
           description: Malformed JSON request body
         '409':
           description: The profile was provisioned through configuration and cannot be modified at runtime
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/reissue-credential:
@@ -1592,6 +1740,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateCredentialReissuanceResponse'
+        '400':
+          description: Malformed JSON request body, the original credential has not been issued, or the credential payload or configuration does not fit the original credential
+        '403':
+          description: The reissuance policy does not allow this reissuance
+        '404':
+          description: Original credential or credential configuration not found
+        '409':
+          description: A reissuance of the original credential already exists
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-key-provider:
     post:
       tags:
@@ -1608,8 +1770,14 @@ paths:
       responses:
         '204':
           description: Key provider removed
+        '400':
+          description: Malformed JSON request body
         '404':
           description: No provider of this type has been added
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/remove-linked-domains:
@@ -1649,6 +1817,10 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/remove-linked-verifiable-presentations:
@@ -1675,6 +1847,10 @@ paths:
           description: Authentication required
         '403':
           description: Operation forbidden
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Empty presentation ID list
   /v0/remove-templates-from-catalog:
@@ -1684,7 +1860,7 @@ paths:
       - Catalog
       summary: Remove one or more templates from a catalog
       description: Removes one or more templates from a catalog by their ID.
-      operationId: remove-templates-from-catalog
+      operationId: remove_templates_from_catalog
       requestBody:
         content:
           application/json:
@@ -1702,6 +1878,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/services:
@@ -1762,6 +1942,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/take-public-offer-online:
@@ -1783,6 +1967,10 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Public offer not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/test-key-provider-connection:
@@ -1807,8 +1995,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConnectionTestResult'
+        '400':
+          description: Malformed JSON request body
         '404':
           description: No provider of this type has been added
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/update-template:
@@ -1829,9 +2023,15 @@ paths:
         '204':
           description: Template updated successfully
         '400':
-          description: Malformed JSON request body, or a missing template ID
+          description: Malformed JSON request body, a missing template ID, or an empty `title`
         '404':
           description: Template not found
+        '409':
+          description: The template is deleted, or the requested status change is not allowed
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
   /v0/verify-credentials-batch:
@@ -1866,6 +2066,10 @@ paths:
           description: Missing `templateId`, empty batch, or batch exceeds size limit
         '404':
           description: Template or its credential configuration not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Template not published
   /v0/verify-linked-domains:
@@ -1947,6 +2151,7 @@ components:
         name:
           type: string
           description: A name for the provider, unique among the providers this instance lists. It can't be changed later.
+          minLength: 1
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
     AddTemplatesRequest:
@@ -2037,6 +2242,8 @@ components:
           items:
             $ref: '#/components/schemas/BatchCredentialRow'
           description: One row per holder.
+          maxItems: 1000
+          minItems: 1
         expiresAt:
           oneOf:
           - $ref: '#/components/schemas/CredentialExpiry'
@@ -2045,6 +2252,7 @@ components:
         templateId:
           type: string
           description: The published template every row is validated against and issued from.
+          minLength: 1
     BatchFailedProblem:
       type: object
       description: Problem details returned when no row of a batch request could be created.
@@ -2053,7 +2261,6 @@ components:
       - title
       - status
       - detail
-      - results
       properties:
         detail:
           type: string
@@ -2061,7 +2268,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BatchItemResult'
-          description: The outcome of every row, in request order.
+          description: |-
+            The outcome of every row, in request order. Absent when the request is rejected before any row is attempted
+            (template not published).
         status:
           type: integer
           format: int32
@@ -2150,6 +2359,7 @@ components:
           - 'null'
         name:
           type: string
+          minLength: 1
     CatalogVisibility:
       type: string
       enum:
@@ -2157,16 +2367,13 @@ components:
       - Private
     ChangeCatalogAppearanceRequest:
       type: object
+      required:
+      - display
       properties:
         catalogId:
           type: string
-          default: ''
         display:
           $ref: '#/components/schemas/CatalogDisplay'
-          default:
-            name: ''
-            description: ''
-            icon: null
     CloudEvent:
       allOf:
       - type: object
@@ -2219,6 +2426,24 @@ components:
             type: string
             example: com.impierce.unicore.issuance.credential.offered
       description: A CNCF CloudEvent envelope (v1.0 spec).
+    CloudEventStreamEvent:
+      type: object
+      description: 'One Server-Sent Event of `GET /v0/events`: the SSE fields, with the CloudEvent serialized as JSON in `data`.'
+      required:
+      - event
+      - data
+      properties:
+        data:
+          type: string
+          description: The CloudEvent (schema `CloudEvent`), serialized as JSON; a JSON warning or an error message on the other frames.
+        event:
+          type: string
+          description: The `type` of the CloudEvent, or `lagged`, `truncated` or `error`.
+        id:
+          type:
+          - string
+          - 'null'
+          description: The `id` of the CloudEvent; absent on `lagged` and `error` frames.
     CnameCheck:
       type: object
       description: The outcome of checking one origin's DNS against the deployment's own host.
@@ -2308,13 +2533,11 @@ components:
           type: boolean
     CreateCatalogRequest:
       type: object
+      required:
+      - display
       properties:
         display:
           $ref: '#/components/schemas/CatalogDisplay'
-          default:
-            name: ''
-            description: ''
-            icon: null
         visibility:
           $ref: '#/components/schemas/CatalogVisibility'
           default: Private
@@ -2398,6 +2621,12 @@ components:
         holderType:
           $ref: '#/components/schemas/HolderType'
           default: individual
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+            description: Where the template is imported from, if it is.
+          - type: 'null'
+          default: null
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -2414,8 +2643,6 @@ components:
           enum:
           - draft
           - published
-          - archived
-          - deleted
         tags:
           type:
           - array
@@ -2426,6 +2653,7 @@ components:
         title:
           type: string
           default: ''
+          minLength: 1
         type:
           type: array
           items:
@@ -2461,14 +2689,8 @@ components:
         credential_configuration:
           type: object
           required:
-          - credential_format
+          - format
           properties:
-            credential_format:
-              type: object
-              enum:
-              - jwt_vc_json
-              - dc+sd-jwt
-              - vc+sd-jwt
             credential_metadata:
               type: object
               properties:
@@ -2512,6 +2734,12 @@ components:
               type: array
               items:
                 type: string
+            format:
+              type: string
+              enum:
+              - jwt_vc_json
+              - dc+sd-jwt
+              - vc+sd-jwt
             proof_types_supported:
               type: object
             scope:
@@ -2585,6 +2813,186 @@ components:
             minimum: 0
         status_list_url:
           type: string
+    CredentialV2:
+      type: object
+      description: A verifiable credential of the VC Data Model 2.0 (§4), the payload of a `vc+jwt` (VC-JOSE-COSE §3.1.1).
+      required:
+      - '@context'
+      - type
+      - issuer
+      - credentialSubject
+      properties:
+        '@context':
+          oneOf:
+          - type: string
+            description: The base context alone.
+            enum:
+            - https://www.w3.org/ns/credentials/v2
+          - type: array
+            items: {}
+            prefixItems:
+            - type: string
+              description: The base context.
+              enum:
+              - https://www.w3.org/ns/credentials/v2
+            description: The base context first, then further contexts.
+            minItems: 1
+          description: The JSON-LD context, carried as data (VCDM 2.0 §4.3); it begins with `https://www.w3.org/ns/credentials/v2`.
+        credentialSchema:
+          oneOf:
+          - type: object
+            description: A data schema.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A data schema.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Data schemas (VCDM 2.0 §4.11).
+        credentialStatus:
+          oneOf:
+          - type: object
+            description: A status entry.
+            required:
+            - type
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+              type:
+                oneOf:
+                - type: string
+                  description: A type.
+                - type: array
+                  items:
+                    type: string
+                    description: A type.
+                  minItems: 1
+                description: The types.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A status entry.
+              required:
+              - type
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier.
+                type:
+                  oneOf:
+                  - type: string
+                    description: A type.
+                  - type: array
+                    items:
+                      type: string
+                      description: A type.
+                    minItems: 1
+                  description: The types.
+              additionalProperties: true
+          description: Where to learn whether the credential is revoked or suspended (VCDM 2.0 §4.10).
+        credentialSubject:
+          oneOf:
+          - type: object
+            description: A subject and the claims about it.
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier of the subject.
+            additionalProperties: true
+          - type: array
+            items:
+              type: object
+              description: A subject and the claims about it.
+              properties:
+                id:
+                  type: string
+                  format: uri
+                  description: The identifier of the subject.
+              additionalProperties: true
+            minItems: 1
+          description: The subjects and the claims about them (VCDM 2.0 §4.8).
+        description:
+          description: A description of the credential (VCDM 2.0 §4.6).
+        id:
+          type: string
+          format: uri
+          description: The identifier of the credential (VCDM 2.0 §4.4).
+        issuer:
+          oneOf:
+          - type: string
+            format: uri
+            description: The identifier.
+          - type: object
+            description: The identifier with further properties.
+            required:
+            - id
+            properties:
+              id:
+                type: string
+                format: uri
+                description: The identifier.
+            additionalProperties: true
+          description: The issuer (VCDM 2.0 §4.7).
+        name:
+          description: A name for the credential (VCDM 2.0 §4.6).
+        type:
+          oneOf:
+          - type: string
+            description: A type.
+          - type: array
+            items:
+              type: string
+              description: A type.
+            minItems: 1
+          description: The types (VCDM 2.0 §4.5), including `VerifiableCredential`.
+        validFrom:
+          type: string
+          format: date-time
+          description: When the credential becomes valid (VCDM 2.0 §4.9).
+        validUntil:
+          type: string
+          format: date-time
+          description: When the credential ceases to be valid (VCDM 2.0 §4.9).
+      additionalProperties: true
     CredentialView:
       type: object
       required:
@@ -2622,6 +3030,7 @@ components:
           type: string
         templateId:
           type: string
+          minLength: 1
     Data:
       type: object
       required:
@@ -2655,6 +3064,7 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
     DeliveryOptions:
       type: object
       properties:
@@ -2825,6 +3235,7 @@ components:
       properties:
         sourceTemplateId:
           type: string
+          minLength: 1
     EmailOfferEndpointRequest:
       type: object
       required:
@@ -2877,21 +3288,6 @@ components:
       enum:
       - country
       - skill
-    GetConnectionsEndpointRequest:
-      type: object
-      properties:
-        did:
-          type:
-          - string
-          - 'null'
-        display:
-          oneOf:
-          - $ref: '#/components/schemas/ConnectionDisplayProperties'
-          - type: 'null'
-        url:
-          type:
-          - string
-          - 'null'
     HolderAuthorization:
       type: object
       required:
@@ -2909,8 +3305,10 @@ components:
       - credential
       properties:
         credential:
-          $ref: '#/components/schemas/Jwt'
-          description: Compact JWT-encoded verifiable credential to add to the holder.
+          $ref: '#/components/schemas/SignedCredential'
+          description: |-
+            The credential to add to the holder: a credential JWT, or a VCDM 2.0 credential secured with SD-JWT
+            (`vc+sd-jwt`) with the disclosures to keep.
     HolderType:
       type: string
       enum:
@@ -3065,9 +3463,20 @@ components:
               The credential. Decoded from the JWT *without* verifying its signature when
               `result.valid` is `false`, and `None` when it could not be decoded at all.
           - type: 'null'
+        credential_v2:
+          oneOf:
+          - $ref: '#/components/schemas/CredentialV2'
+            description: |-
+              The credential of a VCDM 2.0 presentation (`vp+jwt`), unwrapped from its envelope, a credential secured with
+              SD-JWT with the disclosures it carries applied. Decoded *without* verifying its signature when `result.valid`
+              is `false`, and `None` when it could not be decoded at all. A VCDM 1.1 presentation's credentials are in
+              `credential`.
+          - type: 'null'
         jwt:
           type: string
-          description: The raw credential JWT exactly as it appeared in the presentation.
+          description: |-
+            The raw credential exactly as it appeared in the presentation: a JWT, or the SD-JWT of a `vc+sd-jwt`
+            credential, with the disclosures it was presented with.
         result:
           $ref: '#/components/schemas/ValidationResult'
           description: |-
@@ -3341,6 +3750,7 @@ components:
 
             At least one template ID is required. These IDs select the credential types a wallet may
             request; they do not identify credential instances or provide credential claim data.
+          minItems: 1
     PatchCredentialEndpointRequest:
       type: object
       required:
@@ -3763,9 +4173,9 @@ components:
       type: string
       description: DID methods supported by UniCore
       enum:
-      - did_jwk
-      - did_key
-      - did_web
+      - did:jwk
+      - did:key
+      - did:web
     SyncConnectionRequest:
       type: object
       required:
@@ -3833,6 +4243,11 @@ components:
           type:
           - string
           - 'null'
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+            description: Where the template was imported from, if it was.
+          - type: 'null'
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -3874,6 +4289,40 @@ components:
           - 'null'
         uri:
           type: string
+    TemplateOrigin:
+      type: object
+      description: |-
+        Where a template was imported from.
+
+        Set by the importing caller, stored as given, and never fetched or verified. Compare `digest`
+        with the digest of the source's current public content to tell whether the source changed since
+        the import, and with the digest of the local template's public content to tell whether the copy
+        was edited locally.
+      required:
+      - publisherUri
+      - sourceTemplateId
+      - digest
+      properties:
+        checkForUpdates:
+          type: boolean
+          description: |-
+            Whether the importer wants to hear about changes at the source. Off for a copy that is meant to be taken once
+            and maintained locally. Not part of the template's public content, so it never changes its digest. Absent means
+            `true`.
+          default: true
+        digest:
+          type: string
+          description: |-
+            Digest of the template's public content at import time: `sha256-` followed by 64 lowercase
+            hexadecimal digits.
+        publisherUri:
+          type: string
+          description: |-
+            URI identifying who published the template, e.g. the identifier of the publishing entity. Not an address of the
+            template itself: every template imported from one publisher carries the same value.
+        sourceTemplateId:
+          type: string
+          description: Identifier of the template at the publisher. Opaque.
     TxCodeConstraints:
       type: object
       properties:
@@ -3903,6 +4352,8 @@ components:
           minimum: 0
     UpdateTemplateEndpointRequest:
       type: object
+      required:
+      - id
       properties:
         credentialExpiration:
           oneOf:
@@ -3927,6 +4378,12 @@ components:
         id:
           type: string
           default: ''
+          minLength: 1
+        origin:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateOrigin'
+          - type: 'null'
+          description: Replaces the origin; `null` removes it. Applied after all other fields.
         schema: {}
         schemaPropertiesAttributes:
           type:
@@ -3959,6 +4416,7 @@ components:
           - string
           - 'null'
           default: null
+          minLength: 1
         type:
           type:
           - array
