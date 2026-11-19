@@ -15,7 +15,6 @@ use oid4vp::{authorization_request::ClientId, token::vp_token_validator::Decoded
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::{debug, info};
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct AuthorizationRequest {
@@ -45,8 +44,6 @@ impl Aggregate for AuthorizationRequest {
         use AuthorizationRequestCommand::*;
         use AuthorizationRequestError::*;
         use AuthorizationRequestEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateAuthorizationRequest {
@@ -254,8 +251,6 @@ impl Aggregate for AuthorizationRequest {
 
     fn apply(&mut self, event: Self::Event) {
         use AuthorizationRequestEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             AuthorizationRequestCreated { authorization_request } => {

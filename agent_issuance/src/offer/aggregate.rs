@@ -1,4 +1,5 @@
 use agent_shared::config::config;
+use agent_shared::sensitive_logging::sensitive;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
 use oid4vci::credential_issuer::CredentialIssuer;
@@ -9,7 +10,7 @@ use oid4vci::credential_response::{CredentialResponse, CredentialResponseObject,
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 use crate::offer::command::OfferCommand;
@@ -93,8 +94,6 @@ impl Aggregate for Offer {
     ) -> Result<(), Self::Error> {
         use OfferCommand::*;
         use OfferEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateCredentialOffer {
@@ -250,7 +249,12 @@ impl Aggregate for Offer {
                                 .as_str(),
                         );
 
-                        info!("Sending credential offer to: {}", target);
+                        debug!(
+                            %offer_id,
+                            target_host = target_url.host_str(),
+                            target = sensitive(&target),
+                            "Sending credential offer"
+                        );
 
                         client
                             .get(target)
@@ -266,7 +270,11 @@ impl Aggregate for Offer {
                         }])
                     }
                     DeliveryMethod::Email { recipient_email } => {
-                        info!("Sending credential offer via email to: {}", recipient_email);
+                        debug!(
+                            %offer_id,
+                            recipient_email = sensitive(&recipient_email),
+                            "Sending credential offer via email"
+                        );
 
                         // TODO: Remove this client-side logic.
                         let offer_link = config()
@@ -370,8 +378,6 @@ impl Aggregate for Offer {
 
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             CredentialOfferCreated {

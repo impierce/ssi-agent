@@ -28,7 +28,6 @@ use oid4vci::VerifiableCredentialJwt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
@@ -124,8 +123,6 @@ impl Aggregate for Credential {
         use CredentialCommand::*;
         use CredentialError::*;
         use CredentialEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
@@ -473,8 +470,6 @@ impl Aggregate for Credential {
 
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
-
-        debug!("Applying event: {:?}", event);
 
         match event {
             UnsignedCredentialCreated {
@@ -1511,10 +1506,7 @@ pub mod test_utils {
                     .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec![
-                    AlgIdentifier::String("ES256".to_string()),
-                    AlgIdentifier::String("EdDSA".to_string())
-                ],
+                credential_signing_alg_values_supported: vec![AlgIdentifier::String("EdDSA".to_string())],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {

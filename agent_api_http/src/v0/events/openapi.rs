@@ -1,4 +1,4 @@
-use crate::v0::events::__path_events_sse_handler;
+use crate::v0::events::{__path_events_sse_handler, CloudEventStreamEvent};
 use shared_kernel::event_bus::CloudEvent;
 use utoipa::{
     openapi::{
@@ -12,7 +12,7 @@ use utoipa::{
 #[derive(OpenApi)]
 #[openapi(
     paths(events_sse_handler),
-    components(schemas(CloudEvent)),
+    components(schemas(CloudEvent, CloudEventStreamEvent)),
     tags(
         (name = "Events", description = "Stream domain events as CloudEvents via SSE.")
     )

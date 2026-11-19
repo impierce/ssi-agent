@@ -1,7 +1,8 @@
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
 use shared_kernel::command_handler::{CommandHandler, CommandHandlerFactory};
 use shared_kernel::cqrs_es::View;
-use shared_kernel::cqrs_es::{persist::PersistedEventStore, Aggregate, CqrsFramework, Query};
+use shared_kernel::cqrs_es::{Aggregate, CqrsFramework, Query};
+use shared_kernel::streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS};
 use shared_kernel::view_repository::{BoxedViewRepository, ViewRepositoryFactory};
 use std::future::Future;
 use std::sync::Arc;
@@ -49,10 +50,14 @@ impl CommandHandlerFactory for MongoDBStore {
         let client = self.client.clone();
 
         async move {
-            let repo = MongoEventRepository::new(client)
+            let repo = MongoEventRepository::new(client.clone())
                 .await
                 .map_err(|e| MongoDBAggregateError(e.to_string()))?;
-            let store = PersistedEventStore::new_event_store(repo);
+            let replay = MongoEventRepository::new(client)
+                .await
+                .map_err(|e| MongoDBAggregateError(e.to_string()))?
+                .with_streaming_channel_size(REPLAY_BUFFER_EVENTS);
+            let store = StreamingEventStore::new(repo, replay);
 
             Ok(Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>)
         }

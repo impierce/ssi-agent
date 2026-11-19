@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use cqrs_es::{Aggregate, AggregateError, CqrsFramework, EventStore, Query};
 use std::{collections::HashMap, future::Future, sync::Arc};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 /// Trait for executing commands on a specific aggregate type.
 ///
@@ -88,8 +88,15 @@ where
     handler
         .execute_with_metadata(aggregate_id, command, metadata)
         .await
-        .inspect(|()| info!(aggregate_id, "Command executed successfully"))
-        .inspect_err(|e| error!(aggregate_id, error = ?e, "Command execution failed"))
+        .inspect(|()| debug!(aggregate_id, "Command executed successfully"))
+        .inspect_err(|e| {
+            if let AggregateError::UserError(error) = e {
+                // Rejected by a business rule; reported to the caller as a client error.
+                debug!(aggregate_id, error = %error, "Command rejected");
+            } else {
+                error!(aggregate_id, error = %e, "Command execution failed");
+            }
+        })
 }
 
 /// Blanket implementation of [`CommandExecutor`] for [`CqrsFramework`].

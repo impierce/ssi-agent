@@ -1,3 +1,4 @@
+use crate::extractors::JsonBody;
 use crate::{error::IntoApiErrorExt, extractors::RequestActor};
 use agent_identity::{
     document::web::normalize_origin,
@@ -52,7 +53,7 @@ impl LinkedDomainsRequest {
 pub(crate) async fn add_linked_domains(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(request): Json<LinkedDomainsRequest>,
+    JsonBody(request): JsonBody<LinkedDomainsRequest>,
 ) -> Result<StatusCode, ApiError> {
     let origins = request.origins()?;
 
@@ -91,7 +92,7 @@ pub(crate) async fn add_linked_domains(
 pub(crate) async fn remove_linked_domains(
     State(state): State<Arc<IdentityState>>,
     RequestActor(actor): RequestActor,
-    Json(request): Json<LinkedDomainsRequest>,
+    JsonBody(request): JsonBody<LinkedDomainsRequest>,
 ) -> Result<StatusCode, ApiError> {
     let origins = request.origins()?;
 

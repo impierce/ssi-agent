@@ -6,6 +6,7 @@ use agent_authorization::application::consent_query_service::{ConsentPageViewMod
 use agent_authorization::application::consent_service::{ConsentService, ConsentServiceResponse};
 use agent_authorization::application::oauth2_authorization_service::GetConsentQuery;
 use agent_authorization::state::AuthorizationState;
+use agent_shared::sensitive_logging::sensitive;
 use axum::Form;
 use axum::{
     extract::State,
@@ -14,7 +15,7 @@ use axum::{
 use http::{header, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::info;
+use tracing::debug;
 
 /// Get the consent page
 ///
@@ -91,7 +92,11 @@ pub async fn post_consent(
 ) -> Result<Response, PublicError> {
     match ConsentService::handle_consent(&state, client_id, request_uri, consent_given).await? {
         ConsentServiceResponse::Found(location) => {
-            info!("Redirecting to location: {}", location);
+            debug!(
+                path = location.split('?').next(),
+                location = sensitive(&location),
+                "Redirecting after consent"
+            );
 
             Ok((StatusCode::FOUND, [(header::LOCATION, location)]).into_response())
         }

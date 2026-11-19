@@ -11,7 +11,7 @@ use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
 use reqwest::{header, redirect::Policy, Client};
 use std::{io::Read, sync::Arc, time::Duration};
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 /// The largest status list token, compressed or not, the checker reads. The status list URI comes from the credential,
 /// so its server decides how much it sends. This is the body limit of IdentityKit's `ReqwestClient`.
@@ -81,7 +81,7 @@ impl CredentialStatusChecker {
             .ok()
             .and_then(|status| status.status_list)
         {
-            info!("Succesfully parsed `status` claim {status_list_ref:#?}");
+            debug!(uri = %status_list_ref.uri, index = status_list_ref.idx, "Checking credential status");
 
             // 3xx redirects should be followed, but infinite loops are caught after 5 redirects.
             // The timeout of 10 seconds is an estimated guess of how long a status list request should take at maximum.

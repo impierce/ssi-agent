@@ -267,6 +267,8 @@ The format of the log output.
 - `json` _(default)_
 - `text`
 
+When traces are exported via OpenTelemetry, `json` log lines written within a span carry its `trace_id` and `span_id`.
+
 #### Example
 
 ```yaml
@@ -300,6 +302,22 @@ Only required when `type` is `postgres`.
 event_store:
   type: postgres
   connection_string: postgresql://user:password@database:5432/demo
+```
+
+### Maximum request body size
+
+The maximum size, in bytes, of an HTTP request body. A larger request is rejected with `413 Payload Too Large` ([problem details](../problem-details/request.md#payload-too-large)) before its body is read in full. The default of 2 MiB fits every request UniCore expects; raise it only if legitimate requests, such as large batches of credentials, exceed it.
+
+The limit applies to every request before authorization, so it is also the amount of memory any unauthenticated client can make UniCore use per request. Keep it as low as your requests allow. There is no value that turns the limit off.
+
+| Environment variable               | `config.yaml`            | Default   |
+| ---------------------------------- | ------------------------ | --------- |
+| `UNICORE__MAX_REQUEST_BODY_BYTES` | `max_request_body_bytes` | `2097152` |
+
+#### Example
+
+```yaml
+max_request_body_bytes: 8388608 # 8 MiB
 ```
 
 ### Feature flags
