@@ -8,7 +8,7 @@ use agent_identity::{
         SigningKeyStatus,
     },
 };
-use agent_shared::config::SupportedDidMethod;
+use agent_shared::{config::SupportedDidMethod, handlers::QueryHandlerError};
 use axum::{
     extract::State,
     response::{IntoResponse, Response},
@@ -331,9 +331,12 @@ pub(crate) async fn get_signing_keys_endpoint(
 ) -> Result<Json<Vec<SigningKeyDto>>, ApiError> {
     let statuses = get_signing_keys(&state, actor.map_or(Caller::Anonymous, Caller::Actor))
         .await
-        .map_err(|error| {
-            tracing::error!("Listing the signing keys failed: {error:#}");
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+        .map_err(|error| match error.downcast::<QueryHandlerError>() {
+            Ok(error) => error.into_api_error(),
+            Err(error) => {
+                tracing::error!("Listing the signing keys failed: {error:#}");
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         })?;
 
     Ok(Json(
@@ -489,6 +492,44 @@ mod tests {
         assert!(responses
             .iter()
             .all(|(status, body)| *status == StatusCode::NOT_FOUND && body.is_empty()));
+    }
+
+    struct DenyingAuthorization;
+
+    #[async_trait::async_trait]
+    impl shared_kernel::authorization::AuthorizationChecker for DenyingAuthorization {
+        async fn is_authorized(
+            &self,
+            _request: &shared_kernel::authorization::AuthorizationRequest,
+        ) -> Result<(), shared_kernel::authorization::AuthorizationError> {
+            Err(shared_kernel::authorization::AuthorizationError::Forbidden)
+        }
+    }
+
+    #[tokio::test]
+    async fn listing_signing_keys_unauthorized_answers_forbidden() {
+        let event_bus = EventBusHandle::default();
+        let mut identity_state = agent_identity::identity_state(
+            &agent_store::in_memory::InMemory,
+            IdentityServices::default(),
+            &event_bus,
+        )
+        .await;
+        identity_state.authorization_checker = Arc::new(DenyingAuthorization);
+        let app = crate::app(
+            crate::ApiState {
+                identity_state: Some(Arc::new(identity_state)),
+                kms_state: Some(Arc::new(
+                    kms_state(&agent_store::in_memory::InMemory, &event_bus, true, Default::default()).await,
+                )),
+                ..Default::default()
+            },
+            Arc::new(NoActorExtractor),
+        );
+
+        let (status, _) = get_signing_keys(app).await;
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

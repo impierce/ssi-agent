@@ -40,7 +40,7 @@ This error occurs when `create-key` is called with a label that already names a 
 
 ## Key In Use
 
-This error occurs when `delete-key` names a key that a DID document has selected to sign with. Deleting it would stop that document from signing. Select another key with `select-signing-key`, or go back to the configured key with `deselect-signing-key`, then delete it.
+This error occurs when `delete-key` names the key of a verification method in a DID document. Deleting it would stop that method from signing, and Domain Linkage Credentials are signed for every method of the document, also those not selected to sign. Remove the method with `remove-key-from-document` first, then delete the key. When the key is selected to sign, select another key with `select-signing-key`, or the configured one with `deselect-signing-key`, before removing it.
 
 ## Key Already Recorded
 

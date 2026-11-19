@@ -737,6 +737,7 @@ pub enum AddKeyError {
 ///
 /// Fails when the caller isn't authorized, there is no such key, or there is no enabled `did:web` document.
 pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Result<DidUrl, AddKeyError> {
+    let _method_keys = state.services.subject.lock_method_keys().await;
     let Some((document_id, did)) = query_all_documents(state, |(_, document)| {
         document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
     })
@@ -788,6 +789,8 @@ async fn load_external_keys(state: &IdentityState, at_startup: bool) -> anyhow::
             if at_startup { warn!($($arg)*) } else { debug!($($arg)*) }
         };
     }
+    // Held from before the documents are read, so that a key added meanwhile isn't replaced by this older view.
+    let _method_keys = state.services.subject.lock_method_keys().await;
     let keys = match state.services.external_keys.keys().await {
         Ok(keys) => keys,
         Err(error) => {
@@ -922,17 +925,14 @@ pub async fn get_signing_keys(state: &IdentityState, caller: Caller) -> anyhow::
     Ok(statuses)
 }
 
-/// The verification method of an enabled document that is selected to sign and whose key is the external key
-/// `key_id`, with the public key `public_key`, if any.
+/// The verification method of an enabled document whose key is the external key `key_id`, with the public key
+/// `public_key`, if any. Domain Linkage Credentials are signed for every verification method, so one whose key is gone
+/// breaks their renewal, also when it isn't selected to sign.
 ///
 /// # Errors
 ///
 /// Fails when the documents can't be loaded.
-pub async fn selected_method_of_key(
-    state: &IdentityState,
-    key_id: &str,
-    public_key: &Jwk,
-) -> anyhow::Result<Option<DidUrl>> {
+pub async fn method_of_key(state: &IdentityState, key_id: &str, public_key: &Jwk) -> anyhow::Result<Option<DidUrl>> {
     let thumbprint = public_key.thumbprint_sha256().ok();
     Ok(
         query_all_documents(state, |(_, document)| document.status != Status::Disabled)
@@ -940,8 +940,8 @@ pub async fn selected_method_of_key(
             .into_values()
             .flat_map(|document| {
                 document
-                    .signing_methods
-                    .into_values()
+                    .added_verification_methods
+                    .into_iter()
                     .filter(|method| {
                         document.added_keys.get(method).map(String::as_str) == Some(key_id)
                             || (thumbprint.is_some() && method.fragment() == thumbprint.as_deref())
@@ -1469,21 +1469,74 @@ mod tests {
         );
     }
 
+    /// Has the KMS key as `kms-key`, but lists no keys, as before it was created, and only once released.
+    struct GatedKeys {
+        key: ExternalKey,
+        listing: tokio::sync::Notify,
+        released: tokio::sync::Semaphore,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::services::ExternalKeySource for GatedKeys {
+        async fn key(&self, key_id: &str) -> anyhow::Result<Option<ExternalKey>> {
+            Ok((key_id == "kms-key").then(|| self.key.clone()))
+        }
+
+        async fn keys(&self) -> anyhow::Result<Vec<ExternalKey>> {
+            self.listing.notify_one();
+            let _ = self.released.acquire().await?;
+            Ok(vec![])
+        }
+    }
+
     #[tokio::test]
     #[serial_test::serial]
-    async fn finds_the_selected_verification_method_of_a_key() {
-        let state = state_with_added_key().await;
-        handle(
-            &state,
-            DocumentCommand::SelectSigningKey {
-                verification_method_id: KMS_METHOD.parse().unwrap(),
+    async fn a_refresh_started_before_a_key_is_added_keeps_it() {
+        let state = state_with_did_web(kms_key().await).await;
+        let keys = Arc::new(GatedKeys {
+            key: ExternalKey {
+                method_key: method_key().await,
             },
-        )
-        .await;
+            listing: tokio::sync::Notify::new(),
+            released: tokio::sync::Semaphore::new(0),
+        });
+        let mut services = Arc::unwrap_or_clone(state.services.clone());
+        services.external_keys = keys.clone();
+        let state = IdentityState {
+            services: Arc::new(services),
+            ..state
+        };
 
-        let method = selected_method_of_key(&state, "kms-key", &kms_public_key())
-            .await
+        let (refreshed, ()) = tokio::join!(refresh_signing_keys(&state), async {
+            keys.listing.notified().await;
+            let add = add_key(&state, Caller::Internal, "kms-key");
+            tokio::pin!(add);
+            // Without waiting for the refresh, the key is added before the refresh replaces the keys.
+            let added = tokio::time::timeout(std::time::Duration::from_millis(100), &mut add).await;
+            keys.released.add_permits(1);
+            match added {
+                Ok(added) => added,
+                Err(_) => add.await,
+            }
             .unwrap();
+        });
+        refreshed.unwrap();
+
+        assert!(
+            state
+                .services
+                .subject
+                .has_method_key(&KMS_METHOD.parse().unwrap())
+                .await
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn finds_the_verification_method_of_a_key_that_is_not_selected() {
+        let state = state_with_added_key().await;
+
+        let method = method_of_key(&state, "kms-key", &kms_public_key()).await.unwrap();
 
         assert_eq!(method, Some(KMS_METHOD.parse().unwrap()));
     }

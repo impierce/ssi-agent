@@ -30,6 +30,8 @@ pub struct Subject {
     added_methods: Arc<Mutex<HashSet<DidUrl>>>,
     /// Why the key of a verification method last failed to sign, until it signs again.
     failures: Arc<Mutex<HashMap<DidUrl, String>>>,
+    /// Held while the keys of verification methods are loaded again, or one is added.
+    method_keys_update: Arc<Mutex<()>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
 }
@@ -101,6 +103,7 @@ impl Subject {
             method_keys: Arc::new(Mutex::new(HashMap::new())),
             added_methods: Arc::new(Mutex::new(HashSet::new())),
             failures: Arc::new(Mutex::new(HashMap::new())),
+            method_keys_update: Arc::default(),
             key_resolver: key_resolver(),
         }
     }
@@ -199,6 +202,12 @@ impl Subject {
     pub async fn insert_method_key(&self, verification_method_id: DidUrl, key: MethodKey) {
         self.added_methods.lock().await.insert(verification_method_id.clone());
         self.method_keys.lock().await.insert(verification_method_id, key);
+    }
+
+    /// Keeps the keys of verification methods from being loaded again or added by others until the guard is dropped, so
+    /// that keys loaded from documents read before a key was added don't replace that key.
+    pub async fn lock_method_keys(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.method_keys_update.clone().lock_owned().await
     }
 
     /// Replaces the keys of all verification methods at once, such as after loading them again, so that keys no longer
@@ -344,6 +353,7 @@ mod default_subject {
                 method_keys: Arc::new(Mutex::new(HashMap::new())),
                 added_methods: Arc::new(Mutex::new(HashSet::new())),
                 failures: Arc::new(Mutex::new(HashMap::new())),
+                method_keys_update: Arc::default(),
                 key_resolver: key_resolver(),
             }
         }

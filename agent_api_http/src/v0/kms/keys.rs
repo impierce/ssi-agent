@@ -172,7 +172,8 @@ pub struct DeleteKeyRequest {
 /// Delete a key
 ///
 /// Deletes a key from its provider, which schedules its deletion where the provider does so, and frees its label. It
-/// no longer signs. The provider doesn't need to be added anymore.
+/// no longer signs. The provider doesn't need to be added anymore. The key of a verification method in a DID document
+/// isn't deleted: remove the method with `remove-key-from-document` first.
 #[utoipa::path(
     post,
     path = "/delete-key",
@@ -182,6 +183,7 @@ pub struct DeleteKeyRequest {
     responses(
         (status = 204, description = "Key deleted"),
         (status = 404, description = "There is no such key"),
+        (status = 409, description = "The key is the key of a verification method in a DID document"),
         (status = 422, description = "Request body does not match the expected schema"),
         (status = 502, description = "The provider could not delete the key"),
     )
