@@ -86,7 +86,15 @@ print("==> Agent is ready, seeding")
 
 seeded = {
     name: []
-    for name in ("templates", "catalogs", "offers", "credentials", "authorization_requests", "event_publishers")
+    for name in (
+        "templates",
+        "catalogs",
+        "offers",
+        "credentials",
+        "authorization_requests",
+        "event_publishers",
+        "deletable_event_publishers",
+    )
 }
 
 for copy in range(COPIES):
@@ -118,17 +126,38 @@ for copy in range(COPIES):
     _, headers, _ = request("POST", "/v0/authorization_requests", {})
     seeded["authorization_requests"].append(headers["Location"].rsplit("/", 1)[-1])
 
-    _, _, publisher = request(
-        "POST",
-        "/v0/create-event-publisher",
-        {
-            "name": f"Fuzz publisher {copy}",
-            "enabled": False,
-            "filter": {"types": ["com.impierce.unicore.issuance.*"]},
-            "config": {"publisherType": "http", "targetUrl": "https://subscriber.example.org/events"},
-        },
-    )
-    seeded["event_publishers"].append(publisher["id"])
+    for pool in ("event_publishers", "deletable_event_publishers"):
+        _, _, publisher = request(
+            "POST",
+            "/v0/create-event-publisher",
+            {
+                "name": f"Fuzz {pool} {copy}",
+                "enabled": False,
+                "filter": {"types": ["com.impierce.unicore.issuance.*"]},
+                "config": {"publisherType": "http", "targetUrl": "https://subscriber.example.org/events"},
+            },
+        )
+        seeded[pool].append(publisher["id"])
+
+seeded["event_types"] = [
+    "*",
+    "com.impierce.unicore.issuance.*",
+    "com.impierce.unicore.template.*",
+    "com.impierce.unicore.verification.*",
+    "issuance.credential.issued",
+]
+seeded["webhook_urls"] = [
+    "https://subscriber.example.org/events",
+    "http://subscriber.example.org/webhooks/unicore",
+]
+seeded["nats_urls"] = [
+    "nats://broker.example.org:4222",
+    "tls://broker.example.org:4222",
+]
+seeded["nats_subjects"] = [
+    "unicore.events",
+    "unicore.issuance.events",
+]
 
 request("POST", "/v0/add-key-provider", {"providerType": "in_memory", "name": "Fuzz"})
 
