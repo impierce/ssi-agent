@@ -8,7 +8,8 @@ UniCore implements conventional probe endpoints to monitor the availability and 
 
 - `/livez`: Liveness probe
 - `/healthz`: Backwards-compatible alias for `/livez`
-- `/readyz`: Readiness probe
+- `/readyz`: Readiness probe, `503` until persisted events are verified, and from the start of a shutdown (see
+  [Event-store writer lease](./writer-lease.md))
 
 ## Metadata
 

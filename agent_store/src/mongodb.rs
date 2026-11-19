@@ -1,5 +1,6 @@
 use crate::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
-use crate::{AggregateHandler, CqrsComponentBuilder};
+use crate::mongodb_lease::{LeasedMongoEventRepository, MongoWriterLease};
+use crate::{writer_lease::WriterLease, AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use async_trait::async_trait;
 use cqrs_es::CqrsFramework;
@@ -16,15 +17,22 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
-impl<A> AggregateHandler<A, StreamingEventStore<MongoEventRepository, A>>
+impl<A> AggregateHandler<A, StreamingEventStore<LeasedMongoEventRepository, A>>
 where
     A: Aggregate,
 {
-    async fn new(client: Client, services: A::Services) -> Self {
+    async fn new(client: Client, lease: Arc<MongoWriterLease>, services: A::Services) -> Self {
         let replay = new_event_repository(client.clone())
             .await
             .with_streaming_channel_size(REPLAY_BUFFER_EVENTS);
-        let store = StreamingEventStore::new(new_event_repository(client).await, replay);
+        let store = StreamingEventStore::new(
+            LeasedMongoEventRepository::new(
+                new_event_repository(client.clone()).await,
+                client.clone(),
+                lease.clone(),
+            ),
+            LeasedMongoEventRepository::new(replay, client, lease),
+        );
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
         }
@@ -61,6 +69,7 @@ async fn new_event_repository(client: Client) -> MongoEventRepository {
 
 pub struct MongoDB {
     pub client: Client,
+    writer_lease: Arc<MongoWriterLease>,
 }
 
 impl MongoDB {
@@ -69,7 +78,14 @@ impl MongoDB {
             "Missing config parameter `event_store.connection_string` or `UNICORE__EVENT_STORE__CONNECTION_STRING`",
         );
         let client = default_mongo_client(&connection_string).await;
-        Self { client }
+        let writer_lease = MongoWriterLease::new(client.clone());
+        Self { client, writer_lease }
+    }
+
+    /// Waits for the event-store writer lease. Events can only be appended while it is held.
+    pub async fn acquire_writer_lease(&self) -> Result<WriterLease, mongodb::error::Error> {
+        self.writer_lease.acquire().await?;
+        Ok(WriterLease::MongoDb(self.writer_lease.clone()))
     }
     // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
 
@@ -147,7 +163,7 @@ impl CqrsComponentBuilder for MongoDB {
 
         (
             Arc::new(
-                AggregateHandler::new(self.client.clone(), services)
+                AggregateHandler::new(self.client.clone(), self.writer_lease.clone(), services)
                     .await
                     .with_parameters(aggregate.clone(), all_aggregates.clone(), queries, &all_aggregates_name),
             ),
