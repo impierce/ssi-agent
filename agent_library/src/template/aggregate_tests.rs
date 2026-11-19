@@ -3349,6 +3349,32 @@ async fn test_update_origin_with_none_removes_origin(template_id: String) {
 #[rstest]
 #[serial_test::serial]
 #[tokio::test]
+async fn test_update_origin_with_same_origin_emits_no_events(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_events(vec![]);
+
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(&template_id, None)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id,
+            origin: None,
+        })
+        .await
+        .then_expect_events(vec![])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
 async fn test_update_origin_with_invalid_origin_is_rejected(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_origin(&template_id, None)])

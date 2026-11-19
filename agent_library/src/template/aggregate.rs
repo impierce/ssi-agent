@@ -615,7 +615,20 @@ impl Template {
             }
         }
 
-        events.extend(template.decide(UpdateOrigin { template_id, origin })?);
+        if let Some(ref origin) = origin {
+            origin.validate()?;
+        }
+
+        #[cfg(not(test))]
+        let modified_at = chrono::Utc::now().to_rfc3339();
+        #[cfg(test)]
+        let modified_at = test_utils::modified_at();
+
+        events.push(TemplateEvent::OriginUpdated {
+            template_id,
+            origin,
+            modified_at,
+        });
         Ok(events)
     }
 
@@ -1088,6 +1101,10 @@ impl Template {
 
                 if let Some(ref origin) = origin {
                     origin.validate()?;
+                }
+
+                if self.origin == origin {
+                    return Ok(vec![]);
                 }
 
                 #[cfg(not(test))]
