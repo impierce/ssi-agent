@@ -54,7 +54,8 @@ Two rules stood in the way:
   checks an Open Badges schema property by property against it. Arrays there need their own
   mapping.
 - **No migration.** Keys to leaves stay valid, also below an object, and Open Badges templates
-  still get their attributes per leaf. Stored templates and events are untouched.
+  still get their attributes per leaf. Stored templates and events are untouched. Issuer metadata
+  is not stored with a template: it is derived again for every published template at startup.
 
 ## Alternatives Considered
 
@@ -79,6 +80,10 @@ that does not exist yet.
 - A public offer needs every leaf fixed by `const`. A list or a table with a `const` is fixed; one
   without is not, whatever its items say.
 - Disclosing single items of a list, or single fields of a nested object, needs a new decision.
+- `mandatory` says what the template's schema requires now. UniCore checks the claims of a
+  credential it signs against that schema when the credential is created. It does not check a
+  credential that arrives signed, and one created before a schema change is issued as it was
+  created. Either can lack a claim the metadata calls mandatory.
 
 ## Related Documentation
 

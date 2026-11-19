@@ -1,6 +1,7 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
+use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{is_array_schema, DataModel, Display, HolderType, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
@@ -155,6 +156,32 @@ impl CredentialConfigurationProjection {
         .await
         {
             warn!("Failed to remove credential configuration for template `{template_id}`: {e}");
+        }
+    }
+}
+
+/// Derives the credential configuration of every published template again.
+///
+/// A configuration is otherwise derived only when its template changes, so one that an earlier version derived
+/// differently would be advertised as it was until then. A configuration that is already current is left alone.
+pub async fn resync_credential_configurations(issuance_state: Arc<IssuanceState>, library_state: &LibraryState) {
+    use agent_library::template::aggregate::Status;
+
+    let all_templates = match public_query_handler("all_templates", &library_state.query.all_templates).await {
+        Ok(Some(all_templates)) => all_templates,
+        Ok(None) => return,
+        Err(e) => {
+            warn!("Failed to query the templates to resync their credential configurations: {e}");
+            return;
+        }
+    };
+
+    let (projection, _) = CredentialConfigurationProjection::new(issuance_state);
+    for (template_id, template) in &all_templates.templates {
+        if template.status == Status::Published {
+            projection
+                .update_credential_configuration(template_id, credential_configuration_from_template(template))
+                .await;
         }
     }
 }
@@ -422,7 +449,6 @@ impl Query<Template> for CredentialConfigurationProjection {
                 | DisplayUpdated { template_id, .. }
                 | TypeUpdated { template_id, .. }
                 | SchemaUpdated { template_id, .. }
-                | SchemaPropertiesAttributesUpdated { template_id, .. }
                 | HolderAuthorizationUpdated { template_id, .. } => {
                     self.sync_from_view(template_id).await;
                 }

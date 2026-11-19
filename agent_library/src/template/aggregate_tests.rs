@@ -3876,7 +3876,7 @@ async fn test_update_schema_keeps_non_removable_object_and_array(template_id: St
 }
 
 /// The schema of a template describes the claims, an object: an array is refused at its root, on create and on a
-/// schema update. An Open Badges template refuses it by its own rules, before this one.
+/// schema update. An Open Badges template refuses it too, on create for the properties it lacks.
 #[rstest]
 #[case::array(serde_json::json!({ "type": "array", "items": { "type": "string" } }))]
 #[case::array_in_type_list(serde_json::json!({ "type": ["array", "null"], "items": { "type": "string" } }))]
@@ -3946,4 +3946,121 @@ async fn test_array_with_properties_is_addressed_as_a_whole(template_id: String)
         vec!["TemplateCreated", "SchemaUpdated", "SchemaPropertiesAttributesUpdated"]
     );
     assert_eq!(applied(events).schema_properties_attributes, None);
+}
+
+/// Attributes are replaced under the same rule as on create: an object or an array as a whole, nothing inside an
+/// array.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_attributes_addresses_objects_and_arrays_as_a_whole(template_id: String) {
+    let created = events_after(vec![create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        None,
+    )])
+    .await;
+    let update = |keys: &[&str]| TemplateCommand::UpdateSchemaPropertiesAttributes {
+        template_id: template_id.clone(),
+        schema_properties_attributes: keys.iter().map(|key| (key.to_string(), disclosable())).collect(),
+    };
+
+    let keys = ["/Address", "/Address/Coordinates", "/Skills", "/Completed classes"];
+    let mut events = created.clone();
+    events.extend(replaced(created.clone(), update(&keys)).await.unwrap());
+    assert_eq!(
+        event_names(&events),
+        vec!["TemplateCreated", "SchemaPropertiesAttributesUpdated"]
+    );
+    let mut stored: Vec<String> = applied(events)
+        .schema_properties_attributes
+        .unwrap()
+        .into_keys()
+        .collect();
+    stored.sort();
+    assert_eq!(
+        stored,
+        vec!["/Address", "/Address/Coordinates", "/Completed classes", "/Skills"]
+    );
+
+    let error = replaced(created, update(&["/Address", "/Completed classes/Code"]))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Invalid schema_properties_attributes key(s): The following keys do not match any field in \
+         schema.properties: [/Completed classes/Code]"
+    );
+}
+
+/// An Open Badges template takes an attribute for an object as a whole next to the ones it gets for its leaves, and
+/// its required leaves stay non-removable.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_open_badges_template_takes_attribute_for_whole_object(template_id: String) {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "achievement": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "criteria": {
+                        "type": "object",
+                        "properties": { "narrative": { "type": "string" } }
+                    }
+                }
+            }
+        }
+    });
+
+    let attributes = applied(
+        events_after(vec![create_command_with_schema(
+            &template_id,
+            DataModel::OpenBadges3_0,
+            schema,
+            Some(HashMap::from([("/achievement".to_string(), disclosable())])),
+        )])
+        .await,
+    )
+    .schema_properties_attributes
+    .unwrap();
+
+    assert_eq!(attributes.get("/achievement"), Some(&disclosable()));
+    for required in [
+        "/achievement/name",
+        "/achievement/description",
+        "/achievement/criteria/narrative",
+    ] {
+        assert!(attributes[required].non_removable, "{required}");
+    }
+}
+
+/// A property that names no type is read by its `properties`, as an object is, whatever else its schema holds.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_untyped_property_with_properties_is_addressed_as_an_object(template_id: String) {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "Mixed": {
+                "properties": { "Label": { "type": "string" } },
+                "items": { "type": "string" }
+            }
+        }
+    });
+
+    for key in ["/Mixed", "/Mixed/Label"] {
+        let command = create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            schema.clone(),
+            Some(HashMap::from([(key.to_string(), disclosable())])),
+        );
+        assert!(replaced(vec![], command).await.is_ok(), "{key}");
+    }
 }
