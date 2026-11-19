@@ -84,3 +84,4 @@ Content-Type: application/cloudevents+json
 | `com.impierce.unicore.template.schema_properties_attributes_updated` | `/services/template` | Template ID | Credential template schema property attributes updated. |
 | `com.impierce.unicore.template.credential_expiration_updated` | `/services/template` | Template ID | Credential template expiration settings updated. |
 | `com.impierce.unicore.template.holder_authorization_updated` | `/services/template` | Template ID | Credential template holder authorization settings updated. |
+| `com.impierce.unicore.template.origin_updated` | `/services/template` | Template ID | Credential template origin metadata updated. |
