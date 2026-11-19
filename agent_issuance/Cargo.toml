@@ -47,7 +47,7 @@ rstest = { workspace = true, optional = true }
 [dev-dependencies]
 agent_holder = { path = "../agent_holder", features = ["test_utils"] }
 agent_issuance = { path = ".", features = ["test_utils"] }
-agent_library = { path = "../agent_library" }
+agent_library = { path = "../agent_library", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }

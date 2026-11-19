@@ -2098,6 +2098,99 @@ pub mod tests {
         assert_eq!(credential_count(&mut app).await, 1);
     }
 
+    /// A template with nested objects, lists and tables is created over the API as a form builder writes it, and
+    /// issues credentials whose claims have that shape.
+    #[tokio::test]
+    async fn test_template_with_nested_objects_lists_and_tables_issues_credentials() {
+        use agent_library::template::aggregate::test_utils::{
+            structured_claims, structured_schema, structured_schema_properties_attributes,
+        };
+
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+
+        let response = crate::v0::library::router(library_state.clone())
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/create-new-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "title": "Diploma",
+                            "dataModel": DataModel::W3CVcDataModelV2_0,
+                            "holderType": HolderType::Individual,
+                            "status": Status::Published,
+                            "visibility": Visibility::Private,
+                            "type": ["VerifiableCredential"],
+                            "schema": structured_schema(),
+                            "schemaPropertiesAttributes": structured_schema_properties_attributes(),
+                            "holderAuthorization": { "pre_authorized": true }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let template = json_body(response).await;
+        assert_eq!(template["schema"], structured_schema());
+        assert_eq!(
+            template["schemaPropertiesAttributes"],
+            json!(structured_schema_properties_attributes())
+        );
+
+        let mut app = router((issuance_state.clone(), library_state));
+        let mut without_employer = structured_claims();
+        without_employer["Work experience"][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("Employer");
+        let response = batch_request(
+            &mut app,
+            CREATE_BATCH,
+            &json!({
+                "templateId": template["id"],
+                "credentials": [
+                    { "claims": structured_claims() },
+                    { "claims": without_employer },
+                ]
+            }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::MULTI_STATUS);
+        let body = json_body(response).await;
+        let results = body.as_array().unwrap();
+
+        assert_created(&mut app, &issuance_state, &results[0], 0).await;
+        let credential_id = results[0]["credentialId"].as_str().unwrap();
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credentials/{credential_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            json_body(response).await["data"]["raw"]["credentialSubject"],
+            structured_claims()
+        );
+
+        assert_eq!(results[1]["status"], 422);
+        assert_eq!(results[1]["error"]["title"], "Credential Schema Validation Failed");
+        let violations = results[1]["error"]["violations"].as_array().unwrap();
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0]["path"], "/Work experience/1");
+        assert!(violations[0]["message"].as_str().unwrap().contains("Employer"));
+    }
+
     #[tokio::test]
     async fn test_create_batch_reports_what_a_failing_row_had_created() {
         let mut issuance_state =

@@ -32,7 +32,7 @@ Every unsigned credential issuance request in UniCore must reference a template.
 | `description`                | No                                          | Yes (Draft, Published) | Free-text description for the template (not included in issued credentials) |
 | `tags`                       | No                                          | Yes (Draft, Published) | Organizational labels (not included in issued credentials)                  |
 | `visibility`                 | No (defaults to `Private`)                  | Yes (Draft, Published) | Whether the template appears in a future public listing endpoint            |
-| `schemaPropertiesAttributes` | No                                          | Yes (Draft, Published) | Per-field SD-JWT and system-policy metadata for schema leaf fields          |
+| `schemaPropertiesAttributes` | No                                          | Yes (Draft, Published) | Per-field SD-JWT and system-policy metadata for schema properties           |
 | `modifiedAt`                 | System-managed                              | —                      | Timestamp of the last state-changing mutation                               |
 
 ---
@@ -125,13 +125,13 @@ The `schema` field is a **JSON Schema document** that defines the _input surface
 
 1. **Input validation** — UniCore validates every unsigned issuance request against the template schema before issuing the credential. Requests that do not conform are rejected.
 2. **Client-side validation** — API consumers and frontends can use the schema directly with any standard JSON Schema library to validate data before sending it to the server.
-3. **Claim projection** — the schema's leaf fields determine which claims appear in the issued credential's claim set and are eligible for selective disclosure.
+3. **Claim projection** — the schema's leaf fields determine which claims appear in the issued credential's claim set and are eligible for selective disclosure. The issuer metadata announces a claim as `mandatory` when the schema requires it: its property, and every object above it, is listed in `required`. This describes the schema as it is now: a credential that arrives signed is not checked against it, and one created before a schema change is issued as it was created.
 
 ### Shape Rules
 
 - The top-level type must always be `"object"` with a `"properties"` map.
 - The schema uses **real nested JSON Schema objects** — dotted flat keys are not supported.
-- **Array types are rejected**. Any schema that contains a field with `"type": "array"` at any nesting level is invalid. Array-type support will be designed separately when needed.
+- **Arrays are allowed**, of scalars or of objects, at any nesting level: a list is an array, a table is an array of objects with one schema for its rows. Open Badges 3.0 templates are the exception and reject `"type": "array"` at any nesting level.
 - Dots in property names are allowed but have no special meaning; they are treated as literal characters.
 
 ### Canonicalization
@@ -227,19 +227,21 @@ Callers submit credential data as nested JSON matching the schema. No flat-to-ne
 
 ## `schemaPropertiesAttributes`
 
-`schemaPropertiesAttributes` is an optional map that attaches per-field behavioral metadata to the schema's **leaf fields**. It is stored alongside (not inside) the schema.
+`schemaPropertiesAttributes` is an optional map that attaches per-field behavioral metadata to the schema's **properties**. It is stored alongside (not inside) the schema.
 
 ### Key Format: JSON Pointer (RFC 6901)
 
-Keys must be **JSON Pointer** paths (RFC 6901) pointing to leaf fields in the schema:
+Keys must be **JSON Pointer** paths (RFC 6901) pointing to properties in the schema:
 
 | Field location                   | Key                               |
 | -------------------------------- | --------------------------------- |
 | Top-level field `name`           | `/name`                           |
 | Nested field under `achievement` | `/achievement/name`               |
 | Deeply nested field              | `/achievement/criteria/narrative` |
+| Object `address`, as a whole     | `/address`                        |
+| List or table `classes`          | `/classes`                        |
 
-Keys must point to **leaf fields only**. Intermediate object nodes (e.g. `/achievement`) are not valid targets and are rejected. Keys pointing to non-existent schema paths are also rejected.
+A key points to a leaf field, or to an object or an array as a whole; an attribute on an object or an array is for everything inside it. What is inside an array is not addressable: `/classes/code` and `/classes/0/code` are rejected. Keys pointing to non-existent schema paths are also rejected.
 
 ### Attribute Flags
 
@@ -248,7 +250,7 @@ Each entry in `schemaPropertiesAttributes` carries two boolean flags:
 | Flag                     | Caller-settable  | Description                                                                                                                                                                  |
 | ------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `selectivelyDisclosable` | Yes              | When `true`, the holder may selectively omit this field when presenting the credential in SD-JWT format                                                                      |
-| `nonRemovable`           | No (system-only) | When `true`, this leaf field must remain present in the schema and cannot be removed by the caller. Set automatically for standard-mandated fields (e.g. OB required fields) |
+| `nonRemovable`           | No (system-only) | When `true`, this property must remain present in the schema and cannot be removed by the caller. Set automatically for standard-mandated fields (e.g. OB required fields)  |
 
 ### Auto-Population
 
@@ -258,11 +260,11 @@ Callers may override `selectivelyDisclosable` but cannot change `nonRemovable`.
 
 ### Auto-Pruning
 
-When a schema update removes leaf fields, UniCore automatically removes the corresponding entries from `schemaPropertiesAttributes`. Entries for fields that no longer exist in the schema are pruned silently.
+When a schema update removes properties, UniCore automatically removes the corresponding entries from `schemaPropertiesAttributes`. Entries for properties that no longer exist in the schema are pruned silently.
 
 ### Schema Updates and `nonRemovable`
 
-Updating the schema to remove a leaf field that is marked `nonRemovable: true` is **rejected**. This protects standard-mandated fields from being accidentally dropped.
+Updating the schema to remove a property that is marked `nonRemovable: true` is **rejected**. This protects standard-mandated fields from being accidentally dropped.
 
 ### W3C VC 1.1 Restriction
 
