@@ -3766,3 +3766,35 @@ async fn replace_content_and_update_origin_deserialize_apart() {
         serde_json::from_value(serde_json::json!({ "template_id": "copy", "origin": origin('a') })).unwrap();
     assert!(matches!(command, TemplateCommand::UpdateOrigin { .. }), "{command:?}");
 }
+
+/// A schema that refers to another document is refused, when a template is created and when its schema is updated.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_schema_referring_to_another_document_is_refused(template_id: String) {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": { "name": { "$ref": "https://schemas.example.org/name.json" } }
+    });
+    let assert_refused = |error: TemplateError| {
+        let message = error.to_string();
+        assert!(message.starts_with("Invalid JSON Schema: "), "{message}");
+        assert!(
+            message.ends_with("a template schema cannot refer to another document"),
+            "{message}"
+        );
+    };
+
+    let mut create = create_command(&template_id, None, None);
+    if let TemplateCommand::CreateNewTemplate { schema: created, .. } = &mut create {
+        **created = Some(schema.clone());
+    }
+    assert_refused(replaced(vec![], create).await.unwrap_err());
+
+    let created = events_after(vec![create_command(&template_id, None, None)]).await;
+    let update = TemplateCommand::UpdateSchema {
+        template_id: template_id.clone(),
+        schema,
+    };
+    assert_refused(replaced(created, update).await.unwrap_err());
+}

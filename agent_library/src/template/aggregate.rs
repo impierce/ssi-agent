@@ -13,6 +13,7 @@ use super::{
     command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin,
     public_content::PublicTemplateContent,
 };
+use crate::json_schema_validation::template_schema_validator;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -387,9 +388,9 @@ impl Aggregate for Template {
 }
 
 fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    jsonschema::validator_for(schema)
+    template_schema_validator(schema)
         .map(|_| ())
-        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+        .map_err(TemplateError::InvalidSchema)
 }
 
 /// Validates that no field in the schema (at any nesting level) has `"type": "array"`.

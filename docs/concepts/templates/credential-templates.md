@@ -133,6 +133,7 @@ The `schema` field is a **JSON Schema document** that defines the _input surface
 - The schema uses **real nested JSON Schema objects** — dotted flat keys are not supported.
 - **Array types are rejected**. Any schema that contains a field with `"type": "array"` at any nesting level is invalid. Array-type support will be designed separately when needed.
 - Dots in property names are allowed but have no special meaning; they are treated as literal characters.
+- The schema stands on its own. A `$ref` may point within the schema (`#/$defs/...`); a reference to another document is rejected, and nothing is fetched or read for it.
 
 ### Canonicalization
 

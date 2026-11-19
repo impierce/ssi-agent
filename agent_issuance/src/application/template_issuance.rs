@@ -1,5 +1,6 @@
 use crate::credential::aggregate::CredentialExpiry;
 use agent_library::{
+    json_schema_validation::template_schema_validator,
     queries,
     state::LibraryState,
     template::aggregate::{Expiration, Status, Template},
@@ -62,8 +63,7 @@ pub fn validate_credential_against_template(
 ) -> Result<(), TemplateIssuanceError> {
     if let Some(schema) = template.schema.as_ref() {
         let data = credential.get("credentialSubject").unwrap_or(credential);
-        let validator =
-            jsonschema::validator_for(schema).map_err(|e| TemplateIssuanceError::InvalidSchema(e.to_string()))?;
+        let validator = template_schema_validator(schema).map_err(TemplateIssuanceError::InvalidSchema)?;
         let (violations, descriptions): (Vec<SchemaViolation>, Vec<String>) = validator
             .iter_errors(data)
             .enumerate()
@@ -148,5 +148,32 @@ pub fn validate_expiry_within_template_deadline(
         (_, CredentialExpiry::Fixed(limit)) => Err(TemplateIssuanceError::ExpirationExceedsTemplateLimit(
             limit.to_rfc3339(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A stored schema that refers to another document, such as one saved before these were refused, validates no
+    /// credential.
+    #[test]
+    fn schema_referring_to_another_document_validates_nothing() {
+        let template = Template {
+            schema: Box::new(Some(json!({
+                "type": "object",
+                "properties": { "name": { "$ref": "https://schemas.example.org/name.json" } }
+            }))),
+            ..Default::default()
+        };
+
+        let error = validate_credential_against_template(&json!({ "name": "Ferris" }), &template).unwrap_err();
+
+        assert!(
+            matches!(&error, TemplateIssuanceError::InvalidSchema(message)
+                if message.ends_with("a template schema cannot refer to another document")),
+            "{error}"
+        );
     }
 }

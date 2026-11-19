@@ -22,7 +22,6 @@ chrono.workspace = true
 identity-kit.workspace = true
 indexmap.workspace = true
 iso8601.workspace = true
-jsonschema.workspace = true
 jsonwebtoken.workspace = true
 lazy_static.workspace = true
 oid4vci.workspace = true
