@@ -80,14 +80,38 @@ A typical schema looks like this:
 - Root object schemas are supported.
 - Nested object properties are supported.
 - Scalar leaf fields such as `string`, `integer`, `number`, and `boolean` are supported.
+- Properties may be arrays, of scalars or of objects, at any depth. Open Badges 3.0 templates are the exception. The schema itself must not be an array.
 - Standard JSON Schema keywords such as `$schema`, `format`, and `const` are accepted when the JSON Schema validator accepts them.
 - For some data models, `schema` may be omitted entirely.
 
+### Lists and tables
+
+A list is an array, and a table is an array of objects with one schema for its rows. A column is optional unless that schema lists it in `required`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "skills": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "string" },
+          "result": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+UniCore stores the schema as given. Validation of the claims enforces `items`, `minItems`, `maxItems` and `const`; keywords UniCore attaches no meaning to, such as `examples` or a `format` it does not know, are kept for the client that wrote them.
+
 ### Current limitation
 
-Arrays are not currently supported anywhere in template schemas. This is an implementation limitation, not a conceptual statement that credentials can never contain repeatable values.
-
-The current model avoids arrays because claim metadata and disclosure addressing are defined in terms of stable leaf paths, and array item addressing has not yet been introduced into that model.
+Open Badges 3.0 template schemas reject arrays at any depth. The standard gives the shape of an Open Badges credential, and UniCore checks the schema property by property against it.
 
 ## `schemaPropertiesAttributes`
 
@@ -117,28 +141,30 @@ Each entry contains:
 
 This field is separate because the metadata is operational policy, not structural validation. It tells UniCore how to treat claims, not what JSON shape a caller must submit.
 
-### Why keys point only to leaf fields
+### What a key addresses
 
-Metadata is attached only to leaf claims because those are the values that are actually issued, validated, and selectively disclosed. Container objects are organizational structure, not claims in their own right.
+A key addresses a property of the schema: a leaf, or an object or an array as a whole. An attribute on an object or an array is for everything inside it. An SD-JWT credential conceals its claims one level deep (each property of `credentialSubject` in `vc+sd-jwt`, each top-level claim of its own in `dc+sd-jwt`, where registered claims such as `vct` stay in the clear), so an object, a list or a table at that level is disclosed as one.
+
+With the schema of the lists and tables above, `/skills` and `/classes` are keys; `/classes/code` and `/classes/0/code` are not.
 
 ### Current behavior
 
 - Keys must be RFC 6901 JSON Pointer paths.
-- Keys must point to existing leaf fields in `schema.properties`.
-- Keys that point to intermediate object nodes are rejected.
+- Keys must point to an existing property, reached through `properties`: a leaf, an object or an array.
+- Keys that lead into the `items` of an array are rejected.
 - Keys that do not match the schema are rejected.
 - Keys are trimmed during update validation, and collisions after trimming are rejected.
 
 ### Current limitation
 
-Because arrays are unsupported, there is no array-item addressing model in `schemaPropertiesAttributes` yet.
+There is no addressing of single array items. An object and a property inside it can both carry an attribute; UniCore stores both and does not define which one governs disclosure.
 
 ## Relationship Between `schema` and `schemaPropertiesAttributes`
 
 The two fields are intentionally separate but must stay aligned.
 
-- `schema` defines which leaf claims exist.
-- `schemaPropertiesAttributes` may only describe those leaf claims.
+- `schema` defines which properties exist.
+- `schemaPropertiesAttributes` may only describe those properties.
 
 In practice, this means schema changes can invalidate attribute keys, and some schema updates may prune attributes or reject removal of immutable claims.
 
@@ -165,8 +191,8 @@ W3C VC 1.1 templates do not expose claim-level metadata through `schemaPropertie
 
 ### Current structure
 
-- `schema` may describe nested object-based claim structures.
-- `schemaPropertiesAttributes` may describe leaf claims.
+- `schema` may describe nested objects, lists and tables.
+- `schemaPropertiesAttributes` may describe leaves, and objects and arrays as a whole.
 
 ### Design choice
 
@@ -176,7 +202,7 @@ This model exposes both structure and claim behavior because it is intended to s
 
 - `type` is normalized so `VerifiableCredential` is present and ordered first.
 - Duplicate type entries are removed.
-- `schemaPropertiesAttributes` must match leaf schema paths.
+- `schemaPropertiesAttributes` must match the paths of properties in the schema.
 
 ## Open Badges 3.0
 
@@ -217,6 +243,7 @@ Open Badges templates are stricter because the model is anchored to a specific c
 - Extra Open Badges types are rejected.
 - Required achievement fields must be present.
 - Disallowed Open Badges schema properties are rejected.
+- Arrays are rejected.
 - Required paths are marked non-removable by the backend.
 - The stored schema is normalized with injected `required` arrays for required paths.
 
@@ -228,13 +255,13 @@ Some of the Open Badges handling is current implementation behavior rather than 
 
 ### Current structure
 
-- `schema` may describe nested object-based claim structures.
-- `schemaPropertiesAttributes` may describe leaf claims.
+- `schema` may describe nested objects, lists and tables.
+- `schemaPropertiesAttributes` may describe leaves, and objects and arrays as a whole.
 
 ### Current behavior
 
 - `type` is normalized to include `VerifiableCredential`.
-- `schemaPropertiesAttributes` follows the same leaf-path model as W3C VC 2.0.
+- `schemaPropertiesAttributes` follows the same path model as W3C VC 2.0.
 
 ## Normalization Behavior
 
@@ -256,14 +283,14 @@ Callers should treat the backend response as the canonical saved representation 
 
 The most important current limitations are:
 
-- arrays are unsupported in template schemas
-- claim metadata is defined only for leaf paths
+- arrays are unsupported in Open Badges template schemas
+- what is inside an array has no claim metadata of its own
 - some model-specific normalization, especially for Open Badges, is implemented as backend behavior rather than exposed as a more general template-policy layer
 
 These limitations are documented here because they materially affect how templates behave today. They should not be read as promises about the final long-term shape of the model.
 
 ## Relationship to ADR 0001
 
-ADR 0001 explains the architectural decision to keep `schemaPropertiesAttributes` separate from `schema`, and why leaf claims are addressed using JSON Pointer.
+ADR 0001 explains the architectural decision to keep `schemaPropertiesAttributes` separate from `schema`, and why claims are addressed using JSON Pointer. ADR 0012 amends it: template schemas may hold arrays, and a key may address an object or an array as a whole.
 
 This document explains how that decision is applied in the current template model, including data-model-specific constraints, normalization behavior, and present-day limitations.

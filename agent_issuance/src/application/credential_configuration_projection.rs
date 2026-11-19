@@ -1,7 +1,8 @@
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
-use agent_library::template::aggregate::{DataModel, Display, HolderType, PropertyAttribute, Template};
+use agent_library::state::LibraryState;
+use agent_library::template::aggregate::{is_array_schema, DataModel, Display, HolderType, Template};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -13,10 +14,7 @@ use oid4vci::credential_issuer::credential_configurations_supported::{
 };
 use shared_kernel::authorization::Caller;
 use shared_kernel::view_repository::DynViewRepository;
-use std::{
-    collections::HashMap,
-    sync::{Arc, OnceLock},
-};
+use std::sync::{Arc, OnceLock};
 use tracing::warn;
 
 type TemplateViewHandle = Arc<OnceLock<Arc<dyn DynViewRepository<TemplateView, Template>>>>;
@@ -162,6 +160,32 @@ impl CredentialConfigurationProjection {
     }
 }
 
+/// Derives the credential configuration of every published template again.
+///
+/// A configuration is otherwise derived only when its template changes, so one that an earlier version derived
+/// differently would be advertised as it was until then. A configuration that is already current is left alone.
+pub async fn resync_credential_configurations(issuance_state: Arc<IssuanceState>, library_state: &LibraryState) {
+    use agent_library::template::aggregate::Status;
+
+    let all_templates = match public_query_handler("all_templates", &library_state.query.all_templates).await {
+        Ok(Some(all_templates)) => all_templates,
+        Ok(None) => return,
+        Err(e) => {
+            warn!("Failed to query the templates to resync their credential configurations: {e}");
+            return;
+        }
+    };
+
+    let (projection, _) = CredentialConfigurationProjection::new(issuance_state);
+    for (template_id, template) in &all_templates.templates {
+        if template.status == Status::Published {
+            projection
+                .update_credential_configuration(template_id, credential_configuration_from_template(template))
+                .await;
+        }
+    }
+}
+
 /// Derives a `CredentialConfiguration` from a `Template`.
 ///
 /// The display name is taken from `template.display.name` if set, falling back to `template.title`.
@@ -170,8 +194,8 @@ impl CredentialConfigurationProjection {
 /// instance when uploading a logo first) end up storing `""`. Resolving the fallback here rather
 /// than materializing it into the aggregate keeps the link live: as long as no explicit display
 /// name was given, later title updates keep flowing into the issuer metadata.
-/// When the format is "vc+sd-jwt", claims are derived from `schema.properties` merged with
-/// `schema_properties_attributes.selectivelyDisclosable`.
+/// When the format is "vc+sd-jwt", claims are derived from `schema.properties`, and are mandatory where the
+/// schema requires them.
 ///
 /// The `credential_definition.type` array prefers the template's explicit `type` values.
 /// Narrow fallbacks are only used when the template does not yet provide any type values.
@@ -235,11 +259,10 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
 ///
 /// Nested objects are traversed recursively and only leaf fields become claims.
 /// Arrays are exposed as a single claim at the array field itself.
-/// Attribute lookup uses dotted keys such as `achievement.criteria.narrative`.
-/// A claim defaults to non-mandatory unless attributes explicitly mark it as non-disclosable.
+/// A claim is mandatory when every credential of the template holds it: the schema lists its property in `required`,
+/// and likewise every object above it. Whether a claim is selectively disclosable plays no part in that.
 fn build_claims_from_schema(template: &Template, prefix: Option<&str>) -> Option<Vec<ClaimDescription>> {
     let schema = template.schema.as_ref().as_ref()?;
-    let attributes = template.schema_properties_attributes.as_ref();
     let prefix_segments: Vec<String> = prefix
         .iter()
         .flat_map(|value| value.split('.').filter(|segment| !segment.is_empty()))
@@ -247,7 +270,7 @@ fn build_claims_from_schema(template: &Template, prefix: Option<&str>) -> Option
         .collect();
 
     let mut claims = Vec::new();
-    collect_claim_descriptions(schema, &prefix_segments, &[], attributes, &mut claims);
+    collect_claim_descriptions(schema, &prefix_segments, &[], true, &mut claims);
 
     if claims.is_empty() {
         None
@@ -260,19 +283,37 @@ fn collect_claim_descriptions(
     schema: &serde_json::Value,
     prefix_segments: &[String],
     current_segments: &[String],
-    attributes: Option<&HashMap<String, PropertyAttribute>>,
+    // Whether every object from the root down to `schema` is required.
+    always_present: bool,
     claims: &mut Vec<ClaimDescription>,
 ) {
     let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) else {
         return;
     };
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(|value| value.as_array())
+        .map(|names| names.iter().filter_map(|name| name.as_str()).collect())
+        .unwrap_or_default();
 
     for (property_name, property_schema) in properties {
+        // A property name is one path element, whatever characters it holds.
         let mut property_segments = current_segments.to_vec();
-        property_segments.extend(split_path_segments(property_name));
+        property_segments.push(property_name.clone());
+        let mandatory = always_present && required.contains(&property_name.as_str());
 
-        if has_nested_object_properties(property_schema) {
-            collect_claim_descriptions(property_schema, prefix_segments, &property_segments, attributes, claims);
+        // An array is one claim, also when its schema carries `properties`, which say nothing about an array.
+        if !is_array_schema(property_schema) && has_nested_object_properties(property_schema) {
+            // What is inside is always there only if the property has to be an object: `null`, or any value where
+            // no type is given, satisfies the schema without it.
+            let always_present = mandatory && is_object_only_schema(property_schema);
+            collect_claim_descriptions(
+                property_schema,
+                prefix_segments,
+                &property_segments,
+                always_present,
+                claims,
+            );
             continue;
         }
 
@@ -280,7 +321,7 @@ fn collect_claim_descriptions(
             continue;
         }
 
-        if let Some(claim) = build_claim_description(&property_segments, prefix_segments, attributes) {
+        if let Some(claim) = build_claim_description(&property_segments, prefix_segments, mandatory) {
             claims.push(claim);
         }
     }
@@ -289,7 +330,7 @@ fn collect_claim_descriptions(
 fn build_claim_description(
     property_segments: &[String],
     prefix_segments: &[String],
-    attributes: Option<&HashMap<String, PropertyAttribute>>,
+    mandatory: bool,
 ) -> Option<ClaimDescription> {
     let path = ClaimPathPointer::try_new(
         prefix_segments
@@ -301,24 +342,11 @@ fn build_claim_description(
     )
     .ok()?;
 
-    let attribute_key = property_segments.join(".");
-    let mandatory = attributes
-        .and_then(|attrs| attrs.get(&attribute_key))
-        .map(|attr| !attr.is_selectively_disclosable())
-        .unwrap_or(false);
-
     Some(ClaimDescription {
         path,
         mandatory,
         display: vec![],
     })
-}
-
-fn split_path_segments(path: &str) -> Vec<String> {
-    path.split('.')
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| segment.to_string())
-        .collect()
 }
 
 fn has_nested_object_properties(schema: &serde_json::Value) -> bool {
@@ -330,6 +358,17 @@ fn has_nested_object_properties(schema: &serde_json::Value) -> bool {
 
 fn is_object_schema(schema: &serde_json::Value) -> bool {
     schema.get("type").and_then(|value| value.as_str()) == Some("object")
+}
+
+/// Whether a value of this schema has to be an object: its `type` is `"object"` and nothing else.
+fn is_object_only_schema(schema: &serde_json::Value) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(r#type)) => r#type == "object",
+        Some(serde_json::Value::Array(types)) => {
+            !types.is_empty() && types.iter().all(|r#type| r#type.as_str() == Some("object"))
+        }
+        _ => false,
+    }
 }
 
 #[async_trait]
@@ -410,7 +449,6 @@ impl Query<Template> for CredentialConfigurationProjection {
                 | DisplayUpdated { template_id, .. }
                 | TypeUpdated { template_id, .. }
                 | SchemaUpdated { template_id, .. }
-                | SchemaPropertiesAttributesUpdated { template_id, .. }
                 | HolderAuthorizationUpdated { template_id, .. } => {
                     self.sync_from_view(template_id).await;
                 }
@@ -537,12 +575,14 @@ mod tests {
             "properties": {
                 "name": { "type": "string" },
                 "age": { "type": "integer" }
-            }
+            },
+            "required": ["age"]
         });
 
+        // Whether a claim is selectively disclosable says nothing about whether it is always there.
         let mut attrs = HashMap::new();
-        attrs.insert("name".to_string(), PropertyAttribute::new(true, false));
-        attrs.insert("age".to_string(), PropertyAttribute::new(false, false));
+        attrs.insert("/name".to_string(), PropertyAttribute::new(false, false));
+        attrs.insert("/age".to_string(), PropertyAttribute::new(true, false));
 
         let template = Template {
             template_id: "t7".to_string(),
@@ -558,7 +598,7 @@ mod tests {
         let claims = config.credential_metadata.claims.expect("claims should be present");
         assert_eq!(claims.len(), 2);
 
-        // Find claim for "name" - selectively disclosable, so mandatory = false
+        // "name" is not required by the schema, so mandatory = false
         let name_claim = claims
             .iter()
             .find(|c| {
@@ -571,7 +611,7 @@ mod tests {
             .expect("name claim should exist");
         assert!(!name_claim.mandatory);
 
-        // Find claim for "age" - not selectively disclosable, so mandatory = true
+        // "age" is required by the schema, so mandatory = true
         let age_claim = claims
             .iter()
             .find(|c| {
@@ -586,7 +626,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vc_sd_jwt_claim_without_attributes_defaults_to_non_mandatory() {
+    fn test_vc_sd_jwt_claim_not_required_by_schema_is_not_mandatory() {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -614,18 +654,23 @@ mod tests {
         assert!(!claim.mandatory);
     }
 
+    /// The credential holds one key named `No. of credits`, so the path to it has one element for it.
     #[test]
-    fn test_vc_sd_jwt_dotted_keys_become_path_elements() {
+    fn test_property_name_with_dots_is_one_path_element() {
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
-                "achievement.name": { "type": "string" }
+                "No. of credits": { "type": "string" },
+                "grades": {
+                    "type": "object",
+                    "properties": { "v1.2": { "type": "string" } }
+                }
             }
         });
 
         let template = Template {
             template_id: "t8".to_string(),
-            data_model: DataModel::OpenBadges3_0,
+            data_model: DataModel::W3CVcDataModelV2_0,
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             ..Default::default()
@@ -633,13 +678,20 @@ mod tests {
 
         let config = credential_configuration_from_template(&template);
         let claims = config.credential_metadata.claims.expect("claims should be present");
-        assert_eq!(claims.len(), 1);
+        let path = |segments: &[&str]| -> Vec<ClaimPathElement> {
+            segments
+                .iter()
+                .map(|segment| ClaimPathElement::String(segment.to_string()))
+                .collect()
+        };
+        let mut paths: Vec<Vec<ClaimPathElement>> = claims.iter().map(|claim| claim.path.as_ref().to_vec()).collect();
+        paths.sort_by_key(Vec::len);
+
         assert_eq!(
-            claims[0].path.as_ref(),
-            &[
-                ClaimPathElement::String("credentialSubject".to_string()),
-                ClaimPathElement::String("achievement".to_string()),
-                ClaimPathElement::String("name".to_string()),
+            paths,
+            vec![
+                path(&["credentialSubject", "No. of credits"]),
+                path(&["credentialSubject", "grades", "v1.2"]),
             ]
         );
     }
@@ -735,19 +787,29 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_nested_attributes_use_dotted_keys_for_mandatory_resolution() {
-        use agent_library::template::aggregate::PropertyAttribute;
-        use std::collections::HashMap;
-
+    /// A nested claim is always there only when every level down to it is required.
+    #[rstest::rstest]
+    #[case::required_at_every_level(&["achievement"], &["criteria"], &["narrative"], true)]
+    #[case::leaf_optional(&["achievement"], &["criteria"], &[], false)]
+    #[case::object_in_between_optional(&["achievement"], &[], &["narrative"], false)]
+    #[case::top_level_object_optional(&[], &["criteria"], &["narrative"], false)]
+    fn test_nested_claim_is_mandatory_when_required_at_every_level(
+        #[case] required_at_root: &[&str],
+        #[case] required_in_achievement: &[&str],
+        #[case] required_in_criteria: &[&str],
+        #[case] mandatory: bool,
+    ) {
         let schema = serde_json::json!({
             "type": "object",
+            "required": required_at_root,
             "properties": {
                 "achievement": {
                     "type": "object",
+                    "required": required_in_achievement,
                     "properties": {
                         "criteria": {
                             "type": "object",
+                            "required": required_in_criteria,
                             "properties": {
                                 "narrative": { "type": "string" }
                             }
@@ -757,17 +819,10 @@ mod tests {
             }
         });
 
-        let mut attrs = HashMap::new();
-        attrs.insert(
-            "achievement.criteria.narrative".to_string(),
-            PropertyAttribute::new(false, false),
-        );
-
         let template = Template {
-            template_id: "t_nested_attrs".to_string(),
+            template_id: "t_nested_required".to_string(),
             data_model: DataModel::W3CVcDataModelV2_0,
             schema: Box::new(Some(schema)),
-            schema_properties_attributes: Some(attrs),
             ..Default::default()
         };
 
@@ -779,7 +834,140 @@ mod tests {
             .next()
             .expect("claim should exist");
 
-        assert!(claim.mandatory);
+        assert_eq!(claim.mandatory, mandatory);
+    }
+
+    /// A required property that may be something else than an object, such as `null`, need not hold what the schema
+    /// requires of an object.
+    #[rstest::rstest]
+    #[case::object(serde_json::json!("object"), true)]
+    #[case::object_in_type_list(serde_json::json!(["object"]), true)]
+    #[case::nullable_object(serde_json::json!(["object", "null"]), false)]
+    #[case::no_type(serde_json::Value::Null, false)]
+    fn test_claim_in_required_property_is_mandatory_only_in_an_object(
+        #[case] address_type: serde_json::Value,
+        #[case] mandatory: bool,
+    ) {
+        let mut schema = serde_json::json!({
+            "type": "object",
+            "required": ["address"],
+            "properties": {
+                "address": {
+                    "type": address_type,
+                    "required": ["street"],
+                    "properties": { "street": { "type": "string" } }
+                }
+            }
+        });
+        if schema["properties"]["address"]["type"].is_null() {
+            schema["properties"]["address"].as_object_mut().unwrap().remove("type");
+        }
+
+        let template = Template {
+            template_id: "t_nullable_object".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(schema)),
+            ..Default::default()
+        };
+
+        let claims = credential_configuration_from_template(&template)
+            .credential_metadata
+            .claims
+            .expect("claims should be present");
+
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].mandatory, mandatory);
+    }
+
+    /// The leaves of nested objects are claims of their own; a list or a table is one claim, whatever its items hold.
+    /// The claims the schema requires are mandatory, marked with `*` here.
+    #[test]
+    fn test_structured_schema_claims_are_leaves_and_whole_arrays() {
+        use agent_library::template::aggregate::test_utils::{
+            structured_schema, structured_schema_properties_attributes,
+        };
+
+        let template = Template {
+            template_id: "t_structured".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(structured_schema())),
+            schema_properties_attributes: Some(structured_schema_properties_attributes()),
+            ..Default::default()
+        };
+
+        let config = credential_configuration_from_template(&template);
+        assert_eq!(config.format, "vc+sd-jwt");
+
+        let mut paths: Vec<String> = config
+            .credential_metadata
+            .claims
+            .expect("claims should be present")
+            .iter()
+            .map(|claim| {
+                let path = claim
+                    .path
+                    .as_ref()
+                    .iter()
+                    .map(|element| match element {
+                        ClaimPathElement::String(segment) => segment.as_str(),
+                        other => panic!("unexpected path element: {other:?}"),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" > ");
+                format!("{path}{}", if claim.mandatory { " *" } else { "" })
+            })
+            .collect();
+        paths.sort();
+
+        assert_eq!(
+            paths,
+            vec![
+                "credentialSubject > Accreditations",
+                "credentialSubject > Address > City",
+                "credentialSubject > Address > Coordinates > Latitude",
+                "credentialSubject > Address > Coordinates > Longitude",
+                "credentialSubject > Address > Country",
+                "credentialSubject > Address > Street *",
+                "credentialSubject > Completed classes *",
+                "credentialSubject > Credits",
+                "credentialSubject > Full name *",
+                "credentialSubject > Skills *",
+                "credentialSubject > Work experience",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_array_with_properties_is_one_claim() {
+        let template = Template {
+            template_id: "t_array_properties".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "skills": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "properties": { "label": { "type": "string" } }
+                    }
+                }
+            }))),
+            ..Default::default()
+        };
+
+        let claims = credential_configuration_from_template(&template)
+            .credential_metadata
+            .claims
+            .expect("claims should be present");
+
+        assert_eq!(claims.len(), 1);
+        assert_eq!(
+            claims[0].path.as_ref(),
+            &[
+                ClaimPathElement::String("credentialSubject".to_string()),
+                ClaimPathElement::String("skills".to_string()),
+            ]
+        );
     }
 
     #[test]
