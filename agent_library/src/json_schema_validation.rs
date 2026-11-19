@@ -218,6 +218,27 @@ impl Retrieve for MemoryRetriever {
     }
 }
 
+/// Builds the validator of a template's schema, or says why the schema is invalid.
+///
+/// A template's schema is written by a caller, so it has to stand on its own: a `$ref` to another document is
+/// refused, and nothing is fetched or read from disk for it. References within the schema (`#/$defs/...`) and the
+/// JSON Schema drafts themselves resolve as usual.
+pub fn template_schema_validator(schema: &Value) -> Result<Validator, String> {
+    jsonschema::options()
+        .with_retriever(NoExternalReferences)
+        .build(schema)
+        .map_err(|error| error.to_string())
+}
+
+/// Refuses every document a schema refers to.
+struct NoExternalReferences;
+
+impl Retrieve for NoExternalReferences {
+    fn retrieve(&self, _uri: &Uri<String>) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        Err("a template schema cannot refer to another document".into())
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum JsonSchemaError {
     #[error("Get Credential Type Error: `{0}`")]
@@ -242,6 +263,94 @@ mod tests {
     use super::*;
     use lazy_static::lazy_static;
     use serde_json::json;
+
+    fn schema_referring_to(reference: &str) -> Value {
+        json!({ "type": "object", "properties": { "name": { "$ref": reference } } })
+    }
+
+    /// A template schema that refers to another document is refused, and that document is never asked for: no
+    /// request reaches the address it names.
+    #[test]
+    fn template_schema_does_not_fetch_a_referenced_document() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+
+        // The last one is relative to the address the schema gives itself.
+        let mut with_base = schema_referring_to("name.json");
+        with_base["$id"] = json!(format!("http://{address}/schemas/template.json"));
+        for schema in [
+            schema_referring_to(&format!("http://{address}/schema.json")),
+            schema_referring_to(&format!("http://{address}/schema.json#/properties/name")),
+            schema_referring_to("https://schemas.example.org/name.json"),
+            with_base,
+        ] {
+            let error = template_schema_validator(&schema).unwrap_err();
+            assert!(
+                error.ends_with("a template schema cannot refer to another document"),
+                "{schema}: {error}"
+            );
+        }
+
+        // Without such an address there is nothing a relative reference could lead to.
+        assert!(template_schema_validator(&schema_referring_to("name.json")).is_err());
+
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock,
+            "the referenced document was requested"
+        );
+    }
+
+    /// Nor is a file read for it: the answer is the same whether the file exists or not, and holds nothing of it.
+    #[test]
+    fn template_schema_does_not_read_a_referenced_file() {
+        let file = std::env::temp_dir().join(format!("template-schema-reference-{}.json", std::process::id()));
+        std::fs::write(&file, r#"{ "password": "kept-to-itself" }"#).unwrap();
+        let existing = format!("file://{}#/password", file.display());
+        let missing = format!("file://{}.missing#/password", file.display());
+
+        let errors = [existing, missing].map(|reference| {
+            let error = template_schema_validator(&schema_referring_to(&reference)).unwrap_err();
+            error.replace(&reference, "<reference>")
+        });
+        std::fs::remove_file(&file).unwrap();
+
+        assert!(!errors[0].contains("kept-to-itself"), "{}", errors[0]);
+        assert!(
+            errors[0].ends_with("a template schema cannot refer to another document"),
+            "{}",
+            errors[0]
+        );
+        assert_eq!(
+            errors[0].replace(".missing", ""),
+            errors[1].replace(".missing", ""),
+            "the answer tells whether the file exists"
+        );
+    }
+
+    /// What a schema needs from itself, and the JSON Schema drafts, still resolve.
+    #[test]
+    fn template_schema_resolves_its_own_references_and_the_drafts() {
+        for schema in [
+            json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "$defs": { "name": { "type": "string" } },
+                "properties": { "name": { "$ref": "#/$defs/name" } }
+            }),
+            json!({
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "definitions": { "name": { "type": "string" } },
+                "properties": { "name": { "$ref": "#/definitions/name" } }
+            }),
+        ] {
+            let validator = template_schema_validator(&schema).unwrap();
+            assert!(validator.is_valid(&json!({ "name": "Ferris" })));
+            assert!(!validator.is_valid(&json!({ "name": 1 })));
+        }
+    }
 
     lazy_static! {
         static ref EXAMPLE_BASIC_OB3: Value = json!({

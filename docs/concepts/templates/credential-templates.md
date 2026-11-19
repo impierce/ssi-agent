@@ -133,6 +133,7 @@ The `schema` field is a **JSON Schema document** that defines the _input surface
 - The schema uses **real nested JSON Schema objects** — dotted flat keys are not supported.
 - **Arrays are allowed**, of scalars or of objects, at any nesting level: a list is an array, a table is an array of objects with one schema for its rows. Open Badges 3.0 templates are the exception and reject `"type": "array"` at any nesting level.
 - Dots in property names are allowed but have no special meaning; they are treated as literal characters.
+- The schema stands on its own. A `$ref` may point within the schema (`#/$defs/...`); a reference to another document is rejected, and nothing is fetched or read for it.
 
 ### Canonicalization
 
