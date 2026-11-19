@@ -1460,7 +1460,8 @@ paths:
       summary: Delete a key
       description: |-
         Deletes a key from its provider, which schedules its deletion where the provider does so, and frees its label. It
-        no longer signs. The provider doesn't need to be added anymore.
+        no longer signs. The provider doesn't need to be added anymore. The key of a verification method in a DID document
+        isn't deleted: remove the method with `remove-key-from-document` first.
       operationId: delete_key
       requestBody:
         content:
@@ -1475,6 +1476,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: There is no such key
+        '409':
+          description: The key is the key of a verification method in a DID document
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':

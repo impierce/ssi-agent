@@ -116,7 +116,7 @@ struct DocumentKeys(std::sync::Weak<agent_identity::state::IdentityState>);
 
 #[async_trait::async_trait]
 impl KeyUsage for DocumentKeys {
-    async fn selected_method(
+    async fn verification_method(
         &self,
         key_id: &str,
         public_key: &identity_kit::jose::Jwk,
@@ -125,7 +125,7 @@ impl KeyUsage for DocumentKeys {
             return Ok(None);
         };
         Ok(
-            agent_identity::state::selected_method_of_key(&identity_state, key_id, public_key)
+            agent_identity::state::method_of_key(&identity_state, key_id, public_key)
                 .await?
                 .map(|method| method.to_string()),
         )

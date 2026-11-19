@@ -454,7 +454,7 @@ pub enum DeleteKeyError {
     #[error("This instance has no adapter for `{0}` key providers")]
     Unsupported(KeyProviderType),
     #[error(
-        "The key `{id}` is the selected signing key of the verification method `{verification_method}`. Select another key, or deselect it with `deselect-signing-key`, before deleting it"
+        "The key `{id}` is the key of the verification method `{verification_method}`. Remove it with `remove-key-from-document` before deleting it"
     )]
     InUse { id: String, verification_method: String },
     #[error("Whether the key `{0}` signs can't be told: {1}")]
@@ -468,13 +468,14 @@ pub enum DeleteKeyError {
 }
 
 /// Deletes the key `id` from its provider, which schedules its deletion where the provider does, and frees its label.
-/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore. A key
-/// selected to sign isn't deleted, so that signing doesn't break; selecting another key first is the caller's choice.
+/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore. The key
+/// of a verification method isn't deleted, as anything signing for that method, such as a Domain Linkage Credential,
+/// would break; removing the method first is the caller's choice.
 ///
 /// # Errors
 ///
-/// Fails when the caller isn't authorized, there is no such key, it is selected to sign, or the provider can't delete
-/// it.
+/// Fails when the caller isn't authorized, there is no such key, it is the key of a verification method, or the
+/// provider can't delete it.
 pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<(), DeleteKeyError> {
     authorize_command(
         state.authorization_checker.as_ref(),
@@ -497,7 +498,7 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
     .ok_or_else(|| DeleteKeyError::NotFound(id.to_string()))?;
     if let Some(usage) = state.key_usage.get() {
         if let Some(verification_method) = usage
-            .selected_method(id, &reference.public_key)
+            .verification_method(id, &reference.public_key)
             .await
             .map_err(|error| DeleteKeyError::Usage(id.to_string(), error))?
         {
@@ -890,12 +891,12 @@ mod tests {
         assert!(!provider.exists(&KeyId::new("issuer")).await.unwrap());
     }
 
-    /// Every key signs for the verification method `did:web:example.org#kms`.
-    struct SelectedEverywhere;
+    /// Every key is the key of the verification method `did:web:example.org#kms`.
+    struct UsedEverywhere;
 
     #[async_trait]
-    impl KeyUsage for SelectedEverywhere {
-        async fn selected_method(
+    impl KeyUsage for UsedEverywhere {
+        async fn verification_method(
             &self,
             _key_id: &str,
             _public_key: &Jwk,
@@ -905,9 +906,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refuses_to_delete_a_key_selected_to_sign() {
+    async fn refuses_to_delete_the_key_of_a_verification_method() {
         let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        let _ = state.key_usage.set(Arc::new(SelectedEverywhere));
+        let _ = state.key_usage.set(Arc::new(UsedEverywhere));
         let (id, _) = create_labelled(&state).await.unwrap();
 
         let result = delete_key(&state, Caller::Internal, &id).await;

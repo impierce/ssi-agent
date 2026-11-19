@@ -355,7 +355,7 @@ impl Aggregate for Credential {
                         json!(
                             sign_jwt(&services.issuer, &default_did_method.to_string(), &vc_jwt_object)
                                 .await
-                                .ok()
+                                .map_err(|e| BuildCredentialError(format!("Failed to sign the credential: {e:#}")))?
                         )
                     }
                     CredentialFormats::DcSdJwt(_) => {
@@ -1338,6 +1338,50 @@ pub mod credential_tests {
             .when_async(command(credential_id))
             .await
             .then_expect_error_message(&InvalidCredentialDataError.to_string());
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn a_credential_the_issuer_key_cannot_sign_is_not_issued() {
+        let services = IssuanceServices::default().await;
+        // An added verification method never signs with a configured issuer key, so without its own key it fails.
+        let verification_method_id = services
+            .issuer
+            .get_verification_method_id(agent_secret_manager::subject::StorageKey::new(
+                get_preferred_did_method(),
+                get_preferred_signing_algorithm(),
+            ))
+            .await
+            .unwrap();
+        services.issuer.insert_added_method(verification_method_id).await;
+        let credential_id = credential_id();
+
+        let result = CredentialTestFramework::with(services)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                notification_id: None,
+                created_at: Some(created_at()),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: None,
+                overwrite: false,
+                proofs: None,
+                status_list_id: agent_shared::config::TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result();
+
+        assert!(
+            matches!(&result, Err(BuildCredentialError(message)) if message.starts_with("Failed to sign the credential")),
+            "{result:?}"
+        );
     }
 
     pub mod expiry_tests {
