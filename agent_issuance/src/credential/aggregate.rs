@@ -1506,10 +1506,7 @@ pub mod test_utils {
                     .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec![
-                    AlgIdentifier::String("ES256".to_string()),
-                    AlgIdentifier::String("EdDSA".to_string())
-                ],
+                credential_signing_alg_values_supported: vec![AlgIdentifier::String("EdDSA".to_string())],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {

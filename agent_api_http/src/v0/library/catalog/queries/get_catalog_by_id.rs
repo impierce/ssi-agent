@@ -1,11 +1,12 @@
 use crate::error::IntoApiErrorExt;
+use crate::extractors::PathParams;
 use crate::extractors::RequestActor;
 use crate::handlers::caller;
 use crate::v0::library::catalog::CatalogDto;
 use agent_library::queries::get_catalog;
 use agent_library::state::LibraryState;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -20,6 +21,7 @@ use std::sync::Arc;
     get,
     path = "/get-catalog-by-id/{catalog_id}",
     operation_id = "get_catalog_by_id",
+    params(("catalog_id" = String, Path, description = "Catalog ID")),
     tags = ["Library", "Catalog"],
     responses(
         (status = 200, description = "Catalog retrieved successfully", body = CatalogDto),
@@ -31,7 +33,7 @@ use std::sync::Arc;
 pub(crate) async fn get_catalog_by_id(
     State(state): State<Arc<LibraryState>>,
     RequestActor(actor): RequestActor,
-    Path(catalog_id): Path<String>,
+    PathParams(catalog_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     get_catalog(&state, caller(actor), &catalog_id)
         .await

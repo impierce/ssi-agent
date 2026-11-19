@@ -185,6 +185,7 @@ mod tests {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         };
         let payload = serde_json::to_value(&event).unwrap();
         let projected = core_event_projectors()
