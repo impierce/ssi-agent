@@ -14,7 +14,8 @@ event_publishers:
     subjects:
       - name: "email.commands" # NATS subject to publish to
         events:
-          types: [TxCodeGenerated, CredentialOfferEmailSent] # Event types to publish
+          types:
+            - "com.impierce.unicore.issuance.credential.offered"
 ```
 
 ## Usage
@@ -24,38 +25,35 @@ event_publishers:
 ```rust
 use agent_event_publisher_nats::NatsEventPublisher;
 
-if let Some(nats_publisher) = NatsEventPublisher::from_config(&event_bus).await? {
+if let Some(nats_publisher) = NatsEventPublisher::from_config(&integration_event_bus).await? {
     nats_publisher.spawn();
 }
 ```
 
 The publisher subscribes to the shared kernel `EventBusHandle` and automatically forwards matching `CloudEvent`s to configured NATS subjects.
-Using the example configuration, matching events are published to "email.commands".
+Using the example configuration, matching events are published to `"email.commands"`.
 
 ### 2. Example published event
 
-When a `TxCodeGenerated` event occurs, it publishes a CloudEvent to the defined subject.
+When a `com.impierce.unicore.issuance.credential.offered` integration event occurs, it publishes a CloudEvent to the defined subject.
 For example:
 
 ```json
 {
   "specversion": "1.0",
-  "type": "com.impierce.unicore.tx-code-generated",
-  "source": "/services/offer",
+  "type": "com.impierce.unicore.issuance.credential.offered",
+  "source": "/services/issuance",
   "id": "offer:12345:1",
+  "subject": "12345",
   "datacontenttype": "application/json",
   "data": {
     "offer_id": "12345",
-    "tx_code": "1234",
-    "delivery_options": {
-      "recipient_email": "user@example.com"
-    }
+    "credential_ids": ["cred-1"],
+    "pre_authorized_code": "code-abc"
   }
 }
 ```
 
-### Available events
+### Available integration events
 
-#### `offer`
-
-TxCodeGenerated, CredentialOfferEmailSent
+See [`agent_event_publisher_http/README.md`](../agent_event_publisher_http/README.md) for the complete catalog of Published Language integration events (`com.impierce.unicore.*`).

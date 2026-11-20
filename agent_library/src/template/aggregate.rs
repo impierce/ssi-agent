@@ -628,7 +628,20 @@ impl Template {
             }
         }
 
-        events.extend(template.decide(UpdateOrigin { template_id, origin })?);
+        if let Some(ref origin) = origin {
+            origin.validate()?;
+        }
+
+        #[cfg(not(test))]
+        let modified_at = chrono::Utc::now().to_rfc3339();
+        #[cfg(test)]
+        let modified_at = test_utils::modified_at();
+
+        events.push(TemplateEvent::OriginUpdated {
+            template_id,
+            origin,
+            modified_at,
+        });
         Ok(events)
     }
 
@@ -787,6 +800,10 @@ impl Template {
                     return Err(TemplateError::MissingTitle);
                 }
 
+                if self.title == title {
+                    return Ok(vec![]);
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -804,6 +821,9 @@ impl Template {
                 // An empty `display.name` is stored verbatim: it means "no explicit display name",
                 // and the read paths resolve it to the current title. Materializing the title here
                 // would freeze it, so later title updates would no longer reach the wallet.
+                if self.display.as_ref() == Some(&display) {
+                    return Ok(vec![]);
+                }
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -820,7 +840,11 @@ impl Template {
                 ensure_template_editable(&self.status)?;
 
                 // Normalize: trim, dedup, drop empty.  Empty result is stored as None via apply.
-                let tags = normalize_tags(Some(tags)).unwrap_or_default();
+                let normalized = normalize_tags(Some(tags));
+                if self.tags == normalized {
+                    return Ok(vec![]);
+                }
+                let tags = normalized.unwrap_or_default();
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -835,6 +859,10 @@ impl Template {
             }
             UpdateStatus { template_id, status } => {
                 ensure_status_transition_allowed(&self.status, &status)?;
+
+                if self.status == status {
+                    return Ok(vec![]);
+                }
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -856,6 +884,11 @@ impl Template {
                 if self.status == Status::Draft && visibility == Visibility::Public {
                     return Err(TemplateError::DraftTemplateCannotBePublic);
                 }
+
+                if self.visibility == visibility {
+                    return Ok(vec![]);
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -874,7 +907,11 @@ impl Template {
                 ensure_template_editable(&self.status)?;
 
                 // An empty description clears the field (stored as None via apply).
-                let description = normalize_description(&description).unwrap_or_default();
+                let normalized = normalize_description(&description);
+                if self.description == normalized {
+                    return Ok(vec![]);
+                }
+                let description = normalized.unwrap_or_default();
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -891,6 +928,9 @@ impl Template {
                 ensure_template_editable(&self.status)?;
 
                 let r#type = normalize_and_validate_type(r#type, &self.data_model)?;
+                if self.r#type == r#type {
+                    return Ok(vec![]);
+                }
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -937,6 +977,10 @@ impl Template {
                             immutable_missing.join(", ")
                         )));
                     }
+                }
+
+                if self.schema.as_ref().as_ref() == Some(&schema) {
+                    return Ok(vec![]);
                 }
 
                 #[cfg(not(test))]
@@ -995,6 +1039,12 @@ impl Template {
                     &self.data_model,
                 );
 
+                if self.schema_properties_attributes.as_ref() == Some(&schema_properties_attributes)
+                    || (self.schema_properties_attributes.is_none() && schema_properties_attributes.is_empty())
+                {
+                    return Ok(vec![]);
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -1018,6 +1068,10 @@ impl Template {
 
                 validate_expiration(&credential_expiration)?;
 
+                if self.credential_expiration == credential_expiration {
+                    return Ok(vec![]);
+                }
+
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
                 #[cfg(test)]
@@ -1034,6 +1088,10 @@ impl Template {
                 holder_authorization,
             } => {
                 ensure_template_editable(&self.status)?;
+
+                if self.holder_authorization == holder_authorization {
+                    return Ok(vec![]);
+                }
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -1056,6 +1114,10 @@ impl Template {
 
                 if let Some(ref origin) = origin {
                     origin.validate()?;
+                }
+
+                if self.origin == origin {
+                    return Ok(vec![]);
                 }
 
                 #[cfg(not(test))]

@@ -46,7 +46,7 @@ pub struct Queries {
 /// `adapters` holds the adapter for every provider type this instance can connect to.
 pub async fn kms_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
-    event_bus: &EventBusHandle,
+    _event_bus: &EventBusHandle,
     development_providers_allowed: bool,
     adapters: KeyProviderAdapters,
 ) -> KmsState {
@@ -55,7 +55,7 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
     // There is only one key providers aggregate, so its own view already lists every provider and the
     // all-aggregates view is not needed.
     let (key_providers_command_handler, key_providers, _) = builder
-        .commands_and_queries::<KeyProvidersView, KeyProviders, KeyProvidersView>(services, vec![event_bus.query()])
+        .commands_and_queries::<KeyProvidersView, KeyProviders, KeyProvidersView>(services, vec![])
         .await;
 
     KmsState {
