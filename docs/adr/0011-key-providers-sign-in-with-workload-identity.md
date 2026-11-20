@@ -45,7 +45,7 @@ such as a key file encrypted.
    itself has to be kept somewhere.
 4. **Workload identity federation, with the identity of the workload UniCore runs as.** On
    Kubernetes, the cluster issues each pod a short-lived token for its service account, from the
-   cluster's own OpenID Connect issuer. UniCore keeps no secret at all.
+   cluster's own OpenID Connect issuer. UniCore stores no long-lived secret.
 
 ## Decision
 
