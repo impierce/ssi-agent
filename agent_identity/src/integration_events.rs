@@ -1,7 +1,7 @@
 use crate::connection::aggregate::Connection;
 use crate::connection::event::ConnectionEvent;
 use cqrs_es::EventEnvelope;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shared_kernel::event_bus::CloudEvent;
 use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 
@@ -9,36 +9,28 @@ use shared_kernel::{IntegrationEvent, ProjectIntegrationEvent};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnmappedEvent;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
+/// Integration events emitted by the Connection / Identity bounded context (`/services/connection`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, IntegrationEvent)]
+#[serde(tag = "type", content = "data")]
+#[integration_event(source = "/services/connection")]
 pub enum ConnectionIntegrationEvent {
+    /// Invitation created for peer connection.
+    #[serde(rename = "com.impierce.unicore.connection.invitation.created")]
     InvitationCreated {
+        /// Unique identifier of the connection record.
+        #[integration_event(subject)]
         connection_id: String,
+        /// Optional endpoint URL of the peer connection.
         #[serde(skip_serializing_if = "Option::is_none")]
         url: Option<String>,
     },
+    /// Peer connection synced or accepted.
+    #[serde(rename = "com.impierce.unicore.connection.established")]
     ConnectionEstablished {
+        /// Unique identifier of the established connection record.
+        #[integration_event(subject)]
         connection_id: String,
     },
-}
-
-impl IntegrationEvent for ConnectionIntegrationEvent {
-    const SOURCE: &'static str = "/services/connection";
-
-    fn event_type(&self) -> &'static str {
-        match self {
-            Self::InvitationCreated { .. } => "com.impierce.unicore.connection.invitation.created",
-            Self::ConnectionEstablished { .. } => "com.impierce.unicore.connection.established",
-        }
-    }
-
-    fn subject(&self) -> Option<String> {
-        match self {
-            Self::InvitationCreated { connection_id, .. } | Self::ConnectionEstablished { connection_id } => {
-                Some(connection_id.clone())
-            }
-        }
-    }
 }
 
 impl TryFrom<ConnectionEvent> for ConnectionIntegrationEvent {
@@ -65,7 +57,7 @@ impl ProjectIntegrationEvent for Connection {
     fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
         ConnectionIntegrationEvent::try_from(envelope.payload.clone())
             .ok()?
-            .into_projected_cloud_event(envelope, "/services/connection")
+            .into_projected_cloud_event(envelope)
             .ok()
     }
 }
