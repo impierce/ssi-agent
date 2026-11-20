@@ -68,6 +68,7 @@ impl IntoApiErrorExt for CredentialError {
             InvalidCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            RecipientMismatchError => ApiError::new(StatusCode::BAD_REQUEST),
         }
     }
 }
@@ -296,6 +297,10 @@ impl IntoApiErrorExt for PublicOfferError {
     }
 }
 
+/// The error code of a credential request refused because the key proof does not belong to the intended holder. An
+/// extension error code (RFC 6749, section 8.5): OpenID4VCI has none for it.
+pub const RECIPIENT_MISMATCH_ERROR: &str = "credential-offer-recipient-mismatch";
+
 pub enum PublicError {
     AuthorizationError(OID4VCError<AuthorizationErrorResponse>),
     TokenError(OID4VCError<TokenErrorResponse>),
@@ -304,6 +309,8 @@ pub enum PublicError {
     AccessTokenError(AccessTokenValidationError),
     /// No bearer token in the `Authorization` header: a challenge without error code (RFC 6750, section 3.1).
     MissingAccessToken,
+    /// The key proof does not belong to the holder the credential offer is meant for.
+    RecipientMismatch,
     InternalServerError,
     NotFoundError,
     UnsupportedMediaType,
@@ -338,6 +345,14 @@ impl axum::response::IntoResponse for PublicError {
             PublicError::MissingAccessToken => {
                 (StatusCode::UNAUTHORIZED, [("WWW-Authenticate", "Bearer")]).into_response()
             }
+            PublicError::RecipientMismatch => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": RECIPIENT_MISMATCH_ERROR,
+                    "error_description": "The credential offer is meant for a different wallet",
+                })),
+            )
+                .into_response(),
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
             PublicError::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
@@ -362,6 +377,7 @@ impl IntoPublicError for CredentialError {
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
             KeyIdError => PublicError::InternalServerError,
+            RecipientMismatchError => PublicError::RecipientMismatch,
         }
     }
 }

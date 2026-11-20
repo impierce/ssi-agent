@@ -5,7 +5,7 @@ use crate::{
     v0::{
         issuance::{
             credential_issuer::protocol_request,
-            error::{internal_server_error, PublicError},
+            error::{internal_server_error, IntoPublicError, PublicError},
         },
         openapi::PROTOCOL_TAG,
     },
@@ -145,6 +145,15 @@ pub(crate) async fn credential(
             }
         }
     };
+
+    // Refuse a holder other than the intended one before any credential is signed or status list index is used.
+    for credential_id in &credential_ids {
+        if let Some(credential) = public_query_handler(credential_id, &state.query.credential).await? {
+            credential
+                .check_recipient(subject_id.as_deref())
+                .map_err(IntoPublicError::into_public_error)?;
+        }
+    }
 
     let all_status_lists = public_query_handler("all_status_lists", &state.query.all_status_lists)
         .await?

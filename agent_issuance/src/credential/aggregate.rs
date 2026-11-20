@@ -106,6 +106,28 @@ pub struct Credential {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
+impl Credential {
+    /// The DID of the holder the issuer intended the credential for, set in advance in the credential data:
+    /// `credentialSubject.id` for W3C credentials, `sub` for SD-JWT VCs.
+    pub fn intended_holder(&self) -> Option<&str> {
+        let raw = &self.data.as_ref()?.raw;
+        let subject = match self.credential_configuration.credential_format {
+            CredentialFormats::DcSdJwt(_) => raw.get("sub"),
+            _ => raw.get("credentialSubject").and_then(|subject| subject.get("id")),
+        };
+        subject?.as_str().filter(|subject| subject.starts_with("did:"))
+    }
+
+    /// Refuses a holder, identified by the DID of its key proof, other than the intended holder, if there is one.
+    pub fn check_recipient(&self, subject_id: Option<&str>) -> Result<(), CredentialError> {
+        let did = |id: &str| id.split('#').next().unwrap_or(id).to_string();
+        match self.intended_holder() {
+            Some(intended) if subject_id.map(did) != Some(did(intended)) => Err(RecipientMismatchError),
+            _ => Ok(()),
+        }
+    }
+}
+
 impl Aggregate for Credential {
     type Command = CredentialCommand;
     type Event = CredentialEvent;
@@ -244,6 +266,9 @@ impl Aggregate for Credential {
                 status_list_id,
                 index,
             } => {
+                // Before returning an earlier signed credential as well, which another wallet may redeem again.
+                self.check_recipient(subject_id.as_deref())?;
+
                 if self.signed.is_some() && !overwrite {
                     return Ok(());
                 }
@@ -1010,6 +1035,48 @@ pub mod credential_tests {
     use oid4vc_core::Subject;
 
     type CredentialTestFramework = TestFramework<Credential>;
+
+    fn credential_with_data(
+        credential_configuration: CredentialConfigurationsSupportedObject,
+        raw: serde_json::Value,
+    ) -> Credential {
+        Credential {
+            data: Some(Data { raw }),
+            credential_configuration,
+            ..Default::default()
+        }
+    }
+
+    #[rstest]
+    #[case::same_did(Some("did:key:z6MkHolder"), true)]
+    #[case::proof_did_url(Some("did:key:z6MkHolder#z6MkHolder"), true)]
+    #[case::other_did(Some("did:key:z6MkOther"), false)]
+    #[case::no_proof_did(None, false)]
+    fn recipient_is_checked_against_intended_holder(#[case] subject_id: Option<&str>, #[case] accepted: bool) {
+        let w3c = credential_with_data(
+            JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+            json!({"credentialSubject": {"id": "did:key:z6MkHolder", "first_name": "Ferris"}}),
+        );
+        let dc_sd_jwt = credential_with_data(
+            DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+            json!({"sub": "did:key:z6MkHolder", "first_name": "Ferris"}),
+        );
+
+        for credential in [w3c, dc_sd_jwt] {
+            assert_eq!(credential.intended_holder(), Some("did:key:z6MkHolder"));
+            assert_eq!(credential.check_recipient(subject_id).is_ok(), accepted);
+        }
+    }
+
+    #[rstest]
+    #[case::no_subject_id(json!({"credentialSubject": {"first_name": "Ferris"}}))]
+    #[case::non_did_subject_id(json!({"credentialSubject": {"id": "https://example.org/ferris"}}))]
+    fn any_holder_is_accepted_without_intended_holder(#[case] raw: serde_json::Value) {
+        let credential = credential_with_data(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(), raw);
+
+        assert_eq!(credential.intended_holder(), None);
+        assert!(credential.check_recipient(Some("did:key:z6MkOther")).is_ok());
+    }
 
     #[rstest]
     #[case::jwt_vc_json_vc1_1(
