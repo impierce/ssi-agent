@@ -217,6 +217,24 @@ impl StackitKmsProvider {
             .filter(|found| !found.is_deleted()))
     }
 
+    /// The key `key` names, like [`Self::find`], but none when `key` pins a version the key doesn't have or that is
+    /// destroyed.
+    async fn find_with_version(&self, key: &KeyId) -> Result<Option<StackitKey>, KeyStoreError> {
+        let Some(found) = self.find(key).await? else {
+            return Ok(None);
+        };
+        if let KeyName::Version(_, number) = KeyName::of(key) {
+            let version = self
+                .get::<Version>(&format!("keys/{}/versions/{number}", found.id))
+                .await
+                .map_err(KeyStoreError::backend)?;
+            if !version.is_some_and(|version| version.state != "destroyed") {
+                return Ok(None);
+            }
+        }
+        Ok(Some(found))
+    }
+
     /// The key `key` names and the version of it to sign with, after checking that it signs with ES256.
     async fn signing_version(&self, key: &KeyId) -> Result<(StackitKey, Version), KeyStoreError> {
         let found = self
@@ -401,17 +419,7 @@ impl KeyStore for StackitKmsProvider {
     }
 
     async fn exists(&self, key: &KeyId) -> Result<bool, KeyStoreError> {
-        let Some(found) = self.find(key).await? else {
-            return Ok(false);
-        };
-        match KeyName::of(key) {
-            KeyName::Version(_, number) => Ok(self
-                .get::<Version>(&format!("keys/{}/versions/{number}", found.id))
-                .await
-                .map_err(KeyStoreError::backend)?
-                .is_some_and(|version| version.state != "destroyed")),
-            _ => Ok(true),
-        }
+        Ok(self.find_with_version(key).await?.is_some())
     }
 
     async fn generate(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
@@ -420,7 +428,7 @@ impl KeyStore for StackitKmsProvider {
 
     async fn delete(&self, key: &KeyId) -> Result<(), KeyStoreError> {
         let found = self
-            .find(key)
+            .find_with_version(key)
             .await?
             .ok_or_else(|| KeyStoreError::NotFound(key.clone()))?;
         self.request::<Value>(Method::DELETE, &format!("keys/{}", found.id), None)
@@ -751,6 +759,19 @@ mod tests {
         let exists = kms.provider().exists(&KeyId::new(format!("{id}/1"))).await.unwrap();
 
         assert!(!exists);
+    }
+
+    #[tokio::test]
+    async fn does_not_delete_a_key_for_a_version_it_does_not_have() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("issuer", ES256, SIGNING);
+
+        let result = kms.provider().delete(&KeyId::new(format!("{id}/99"))).await;
+
+        assert_eq!(
+            (matches!(result, Err(KeyStoreError::NotFound(_))), kms.key_states()),
+            (true, vec!["active"])
+        );
     }
 
     #[tokio::test]
