@@ -60,7 +60,8 @@ Option 4, for STACKIT KMS.
   expire.
 - The customer sets up their side in their own STACKIT project: a service account with access to
   the key ring, and a federated identity provider on it that trusts the host's issuer. They get the
-  issuer and the subject from whoever hosts the deployment.
+  issuer and the subject from whoever hosts the deployment. The audience is always
+  `sts.accounts.stackit.cloud`: the host issues UniCore's token for it.
 - The federated identity provider must check the subject as well as the audience. The issuer is
   shared by every workload on the cluster, and the subject
   (`system:serviceaccount:<namespace>:<service account>`) is what identifies this deployment. A
@@ -72,8 +73,10 @@ Option 4, for STACKIT KMS.
 
 ## Consequences
 
-- No secret appears in UniCore's events, storage or API, so there is nothing for UniCore to lose,
-  leak or rotate, and nothing that depends on Stronghold.
+- No long-lived secret appears in UniCore's events, storage or API, so there is no key for UniCore to
+  lose, leak or rotate, and nothing that depends on Stronghold. The host's token and the access
+  token still grant access while they are valid, for minutes: the host keeps the token file readable
+  only to UniCore, and UniCore logs neither token.
 - The customer revokes UniCore's access by removing the federated identity provider, without
   involving UniCore.
 - STACKIT KMS works only where the host gives UniCore a workload identity that STACKIT can trust,
