@@ -427,9 +427,7 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
 
     info!("Key Management System enabled");
 
-    let stackit = StackitKmsFactory::new(config().stackit_federated_token_file.clone().map(PathBuf::from))
-        .unwrap_or_else(|error| panic!("STACKIT KMS providers can't be set up: {error}"));
-    let factories: KeyProviderFactories = [
+    let mut factories: KeyProviderFactories = [
         (
             KeyProviderType::InMemory,
             Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as _,
@@ -440,9 +438,15 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
                 config().deployment_alias.clone(),
             )))) as _,
         ),
-        (KeyProviderType::StackitKms, Arc::new(stackit) as _),
     ]
     .into();
+    // Without STACKIT, the other providers still work; adding a STACKIT provider is then refused as unsupported.
+    match StackitKmsFactory::new(config().stackit_federated_token_file.clone().map(PathBuf::from)) {
+        Ok(stackit) => {
+            factories.insert(KeyProviderType::StackitKms, Arc::new(stackit));
+        }
+        Err(error) => error!(%error, "STACKIT KMS providers can't be set up"),
+    }
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
 
     Some(Arc::new(

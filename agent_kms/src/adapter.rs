@@ -133,6 +133,11 @@ pub trait KeyProviderAdapter: KeyStore {
     ///
     /// By default the key is deleted by `created`, for providers whose label goes with the key.
     ///
+    /// Whether the recorded key `recorded` and the key `key` are one key of the provider, such as two of its versions.
+    fn same_key(&self, recorded: &str, key: &KeyId) -> bool {
+        recorded == key.as_str()
+    }
+
     /// # Errors
     ///
     /// Fails as [`KeyStore::delete`] does.

@@ -1,10 +1,11 @@
 use crate::error::{type_url, IntoApiErrorExt};
-use crate::extractors::{JsonBody, PathParams, RequestActor};
+use crate::extractors::{invalid_body, JsonBody, PathParams, RequestActor};
 use crate::handlers::{caller, command_handler};
 use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
     command::KeyProviderCommand,
+    error::KeyProviderError,
     settings::{KeyProviderSettings, StackitKmsSettings, StackitRegion},
 };
 use agent_kms::state::{
@@ -113,7 +114,25 @@ pub struct AddKeyProviderRequest {
     #[schema(min_length = 1)]
     pub name: String,
     /// Required for `stackit_kms` providers, which keep keys in a key ring of your STACKIT project.
-    pub settings: Option<KeyProviderSettingsDto>,
+    #[schema(value_type = Option<KeyProviderSettingsDto>)]
+    pub settings: Option<serde_json::Value>,
+}
+
+impl AddKeyProviderRequest {
+    /// Reads the settings as those of the provider type, so that settings for a type without any are refused as such,
+    /// rather than as settings of another type with a field missing.
+    #[allow(clippy::result_large_err)]
+    fn settings(&self) -> Result<Option<KeyProviderSettingsDto>, ApiError> {
+        match &self.settings {
+            None | Some(serde_json::Value::Null) => Ok(None),
+            Some(_) if !self.provider_type.takes_settings() => {
+                Err(KeyProviderError::WrongSettings(self.provider_type).into_api_error())
+            }
+            Some(settings) => serde_json::from_value(settings.clone())
+                .map(Some)
+                .map_err(|error| invalid_body(format!("settings: {error}"))),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -154,12 +173,12 @@ pub struct ConnectionTestResult {
 pub(crate) async fn add_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    JsonBody(AddKeyProviderRequest {
-        provider_type,
-        name,
-        settings,
-    }): JsonBody<AddKeyProviderRequest>,
+    JsonBody(request): JsonBody<AddKeyProviderRequest>,
 ) -> Result<Response, ApiError> {
+    let settings = request.settings()?;
+    let AddKeyProviderRequest {
+        provider_type, name, ..
+    } = request;
     let name = KeyProviders::normalize_name(&name);
     command_handler(
         state.authorization_checker.clone(),

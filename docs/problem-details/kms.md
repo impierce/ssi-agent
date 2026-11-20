@@ -14,6 +14,14 @@ This error occurs when the in-memory provider is added outside the `development`
 
 This error occurs when `add-key-provider` is called with a name that is empty once trimmed.
 
+## Missing Key Provider Settings
+
+This error occurs when `add-key-provider` is called without settings for a provider type that needs them, such as `stackit_kms`.
+
+## Wrong Key Provider Settings
+
+This error occurs when `add-key-provider` is called with settings for a provider type that takes none, such as `aws_kms_ambient`, or with the settings of another provider type.
+
 ## Key Provider Name Taken
 
 This error occurs when another added provider already has this name. Names are unique among the providers an instance lists.
@@ -44,7 +52,7 @@ This error occurs when `delete-key` names the key of a verification method in a 
 
 ## Key Already Recorded
 
-This error occurs when `adopt-key` names a key that this instance has already recorded.
+This error occurs when `adopt-key` names a key that this instance has already recorded, also under another of its versions, such as a STACKIT key rotated since it was recorded.
 
 ## Key Not Found
 

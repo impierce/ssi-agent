@@ -235,6 +235,11 @@ impl FakeStackit {
         self.state.lock().unwrap().refused = Some(message.to_string());
     }
 
+    /// How many requests STACKIT received.
+    pub async fn requests(&self) -> usize {
+        self.server.received_requests().await.unwrap_or_default().len()
+    }
+
     pub fn forgotten_tokens(&self) -> usize {
         self.tokens.forgotten.load(Ordering::SeqCst)
     }

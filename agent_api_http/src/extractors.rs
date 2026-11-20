@@ -158,7 +158,7 @@ fn malformed_body(message: impl Into<String>) -> ApiError {
         .finish()
 }
 
-fn invalid_body(message: impl Into<String>) -> ApiError {
+pub(crate) fn invalid_body(message: impl Into<String>) -> ApiError {
     ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
         .title("Invalid Request Body")
         .type_url(type_url("request#invalid-body"))

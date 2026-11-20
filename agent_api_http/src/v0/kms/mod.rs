@@ -299,6 +299,16 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refuses_settings_for_a_provider_type_without_settings() {
+        let app = app_with_kms().await;
+        let body = json!({ "providerType": "aws_kms_ambient", "name": "AWS", "settings": {} });
+
+        let (_, error) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        assert_eq!(error["type"], crate::error::type_url("kms#wrong-key-provider-settings"));
+    }
+
+    #[tokio::test]
     async fn lists_a_provider_with_its_settings() {
         let app = app_with_kms().await;
         add_stackit(&app).await;

@@ -137,8 +137,10 @@ pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyPr
     )
     .await?
     .unwrap_or_default();
-    view.providers
-        .retain(|provider_type, _| KeyProviders::is_visible(*provider_type, state.development_providers_allowed));
+    let visible =
+        |provider_type: &KeyProviderType| KeyProviders::is_visible(*provider_type, state.development_providers_allowed);
+    view.providers.retain(|provider_type, _| visible(provider_type));
+    view.settings.retain(|provider_type, _| visible(provider_type));
     Ok(view)
 }
 
@@ -461,6 +463,7 @@ pub async fn adopt_key(
 ) -> Result<(String, KeyReference), CreateKeyError> {
     let (adapter, settings) = added_provider_adapter(state, caller.clone(), provider_type, &AdoptKey).await?;
     let adapter = adapter?;
+    adapter.check_label(&label)?;
     let id = Uuid::new_v4().to_string();
     authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, &AdoptKey)
         .await
@@ -471,7 +474,7 @@ pub async fn adopt_key(
         .await
         .map_err(TestConnectionError::from)?;
     if recorded.keys.values().any(|reference| {
-        reference.provider_type == provider_type && reference.provider_key_id == provider_key_id.as_str()
+        reference.provider_type == provider_type && adapter.same_key(&reference.provider_key_id, &provider_key_id)
     }) {
         return Err(CreateKeyError::AlreadyRecorded(provider_key_id));
     }
@@ -569,11 +572,7 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
             });
         }
     }
-    let providers = providers(state)
-        .await
-        .map_err(|error| DeleteKeyError::Query(QueryHandlerError::Persistence(error)))?;
-    let adapter =
-        key_adapter(state, &providers, &reference).ok_or(DeleteKeyError::Unsupported(reference.provider_type))??;
+    let adapter = key_adapter(state, &reference).ok_or(DeleteKeyError::Unsupported(reference.provider_type))??;
 
     match adapter
         .discard(
@@ -625,7 +624,7 @@ pub struct SigningKey {
 ///
 /// # Errors
 ///
-/// Fails when the key or the providers can't be loaded.
+/// Fails when the key can't be loaded.
 pub async fn signing_key(state: &KmsState, key_id: &str) -> Result<Option<SigningKey>, PersistenceError> {
     let Some(KeyView {
         reference: Some(reference),
@@ -634,51 +633,36 @@ pub async fn signing_key(state: &KmsState, key_id: &str) -> Result<Option<Signin
     else {
         return Ok(None);
     };
-    let providers = providers(state).await?;
-    Ok(with_adapter(state, &providers, reference))
+    Ok(with_adapter(state, reference))
 }
 
 /// Returns every key this instance created and has an adapter for, to sign with.
 ///
 /// # Errors
 ///
-/// Fails when the keys or the providers can't be loaded.
+/// Fails when the keys can't be loaded.
 pub async fn signing_keys(state: &KmsState) -> Result<Vec<SigningKey>, PersistenceError> {
-    let providers = providers(state).await?;
     Ok(public_query_handler("all_keys", &state.query.all_keys)
         .await?
         .unwrap_or_default()
         .keys
         .into_values()
-        .filter_map(|reference| with_adapter(state, &providers, reference))
+        .filter_map(|reference| with_adapter(state, reference))
         .collect())
-}
-
-async fn providers(state: &KmsState) -> Result<KeyProvidersView, PersistenceError> {
-    Ok(public_query_handler(KeyProviders::ID, &state.query.key_providers)
-        .await?
-        .unwrap_or_default())
 }
 
 /// The key with the adapter of its provider, built from the settings the key was created with. `None` when the
 /// adapter can't be built.
-fn with_adapter(state: &KmsState, providers: &KeyProvidersView, reference: KeyReference) -> Option<SigningKey> {
-    let adapter = key_adapter(state, providers, &reference)?.ok()?;
+fn with_adapter(state: &KmsState, reference: KeyReference) -> Option<SigningKey> {
+    let adapter = key_adapter(state, &reference)?.ok()?;
     Some(SigningKey { reference, adapter })
 }
 
 /// The adapter of the provider of the key `reference`, built from the settings the key was created with, so that the
-/// key keeps signing when its provider is removed, or added again with other settings. A key recorded before keys
-/// carried settings uses its provider's current settings. `None` when this instance can't use its provider type.
-fn key_adapter(state: &KmsState, providers: &KeyProvidersView, reference: &KeyReference) -> Option<ProviderAdapter> {
-    let settings = reference.settings.clone().or_else(|| {
-        reference
-            .provider_type
-            .takes_settings()
-            .then(|| providers.settings.get(&reference.provider_type).cloned())
-            .flatten()
-    });
-    adapter(state, reference.provider_type, settings)
+/// key keeps signing when its provider is removed, or added again with other settings. `None` when this instance can't
+/// use its provider type.
+fn key_adapter(state: &KmsState, reference: &KeyReference) -> Option<ProviderAdapter> {
+    adapter(state, reference.provider_type, reference.settings.clone())
 }
 
 #[cfg(test)]
@@ -715,12 +699,15 @@ mod tests {
 
     /// An in-memory provider that can be made slow to generate, unable to return public keys, or refusing labels. It
     /// counts the keys it generated.
+    #[allow(clippy::struct_excessive_bools)]
     struct FakeProvider {
         keys: InMemoryKeyStore,
         generate_delay: Duration,
         public_keys_fail: bool,
         labels_refused: bool,
         algorithms_refused: bool,
+        /// Takes every two keys for one key, as versions of one key are.
+        keys_alike: bool,
         generated: AtomicUsize,
     }
 
@@ -732,6 +719,7 @@ mod tests {
                 public_keys_fail: false,
                 labels_refused: false,
                 algorithms_refused: false,
+                keys_alike: false,
                 generated: AtomicUsize::new(0),
             }
         }
@@ -806,6 +794,10 @@ mod tests {
                 return Err(InvalidLabel(format!("`{label}` is refused")));
             }
             Ok(())
+        }
+
+        fn same_key(&self, recorded: &str, key: &KeyId) -> bool {
+            self.keys_alike || recorded == key.as_str()
         }
     }
 
@@ -1218,6 +1210,50 @@ mod tests {
         .await;
 
         assert!(matches!(result, Err(CreateKeyError::AlreadyRecorded(_))), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn refuses_to_adopt_another_version_of_a_recorded_key() {
+        let provider = Arc::new(FakeProvider {
+            keys_alike: true,
+            ..FakeProvider::new()
+        });
+        let state = state_with_provider(provider.clone()).await;
+        create_labelled(&state).await.unwrap();
+        provider
+            .keys
+            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA).with_label("rotated"))
+            .await
+            .unwrap();
+
+        let result = adopt_key(
+            &state,
+            Caller::Internal,
+            KeyProviderType::InMemory,
+            "rotated".to_string(),
+        )
+        .await;
+
+        assert!(matches!(result, Err(CreateKeyError::AlreadyRecorded(_))), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn refuses_to_adopt_by_a_label_the_provider_refuses() {
+        let state = state_with_provider(Arc::new(FakeProvider {
+            labels_refused: true,
+            ..FakeProvider::new()
+        }))
+        .await;
+
+        let result = adopt_key(
+            &state,
+            Caller::Internal,
+            KeyProviderType::InMemory,
+            "issuer".to_string(),
+        )
+        .await;
+
+        assert!(matches!(result, Err(CreateKeyError::InvalidLabel(_))), "{result:?}");
     }
 
     #[tokio::test]

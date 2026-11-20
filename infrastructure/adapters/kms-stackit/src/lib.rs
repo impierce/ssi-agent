@@ -228,7 +228,7 @@ impl StackitKmsProvider {
                 .get::<Version>(&format!("keys/{}/versions/{number}", found.id))
                 .await
                 .map_err(KeyStoreError::backend)?;
-            if !version.is_some_and(|version| version.state != "destroyed") {
+            if version.is_none_or(|version| version.state == "destroyed") {
                 return Ok(None);
             }
         }
@@ -391,7 +391,6 @@ impl KeyStore for StackitKmsProvider {
         struct SignedData {
             signature: String,
         }
-        let (found, version) = self.signing_version(key).await?;
         if alg != JwsAlgorithm::ES256 {
             return Err(KeyStoreError::AlgorithmMismatch {
                 key: key.clone(),
@@ -399,17 +398,29 @@ impl KeyStore for StackitKmsProvider {
                 requested: alg,
             });
         }
+        // A pinned version, as every recorded key is, signs without looking the key up first. Only when signing fails
+        // is it looked up, to tell a key that is gone from one that can't sign.
+        let (id, number) = if let KeyName::Version(id, number) = KeyName::of(key) {
+            (id, number)
+        } else {
+            let (found, version) = self.signing_version(key).await?;
+            (found.id, version.number)
+        };
 
         // STACKIT hashes the whole message itself.
-        let signed = self
+        let signed = match self
             .request::<SignedData>(
                 Method::POST,
-                &format!("keys/{}/versions/{}/sign", found.id, version.number),
+                &format!("keys/{id}/versions/{number}/sign"),
                 Some(json!({ "data": STANDARD.encode(data) })),
             )
             .await
-            .map_err(KeyStoreError::backend)?
-            .ok_or_else(|| KeyStoreError::NotFound(key.clone()))?;
+        {
+            Ok(Some(signed)) => signed,
+            Ok(None) => return Err(KeyStoreError::NotFound(key.clone())),
+            Err(_) if !self.exists(key).await? => return Err(KeyStoreError::NotFound(key.clone())),
+            Err(error) => return Err(KeyStoreError::backend(error)),
+        };
         let der = STANDARD.decode(signed.signature).map_err(|error| {
             KeyStoreError::backend(StackitError(format!("STACKIT KMS's signature isn't base64: {error}")))
         })?;
@@ -477,6 +488,16 @@ impl KeyProviderAdapter for StackitKmsProvider {
     /// given to another key once this one is deleted.
     async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
         Ok(self.create_key(spec).await?.1)
+    }
+
+    /// Versions of one key are one key: deleting either deletes the key.
+    fn same_key(&self, recorded: &str, key: &KeyId) -> bool {
+        match (KeyName::of(&KeyId::new(recorded)), KeyName::of(key)) {
+            (KeyName::Version(recorded, _) | KeyName::Key(recorded), KeyName::Version(key, _) | KeyName::Key(key)) => {
+                recorded == key
+            }
+            _ => recorded == key.as_str(),
+        }
     }
 
     /// Returns the id that pins the newest usable version of the key labelled `label`.
@@ -809,6 +830,48 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(KeyStoreError::InvalidKey { .. })), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn signs_with_a_pinned_version_in_one_request() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("issuer", ES256, SIGNING);
+
+        kms.provider()
+            .sign(&KeyId::new(format!("{id}/1")), JwsAlgorithm::ES256, b"data")
+            .await
+            .unwrap();
+
+        assert_eq!(kms.requests().await, 1);
+    }
+
+    #[tokio::test]
+    async fn reports_a_deleted_key_as_missing_when_signing_with_a_pinned_version() {
+        let kms = FakeStackit::start().await;
+        let id = kms.add_key("issuer", ES256, SIGNING);
+        kms.set_key_state(id, "deleted");
+
+        let result = kms
+            .provider()
+            .sign(&KeyId::new(format!("{id}/1")), JwsAlgorithm::ES256, b"data")
+            .await;
+
+        assert!(matches!(result, Err(KeyStoreError::NotFound(_))), "{result:?}");
+    }
+
+    #[tokio::test]
+    async fn takes_two_versions_of_one_key_for_one_key() {
+        let kms = FakeStackit::start().await;
+        let provider = kms.provider();
+        let id = uuid::Uuid::from_u128(1);
+        let other = uuid::Uuid::from_u128(2);
+
+        let same = (
+            provider.same_key(&format!("{id}/1"), &KeyId::new(format!("{id}/2"))),
+            provider.same_key(&format!("{id}/1"), &KeyId::new(format!("{other}/1"))),
+        );
+
+        assert_eq!(same, (true, false));
     }
 
     #[tokio::test]
