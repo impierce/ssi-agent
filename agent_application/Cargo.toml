@@ -11,8 +11,6 @@ publish.workspace = true
 [dependencies]
 agent_api_http = { path = "../agent_api_http" }
 agent_authorization = { path = "../agent_authorization" }
-agent_event_publisher_http = { path = "../agent_event_publisher_http" }
-agent_event_publisher_nats = { path = "../agent_event_publisher_nats" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
@@ -22,7 +20,9 @@ agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
+bc-event-publishing.workspace = true
 kms-aws = { path = "../infrastructure/adapters/kms-aws" }
+shared-kernel.workspace = true
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 anyhow.workspace = true
@@ -42,7 +42,6 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
-shared-kernel.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

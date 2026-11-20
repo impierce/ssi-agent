@@ -12,9 +12,13 @@ use shared_kernel::event_bus::{
     Position, SourceEvent, SubscribePosition,
 };
 use shared_kernel::integration_event::EventProjector;
-use shared_kernel::streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS};
-use shared_kernel::view_repository::DynViewRepository;
+use shared_kernel::{
+    command_handler::{CommandHandler, CommandHandlerFactory},
+    streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS},
+    view_repository::{BoxedViewRepository, DynViewRepository, ViewRepositoryFactory},
+};
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
@@ -156,6 +160,39 @@ impl CqrsComponentBuilder for MongoDB {
             aggregate,
             all_aggregates,
         )
+    }
+}
+
+impl ViewRepositoryFactory for MongoDB {
+    fn create_view_repository<V, A>(&self, name: &str) -> BoxedViewRepository<V, A>
+    where
+        V: View<A> + Clone + 'static,
+        A: Aggregate + 'static,
+    {
+        BoxedViewRepository::new(Box::new(MongoViewRepository::new(name, self.client.clone())))
+    }
+}
+
+impl CommandHandlerFactory for MongoDB {
+    type Error = std::convert::Infallible;
+
+    fn create_handler<A>(
+        &self,
+        services: A::Services,
+        queries: Vec<Box<dyn Query<A>>>,
+    ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
+    where
+        A: Aggregate + 'static,
+        <A as Aggregate>::Command: Send,
+    {
+        let client = self.client.clone();
+        async move {
+            let replay = new_event_repository(client.clone())
+                .await
+                .with_streaming_channel_size(REPLAY_BUFFER_EVENTS);
+            let store = StreamingEventStore::new(new_event_repository(client).await, replay);
+            Ok(Arc::new(CqrsFramework::new(store, queries, services)) as CommandHandler<A>)
+        }
     }
 }
 

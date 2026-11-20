@@ -95,7 +95,7 @@ Use `%` (`Display`) for identifiers. A `?` (`Debug`) field on a domain type is a
   of a client error. `app` applies it to the built-in routes; apply it to custom routes as well.
 - The SSE events router is merged after `with_request_logging`, so event payloads are not logged.
 - Secret configuration fields are serialized as `<REDACTED>` (`#[serde(serialize_with = "redact")]`), and
-  `ApplicationConfiguration::redacted()` also redacts URL credentials and webhook paths. Log the configuration only
+  `ApplicationConfiguration::redacted()` also redacts URL credentials. Log the configuration only
   through `redacted()`.
 - With OpenTelemetry export active, JSON log lines written within a span carry its `trace_id` and `span_id`, so a
   request is easier to follow by correlating its lines than by logging more of them.

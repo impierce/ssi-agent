@@ -253,7 +253,6 @@ pub mod tests {
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::{set_config, Events};
     use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
@@ -462,18 +461,20 @@ pub mod tests {
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
-            set_config().enable_event_publisher_http(0);
-            set_config().set_event_publisher_http_target_url(0, target_url.clone());
-            set_config().set_event_publisher_http_target_events(
-                0,
-                Events {
-                    types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
-                },
+            drop(
+                bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
+                    "test-pub".to_string(),
+                    &bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
+                        types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
+                    },
+                    bc_event_publishing::domain::event_publisher::config::HttpPublisherConfig {
+                        target_url,
+                        headers: None,
+                    },
+                    &event_bus,
+                )
+                .spawn(),
             );
-
-            if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&event_bus) {
-                publisher.spawn();
-            }
             Some(external_server)
         } else {
             None

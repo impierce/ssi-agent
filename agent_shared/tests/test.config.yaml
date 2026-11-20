@@ -31,17 +31,6 @@ signing_algorithms_supported:
     enabled: true
     preferred: true
 
-event_publishers:
-  http:
-    - enabled: true
-      target_url: https://service.example.test:8291/events
-      headers:
-        Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
-      events:
-        types:
-          - com.impierce.unicore.issuance.credential.offered
-          - com.impierce.unicore.issuance.credential.issued
-
 display:
   - name: UniCore
     locale: en

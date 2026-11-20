@@ -364,7 +364,6 @@ feature:
 
 <!-- TODO: How to document all other DID methods? -->
 <!-- TODO: VP_FORMATS -->
-<!-- TODO: EVENT_PUBLISHERS: even configured through env vars? -->
 
 <!--
 ## Secret Management
