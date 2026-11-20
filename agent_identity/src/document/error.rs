@@ -30,6 +30,20 @@ pub enum DocumentError {
     VerificationMethodInsertionError(String),
     #[error("Failed to generate DID from key with Key ID: {0}")]
     GenerateDidError(KeyId),
+    #[error("Only `did:web` documents can add public keys, not `{0}` documents")]
+    AddPublicKeyUnsupportedError(SupportedDidMethod),
+    #[error("The public key to add is invalid: {0}")]
+    InvalidPublicKeyError(String),
+    #[error("The document has no verification method `{0}`")]
+    UnknownVerificationMethodError(String),
+    #[error("The key of verification method `{0}` names no supported algorithm")]
+    VerificationMethodAlgorithmError(String),
+    #[error("The verification method `{0}` is not of an added key, so it can't be removed")]
+    NotAnAddedKeyError(String),
+    #[error(
+        "The verification method `{0}` is the selected signing key of its algorithm. Select another key, or deselect it with `deselect-signing-key`, before removing it"
+    )]
+    SelectedSigningKeyError(String),
 
     // did:web specific Errors
     #[error("Opaque origin not supported")]

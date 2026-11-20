@@ -5,7 +5,7 @@ use crate::connection::{
 use crate::dns::CnameResolver;
 use crate::document::aggregate::{Document, Status};
 use crate::service::error::ServiceError;
-use agent_secret_manager::subject::Subject;
+use agent_secret_manager::subject::{MethodKey, Subject};
 use chrono::{DateTime, Utc};
 use identity_kit::{
     did::{Did, DidDocument},
@@ -71,6 +71,37 @@ pub struct NoLinkedVerifiablePresentations;
 impl LinkedVerifiablePresentationSource for NoLinkedVerifiablePresentations {
     async fn signed_presentation(&self, _presentation_id: &str) -> anyhow::Result<Option<Jwt>> {
         Ok(None)
+    }
+}
+
+/// A key held outside this instance's configured key store, such as in a Key Management System, that a DID document
+/// can sign with once its public key is added.
+#[derive(Clone)]
+pub struct ExternalKey {
+    pub method_key: MethodKey,
+}
+
+/// Where the keys held outside this instance's configured key store come from.
+#[async_trait::async_trait]
+pub trait ExternalKeySource: Send + Sync {
+    /// The key named `key_id`, or `None` when there is no such key.
+    async fn key(&self, key_id: &str) -> anyhow::Result<Option<ExternalKey>>;
+
+    /// Every key, so that their added public keys sign again after a restart.
+    async fn keys(&self) -> anyhow::Result<Vec<ExternalKey>>;
+}
+
+/// Offers no keys, for deployments and tests without a Key Management System.
+pub struct NoExternalKeys;
+
+#[async_trait::async_trait]
+impl ExternalKeySource for NoExternalKeys {
+    async fn key(&self, _key_id: &str) -> anyhow::Result<Option<ExternalKey>> {
+        Ok(None)
+    }
+
+    async fn keys(&self) -> anyhow::Result<Vec<ExternalKey>> {
+        Ok(vec![])
     }
 }
 
@@ -154,6 +185,7 @@ pub(crate) async fn validate_linked_verifiable_presentation(
 }
 
 /// Identity services.
+#[derive(Clone)]
 pub struct IdentityServices {
     pub subject: Arc<Subject>,
     pub public_url: Url,
@@ -166,6 +198,7 @@ pub struct IdentityServices {
     /// `docs/adr/0002-allow-localhost-http-fallback-for-local-testing.md`.
     pub allow_local_network_outbound: bool,
     pub linked_verifiable_presentations: Arc<dyn LinkedVerifiablePresentationSource>,
+    pub external_keys: Arc<dyn ExternalKeySource>,
 }
 
 impl IdentityServices {
@@ -178,6 +211,7 @@ impl IdentityServices {
             client: Client::new(),
             allow_local_network_outbound: cfg!(feature = "allow-localhost"),
             linked_verifiable_presentations: Arc::new(NoLinkedVerifiablePresentations),
+            external_keys: Arc::new(NoExternalKeys),
         }
     }
 

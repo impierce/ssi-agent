@@ -12,7 +12,7 @@ use identity_kit::{
 };
 use jsonwebtoken::Algorithm;
 use oid4vc_core::{authentication::sign::ExternalSign, Sign, Verify};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -22,7 +22,16 @@ use tokio::sync::Mutex;
 pub struct Subject {
     /// Holds the configured issuer keys.
     pub key_store: Arc<dyn KeyStore>,
+    /// The verification method each DID method signs with, per algorithm.
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
+    /// The keys of verification methods that the configured issuer keys don't back, by verification method.
+    method_keys: Arc<Mutex<HashMap<DidUrl, MethodKey>>>,
+    /// The verification methods that the configured issuer keys don't back, also those whose key isn't available.
+    added_methods: Arc<Mutex<HashSet<DidUrl>>>,
+    /// Why the key of a verification method last failed to sign, until it signs again.
+    failures: Arc<Mutex<HashMap<DidUrl, String>>>,
+    /// Held while what signs changes: keys of verification methods loaded again or added, or the selected ones cached.
+    signing_keys_update: Arc<Mutex<()>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
 }
@@ -34,6 +43,15 @@ impl fmt::Debug for Subject {
             .field("key_resolver", &self.key_resolver)
             .finish_non_exhaustive()
     }
+}
+
+/// A key in a key store other than the configured issuer keys, such as a KMS key.
+#[derive(Clone)]
+pub struct MethodKey {
+    pub key_store: Arc<dyn KeyStore>,
+    pub key_id: identity_kit::keys::KeyId,
+    /// The key's public key, as recorded when the key was created, so that signing doesn't fetch it first.
+    pub public_key: Jwk,
 }
 
 /// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
@@ -82,6 +100,10 @@ impl Subject {
         Self {
             key_store: Arc::new(stronghold_key_store().await),
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
+            method_keys: Arc::new(Mutex::new(HashMap::new())),
+            added_methods: Arc::new(Mutex::new(HashSet::new())),
+            failures: Arc::new(Mutex::new(HashMap::new())),
+            signing_keys_update: Arc::default(),
             key_resolver: key_resolver(),
         }
     }
@@ -91,6 +113,114 @@ impl Subject {
         let (key, alg) = issuer_key(algorithm)?;
 
         Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)
+    }
+
+    /// IdentityKit's signer for the verification method `verification_method_id`: with the key inserted for it, or
+    /// else with the configured issuer key for `algorithm`.
+    ///
+    /// # Errors
+    ///
+    /// Fails for an added verification method whose key isn't available. Signing with the configured issuer key
+    /// instead would not help: the signature's `kid` names this verification method, so it wouldn't verify.
+    pub async fn method_signer(
+        &self,
+        verification_method_id: &DidUrl,
+        algorithm: Algorithm,
+    ) -> anyhow::Result<KeySigner<Arc<dyn KeyStore>>> {
+        let method_key = self.method_keys.lock().await.get(verification_method_id).cloned();
+        let Some(MethodKey {
+            key_store,
+            key_id,
+            public_key,
+        }) = method_key
+        else {
+            if self.added_methods.lock().await.contains(verification_method_id) {
+                return Err(anyhow!(
+                    "The key of the verification method `{verification_method_id}` isn't available to sign with"
+                ));
+            }
+            return self.issuer_signer(algorithm).await;
+        };
+
+        KeySigner::from_public_jwk(
+            key_store,
+            key_id.clone(),
+            JwsAlgorithm::try_from(algorithm)?,
+            public_key,
+        )
+        .map_err(|error| {
+            anyhow!(error).context(format!(
+                "The key `{key_id}` of the verification method `{verification_method_id}` can't sign"
+            ))
+        })
+    }
+
+    /// Signs `message` for the verification method `verification_method_id`, as [`method_signer`](Self::method_signer)
+    /// does, naming the verification method when its key can't sign.
+    pub async fn sign_for_method(
+        &self,
+        verification_method_id: &DidUrl,
+        algorithm: Algorithm,
+        message: &[u8],
+    ) -> anyhow::Result<Vec<u8>> {
+        let signed = match self.method_signer(verification_method_id, algorithm).await {
+            Ok(signer) => signer.sign(message).await.map_err(|error| {
+                anyhow!(error).context(format!(
+                    "The key of the verification method `{verification_method_id}` can't sign"
+                ))
+            }),
+            Err(error) => Err(error),
+        };
+
+        let mut failures = self.failures.lock().await;
+        match &signed {
+            Ok(_) => failures.remove(verification_method_id),
+            Err(error) => failures.insert(verification_method_id.clone(), format!("{error:#}")),
+        };
+        signed
+    }
+
+    /// Why the key of the verification method `verification_method_id` can't sign: it isn't available, or it failed
+    /// the last time it signed. `None` when it can sign as far as is known.
+    pub async fn signing_problem(&self, verification_method_id: &DidUrl) -> Option<String> {
+        if self.added_methods.lock().await.contains(verification_method_id)
+            && !self.method_keys.lock().await.contains_key(verification_method_id)
+        {
+            return Some(format!(
+                "The key of the verification method `{verification_method_id}` isn't available to sign with"
+            ));
+        }
+        self.failures.lock().await.get(verification_method_id).cloned()
+    }
+
+    /// Whether a key was inserted for the verification method `verification_method_id`.
+    pub async fn has_method_key(&self, verification_method_id: &DidUrl) -> bool {
+        self.method_keys.lock().await.contains_key(verification_method_id)
+    }
+
+    /// Signs for the verification method `verification_method_id` with `key` instead of a configured issuer key.
+    pub async fn insert_method_key(&self, verification_method_id: DidUrl, key: MethodKey) {
+        self.added_methods.lock().await.insert(verification_method_id.clone());
+        self.method_keys.lock().await.insert(verification_method_id, key);
+    }
+
+    /// Keeps others from changing what signs until the guard is dropped. Taken before the documents are read, it keeps
+    /// a change based on documents read earlier from undoing one made meanwhile.
+    pub async fn lock_signing_keys(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.signing_keys_update.clone().lock_owned().await
+    }
+
+    /// Replaces the keys of all verification methods at once, such as after loading them again, so that keys no longer
+    /// available stop being used.
+    pub async fn replace_method_keys(&self, keys: HashMap<DidUrl, MethodKey>) {
+        self.added_methods.lock().await.extend(keys.keys().cloned());
+        *self.method_keys.lock().await = keys;
+    }
+
+    /// Never signs for the verification method `verification_method_id` with a configured issuer key, as it isn't one
+    /// of theirs, also while its own key isn't available.
+    pub async fn insert_added_method(&self, verification_method_id: DidUrl) {
+        self.added_methods.lock().await.insert(verification_method_id);
     }
 
     pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
@@ -107,6 +237,18 @@ impl Subject {
             .await
             .insert(key, verification_method_id);
         Ok(())
+    }
+
+    /// Sets the verification method of each storage key in `verification_method_ids` at once, so that nothing signing
+    /// meanwhile sees some of them changed and others not.
+    pub async fn insert_verification_method_ids(
+        &self,
+        verification_method_ids: impl IntoIterator<Item = (StorageKey, DidUrl)>,
+    ) {
+        self.verification_method_ids
+            .lock()
+            .await
+            .extend(verification_method_ids);
     }
 
     pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DidUrl> {
@@ -208,6 +350,10 @@ mod default_subject {
             Self {
                 key_store: Arc::new(stronghold_key_store().await),
                 verification_method_ids,
+                method_keys: Arc::new(Mutex::new(HashMap::new())),
+                added_methods: Arc::new(Mutex::new(HashSet::new())),
+                failures: Arc::new(Mutex::new(HashMap::new())),
+                signing_keys_update: Arc::default(),
                 key_resolver: key_resolver(),
             }
         }
@@ -238,8 +384,21 @@ impl Sign for Subject {
             .map(ToString::to_string)
     }
 
-    async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?)
+    async fn sign(&self, message: &str, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        let verification_method_id = match SupportedDidMethod::from_str(subject_syntax_type) {
+            Ok(method) => {
+                self.get_verification_method_id(StorageKey::new(method, algorithm))
+                    .await
+            }
+            Err(_) => None,
+        };
+        match verification_method_id {
+            Some(verification_method_id) => {
+                self.sign_for_method(&verification_method_id, algorithm, message.as_bytes())
+                    .await
+            }
+            None => Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?),
+        }
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -279,6 +438,7 @@ mod tests {
     use super::*;
     use agent_shared::config::{default_issuer_eddsa_key_id, default_issuer_es256_key_id, SecretManagerConfig};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use identity_kit::keys::{InMemoryKeyStore, KeySpec, KeyType};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
@@ -327,6 +487,131 @@ mod tests {
         // Verify the signature
         let public_key = UnparsedPublicKey::new(&ED25519, public_key_bytes);
         assert!(public_key.verify(message.as_bytes(), &signature_bytes).is_ok());
+    }
+
+    /// An ES256 key in an in-memory key store, and its public JWK.
+    async fn in_memory_key() -> (MethodKey, Jwk) {
+        let key_store = Arc::new(InMemoryKeyStore::new());
+        let key_id = key_store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        let public_jwk = key_store.public_jwk(&key_id).await.unwrap();
+
+        (
+            MethodKey {
+                key_store,
+                key_id,
+                public_key: public_jwk.clone(),
+            },
+            public_jwk,
+        )
+    }
+
+    async fn configured_es256_public_jwk(subject: &Subject) -> Jwk {
+        subject
+            .get_public_key(KeyId::new(default_issuer_es256_key_id().as_str()))
+            .await
+            .unwrap()
+    }
+
+    fn signed_by(public_jwk: &Jwk, message: &str, signature: &[u8]) -> bool {
+        UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_jwk.p256_public_bytes().unwrap())
+            .verify(message.as_bytes(), signature)
+            .is_ok()
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_did_method_with_the_key_of_its_verification_method() {
+        let subject = Subject::test_subject().await;
+        let (key, public_jwk) = in_memory_key().await;
+        let verification_method_id: DidUrl = "did:web:example.org#kms".parse().unwrap();
+        subject.insert_method_key(verification_method_id.clone(), key).await;
+        subject
+            .insert_verification_method_id(
+                StorageKey::new(SupportedDidMethod::Web, Algorithm::ES256),
+                verification_method_id,
+            )
+            .await
+            .unwrap();
+
+        let signature = Sign::sign(&subject, "message", "did:web", Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(signed_by(&public_jwk, "message", &signature));
+    }
+
+    #[tokio::test]
+    async fn names_the_verification_method_whose_key_can_no_longer_sign() {
+        let subject = Subject::test_subject().await;
+        let (key, _) = in_memory_key().await;
+        key.key_store.delete(&key.key_id).await.unwrap();
+        let verification_method_id: DidUrl = "did:web:example.org#kms".parse().unwrap();
+        subject.insert_method_key(verification_method_id.clone(), key).await;
+
+        let error = subject
+            .sign_for_method(&verification_method_id, Algorithm::ES256, b"message")
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "The key of the verification method `did:web:example.org#kms` can't sign"
+        );
+    }
+
+    #[tokio::test]
+    async fn signs_for_no_added_verification_method_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+        let verification_method_id: DidUrl = "did:web:example.org#kms".parse().unwrap();
+        subject.insert_added_method(verification_method_id.clone()).await;
+
+        let error = subject
+            .method_signer(&verification_method_id, Algorithm::ES256)
+            .await
+            .err()
+            .unwrap();
+
+        assert_eq!(
+            error.to_string(),
+            "The key of the verification method `did:web:example.org#kms` isn't available to sign with"
+        );
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_did_method_without_a_verification_method_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+
+        let signature = Sign::sign(&subject, "message", "did:web", Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(signed_by(
+            &configured_es256_public_jwk(&subject).await,
+            "message",
+            &signature
+        ));
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_verification_method_without_its_own_key_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+        let verification_method_id: DidUrl = "did:web:example.org#stronghold".parse().unwrap();
+
+        let signature = subject
+            .method_signer(&verification_method_id, Algorithm::ES256)
+            .await
+            .unwrap()
+            .sign(b"message")
+            .await
+            .unwrap();
+
+        assert!(signed_by(
+            &configured_es256_public_jwk(&subject).await,
+            "message",
+            &signature
+        ));
     }
 
     /// The public key of the `did:web` document [`serve_did_web`] serves.

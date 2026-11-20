@@ -1,5 +1,5 @@
 use crate::adapter::{
-    ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys, RefusedAlgorithm,
+    ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderAdapters, KeyUsage, ProviderKeys, RefusedAlgorithm,
 };
 use crate::key::{
     aggregate::{Key, KeyReference},
@@ -16,8 +16,11 @@ use crate::key_provider::{
 };
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
-    handlers::{authorize_command, command_handler, query_handler, CommandHandlerError, QueryHandlerError},
+    handlers::{
+        authorize_command, command_handler, public_query_handler, query_handler, CommandHandlerError, QueryHandlerError,
+    },
 };
+use cqrs_es::persist::PersistenceError;
 use identity_kit::{
     jose::{JwsAlgorithm, KeyType},
     keys::{KeyId, KeySpec, KeyStoreError},
@@ -52,6 +55,8 @@ pub struct KmsState {
     pub adapters: Arc<KeyProviderAdapters>,
     /// Whether development-only providers, such as the in-memory provider, may be used.
     pub development_providers_allowed: bool,
+    /// What signs with the keys, set once the contexts that use them exist.
+    pub key_usage: Arc<std::sync::OnceLock<Arc<dyn KeyUsage>>>,
 }
 
 #[derive(Clone)]
@@ -100,6 +105,7 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
         },
         adapters: Arc::new(adapters),
         development_providers_allowed,
+        key_usage: Arc::default(),
     }
 }
 
@@ -447,6 +453,12 @@ pub enum DeleteKeyError {
     NotFound(String),
     #[error("This instance has no adapter for `{0}` key providers")]
     Unsupported(KeyProviderType),
+    #[error(
+        "The key `{id}` is the key of the verification method `{verification_method}`. Remove it with `remove-key-from-document` before deleting it"
+    )]
+    InUse { id: String, verification_method: String },
+    #[error("Whether the key `{0}` signs can't be told: {1}")]
+    Usage(String, Box<dyn std::error::Error + Send + Sync>),
     #[error(transparent)]
     KeyStore(#[from] KeyStoreError),
     #[error(transparent)]
@@ -456,11 +468,14 @@ pub enum DeleteKeyError {
 }
 
 /// Deletes the key `id` from its provider, which schedules its deletion where the provider does, and frees its label.
-/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore.
+/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore. The key
+/// of a verification method isn't deleted, as anything signing for that method, such as a Domain Linkage Credential,
+/// would break; removing the method first is the caller's choice.
 ///
 /// # Errors
 ///
-/// Fails when the caller isn't authorized, there is no such key, or the provider can't delete it.
+/// Fails when the caller isn't authorized, there is no such key, it is the key of a verification method, or the
+/// provider can't delete it.
 pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<(), DeleteKeyError> {
     authorize_command(
         state.authorization_checker.as_ref(),
@@ -481,6 +496,18 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
     .filter(|key| !key.deleted)
     .and_then(|key| key.reference)
     .ok_or_else(|| DeleteKeyError::NotFound(id.to_string()))?;
+    if let Some(usage) = state.key_usage.get() {
+        if let Some(verification_method) = usage
+            .verification_method(id, &reference.public_key)
+            .await
+            .map_err(|error| DeleteKeyError::Usage(id.to_string(), error))?
+        {
+            return Err(DeleteKeyError::InUse {
+                id: id.to_string(),
+                verification_method,
+            });
+        }
+    }
     let adapter = state
         .adapters
         .get(&reference.provider_type)
@@ -522,6 +549,46 @@ pub async fn get_keys(state: &KmsState, caller: Caller) -> Result<AllKeysView, Q
     )
     .await?
     .unwrap_or_default())
+}
+
+/// A key this instance created, with the adapter of its provider, which signs with it.
+#[derive(Clone)]
+pub struct SigningKey {
+    pub reference: KeyReference,
+    pub adapter: Arc<dyn KeyProviderAdapter>,
+}
+
+/// Returns the key `key_id` to sign with, or `None` when there is no such key, it was deleted, or this instance has no
+/// adapter for its provider.
+///
+/// # Errors
+///
+/// Fails when the key can't be loaded.
+pub async fn signing_key(state: &KmsState, key_id: &str) -> Result<Option<SigningKey>, PersistenceError> {
+    Ok(public_query_handler(key_id, &state.query.key)
+        .await?
+        .filter(|key| !key.deleted)
+        .and_then(|KeyView { reference, .. }| with_adapter(state, reference?)))
+}
+
+/// Returns every key this instance created and has an adapter for, to sign with.
+///
+/// # Errors
+///
+/// Fails when the keys can't be loaded.
+pub async fn signing_keys(state: &KmsState) -> Result<Vec<SigningKey>, PersistenceError> {
+    Ok(public_query_handler("all_keys", &state.query.all_keys)
+        .await?
+        .unwrap_or_default()
+        .keys
+        .into_values()
+        .filter_map(|reference| with_adapter(state, reference))
+        .collect())
+}
+
+fn with_adapter(state: &KmsState, reference: KeyReference) -> Option<SigningKey> {
+    let adapter = state.adapters.get(&reference.provider_type)?.clone();
+    Some(SigningKey { reference, adapter })
 }
 
 #[cfg(test)]
@@ -824,6 +891,31 @@ mod tests {
         assert!(!provider.exists(&KeyId::new("issuer")).await.unwrap());
     }
 
+    /// Every key is the key of the verification method `did:web:example.org#kms`.
+    struct UsedEverywhere;
+
+    #[async_trait]
+    impl KeyUsage for UsedEverywhere {
+        async fn verification_method(
+            &self,
+            _key_id: &str,
+            _public_key: &Jwk,
+        ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(Some("did:web:example.org#kms".to_string()))
+        }
+    }
+
+    #[tokio::test]
+    async fn refuses_to_delete_the_key_of_a_verification_method() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let _ = state.key_usage.set(Arc::new(UsedEverywhere));
+        let (id, _) = create_labelled(&state).await.unwrap();
+
+        let result = delete_key(&state, Caller::Internal, &id).await;
+
+        assert!(matches!(result, Err(DeleteKeyError::InUse { .. })), "{result:?}");
+    }
+
     #[tokio::test]
     async fn records_a_key_its_provider_no_longer_has_as_deleted() {
         let provider = Arc::new(FakeProvider::new());
@@ -944,5 +1036,48 @@ mod tests {
         .await;
 
         assert!(get_keys(&state, Caller::Internal).await.unwrap().keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn gives_a_key_to_sign_with_with_the_adapter_of_its_provider() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let (id, reference) = create_labelled(&state).await.unwrap();
+
+        let signing_key = signing_key(&state, &id).await.unwrap();
+
+        assert_eq!(signing_key.map(|key| key.reference), Some(reference));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_key_cannot_sign() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+
+        let signing_key = signing_key(&state, "unknown").await.unwrap();
+
+        assert!(signing_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_key_without_an_adapter_for_its_provider_cannot_sign() {
+        let mut state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let (id, _) = create_labelled(&state).await.unwrap();
+        state.adapters = Arc::new(KeyProviderAdapters::new());
+
+        let signing_key = signing_key(&state, &id).await.unwrap();
+
+        assert!(signing_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn gives_every_created_key_to_sign_with() {
+        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
+        let (_, reference) = create_labelled(&state).await.unwrap();
+
+        let signing_keys = signing_keys(&state).await.unwrap();
+
+        assert_eq!(
+            signing_keys.into_iter().map(|key| key.reference).collect::<Vec<_>>(),
+            vec![reference]
+        );
     }
 }

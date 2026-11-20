@@ -10,6 +10,7 @@ use crate::{
     state::{query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID},
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
+use cqrs_es::AggregateError;
 use identity_kit::{did::Service as DocumentService, vc::Jwt};
 use serde::Serialize;
 use shared_kernel::authorization::{
@@ -338,7 +339,10 @@ fn renewal_command(only_if_expiring: bool) -> ServiceCommand {
     }
 }
 
-/// Startup and runtime share the same renewal policy. Deleted services are never renewed.
+/// Startup and runtime share the same renewal policy. Deleted services are never renewed. A key that can't sign, such
+/// as one whose provider can't be reached, keeps the current credentials published, and the next maintenance tries
+/// again. Renewal starts [`LINKED_DOMAINS_RENEWAL_WINDOW_DAYS`](super::aggregate::LINKED_DOMAINS_RENEWAL_WINDOW_DAYS)
+/// days before they expire, but they expire if it keeps failing that long. It doesn't stop the instance from starting.
 pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
     let _guard = state.service_lifecycle_lock.lock().await;
     if linked_domains(state)
@@ -349,7 +353,12 @@ pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
         if eligible_documents.is_empty() {
             warn!("Linked domains need renewal, but no eligible signing DID is enabled");
         } else {
-            execute_locked(state, renewal_command(true)).await?;
+            match execute_locked(state, renewal_command(true)).await {
+                Err(ServiceManagementError::Command(CommandHandlerError::Aggregate(AggregateError::UserError(
+                    ServiceError::SigningError(error),
+                )))) => warn!("Renewing the linked domains failed, the current credentials stay published: {error}"),
+                result => result?,
+            }
             return Ok(());
         }
     }
