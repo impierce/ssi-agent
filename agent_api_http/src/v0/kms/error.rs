@@ -1,8 +1,10 @@
 use crate::error::{type_url, IntoApiErrorExt};
+use agent_kms::key::error::KeyError;
 use agent_kms::key_provider::error::KeyProviderError;
-use agent_kms::state::TestConnectionError;
+use agent_kms::state::{CreateKeyError, DeleteKeyError, RemoveKeyProviderError, TestConnectionError};
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use identity_kit::keys::KeyStoreError;
 
 impl IntoApiErrorExt for KeyProviderError {
     fn into_api_error(self) -> ApiError {
@@ -59,11 +61,133 @@ impl IntoApiErrorExt for TestConnectionError {
     }
 }
 
+impl IntoApiErrorExt for KeyError {
+    fn into_api_error(self) -> ApiError {
+        let (status, title, problem_type) = match &self {
+            KeyError::AlreadyRecorded => (StatusCode::CONFLICT, "Key Already Recorded", "kms#key-already-recorded"),
+            KeyError::NotFound => (StatusCode::NOT_FOUND, "Key Not Found", "kms#key-not-found"),
+        };
+
+        ApiError::builder(status)
+            .title(title)
+            .type_url(type_url(problem_type))
+            .message(self.to_string())
+            .source(self)
+            .finish()
+    }
+}
+
+impl IntoApiErrorExt for KeyStoreError {
+    fn into_api_error(self) -> ApiError {
+        let (status, title, problem_type) = match &self {
+            KeyStoreError::AlreadyExists(_) => (StatusCode::CONFLICT, "Key Already Exists", "kms#key-already-exists"),
+            KeyStoreError::Unsupported(_)
+            | KeyStoreError::UnsupportedAlgorithm(_)
+            | KeyStoreError::UnsupportedKeyType(_)
+            | KeyStoreError::InvalidSpec { .. } => (
+                StatusCode::BAD_REQUEST,
+                "Key Not Supported By Provider",
+                "kms#key-not-supported-by-provider",
+            ),
+            // Anything else is the provider failing a request that should have worked.
+            _ => (StatusCode::BAD_GATEWAY, "Key Provider Error", "kms#key-provider-error"),
+        };
+
+        ApiError::builder(status)
+            .title(title)
+            .type_url(type_url(problem_type))
+            .message(self.to_string())
+            .source(self)
+            .finish()
+    }
+}
+
+impl IntoApiErrorExt for CreateKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            CreateKeyError::Provider(error) => error.into_api_error(),
+            // Only adopting a key looks a key up by its label before anything else.
+            CreateKeyError::KeyStore(KeyStoreError::NotFound(_)) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Key Not Found")
+                .type_url(type_url("kms#key-not-found"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+            CreateKeyError::KeyStore(error) => error.into_api_error(),
+            CreateKeyError::AlgorithmRefused(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Key Algorithm Refused By Provider")
+                .type_url(type_url("kms#key-algorithm-refused-by-provider"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+            CreateKeyError::UnsupportedKey(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Key Not Supported")
+                .type_url(type_url("kms#unsupported-key"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+            CreateKeyError::AlreadyRecorded(_) => ApiError::builder(StatusCode::CONFLICT)
+                .title("Key Already Recorded")
+                .type_url(type_url("kms#key-already-recorded"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+            CreateKeyError::Record(error) => error.into_api_error(),
+            CreateKeyError::UnsupportedAlgorithm(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Key Algorithm Not Supported")
+                .type_url(type_url("kms#unsupported-key-algorithm"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+            CreateKeyError::InvalidLabel(_) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Key Label")
+                .type_url(type_url("kms#invalid-key-label"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for RemoveKeyProviderError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            RemoveKeyProviderError::Query(error) => error.into_api_error(),
+            RemoveKeyProviderError::Command(error) => error.into_api_error(),
+            RemoveKeyProviderError::HasKeys { .. } => ApiError::builder(StatusCode::CONFLICT)
+                .title("Key Provider Has Keys")
+                .type_url(type_url("kms#key-provider-has-keys"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for DeleteKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            DeleteKeyError::KeyStore(error) => error.into_api_error(),
+            DeleteKeyError::Query(error) => error.into_api_error(),
+            DeleteKeyError::Record(error) => error.into_api_error(),
+            DeleteKeyError::NotFound(_) => KeyError::NotFound.into_api_error(),
+            DeleteKeyError::Unsupported(provider_type) => {
+                TestConnectionError::Unsupported(provider_type).into_api_error()
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::error::tests::assert_problems;
+    use agent_kms::adapter::{InvalidLabel, RefusedAlgorithm};
     use agent_kms::key_provider::aggregate::KeyProviderType;
+    use identity_kit::{
+        jose::{JwsAlgorithm, KeyType},
+        keys::KeyId,
+    };
 
     #[test]
     fn key_provider_errors_successfully_convert_to_problem_details() {
@@ -110,5 +234,92 @@ mod tests {
                 Some("kms#key-provider-not-supported"),
             ),
         ]);
+    }
+
+    #[test]
+    fn key_errors_successfully_convert_to_problem_details() {
+        assert_problems([(
+            KeyError::AlreadyRecorded,
+            StatusCode::CONFLICT,
+            Some("kms#key-already-recorded"),
+        )]);
+    }
+
+    #[test]
+    fn key_store_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                KeyStoreError::AlreadyExists(KeyId::new("issuer")),
+                StatusCode::CONFLICT,
+                Some("kms#key-already-exists"),
+            ),
+            (
+                KeyStoreError::UnsupportedKeyType(KeyType::Rsa2048),
+                StatusCode::BAD_REQUEST,
+                Some("kms#key-not-supported-by-provider"),
+            ),
+            (
+                KeyStoreError::NotFound(KeyId::new("issuer")),
+                StatusCode::BAD_GATEWAY,
+                Some("kms#key-provider-error"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn create_key_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                CreateKeyError::UnsupportedAlgorithm(JwsAlgorithm::ES384),
+                StatusCode::BAD_REQUEST,
+                Some("kms#unsupported-key-algorithm"),
+            ),
+            (
+                CreateKeyError::InvalidLabel(InvalidLabel("`aws/x` can't be an AWS KMS alias name".to_string())),
+                StatusCode::BAD_REQUEST,
+                Some("kms#invalid-key-label"),
+            ),
+            (
+                CreateKeyError::AlgorithmRefused(RefusedAlgorithm("too small".to_string())),
+                StatusCode::BAD_REQUEST,
+                Some("kms#key-algorithm-refused-by-provider"),
+            ),
+            (
+                CreateKeyError::UnsupportedKey(KeyId::new("rsa")),
+                StatusCode::BAD_REQUEST,
+                Some("kms#unsupported-key"),
+            ),
+            (
+                CreateKeyError::AlreadyRecorded(KeyId::new("issuer")),
+                StatusCode::CONFLICT,
+                Some("kms#key-already-recorded"),
+            ),
+            (
+                CreateKeyError::KeyStore(KeyStoreError::NotFound(KeyId::new("issuer"))),
+                StatusCode::NOT_FOUND,
+                Some("kms#key-not-found"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn remove_key_provider_errors_successfully_convert_to_problem_details() {
+        assert_problems([(
+            RemoveKeyProviderError::HasKeys {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                keys: 2,
+            },
+            StatusCode::CONFLICT,
+            Some("kms#key-provider-has-keys"),
+        )]);
+    }
+
+    #[test]
+    fn delete_key_errors_successfully_convert_to_problem_details() {
+        assert_problems([(
+            DeleteKeyError::NotFound("key".to_string()),
+            StatusCode::NOT_FOUND,
+            Some("kms#key-not-found"),
+        )]);
     }
 }

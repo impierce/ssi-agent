@@ -52,6 +52,22 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     )
     .await
     .unwrap();
+    let kms = state.api.kms_state.as_ref().expect("the KMS is enabled");
+    agent_shared::handlers::public_command_handler(
+        "persisted-key",
+        &kms.command.keys,
+        agent_kms::key::command::KeyCommand::RecordCreatedKey {
+            reference: serde_json::from_value(json!({
+                "provider_type": "aws_kms_ambient",
+                "provider_key_id": "arn:aws:kms:eu-central-1:123456789012:key/00000000-0000-0000-0000-000000000001",
+                "algorithm": "EdDSA",
+                "public_key": { "kty": "OKP", "crv": "Ed25519", "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPZpiMlrwIaaPcHURo" }
+            }))
+            .unwrap(),
+        },
+    )
+    .await
+    .unwrap();
     let app = router(state);
     assert_reissuance_views(&app).await;
 
@@ -120,6 +136,10 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         providers,
         json!([{ "providerType": "aws_kms_ambient", "name": "Persisted keys" }])
     );
+
+    let (status, keys) = send(&app, Request::get("/v0/get-all-keys").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(keys[0]["id"], "persisted-key");
 }
 
 async fn assert_reissuance_views(app: &Router) {

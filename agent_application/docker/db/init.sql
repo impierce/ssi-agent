@@ -354,6 +354,9 @@ CREATE TABLE all_server_configs
     PRIMARY KEY (view_id)
 );
 
+-- The Key Management System's views. Like the rest of this file, they are only created with a new database. The KMS
+-- is still in development behind the `kms` feature flag, so existing PostgreSQL databases get an upgrade note once it
+-- leaves development, not before.
 CREATE TABLE key_providers
 (
     view_id           text                        NOT NULL,
@@ -363,6 +366,22 @@ CREATE TABLE key_providers
 );
 
 CREATE TABLE all_key_providerss
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE key
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE all_keys
 (
     view_id           text                        NOT NULL,
     version           bigint CHECK (version >= 0) NOT NULL,

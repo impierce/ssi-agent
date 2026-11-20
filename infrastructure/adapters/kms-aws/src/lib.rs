@@ -3,7 +3,9 @@
 //! Credentials and region are resolved through the standard AWS chain: environment variables, shared config files,
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
-use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys};
+use agent_kms::adapter::{
+    ConnectionError, InvalidLabel, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys, RefusedAlgorithm,
+};
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
 use aws_sdk_kms::{
@@ -13,7 +15,10 @@ use aws_sdk_kms::{
     Client,
 };
 use futures::{stream, StreamExt as _, TryStreamExt as _};
-use identity_kit::jose::JwsAlgorithm;
+use identity_kit::{
+    jose::JwsAlgorithm,
+    keys::{KeyId, KeySpec, KeyStoreError},
+};
 use std::{collections::HashMap, sync::RwLock, time::Duration};
 use tokio::sync::OnceCell;
 use tracing::debug;
@@ -30,7 +35,7 @@ const DESCRIBE_CONCURRENCY: usize = 8;
 
 mod key_store;
 use key_store::signing_algorithm;
-pub use key_store::AwsKmsError;
+pub use key_store::{AwsKmsError, InvalidDeploymentAlias};
 
 #[cfg(test)]
 mod fake_kms;
@@ -41,8 +46,9 @@ pub struct AwsKmsAmbientKeyProvider {
     /// The algorithm of every key looked up so far by key ID or key ARN, which always name the same key. A key's spec
     /// never changes in AWS KMS.
     algorithms: RwLock<HashMap<String, JwsAlgorithm>>,
-    /// Tags given to every key this provider generates, for example to scope IAM policies to a tenant.
-    key_tags: Vec<(String, String)>,
+    /// The alias of the deployment this provider generates keys for, if any. Its keys are tagged with it and their
+    /// aliases are prefixed with it, so IAM policies can limit a deployment to its own keys and aliases.
+    deployment_alias: Option<String>,
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -58,7 +64,7 @@ impl AwsKmsAmbientKeyProvider {
             client,
             deadline: REQUEST_DEADLINE,
             algorithms: RwLock::default(),
-            key_tags: Vec::new(),
+            deployment_alias: None,
         }
     }
 
@@ -68,13 +74,20 @@ impl AwsKmsAmbientKeyProvider {
         Self::with_cell(OnceCell::new_with(Some(client)))
     }
 
-    /// Tags every key this provider generates with `tags`, as key and value.
-    #[must_use]
-    pub fn with_key_tags(self, tags: impl IntoIterator<Item = (String, String)>) -> Self {
-        Self {
-            key_tags: tags.into_iter().collect(),
+    /// Generates keys for the deployment `alias`: tagged `unitrust-alias = <alias>`, with the alias
+    /// `alias/<alias>/<label>` for a label.
+    ///
+    /// # Errors
+    ///
+    /// Fails when AWS KMS can't name keys under `alias`, or `alias` would share its alias names with AWS or with
+    /// another deployment.
+    pub fn with_deployment_alias(self, alias: impl Into<String>) -> Result<Self, InvalidDeploymentAlias> {
+        let alias = alias.into();
+        key_store::check_deployment_alias(&alias)?;
+        Ok(Self {
+            deployment_alias: Some(alias),
             ..self
-        }
+        })
     }
 
     /// Replaces the upper bound for one whole request.
@@ -179,6 +192,39 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
             "Listed AWS KMS keys"
         );
         Ok(listing)
+    }
+
+    fn check_label(&self, label: &str) -> Result<(), InvalidLabel> {
+        key_store::alias_for_label(self.deployment_alias.as_deref(), label).map(drop)
+    }
+
+    /// Returns the new key's ARN: a label's alias can be pointed at another key.
+    async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        Ok(self.create(spec).await?.arn)
+    }
+
+    /// Refuses Ed25519: AWS KMS signs at most 4096 bytes with it, as it must be given the whole message, which
+    /// credentials such as Open Badges with embedded images exceed.
+    fn check_algorithm(&self, algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
+        if algorithm == JwsAlgorithm::EdDSA {
+            return Err(RefusedAlgorithm(format!(
+                "AWS KMS signs at most {} bytes with Ed25519 keys, too little for credentials such as Open Badges \
+                 with embedded images. Use ES256 instead",
+                key_store::MAX_RAW_MESSAGE
+            )));
+        }
+        Ok(())
+    }
+
+    /// Returns the ARN of the key the label's alias names.
+    async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
+        self.adopt(label).await
+    }
+
+    /// Deletes the key by its ARN, and removes its label's alias only while the alias still names it: the alias may
+    /// have been pointed at another key meanwhile.
+    async fn discard(&self, created: &KeyId, label: Option<&str>) -> Result<(), KeyStoreError> {
+        self.discard(created, label).await
     }
 }
 
