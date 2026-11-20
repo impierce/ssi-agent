@@ -584,8 +584,11 @@ pub async fn initialize_documents(
         }
     }
 
-    load_external_keys(state, true).await?;
-    cache_verification_method_ids(state).await?;
+    {
+        let _signing_keys = state.services.subject.lock_signing_keys().await;
+        load_external_keys(state, true).await?;
+        cache_verification_method_ids(state).await?;
+    }
 
     if did_web_overwritten {
         crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
@@ -676,6 +679,7 @@ pub async fn select_signing_key(
     caller: Caller,
     verification_method_id: DidUrl,
 ) -> Result<(), SelectSigningKeyError> {
+    let _signing_keys = state.services.subject.lock_signing_keys().await;
     let Some((document_id, document)) = query_all_documents(state, |(_, document)| {
         document
             .document
@@ -737,7 +741,7 @@ pub enum AddKeyError {
 ///
 /// Fails when the caller isn't authorized, there is no such key, or there is no enabled `did:web` document.
 pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Result<DidUrl, AddKeyError> {
-    let _method_keys = state.services.subject.lock_method_keys().await;
+    let _signing_keys = state.services.subject.lock_signing_keys().await;
     let Some((document_id, did)) = query_all_documents(state, |(_, document)| {
         document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
     })
@@ -782,15 +786,14 @@ pub async fn add_key(state: &IdentityState, caller: Caller, key_id: &str) -> Res
 /// and anything signing for it by name, such as a Domain Linkage Credential, fails.
 ///
 /// All keys are replaced at once, so a key deleted meanwhile stops signing. Problems are logged as warnings at
-/// startup, and only at `debug` when the keys are loaded again periodically.
+/// startup, and only at `debug` when the keys are loaded again periodically. Callers hold
+/// [`Subject::lock_signing_keys`], so that a key added meanwhile isn't replaced by keys loaded from older documents.
 async fn load_external_keys(state: &IdentityState, at_startup: bool) -> anyhow::Result<()> {
     macro_rules! report {
         ($($arg:tt)*) => {
             if at_startup { warn!($($arg)*) } else { debug!($($arg)*) }
         };
     }
-    // Held from before the documents are read, so that a key added meanwhile isn't replaced by this older view.
-    let _method_keys = state.services.subject.lock_method_keys().await;
     let keys = match state.services.external_keys.keys().await {
         Ok(keys) => keys,
         Err(error) => {
@@ -847,6 +850,7 @@ pub const SIGNING_KEYS_REFRESH_INTERVAL: std::time::Duration = std::time::Durati
 ///
 /// Fails when the documents can't be loaded.
 pub async fn refresh_signing_keys(state: &IdentityState) -> anyhow::Result<()> {
+    let _signing_keys = state.services.subject.lock_signing_keys().await;
     load_external_keys(state, false).await?;
     cache_verification_method_ids(state).await
 }
@@ -968,6 +972,7 @@ async fn change_signing_keys(
     caller: Caller,
     command: DocumentCommand,
 ) -> Result<(), ChangeDocumentKeyError> {
+    let _signing_keys = state.services.subject.lock_signing_keys().await;
     let Some(document_id) = query_all_documents(state, |(_, document)| {
         document.status != Status::Disabled && document.did_method == Some(SupportedDidMethod::Web)
     })
@@ -1279,6 +1284,10 @@ mod tests {
     async fn state_with_did_web(external_keys: FakeExternalKeys) -> IdentityState {
         let mut services = Arc::unwrap_or_clone(crate::services::IdentityServices::default());
         services.external_keys = Arc::new(external_keys);
+        state_with_did_web_from(services).await
+    }
+
+    async fn state_with_did_web_from(services: crate::services::IdentityServices) -> IdentityState {
         let state = identity_state(&InMemory, Arc::new(services), &EventBusHandle::default()).await;
         handle(
             &state,
@@ -1529,6 +1538,47 @@ mod tests {
                 .has_method_key(&KMS_METHOD.parse().unwrap())
                 .await
         );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn linked_domains_due_for_renewal_with_a_key_that_cannot_sign_do_not_fail_maintenance() {
+        let days_passed = Arc::new(std::sync::atomic::AtomicI64::new(0));
+        let mut services = Arc::unwrap_or_clone(crate::services::IdentityServices::default());
+        services.linkage_clock = Arc::new({
+            let days_passed = days_passed.clone();
+            move || {
+                crate::service::aggregate::test_utils::issuance_date()
+                    + chrono::TimeDelta::days(days_passed.load(std::sync::atomic::Ordering::SeqCst))
+            }
+        });
+        let state = state_with_did_web_from(services).await;
+        crate::service::lifecycle::execute(
+            &state,
+            None,
+            crate::service::command::ServiceCommand::AddLinkedDomains {
+                service_id: LINKED_DOMAINS_SERVICE_ID.into(),
+                verification_methods: vec![],
+                origins: vec!["https://my-domain.example.org".parse().unwrap()],
+            },
+        )
+        .await
+        .unwrap();
+        // An added key without a loaded key, as when its provider can't be reached.
+        handle(
+            &state,
+            DocumentCommand::AddPublicKey {
+                public_key_jwk: Box::new(kms_public_key()),
+                key_id: None,
+            },
+        )
+        .await;
+        cache_verification_method_ids(&state).await.unwrap();
+        days_passed.store(3650, std::sync::atomic::Ordering::SeqCst);
+
+        let result = crate::service::lifecycle::maintain_services(&state).await;
+
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[tokio::test]
