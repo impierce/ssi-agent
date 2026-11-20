@@ -21,6 +21,7 @@ members = [
 
     "infrastructure/stores/mongodb",
     "infrastructure/adapters/kms-aws",
+    "infrastructure/adapters/kms-stackit",
     "infrastructure/adapters/verification-authorization",
 ]
 

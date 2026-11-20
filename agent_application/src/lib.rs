@@ -19,7 +19,7 @@ use agent_issuance::{
     services::IssuanceServices,
 };
 use agent_kms::{
-    adapter::{InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters, KeyUsage},
+    adapter::{FixedAdapter, InMemoryKeyStore, KeyProviderFactories, KeyUsage},
     key_provider::aggregate::KeyProviderType,
     kms_state,
     state::{signing_key, signing_keys, SigningKey},
@@ -37,12 +37,13 @@ use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, Cqr
 use agent_verification::services::VerificationServices;
 pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
 use kms_aws::AwsKmsAmbientKeyProvider;
+use kms_stackit::StackitKmsFactory;
 use probes::{
     liveness::{healthz, livez},
     readiness::{readyz, ReadinessState},
 };
 use shared_kernel::authorization::{ActorExtractor, NoActorExtractor};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::io;
 use tower_http::cors::CorsLayer;
 use tracing::{error, info, warn};
@@ -431,21 +432,30 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
 
     info!("Key Management System enabled");
 
-    let adapters: KeyProviderAdapters = [
+    let mut factories: KeyProviderFactories = [
         (
             KeyProviderType::InMemory,
-            Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as _,
         ),
         (
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(aws_kms_provider(config().deployment_alias.clone())),
+            Arc::new(FixedAdapter(Arc::new(aws_kms_provider(
+                config().deployment_alias.clone(),
+            )))) as _,
         ),
     ]
     .into();
+    // Without STACKIT, the other providers still work; adding a STACKIT provider is then refused as unsupported.
+    match StackitKmsFactory::new(config().stackit_federated_token_file.clone().map(PathBuf::from)) {
+        Ok(stackit) => {
+            factories.insert(KeyProviderType::StackitKms, Arc::new(stackit));
+        }
+        Err(error) => error!(%error, "STACKIT KMS providers can't be set up"),
+    }
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
 
     Some(Arc::new(
-        kms_state(builder, event_bus, development_providers_allowed, adapters).await,
+        kms_state(builder, event_bus, development_providers_allowed, factories).await,
     ))
 }
 
@@ -573,7 +583,9 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_kms::{key_provider::aggregate::KeyProviders, key_provider::command::KeyProviderCommand};
+    use agent_kms::{
+        adapter::KeyProviderFactory, key_provider::aggregate::KeyProviders, key_provider::command::KeyProviderCommand,
+    };
     use agent_shared::{config::set_config, handlers::command_handler};
     use identity_kit::{jose::JwsAlgorithm, keys::KeyStore as _};
     use shared_kernel::authorization::Caller;
@@ -593,12 +605,12 @@ mod tests {
 
     #[tokio::test]
     async fn a_kms_key_signs_with_the_key_its_provider_holds() {
-        let adapters: KeyProviderAdapters = [(
+        let factories: KeyProviderFactories = [(
             KeyProviderType::InMemory,
-            Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as Arc<dyn KeyProviderFactory>,
         )]
         .into();
-        let kms_state = Arc::new(kms_state(&InMemory, &Default::default(), true, adapters).await);
+        let kms_state = Arc::new(kms_state(&InMemory, &Default::default(), true, factories).await);
         command_handler(
             kms_state.authorization_checker.clone(),
             Caller::Internal,
@@ -607,6 +619,7 @@ mod tests {
             KeyProviderCommand::AddKeyProvider {
                 provider_type: KeyProviderType::InMemory,
                 name: "in_memory".to_string(),
+                settings: None,
             },
         )
         .await

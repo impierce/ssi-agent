@@ -1,6 +1,6 @@
 //! The port through which the KMS talks to key providers, and the in-memory provider.
 
-use crate::key_provider::aggregate::KeyProviderType;
+use crate::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use async_trait::async_trait;
 pub use identity_kit::keys::InMemoryKeyStore;
 use identity_kit::{
@@ -133,6 +133,11 @@ pub trait KeyProviderAdapter: KeyStore {
     ///
     /// By default the key is deleted by `created`, for providers whose label goes with the key.
     ///
+    /// Whether the recorded key `recorded` and the key `key` are one key of the provider, such as two of its versions.
+    fn same_key(&self, recorded: &str, key: &KeyId) -> bool {
+        recorded == key.as_str()
+    }
+
     /// # Errors
     ///
     /// Fails as [`KeyStore::delete`] does.
@@ -141,8 +146,29 @@ pub trait KeyProviderAdapter: KeyStore {
     }
 }
 
-/// The adapter for each provider type this instance can use.
-pub type KeyProviderAdapters = HashMap<KeyProviderType, Arc<dyn KeyProviderAdapter>>;
+/// Builds the adapter of a provider from the settings it was added with. Providers are added at runtime, so their
+/// adapters can only be built once their settings are known.
+pub trait KeyProviderFactory: Send + Sync {
+    /// Builds the adapter for a provider added with `settings`, which match the factory's provider type.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the provider can't be reached with these settings in this environment, for example because a
+    /// workload identity token it needs isn't available.
+    fn build(&self, settings: Option<&KeyProviderSettings>) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError>;
+}
+
+/// The factory for each provider type this instance can use.
+pub type KeyProviderFactories = HashMap<KeyProviderType, Arc<dyn KeyProviderFactory>>;
+
+/// A factory for a provider type that takes no settings, which always hands out the same adapter.
+pub struct FixedAdapter(pub Arc<dyn KeyProviderAdapter>);
+
+impl KeyProviderFactory for FixedAdapter {
+    fn build(&self, _settings: Option<&KeyProviderSettings>) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError> {
+        Ok(self.0.clone())
+    }
+}
 
 /// The in-memory provider keeps keys in this process, so it is always reachable. Its keys are lost on restart.
 #[async_trait]

@@ -34,6 +34,16 @@ impl IntoApiErrorExt for KeyProviderError {
                 "Key Provider Name Taken",
                 "kms#key-provider-name-taken",
             ),
+            KeyProviderError::MissingSettings(_) => (
+                StatusCode::BAD_REQUEST,
+                "Key Provider Settings Missing",
+                "kms#missing-key-provider-settings",
+            ),
+            KeyProviderError::WrongSettings(_) => (
+                StatusCode::BAD_REQUEST,
+                "Wrong Key Provider Settings",
+                "kms#wrong-key-provider-settings",
+            ),
         };
 
         ApiError::builder(status)
@@ -113,6 +123,12 @@ impl IntoApiErrorExt for CreateKeyError {
                 .message(self.to_string())
                 .source(self)
                 .finish(),
+            CreateKeyError::Unreachable(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("Key Provider Unreachable")
+                .type_url(type_url("kms#key-provider-unreachable"))
+                .message(self.to_string())
+                .source(self)
+                .finish(),
             CreateKeyError::KeyStore(error) => error.into_api_error(),
             CreateKeyError::AlgorithmRefused(_) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Key Algorithm Refused By Provider")
@@ -168,6 +184,7 @@ impl IntoApiErrorExt for DeleteKeyError {
     fn into_api_error(self) -> ApiError {
         match self {
             DeleteKeyError::KeyStore(error) => error.into_api_error(),
+            DeleteKeyError::Unreachable(error) => CreateKeyError::Unreachable(error).into_api_error(),
             DeleteKeyError::Query(error) => error.into_api_error(),
             DeleteKeyError::Record(error) => error.into_api_error(),
             DeleteKeyError::NotFound(_) => KeyError::NotFound.into_api_error(),
@@ -194,7 +211,7 @@ impl IntoApiErrorExt for DeleteKeyError {
 mod tests {
     use super::*;
     use crate::error::tests::assert_problems;
-    use agent_kms::adapter::{InvalidLabel, RefusedAlgorithm};
+    use agent_kms::adapter::{ConnectionError, InvalidLabel, RefusedAlgorithm};
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use identity_kit::{
         jose::{JwsAlgorithm, KeyType},
@@ -228,6 +245,16 @@ mod tests {
                 KeyProviderError::NameTaken("Keys".to_string()),
                 StatusCode::CONFLICT,
                 Some("kms#key-provider-name-taken"),
+            ),
+            (
+                KeyProviderError::MissingSettings(KeyProviderType::StackitKms),
+                StatusCode::BAD_REQUEST,
+                Some("kms#missing-key-provider-settings"),
+            ),
+            (
+                KeyProviderError::WrongSettings(KeyProviderType::AwsKmsAmbient),
+                StatusCode::BAD_REQUEST,
+                Some("kms#wrong-key-provider-settings"),
             ),
         ]);
     }
@@ -290,6 +317,11 @@ mod tests {
                 CreateKeyError::InvalidLabel(InvalidLabel("`aws/x` can't be an AWS KMS alias name".to_string())),
                 StatusCode::BAD_REQUEST,
                 Some("kms#invalid-key-label"),
+            ),
+            (
+                CreateKeyError::Unreachable(ConnectionError("no workload identity token".to_string())),
+                StatusCode::BAD_GATEWAY,
+                Some("kms#key-provider-unreachable"),
             ),
             (
                 CreateKeyError::AlgorithmRefused(RefusedAlgorithm("too small".to_string())),

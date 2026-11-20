@@ -39,7 +39,7 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
 mod tests {
     use crate::{app_with_base_path, ApiState};
     use agent_kms::adapter::InMemoryKeyStore;
-    use agent_kms::adapter::{test_utils::UnreachableKeyProvider, KeyProviderAdapter, KeyProviderAdapters};
+    use agent_kms::adapter::{test_utils::UnreachableKeyProvider, FixedAdapter, KeyProviderFactories};
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use agent_kms::kms_state;
     use agent_store::in_memory::InMemory;
@@ -53,15 +53,18 @@ mod tests {
     use tower::ServiceExt;
 
     async fn app_with_kms() -> Router {
-        let adapters: KeyProviderAdapters = [
+        let factories: KeyProviderFactories = [
             (
                 KeyProviderType::InMemory,
-                Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
+                Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as _,
             ),
-            (KeyProviderType::AwsKmsAmbient, Arc::new(UnreachableKeyProvider)),
+            (
+                KeyProviderType::AwsKmsAmbient,
+                Arc::new(FixedAdapter(Arc::new(UnreachableKeyProvider))) as _,
+            ),
         ]
         .into();
-        let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await;
+        let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, factories).await;
 
         app_with_base_path(
             ApiState {
@@ -90,6 +93,23 @@ mod tests {
             serde_json::from_slice(&bytes).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into()))
         };
         (status, body)
+    }
+
+    fn stackit_settings() -> Value {
+        json!({
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "region": "eu01",
+            "keyRingId": "00000000-0000-0000-0000-000000000002",
+            "serviceAccountEmail": "unicore@sa.stackit.cloud"
+        })
+    }
+
+    fn stackit_provider() -> Value {
+        json!({ "providerType": "stackit_kms", "name": "Own keys", "settings": stackit_settings() })
+    }
+
+    async fn add_stackit(app: &Router) -> (StatusCode, Value) {
+        send(app, "POST", "/v0/add-key-provider", Some(stackit_provider())).await
     }
 
     async fn add(app: &Router, provider_type: &str) {
@@ -252,5 +272,49 @@ mod tests {
         let response = send(&app, "GET", "/v0/get-all-keys", None).await;
 
         assert_eq!(response, (StatusCode::OK, json!([created])));
+    }
+
+    #[tokio::test]
+    async fn adding_a_provider_answers_with_its_settings() {
+        let app = app_with_kms().await;
+
+        let response = add_stackit(&app).await;
+
+        assert_eq!(response, (StatusCode::CREATED, stackit_provider()));
+    }
+
+    #[tokio::test]
+    async fn names_what_is_wrong_with_settings() {
+        let app = app_with_kms().await;
+        let mut settings = stackit_settings();
+        settings.as_object_mut().unwrap().remove("keyRingId");
+        let body = json!({ "providerType": "stackit_kms", "name": "Own keys", "settings": settings });
+
+        let (_, error) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        assert!(
+            error["detail"].as_str().unwrap().contains("missing field `keyRingId`"),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn refuses_settings_for_a_provider_type_without_settings() {
+        let app = app_with_kms().await;
+        let body = json!({ "providerType": "aws_kms_ambient", "name": "AWS", "settings": {} });
+
+        let (_, error) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        assert_eq!(error["type"], crate::error::type_url("kms#wrong-key-provider-settings"));
+    }
+
+    #[tokio::test]
+    async fn lists_a_provider_with_its_settings() {
+        let app = app_with_kms().await;
+        add_stackit(&app).await;
+
+        let response = send(&app, "GET", "/v0/get-all-key-providers", None).await;
+
+        assert_eq!(response.1, json!([stackit_provider()]));
     }
 }

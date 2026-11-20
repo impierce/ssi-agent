@@ -1,5 +1,5 @@
 use crate::key::{command::KeyCommand, error::KeyError, event::KeyEvent};
-use crate::key_provider::aggregate::KeyProviderType;
+use crate::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::{
     jose::{Jwk, JwsAlgorithm},
@@ -14,6 +14,10 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct KeyReference {
     pub provider_type: KeyProviderType,
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Object>)]
+    pub settings: Option<KeyProviderSettings>,
     /// The provider's identifier for the key, which names this key for good.
     pub provider_key_id: String,
     /// The label the key was created with, which also names it in the provider unless it is moved to another key.
@@ -96,6 +100,7 @@ mod tests {
     fn reference(provider_key_id: &str) -> KeyReference {
         KeyReference {
             provider_type: KeyProviderType::InMemory,
+            settings: None,
             provider_key_id: provider_key_id.to_string(),
             label: None,
             algorithm: JwsAlgorithm::EdDSA,

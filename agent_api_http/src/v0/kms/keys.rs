@@ -1,6 +1,7 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::caller;
+use crate::v0::kms::key_providers::KeyProviderSettingsDto;
 use agent_kms::key::aggregate::KeyReference;
 use agent_kms::key_provider::aggregate::KeyProviderType;
 use agent_kms::state::{adopt_key as adopt, create_key as create, delete_key as delete, get_keys};
@@ -23,6 +24,9 @@ use std::sync::Arc;
 pub struct KeyDto {
     pub id: String,
     pub provider_type: KeyProviderType,
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<KeyProviderSettingsDto>,
     /// The provider's identifier for the key, which names this key for good.
     pub provider_key_id: String,
     /// The label the key was created with, which also names it in the provider unless it is moved to another key.
@@ -36,6 +40,7 @@ impl KeyDto {
     fn new(id: String, reference: KeyReference) -> Self {
         let KeyReference {
             provider_type,
+            settings,
             provider_key_id,
             label,
             algorithm,
@@ -44,6 +49,7 @@ impl KeyDto {
         Self {
             id,
             provider_type,
+            settings: settings.map(Into::into),
             provider_key_id,
             label,
             algorithm,
