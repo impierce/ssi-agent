@@ -340,9 +340,9 @@ fn renewal_command(only_if_expiring: bool) -> ServiceCommand {
 }
 
 /// Startup and runtime share the same renewal policy. Deleted services are never renewed. A key that can't sign, such
-/// as one whose provider can't be reached, keeps the current credentials, which stay valid for at least
-/// [`LINKED_DOMAINS_RENEWAL_WINDOW_DAYS`](super::aggregate::LINKED_DOMAINS_RENEWAL_WINDOW_DAYS) days, and the next
-/// maintenance tries again. It doesn't stop the instance from starting.
+/// as one whose provider can't be reached, keeps the current credentials published, and the next maintenance tries
+/// again. Renewal starts [`LINKED_DOMAINS_RENEWAL_WINDOW_DAYS`](super::aggregate::LINKED_DOMAINS_RENEWAL_WINDOW_DAYS)
+/// days before they expire, but they expire if it keeps failing that long. It doesn't stop the instance from starting.
 pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
     let _guard = state.service_lifecycle_lock.lock().await;
     if linked_domains(state)
