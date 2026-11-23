@@ -12,10 +12,10 @@ use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::jose::{JwsHeader, Signer as _};
-use identity_kit::sd_jwt_vc::{Confirmation, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims};
+use identity_kit::sd_jwt_vc::{Confirmation, SdJwt, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims};
 use identity_kit::status_list::{StatusListRef, StatusListToken, StatusType};
 use jsonwebtoken::Header;
-use oid4vc_core::{jwt, Subject as _};
+use oid4vc_core::{jwt, utils::jwt::get_unverified_jwt_claims, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{self, VcSdJwt, VcSdJwtParameters};
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
@@ -110,40 +110,89 @@ impl Credential {
     /// The DIDs of the holder the issuer intended the credential for, set in advance in the unsigned credential data:
     /// the `id` of every `credentialSubject` at its root, in any credential format. Values that are not DIDs are
     /// ignored.
-    pub fn intended_holders(&self) -> Vec<&str> {
-        let credential_subject_ids: Vec<&serde_json::Value> =
-            match self.data.as_ref().and_then(|data| data.raw.get("credentialSubject")) {
-                Some(serde_json::Value::Array(subjects)) => {
-                    subjects.iter().filter_map(|subject| subject.get("id")).collect()
-                }
-                Some(subject) => subject.get("id").into_iter().collect(),
-                None => vec![],
-            };
-
-        credential_subject_ids
-            .into_iter()
-            .filter_map(serde_json::Value::as_str)
-            .filter(|id| id.starts_with("did:"))
-            .collect()
+    pub fn intended_holders(&self) -> Vec<String> {
+        dids(credential_subject_ids(
+            self.data.as_ref().and_then(|data| data.raw.get("credentialSubject")),
+        ))
     }
 
-    /// Refuses a holder, identified by the DID of its key proof, other than the intended holder, if there is one. With
-    /// several credential subjects, the holder must be one of them.
-    pub fn check_recipient(&self, subject_id: Option<&str>) -> Result<(), CredentialError> {
-        fn did(did_url: &str) -> &str {
-            did_url.split('#').next().unwrap_or(did_url)
-        }
+    /// The DIDs of the holder the credential was signed for, from the first of these claims of the signed credential
+    /// that names one: the `id` of every `credentialSubject`, at the root (`dc+sd-jwt`, `vc+sd-jwt`) or nested in `vc`
+    /// (`jwt_vc_json`); else `sub`; else the DID of the `cnf.kid` DID URL, the only one in a `dc+sd-jwt`. The
+    /// disclosures of an SD-JWT are resolved first, since a `vc+sd-jwt` conceals its `credentialSubject.id`. Empty for
+    /// a credential that is not signed yet.
+    pub fn signed_holders(&self) -> Vec<String> {
+        let Some(signed) = &self.signed else {
+            return vec![];
+        };
+        let claims = signed
+            .as_str()
+            .and_then(|token| SdJwt::parse(token).ok())
+            .and_then(|sd_jwt| sd_jwt.process().ok())
+            .and_then(|processed| serde_json::to_value(processed.payload).ok())
+            .or_else(|| get_unverified_jwt_claims(signed).ok());
+        let Some(claims) = claims else {
+            return vec![];
+        };
 
-        let intended_holders = self.intended_holders();
-        if intended_holders.is_empty() {
+        let credential_subject = claims
+            .get("credentialSubject")
+            .or_else(|| claims.pointer("/vc/credentialSubject"));
+        let holders = [
+            credential_subject_ids(credential_subject),
+            claims.get("sub").into_iter().collect(),
+            claims.pointer("/cnf/kid").into_iter().collect(),
+        ]
+        .into_iter()
+        .map(dids)
+        .find(|holders| !holders.is_empty())
+        .unwrap_or_default();
+        holders
+    }
+
+    /// Refuses a holder, identified by the DID of its key proof, other than the one the credential is for, if there is
+    /// one. Once the credential is signed, that is the holder it was signed for, so an offer redeemed again only hands
+    /// it to the same wallet; before, it is the intended holder in the unsigned data, where with several credential
+    /// subjects the holder must be one of them.
+    pub fn check_recipient(&self, subject_id: Option<&str>) -> Result<(), CredentialError> {
+        let holders = if self.signed.is_some() {
+            self.signed_holders()
+        } else {
+            self.intended_holders()
+        };
+        if holders.is_empty() {
             return Ok(());
         }
 
         match subject_id.map(did) {
-            Some(holder) if intended_holders.iter().any(|intended| did(intended) == holder) => Ok(()),
+            Some(holder) if holders.iter().any(|expected| expected == holder) => Ok(()),
             _ => Err(RecipientMismatchError),
         }
     }
+}
+
+/// The DID of a DID or DID URL.
+fn did(did_url: &str) -> &str {
+    did_url.split('#').next().unwrap_or(did_url)
+}
+
+/// The `id` of every credential subject in `credential_subject`: one object, or an array of them.
+fn credential_subject_ids(credential_subject: Option<&serde_json::Value>) -> Vec<&serde_json::Value> {
+    match credential_subject {
+        Some(serde_json::Value::Array(subjects)) => subjects.iter().filter_map(|subject| subject.get("id")).collect(),
+        Some(subject) => subject.get("id").into_iter().collect(),
+        None => vec![],
+    }
+}
+
+/// The DIDs among `values`, without the fragment of a DID URL. Values that are not DIDs are ignored.
+fn dids(values: Vec<&serde_json::Value>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter_map(serde_json::Value::as_str)
+        .filter(|id| id.starts_with("did:"))
+        .map(|id| did(id).to_string())
+        .collect()
 }
 
 impl Aggregate for Credential {
@@ -1105,6 +1154,97 @@ pub mod credential_tests {
         assert!(credential.check_recipient(Some("did:key:z6MkOther#key-1")).is_ok());
         assert!(credential.check_recipient(Some("did:key:z6MkStranger")).is_err());
         assert!(credential.check_recipient(None).is_err());
+    }
+
+    /// A credential signed with `claims`, an issuer-signed JWT whose signature is not checked, and unsigned data that
+    /// names `did:key:z6MkIntended` as the intended holder.
+    fn signed_credential(
+        credential_configuration: CredentialConfigurationsSupportedObject,
+        claims: serde_json::Value,
+    ) -> Credential {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+        let encode = |value: serde_json::Value| URL_SAFE_NO_PAD.encode(value.to_string());
+        Credential {
+            signed: Some(json!(format!(
+                "{}.{}.c2ln~",
+                encode(json!({"alg": "EdDSA"})),
+                encode(claims)
+            ))),
+            ..credential_with_data(
+                credential_configuration,
+                json!({"credentialSubject": {"id": "did:key:z6MkIntended"}}),
+            )
+        }
+    }
+
+    #[rstest]
+    #[case::credential_subject_id_before_sub_and_cnf(
+        json!({
+            "credentialSubject": {"id": "did:key:z6MkFirst"},
+            "sub": "did:key:z6MkSecond",
+            "cnf": {"kid": "did:key:z6MkThird#z6MkThird"}
+        }),
+        "did:key:z6MkFirst"
+    )]
+    #[case::credential_subject_id_nested_in_vc(
+        json!({"vc": {"credentialSubject": {"id": "did:key:z6MkFirst"}}, "sub": "did:key:z6MkSecond"}),
+        "did:key:z6MkFirst"
+    )]
+    #[case::sub_before_cnf(
+        json!({"sub": "did:key:z6MkSecond", "cnf": {"kid": "did:key:z6MkThird#z6MkThird"}}),
+        "did:key:z6MkSecond"
+    )]
+    #[case::cnf_kid_only(json!({"cnf": {"kid": "did:key:z6MkThird#z6MkThird"}}), "did:key:z6MkThird")]
+    fn signed_credential_is_only_handed_to_holder_it_was_signed_for(
+        #[case] claims: serde_json::Value,
+        #[case] signed_for: &str,
+    ) {
+        let credential = signed_credential(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(), claims);
+
+        assert_eq!(credential.signed_holders(), vec![signed_for]);
+        assert!(credential.check_recipient(Some(signed_for)).is_ok());
+        assert!(credential.check_recipient(Some(&format!("{signed_for}#key-1"))).is_ok());
+        assert!(credential.check_recipient(Some("did:key:z6MkOther")).is_err());
+        assert!(credential.check_recipient(None).is_err());
+        // The unsigned data is no longer checked once the credential is signed.
+        assert!(credential.check_recipient(Some("did:key:z6MkIntended")).is_err());
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn concealed_credential_subject_id_of_signed_vc_sd_jwt_is_read() {
+        let issuer = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
+        let signer = sd_jwt_signer(&issuer).await.unwrap();
+        let claims = json!({
+            "credentialSubject": {"id": "did:key:z6MkFirst", "first_name": "Ferris"},
+            "cnf": {"kid": "did:key:z6MkThird#z6MkThird"}
+        });
+        let sd_jwt = SdJwtBuilder::new(claims.as_object().cloned().unwrap())
+            .conceal(["credentialSubject", "id"])
+            .conceal(["credentialSubject", "first_name"])
+            .sign(&JwsHeader::new(signer.alg()).with_typ(SdJwtCredentialV2::TYP), &signer)
+            .await
+            .unwrap();
+        let credential = Credential {
+            signed: Some(json!(sd_jwt.to_string())),
+            ..credential_with_data(VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), json!({}))
+        };
+
+        assert_eq!(credential.signed_holders(), vec!["did:key:z6MkFirst"]);
+        assert!(credential.check_recipient(Some("did:key:z6MkFirst")).is_ok());
+        assert!(credential.check_recipient(Some("did:key:z6MkThird")).is_err());
+    }
+
+    #[test]
+    fn signed_credential_without_holder_is_handed_to_any_holder() {
+        let credential = signed_credential(
+            JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+            json!({"iss": "did:key:z6MkIssuer", "vc": {"credentialSubject": {"first_name": "Ferris"}}}),
+        );
+
+        assert!(credential.signed_holders().is_empty());
+        assert!(credential.check_recipient(Some("did:key:z6MkOther")).is_ok());
     }
 
     #[rstest]
