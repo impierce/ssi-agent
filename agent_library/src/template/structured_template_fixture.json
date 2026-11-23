@@ -1,0 +1,214 @@
+{
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "Full name": {
+        "title": "Full name",
+        "type": "string"
+      },
+      "Address": {
+        "title": "Address",
+        "type": "object",
+        "properties": {
+          "Street": {
+            "title": "Street",
+            "type": "string"
+          },
+          "City": {
+            "title": "City",
+            "type": "string"
+          },
+          "Country": {
+            "title": "Country",
+            "type": "string",
+            "format": "country"
+          },
+          "Coordinates": {
+            "title": "Coordinates",
+            "type": "object",
+            "properties": {
+              "Latitude": {
+                "title": "Latitude",
+                "type": "string"
+              },
+              "Longitude": {
+                "title": "Longitude",
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "Street"
+        ],
+        "description": "Current home address"
+      },
+      "Skills": {
+        "title": "Skills",
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 5,
+        "minItems": 1,
+        "examples": [
+          [
+            "Rust",
+            "Glassblowing"
+          ]
+        ]
+      },
+      "Accreditations": {
+        "title": "Accreditations",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "format": "uri"
+        },
+        "const": [
+          "https://accreditation.example.com/1"
+        ]
+      },
+      "Work experience": {
+        "title": "Work experience",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Employer": {
+              "title": "Employer",
+              "type": "string"
+            },
+            "Since": {
+              "title": "Since",
+              "type": "string",
+              "format": "date"
+            },
+            "Roles": {
+              "title": "Roles",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "Employer"
+          ]
+        }
+      },
+      "Completed classes": {
+        "title": "Completed classes",
+        "type": "array",
+        "format": "table",
+        "items": {
+          "type": "object",
+          "properties": {
+            "Code": {
+              "title": "Code",
+              "type": "string"
+            },
+            "Name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "Passed on": {
+              "title": "Passed on",
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "minItems": 1,
+        "examples": [
+          [
+            {
+              "Code": "K0303",
+              "Name": "Digitale technieken",
+              "Passed on": "2026-06-30"
+            }
+          ]
+        ]
+      },
+      "Credits": {
+        "title": "Credits",
+        "type": "number"
+      }
+    },
+    "required": [
+      "Full name",
+      "Address",
+      "Skills",
+      "Completed classes"
+    ]
+  },
+  "schemaPropertiesAttributes": {
+    "/Full name": {
+      "selectivelyDisclosable": true
+    },
+    "/Address": {
+      "selectivelyDisclosable": false
+    },
+    "/Skills": {
+      "selectivelyDisclosable": false
+    },
+    "/Accreditations": {
+      "selectivelyDisclosable": false
+    },
+    "/Work experience": {
+      "selectivelyDisclosable": false
+    },
+    "/Completed classes": {
+      "selectivelyDisclosable": false
+    },
+    "/Credits": {
+      "selectivelyDisclosable": false
+    }
+  },
+  "claims": {
+    "Full name": "Jelle de Vries",
+    "Address": {
+      "Street": "Kerkstraat 12",
+      "City": "Leerdam",
+      "Country": "NL",
+      "Coordinates": {
+        "Latitude": "51.89",
+        "Longitude": "5.09"
+      }
+    },
+    "Skills": [
+      "Rust",
+      "Glassblowing"
+    ],
+    "Accreditations": [
+      "https://accreditation.example.com/1"
+    ],
+    "Work experience": [
+      {
+        "Employer": "Glasfabriek",
+        "Since": "2021-09-01",
+        "Roles": [
+          "Apprentice",
+          "Glassblower"
+        ]
+      },
+      {
+        "Employer": "Atelier Noord"
+      }
+    ],
+    "Completed classes": [
+      {
+        "Code": "K0303",
+        "Name": "Digitale technieken",
+        "Passed on": "2026-06-30"
+      },
+      {
+        "Code": "K1029",
+        "Name": "Warm glas technieken",
+        "Passed on": "2026-07-02"
+      }
+    ],
+    "Credits": 42
+  }
+}

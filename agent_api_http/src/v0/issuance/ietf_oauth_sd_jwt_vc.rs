@@ -192,10 +192,11 @@ mod tests {
                 "vct": format!("{}vct/{encoded_credential_configuration_id}/1.0", config().public_url),
                 "name": credential_configuration_id,
                 "display": [{ "locale": "", "name": "Verifiable Credential" }],
+                // The template's schema requires `first_name` and `last_name`.
                 "claims": [
                     { "path": ["credentialSubject", "id"], "sd": "always" },
-                    { "path": ["credentialSubject", "first_name"], "sd": "always" },
-                    { "path": ["credentialSubject", "last_name"], "sd": "always" },
+                    { "path": ["credentialSubject", "first_name"], "mandatory": true, "sd": "always" },
+                    { "path": ["credentialSubject", "last_name"], "mandatory": true, "sd": "always" },
                 ]
             })
         );

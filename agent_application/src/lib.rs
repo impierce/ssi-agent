@@ -13,7 +13,10 @@ use agent_identity::services::{
     ExternalKey, ExternalKeySource, IdentityServices, LinkedVerifiablePresentationSource, NoExternalKeys,
 };
 use agent_issuance::{
-    application::credential_configuration_projection::CredentialConfigurationProjection, services::IssuanceServices,
+    application::credential_configuration_projection::{
+        resync_credential_configurations, CredentialConfigurationProjection,
+    },
+    services::IssuanceServices,
 };
 use agent_kms::{
     adapter::{InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters, KeyUsage},
@@ -398,6 +401,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
         agent_identity::state::spawn_signing_keys_refresh(&identity_state);
     }
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
+    // Templates published under an earlier version are advertised as this version derives them.
+    resync_credential_configurations(issuance_state.clone(), &library_state).await;
 
     Ok(ApplicationState {
         api: ApiState {

@@ -963,8 +963,9 @@ async fn test_schema_updated_refreshes_credential_configuration() {
     assert_eq!(claim_count, 1);
 }
 
+/// Attributes play no part in a credential configuration, so updating them leaves it as it is.
 #[tokio::test]
-async fn test_schema_properties_attributes_updated_refreshes_credential_configuration() {
+async fn test_schema_properties_attributes_updated_leaves_credential_configuration_as_it_is() {
     let (issuance, lib_state, projection) = setup().await;
 
     let template_id = "schema-attributes-update-template";
@@ -1025,6 +1026,11 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
         metadata: HashMap::new(),
     };
     projection.dispatch(template_id, &[create_event]).await;
+    let before = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(before.credential_configurations.contains_key(template_id));
 
     let mut attrs = HashMap::new();
     attrs.insert("/name".to_string(), PropertyAttribute::new(true, false));
@@ -1056,14 +1062,80 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
-    let claim = config_obj
+    assert_eq!(
+        server_config.credential_configurations,
+        before.credential_configurations
+    );
+}
+
+/// At startup the configuration of every published template is derived again: one that is missing or was derived
+/// differently is replaced, a draft gets none, and a second run changes nothing.
+#[tokio::test]
+async fn test_resync_derives_configurations_of_published_templates() {
+    use agent_issuance::application::credential_configuration_projection::resync_credential_configurations;
+
+    let (issuance, lib_state, _) = setup().await;
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": { "name": { "type": "string" } },
+        "required": ["name"]
+    });
+    // The projection is not wired to this library state, so creating a template derives nothing by itself.
+    for (template_id, status) in [
+        ("published-template", Status::Published),
+        ("draft-template", Status::Draft),
+    ] {
+        command_handler(
+            template_id,
+            &lib_state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: template_id.to_string(),
+                source_template_id: None,
+                title: "Resync Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(Some(schema.clone())),
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+                origin: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let configurations = || async {
+        query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+            .await
+            .unwrap()
+            .map(|server_config| server_config.credential_configurations)
+            .unwrap_or_default()
+    };
+    assert!(!configurations().await.contains_key("published-template"));
+
+    resync_credential_configurations(issuance.clone(), &lib_state).await;
+
+    let derived = configurations().await;
+    let (_, published, _) = derived
+        .get("published-template")
+        .expect("published template is advertised");
+    let claim = published
         .credential_metadata
         .as_ref()
         .and_then(|metadata| metadata.claims.as_ref())
         .and_then(|claims| claims.first())
-        .expect("claim should be present after schema attribute update");
-    assert!(!claim.mandatory);
+        .expect("claim should be present");
+    assert!(claim.mandatory);
+    assert!(!derived.contains_key("draft-template"));
+
+    resync_credential_configurations(issuance.clone(), &lib_state).await;
+    assert_eq!(configurations().await, derived);
 }
 
 #[tokio::test]
