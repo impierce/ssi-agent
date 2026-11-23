@@ -253,6 +253,7 @@ dependencies = [
  "oid4vci",
  "rand 0.9.5",
  "reqwest 0.12.28",
+ "reqwest 0.13.5",
  "rstest",
  "serde",
  "serde_json",
@@ -3451,9 +3452,9 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "identity-kit"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af9b760d42e6b9a5f2bd26dbd38b94f637e92c71321e6ee73d489dbeafa195a9"
+checksum = "bb6a8bdddf4dd715fa3e21119b1199a1107be87a687284d72f72b5917f97563e"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -4573,9 +4574,8 @@ dependencies = [
 
 [[package]]
 name = "oid4vc-core"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479b38ddabab40466598dc463c1f37783bfc8f5b4d753d408d0e3d45995ac5e7"
+version = "0.8.0"
+source = "git+https://github.com/impierce/openid4vc?rev=5c541b23e7c47ba3ae81b16ae8413e99d027dd26#5c541b23e7c47ba3ae81b16ae8413e99d027dd26"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4583,17 +4583,19 @@ dependencies = [
  "derive_more",
  "ed25519-dalek 3.0.0",
  "getset",
+ "http",
  "identity-kit",
  "is_empty",
  "jsonwebtoken",
  "nutype",
  "rand 0.10.3",
  "reqwest 0.13.5",
- "rustls",
+ "reqwest-middleware",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "serde_with",
+ "thiserror 2.0.21",
  "tracing",
  "url",
  "utoipa",
@@ -4601,9 +4603,8 @@ dependencies = [
 
 [[package]]
 name = "oid4vc-manager"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3218fa6c88e849f39de0b4e961ecef05352995932aa1490ed0e9265ad580f531"
+version = "0.8.0"
+source = "git+https://github.com/impierce/openid4vc?rev=5c541b23e7c47ba3ae81b16ae8413e99d027dd26#5c541b23e7c47ba3ae81b16ae8413e99d027dd26"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4616,7 +4617,6 @@ dependencies = [
  "jsonwebtoken",
  "oid4vc-core",
  "oid4vci",
- "oid4vp",
  "reqwest 0.13.5",
  "serde",
  "serde_json",
@@ -4631,9 +4631,8 @@ dependencies = [
 
 [[package]]
 name = "oid4vci"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b00fac0afb8b9ab1ba095a34bef0c48e829ef25ed6629864925a78f838370996"
+version = "0.8.0"
+source = "git+https://github.com/impierce/openid4vc?rev=5c541b23e7c47ba3ae81b16ae8413e99d027dd26#5c541b23e7c47ba3ae81b16ae8413e99d027dd26"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4659,9 +4658,8 @@ dependencies = [
 
 [[package]]
 name = "oid4vp"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1acefd6395bf4c61be31e83d4495fa2ac797e2cce8fdebcf50b9685b510ac944"
+version = "0.9.0"
+source = "git+https://github.com/impierce/openid4vc?rev=5c541b23e7c47ba3ae81b16ae8413e99d027dd26#5c541b23e7c47ba3ae81b16ae8413e99d027dd26"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4676,7 +4674,6 @@ dependencies = [
  "oid4vci",
  "reqwest 0.13.5",
  "reqwest-middleware",
- "reqwest-retry",
  "serde",
  "serde_json",
  "serde_with",
@@ -6386,9 +6383,8 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "siopv2"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34c6924150a5770ed1af936415ea158d03d7904345840d51446d128cce27e382"
+version = "0.8.0"
+source = "git+https://github.com/impierce/openid4vc?rev=5c541b23e7c47ba3ae81b16ae8413e99d027dd26#5c541b23e7c47ba3ae81b16ae8413e99d027dd26"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -130,7 +130,7 @@ impl Aggregate for Offer {
                 let tx_code = tx_code_constraints.as_ref().map(generate_tx_code);
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
-                    credential_issuer: credential_issuer.clone(),
+                    credential_issuer: credential_issuer.clone().into(),
                     credential_configuration_ids: CredentialConfigurationIds::try_new(template_ids)
                         .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
@@ -651,7 +651,7 @@ pub mod tests {
                 let static_issuer_url = static_issuer_url();
                 let pre_authorized_code = pre_authorized_code().await;
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
-                    credential_issuer: static_issuer_url.clone(),
+                    credential_issuer: static_issuer_url.clone().into(),
                     credential_configuration_ids: CredentialConfigurationIds::try_new(vec![
                         "UniversityDegree".to_string()
                     ])
@@ -895,7 +895,7 @@ pub mod test_utils {
         static_issuer_url: Url,
     ) -> CredentialOffer {
         CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
-            credential_issuer: static_issuer_url,
+            credential_issuer: static_issuer_url.into(),
             credential_configuration_ids: CredentialConfigurationIds::try_new(vec!["UniversityDegree".to_string()])
                 .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
             grants: Some(Grants {
@@ -916,6 +916,7 @@ pub mod test_utils {
         CredentialOffer::CredentialOfferUri(
             credential_issuer_metadata
                 .credential_issuer
+                .url()
                 .join("openid4vci/")
                 .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))
                 .expect("Failed to parse URL in test"),

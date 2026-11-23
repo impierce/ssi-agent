@@ -1,6 +1,7 @@
 use crate::services::{DidConfigurationError, IdentityServices, LinkedDid};
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 use identity_kit::{did::Did, vc::Credential};
 use oid4vci::credential_issuer::credential_issuer_metadata::CredentialIssuerMetadata;
 use serde::{Deserialize, Serialize};
@@ -55,6 +56,7 @@ pub struct LinkedVpValidation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 pub struct LinkedCredentialValidation {
     /// The credential. Decoded from the JWT *without* verifying its signature when
     /// `result.valid` is `false`, and `None` when it could not be decoded at all.
@@ -80,12 +82,14 @@ pub struct LinkedCredentialValidation {
 /// already takes its component name.
 struct W3cCredential;
 
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 impl PartialSchema for W3cCredential {
     fn schema() -> RefOr<Schema> {
         Credential::schema()
     }
 }
 
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 impl ToSchema for W3cCredential {
     fn name() -> Cow<'static, str> {
         Cow::Borrowed("W3cCredential")

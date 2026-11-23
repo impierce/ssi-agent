@@ -280,7 +280,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
-                    credential_issuer: public_url.clone(),
+                    credential_issuer: public_url.clone().into(),
                     credential_endpoint: public_url.append_path_segment("openid4vci/credential"),
                     nonce_endpoint: Some(public_url.append_path_segment("openid4vci/nonce")),
                     display,

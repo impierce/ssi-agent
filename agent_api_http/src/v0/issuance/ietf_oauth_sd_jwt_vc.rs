@@ -110,10 +110,11 @@ fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec
 
             let mut claim_metadata = ClaimMetadata::new(path).with_sd(SdPolicy::Always);
             claim_metadata.mandatory = claim.mandatory.then_some(true);
+            // A claim display in type metadata needs a `label`.
             claim_metadata.display = claim
                 .display
                 .into_iter()
-                .map(|display| ClaimDisplay::new(display.locale.unwrap_or_default(), display.name))
+                .filter_map(|display| Some(ClaimDisplay::new(display.locale.unwrap_or_default(), display.name?)))
                 .collect();
 
             Some(claim_metadata)
