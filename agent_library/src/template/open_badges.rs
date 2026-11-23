@@ -258,6 +258,49 @@ pub fn open_badges_required_leaf_paths() -> Vec<String> {
     leaf_paths
 }
 
+/// Whether the property at `path`, the property names from the credential subject down, is one of OB 3.0 or of
+/// UniCore's opinionated defs, rather than one a template adds.
+///
+/// Mirrors [`validate_ob_properties_recursive`]: where a def governs a level, only its properties (and opinionated
+/// ones) are allowed there, so a template adds properties only below a property without a def.
+pub fn is_open_badges_standard_property(path: &[&str]) -> bool {
+    let Some(defs) = ob_json_schema().get("$defs").and_then(|defs| defs.as_object()) else {
+        return false;
+    };
+    let mut current_def = defs.get("AchievementSubject");
+    let mut current_path = String::new();
+
+    for segment in path {
+        let child_path = if current_path.is_empty() {
+            segment.to_string()
+        } else {
+            format!("{current_path}/{segment}")
+        };
+        let spec_property = current_def
+            .and_then(|def| def.get("properties").and_then(|properties| properties.as_object()))
+            .and_then(|properties| properties.get(*segment));
+        let opinionated_def = ob_opinionated_defs().get(&child_path);
+        let opinionated_property = {
+            let (parent, key) = split_parent_path(&child_path);
+            ob_opinionated_defs()
+                .get(parent)
+                .and_then(|def| def.get("properties").and_then(|properties| properties.as_object()))
+                .is_some_and(|properties| properties.contains_key(key))
+        };
+        if spec_property.is_none() && opinionated_def.is_none() && !opinionated_property {
+            return false;
+        }
+
+        current_def = spec_property
+            .and_then(|property| property.get("$ref").and_then(|r| r.as_str()))
+            .and_then(|r| r.strip_prefix("#/$defs/"))
+            .and_then(|def_name| defs.get(def_name))
+            .or(opinionated_def);
+        current_path = child_path;
+    }
+    true
+}
+
 /// Returns a lazily-initialised reference to the parsed OpenBadges 3.0 JSON Schema.
 fn ob_json_schema() -> &'static serde_json::Value {
     static OB_SCHEMA: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
@@ -560,5 +603,24 @@ pub(crate) fn ensure_schema_required_keys(schema: &mut serde_json::Value) {
                 add_if_absent(r, key);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_open_badges_standard_property;
+
+    #[rstest::rstest]
+    #[case::subject(&[], true)]
+    #[case::spec_property(&["achievement"], true)]
+    #[case::nested_spec_property(&["achievement", "criteria", "narrative"], true)]
+    #[case::opinionated_object(&["profile"], true)]
+    #[case::opinionated_property(&["profile", "givenName"], true)]
+    #[case::unknown_property(&["nickname"], false)]
+    #[case::unknown_property_of_a_spec_def(&["achievement", "level"], false)]
+    #[case::unknown_property_of_an_opinionated_def(&["profile", "nickname"], false)]
+    #[case::below_a_property_without_def(&["narrative", "en"], false)]
+    fn test_is_open_badges_standard_property(#[case] path: &[&str], #[case] standard: bool) {
+        assert_eq!(is_open_badges_standard_property(path), standard);
     }
 }

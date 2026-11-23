@@ -3,7 +3,8 @@ use crate::server_config::views::ServerConfigView;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::state::LibraryState;
 use agent_library::template::aggregate::{
-    is_array_schema, DataModel, Display, FormFieldType, HolderType, PropertyAttribute, Template,
+    is_array_schema, is_open_badges_standard_property, DataModel, Display, FormFieldType, HolderType,
+    PropertyAttribute, Template,
 };
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
@@ -266,7 +267,8 @@ const VALUE_FORMATS: [&str; 4] = ["country", "date", "date-time", "uri"];
 /// `properties`, which a Wallet takes as the display order (Appendix B.3).
 ///
 /// - Every property has a description, with its schema `title` as display name. An Object's description comes before
-///   those of its properties.
+///   those of its properties. In an Open Badges template, only the properties the template adds have a display name:
+///   those of OB 3.0 and UniCore's own are named by the standard.
 /// - An array has a description of its own. The properties of its items are described with `null` at the array's
 ///   position (Appendix C.1). Items that are values are described only when they carry a `format`.
 /// - A display object carries a `format` for a Table (`table`), and for a value whose type a Wallet can show in a
@@ -284,6 +286,8 @@ fn build_claims_from_schema(template: &Template, prefix: Option<&str>) -> Option
 
     let mut builder = ClaimsBuilder {
         attributes: template.schema_properties_attributes.as_ref(),
+        open_badges: template.data_model == DataModel::OpenBadges3_0,
+        prefix_len: prefix.len(),
         claims: Vec::new(),
     };
     builder.describe_properties(schema, &prefix, Some(""), true);
@@ -297,6 +301,10 @@ fn build_claims_from_schema(template: &Template, prefix: Option<&str>) -> Option
 
 struct ClaimsBuilder<'a> {
     attributes: Option<&'a HashMap<String, PropertyAttribute>>,
+    /// Whether the template is an Open Badges template, whose standard properties get no display name.
+    open_badges: bool,
+    /// The number of path elements before the template's properties, such as `credentialSubject`.
+    prefix_len: usize,
     claims: Vec<ClaimDescription>,
 }
 
@@ -355,7 +363,8 @@ impl ClaimsBuilder<'_> {
             let name = schema
                 .get("title")
                 .and_then(|title| title.as_str())
-                .filter(|title| !title.trim().is_empty());
+                .filter(|title| !title.trim().is_empty())
+                .filter(|_| !(self.open_badges && self.is_open_badges_standard_property(&path)));
             self.push(&path, mandatory, name, format);
         }
 
@@ -380,6 +389,18 @@ impl ClaimsBuilder<'_> {
             let always_present = mandatory && has_only_type(schema, "object");
             self.describe_properties(schema, &path, pointer, always_present);
         }
+    }
+
+    /// Whether `path` leads to a property of OB 3.0 or of UniCore's own, rather than one the template adds.
+    fn is_open_badges_standard_property(&self, path: &[ClaimPathElement]) -> bool {
+        let property_names: Option<Vec<&str>> = path[self.prefix_len..]
+            .iter()
+            .map(|element| match element {
+                ClaimPathElement::String(name) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        property_names.is_some_and(|property_names| is_open_badges_standard_property(&property_names))
     }
 
     /// The `format` of the display object of the value of `schema`: `table` for a Table, one of [`VALUE_FORMATS`] for
@@ -986,6 +1007,66 @@ mod tests {
             display(serde_json::json!(["credentialSubject", "list"])),
             serde_json::json!([{ "name": "List" }])
         );
+    }
+
+    /// In an Open Badges template, the properties of OB 3.0 and UniCore's own are named by the standard: only the
+    /// properties the template adds get the display name of their `title`. Formats stay.
+    #[test]
+    fn test_open_badges_template_names_only_added_properties() {
+        let template = Template {
+            template_id: "t_open_badges".to_string(),
+            data_model: DataModel::OpenBadges3_0,
+            schema: Box::new(Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "achievement": {
+                        "title": "Achievement",
+                        "type": "object",
+                        "properties": {
+                            "name": { "title": "Name", "type": "string" },
+                            "criteria": {
+                                "title": "Criteria",
+                                "type": "object",
+                                "properties": { "narrative": { "title": "Narrative", "type": "string" } }
+                            }
+                        }
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "object",
+                        "properties": {
+                            "givenName": { "title": "Given name", "type": "string" },
+                            "dateOfBirth": { "title": "Date of birth", "type": "string", "format": "date" }
+                        }
+                    },
+                    "narrative": {
+                        "title": "Narrative",
+                        "type": "object",
+                        "properties": { "en": { "title": "English", "type": "string" } }
+                    }
+                }
+            }))),
+            ..Default::default()
+        };
+
+        let claims = credential_configuration_from_template(&template)
+            .credential_metadata
+            .claims
+            .expect("claims should be present");
+
+        let expected: Vec<ClaimDescription> = serde_json::from_value(serde_json::json!([
+          { "path": ["credentialSubject", "achievement"] },
+          { "path": ["credentialSubject", "achievement", "name"] },
+          { "path": ["credentialSubject", "achievement", "criteria"] },
+          { "path": ["credentialSubject", "achievement", "criteria", "narrative"] },
+          { "path": ["credentialSubject", "profile"] },
+          { "path": ["credentialSubject", "profile", "givenName"] },
+          { "path": ["credentialSubject", "profile", "dateOfBirth"], "display": [{ "format": "date" }] },
+          { "path": ["credentialSubject", "narrative"] },
+          { "path": ["credentialSubject", "narrative", "en"], "display": [{ "name": "English" }] }
+        ]))
+        .unwrap();
+        assert_eq!(claims, expected);
     }
 
     /// A value whose `schemaPropertiesAttributes` type is `country` is a country, also when its schema has no `format`.
