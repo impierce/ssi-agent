@@ -349,7 +349,7 @@ impl axum::response::IntoResponse for PublicError {
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({
                     "error": RECIPIENT_MISMATCH_ERROR,
-                    "error_description": "The credential offer is meant for a different wallet",
+                    "error_description": "The credential offer is meant for a different Holder",
                 })),
             )
                 .into_response(),
