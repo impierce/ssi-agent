@@ -4326,7 +4326,7 @@ components:
         nonRemovable:
           type: boolean
           description: |-
-            Whether this property is non-removable — its leaf field must remain present in the schema
+            Whether this property is non-removable — it must remain present in the schema
             and cannot be removed by the caller. Determined by the data model; system-controlled only.
             For OpenBadges 3.0 templates, only the required standard fields are non-removable.
             Defaults to `false`.

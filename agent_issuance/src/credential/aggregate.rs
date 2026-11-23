@@ -1165,6 +1165,65 @@ pub mod credential_tests {
             }])
     }
 
+    /// `credential` with the claims of the structured template (nested objects, lists and tables) in place of its own.
+    fn with_structured_claims(mut credential: serde_json::Value) -> serde_json::Value {
+        let claims = agent_library::template::aggregate::test_utils::structured_claims();
+        if credential.get("credentialSubject").is_some() {
+            credential["credentialSubject"] = claims;
+        } else {
+            let vct = credential["vct"].clone();
+            credential = claims;
+            credential["vct"] = vct;
+        }
+        credential
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_jwt_vc_json_credential_keeps_nested_claims(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        let unsigned_credential = with_structured_claims(UNSIGNED_VC1_1_CREDENTIAL.clone());
+
+        let events = CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: unsigned_credential.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result()
+            .unwrap();
+
+        let [CredentialEvent::CredentialSigned { signed_credential, .. }] = &events[..] else {
+            panic!("unexpected events: {events:?}");
+        };
+        let payload = decode_segment(signed_credential.as_str().unwrap().split('.').nth(1).unwrap());
+        let mut credential_subject = payload["vc"]["credentialSubject"].as_object().unwrap().clone();
+        // The holder's identifier is added on signing.
+        credential_subject.remove("id");
+
+        assert_eq!(json!(credential_subject), unsigned_credential["credentialSubject"]);
+    }
+
     /// Decodes a base64url-encoded JSON segment of an SD-JWT.
     fn decode_segment(segment: &str) -> serde_json::Value {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -1187,6 +1246,17 @@ pub mod credential_tests {
         "vc+sd-jwt"
     )]
     #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "vc+sd-jwt")]
+    // Nested objects, lists and tables are each disclosed as a whole, with the top-level claim that holds them.
+    #[case::dc_sd_jwt_structured(
+        with_structured_claims(UNSIGNED_DC_SD_JWT_CREDENTIAL.clone()),
+        DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "dc+sd-jwt"
+    )]
+    #[case::vc2_sd_jwt_structured(
+        with_structured_claims(UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone()),
+        VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
     #[serial_test::serial]
     #[tokio::test]
     async fn test_sign_sd_jwt_credential(
