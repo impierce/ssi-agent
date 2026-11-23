@@ -284,7 +284,6 @@ impl Aggregate for Credential {
                 status_list_id,
                 index,
             } => {
-                // Before returning an earlier signed credential as well, which another wallet may redeem again.
                 self.check_recipient(subject_id.as_deref())?;
 
                 if self.signed.is_some() && !overwrite {
