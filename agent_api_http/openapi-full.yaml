@@ -3219,16 +3219,23 @@ components:
           $ref: '#/components/schemas/ClaimPathPointer'
     ClaimDescriptionDisplay:
       type: object
-      description: Localized display metadata for a claim.
-      required:
-      - name
+      description: Display properties of a claim for one language, as OpenID4VCI 1.0, Appendix B.2 defines them in `display`.
       properties:
         locale:
           type:
           - string
           - 'null'
+          description: The language of this object, a BCP47 language tag.
         name:
-          type: string
+          type:
+          - string
+          - 'null'
+          description: The display name of the claim.
+      additionalProperties:
+        description: |-
+          The other parameters of the object: Appendix B.2 lists `name` and `locale` as "a non-exhaustive list of valid
+          parameters". They are kept as received and serialized next to `name` and `locale`; this crate does not
+          interpret them. Do not put `name` or `locale` here: they have their own fields.
     ClaimDisplay:
       type: object
       description: Display information for a claim in one locale (SD-JWT VC §5.6.2).
@@ -3908,6 +3915,9 @@ components:
           credential_configuration_id:
             type: string
       description: Selects a Credential using either an issued identifier or a configuration identifier.
+    CredentialIssuerIdentifier:
+      type: string
+      format: uri
     CredentialIssuerMetadata:
       type: object
       description: |-
@@ -3940,8 +3950,8 @@ components:
           - boolean
           - 'null'
         credential_issuer:
-          type: string
-          format: uri
+          $ref: '#/components/schemas/CredentialIssuerIdentifier'
+          description: Kept as received, see [`CredentialIssuerIdentifier`].
         credential_response_encryption:
           oneOf:
           - $ref: '#/components/schemas/CredentialResponseEncryption'
@@ -3996,8 +4006,8 @@ components:
         credential_configuration_ids:
           $ref: '#/components/schemas/CredentialConfigurationIds'
         credential_issuer:
-          type: string
-          format: uri
+          $ref: '#/components/schemas/CredentialIssuerIdentifier'
+          description: Kept as received, see [`CredentialIssuerIdentifier`].
         grants:
           oneOf:
           - $ref: '#/components/schemas/Grants'

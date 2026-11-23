@@ -87,7 +87,7 @@ impl Aggregate for Offer {
                 };
 
                 // The credential offer contains a credential issuer url.
-                let credential_issuer_url = credential_offer.credential_issuer.clone();
+                let credential_issuer_url = credential_offer.credential_issuer.url();
 
                 // Get the credential issuer metadata.
                 let credential_issuer_metadata = wallet
@@ -122,7 +122,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?;
 
-                let credential_issuer_url = credential_offer.credential_issuer.clone();
+                let credential_issuer_url = credential_offer.credential_issuer.url();
 
                 // Get the authorization server metadata.
                 let authorization_server_metadata = wallet
@@ -183,7 +183,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?;
 
-                let credential_issuer_url = credential_offer.credential_issuer.clone();
+                let credential_issuer_url = credential_offer.credential_issuer.url();
 
                 // Get an access token.
                 let token_response = self.token_response.as_ref().ok_or(MissingTokenResponseError)?.clone();

@@ -113,7 +113,7 @@ fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec
             claim_metadata.display = claim
                 .display
                 .into_iter()
-                .map(|display| ClaimDisplay::new(display.locale.unwrap_or_default(), display.name))
+                .filter_map(|display| Some(ClaimDisplay::new(display.locale.unwrap_or_default(), display.name?)))
                 .collect();
 
             Some(claim_metadata)
