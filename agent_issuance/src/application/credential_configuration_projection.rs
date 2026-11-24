@@ -2,7 +2,10 @@ use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::views::ServerConfigView;
 use crate::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{is_array_schema, DataModel, Display, HolderType, Template};
+use agent_library::template::aggregate::{
+    is_array_schema, is_open_badges_standard_property, DataModel, Display, FormFieldType, HolderType,
+    PropertyAttribute, Template,
+};
 use agent_library::template::views::TemplateView;
 use agent_shared::config::CredentialConfiguration;
 use agent_shared::handlers::{command_handler, public_query_handler};
@@ -10,10 +13,12 @@ use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use oid4vc_core::claim_path_pointer::{ClaimPathElement, ClaimPathPointer};
 use oid4vci::credential_issuer::credential_configurations_supported::{
-    ClaimDescription, CredentialConfigurationsSupportedDisplay, CredentialMetadata, Logo as OidcLogo,
+    ClaimDescription, ClaimDescriptionDisplay, CredentialConfigurationsSupportedDisplay, CredentialMetadata,
+    Logo as OidcLogo,
 };
 use shared_kernel::authorization::Caller;
 use shared_kernel::view_repository::DynViewRepository;
+use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tracing::warn;
 
@@ -255,98 +260,190 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
     }
 }
 
-/// Builds claim descriptions from the template schema.
+/// The `format` of a value claim, from the schema `format` of its property.
+const VALUE_FORMATS: [&str; 4] = ["country", "date", "date-time", "uri"];
+
+/// Builds the claims descriptions of the template schema (OpenID4VCI 1.0, Appendix B.2), in the order of the schema's
+/// `properties`, which a Wallet takes as the display order (Appendix B.3).
 ///
-/// Nested objects are traversed recursively and only leaf fields become claims.
-/// Arrays are exposed as a single claim at the array field itself.
-/// A claim is mandatory when every credential of the template holds it: the schema lists its property in `required`,
-/// and likewise every object above it. Whether a claim is selectively disclosable plays no part in that.
+/// - Every property has a description, with its schema `title` as display name. An Object's description comes before
+///   those of its properties. In an Open Badges template, only the properties the template adds have a display name:
+///   those of OB 3.0 and UniCore's own are named by the standard.
+/// - An array has a description of its own. The properties of its items are described with `null` at the array's
+///   position (Appendix C.1). Items that are values are described only when they carry a `format`.
+/// - A display object carries a `format` for a Table (`table`), and for a value whose type a Wallet can show in a
+///   better way (see [`VALUE_FORMATS`]).
+/// - A claim is mandatory when every credential of the template holds it: the schema lists its property in
+///   `required`, and likewise every object above it. Through an array, the array has to hold at least one item
+///   (`minItems`). Whether a claim is selectively disclosable plays no part in that.
 fn build_claims_from_schema(template: &Template, prefix: Option<&str>) -> Option<Vec<ClaimDescription>> {
     let schema = template.schema.as_ref().as_ref()?;
-    let prefix_segments: Vec<String> = prefix
+    let prefix: Vec<ClaimPathElement> = prefix
         .iter()
         .flat_map(|value| value.split('.').filter(|segment| !segment.is_empty()))
-        .map(|segment| segment.to_string())
+        .map(|segment| ClaimPathElement::String(segment.to_string()))
         .collect();
 
-    let mut claims = Vec::new();
-    collect_claim_descriptions(schema, &prefix_segments, &[], true, &mut claims);
+    let mut builder = ClaimsBuilder {
+        attributes: template.schema_properties_attributes.as_ref(),
+        open_badges: template.data_model == DataModel::OpenBadges3_0,
+        prefix_len: prefix.len(),
+        claims: Vec::new(),
+    };
+    builder.describe_properties(schema, &prefix, Some(""), true);
 
-    if claims.is_empty() {
+    if builder.claims.is_empty() {
         None
     } else {
-        Some(claims)
+        Some(builder.claims)
     }
 }
 
-fn collect_claim_descriptions(
-    schema: &serde_json::Value,
-    prefix_segments: &[String],
-    current_segments: &[String],
-    // Whether every object from the root down to `schema` is required.
-    always_present: bool,
-    claims: &mut Vec<ClaimDescription>,
-) {
-    let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) else {
-        return;
-    };
-    let required: Vec<&str> = schema
-        .get("required")
-        .and_then(|value| value.as_array())
-        .map(|names| names.iter().filter_map(|name| name.as_str()).collect())
-        .unwrap_or_default();
+struct ClaimsBuilder<'a> {
+    attributes: Option<&'a HashMap<String, PropertyAttribute>>,
+    /// Whether the template is an Open Badges template, whose standard properties get no display name.
+    open_badges: bool,
+    /// The number of path elements before the template's properties, such as `credentialSubject`.
+    prefix_len: usize,
+    claims: Vec<ClaimDescription>,
+}
 
-    for (property_name, property_schema) in properties {
-        // A property name is one path element, whatever characters it holds.
-        let mut property_segments = current_segments.to_vec();
-        property_segments.push(property_name.clone());
-        let mandatory = always_present && required.contains(&property_name.as_str());
+impl ClaimsBuilder<'_> {
+    /// Describes the properties of the object `schema` at `path`.
+    ///
+    /// `pointer` is the JSON Pointer of `schema` that `schemaPropertiesAttributes` keys use, `None` inside an array:
+    /// a key never leads into `items`. `always_present` is whether every credential holds an object at `path`.
+    fn describe_properties(
+        &mut self,
+        schema: &serde_json::Value,
+        path: &[ClaimPathElement],
+        pointer: Option<&str>,
+        always_present: bool,
+    ) {
+        let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) else {
+            return;
+        };
+        let required: Vec<&str> = schema
+            .get("required")
+            .and_then(|value| value.as_array())
+            .map(|names| names.iter().filter_map(|name| name.as_str()).collect())
+            .unwrap_or_default();
 
-        // An array is one claim, also when its schema carries `properties`, which say nothing about an array.
-        if !is_array_schema(property_schema) && has_nested_object_properties(property_schema) {
-            // What is inside is always there only if the property has to be an object: `null`, or any value where
-            // no type is given, satisfies the schema without it.
-            let always_present = mandatory && is_object_only_schema(property_schema);
-            collect_claim_descriptions(
+        for (property_name, property_schema) in properties {
+            // A property name is one path element, whatever characters it holds.
+            let mut property_path = path.to_vec();
+            property_path.push(ClaimPathElement::String(property_name.clone()));
+            // RFC 6901: escape `~` as `~0` and `/` as `~1`.
+            let property_pointer =
+                pointer.map(|pointer| format!("{pointer}/{}", property_name.replace('~', "~0").replace('/', "~1")));
+            let mandatory = always_present && required.contains(&property_name.as_str());
+
+            self.describe(
                 property_schema,
-                prefix_segments,
-                &property_segments,
-                always_present,
-                claims,
+                property_path,
+                property_pointer.as_deref(),
+                mandatory,
+                true,
             );
-            continue;
-        }
-
-        if is_object_schema(property_schema) {
-            continue;
-        }
-
-        if let Some(claim) = build_claim_description(&property_segments, prefix_segments, mandatory) {
-            claims.push(claim);
         }
     }
-}
 
-fn build_claim_description(
-    property_segments: &[String],
-    prefix_segments: &[String],
-    mandatory: bool,
-) -> Option<ClaimDescription> {
-    let path = ClaimPathPointer::try_new(
-        prefix_segments
+    /// Describes the value of `schema` at `path`, then what it holds. Without `always_describe`, a value is described
+    /// only when its display object has a `format`.
+    fn describe(
+        &mut self,
+        schema: &serde_json::Value,
+        path: Vec<ClaimPathElement>,
+        pointer: Option<&str>,
+        mandatory: bool,
+        always_describe: bool,
+    ) {
+        let format = self.format(schema, pointer);
+        if always_describe || format.is_some() {
+            let name = schema
+                .get("title")
+                .and_then(|title| title.as_str())
+                .filter(|title| !title.trim().is_empty())
+                .filter(|_| !(self.open_badges && self.is_open_badges_standard_property(&path)));
+            self.push(&path, mandatory, name, format);
+        }
+
+        // An array holds items, also when its schema carries `properties`, which say nothing about an array.
+        if is_array_schema(schema) {
+            let Some(items) = schema.get("items") else {
+                return;
+            };
+            // Every item is there only if the array has to be one and holds at least one item.
+            let has_items = mandatory
+                && has_only_type(schema, "array")
+                && schema
+                    .get("minItems")
+                    .and_then(|min_items| min_items.as_u64())
+                    .is_some_and(|min_items| min_items >= 1);
+            let mut items_path = path;
+            items_path.push(ClaimPathElement::Null);
+            self.describe(items, items_path, None, has_items, false);
+        } else if has_nested_object_properties(schema) {
+            // What is inside is always there only if the value has to be an object: `null`, or any value where no
+            // type is given, satisfies the schema without it.
+            let always_present = mandatory && has_only_type(schema, "object");
+            self.describe_properties(schema, &path, pointer, always_present);
+        }
+    }
+
+    /// Whether `path` leads to a property of OB 3.0 or of UniCore's own, rather than one the template adds.
+    fn is_open_badges_standard_property(&self, path: &[ClaimPathElement]) -> bool {
+        let property_names: Option<Vec<&str>> = path[self.prefix_len..]
             .iter()
-            .chain(property_segments.iter())
-            .cloned()
-            .map(ClaimPathElement::String)
-            .collect(),
-    )
-    .ok()?;
+            .map(|element| match element {
+                ClaimPathElement::String(name) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        property_names.is_some_and(|property_names| is_open_badges_standard_property(&property_names))
+    }
 
-    Some(ClaimDescription {
-        path,
-        mandatory,
-        display: vec![],
-    })
+    /// The `format` of the display object of the value of `schema`: `table` for a Table, one of [`VALUE_FORMATS`] for
+    /// a value. Objects, Lists and values without one of these formats need none: the data shows what they are.
+    fn format(&self, schema: &serde_json::Value, pointer: Option<&str>) -> Option<&'static str> {
+        let schema_format = schema.get("format").and_then(|format| format.as_str());
+        if is_array_schema(schema) {
+            return (schema_format == Some("table")).then_some("table");
+        }
+        if is_object_schema(schema) {
+            return None;
+        }
+        if let Some(format) = VALUE_FORMATS.iter().find(|format| Some(**format) == schema_format) {
+            return Some(format);
+        }
+        let attribute_type = pointer
+            .and_then(|pointer| self.attributes?.get(pointer))
+            .and_then(|attribute| attribute.r#type);
+        (attribute_type == Some(FormFieldType::Country)).then_some("country")
+    }
+
+    fn push(&mut self, path: &[ClaimPathElement], mandatory: bool, name: Option<&str>, format: Option<&str>) {
+        let Ok(path) = ClaimPathPointer::try_new(path.to_vec()) else {
+            return;
+        };
+        let display = if name.is_none() && format.is_none() {
+            vec![]
+        } else {
+            vec![ClaimDescriptionDisplay {
+                name: name.map(str::to_string),
+                locale: None,
+                additional_parameters: format
+                    .map(|format| serde_json::Map::from_iter([("format".to_string(), format.into())]))
+                    .unwrap_or_default(),
+            }]
+        };
+
+        self.claims.push(ClaimDescription {
+            path,
+            mandatory,
+            display,
+        });
+    }
 }
 
 fn has_nested_object_properties(schema: &serde_json::Value) -> bool {
@@ -356,16 +453,21 @@ fn has_nested_object_properties(schema: &serde_json::Value) -> bool {
         .is_some_and(|properties| !properties.is_empty())
 }
 
+/// Whether the `type` of this schema includes `"object"`.
 fn is_object_schema(schema: &serde_json::Value) -> bool {
-    schema.get("type").and_then(|value| value.as_str()) == Some("object")
-}
-
-/// Whether a value of this schema has to be an object: its `type` is `"object"` and nothing else.
-fn is_object_only_schema(schema: &serde_json::Value) -> bool {
     match schema.get("type") {
         Some(serde_json::Value::String(r#type)) => r#type == "object",
+        Some(serde_json::Value::Array(types)) => types.iter().any(|r#type| r#type.as_str() == Some("object")),
+        _ => false,
+    }
+}
+
+/// Whether a value of this schema has to be of this type: its `type` is this one and nothing else.
+fn has_only_type(schema: &serde_json::Value, expected: &str) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(r#type)) => r#type == expected,
         Some(serde_json::Value::Array(types)) => {
-            !types.is_empty() && types.iter().all(|r#type| r#type.as_str() == Some("object"))
+            !types.is_empty() && types.iter().all(|r#type| r#type.as_str() == Some(expected))
         }
         _ => false,
     }
@@ -449,6 +551,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                 | DisplayUpdated { template_id, .. }
                 | TypeUpdated { template_id, .. }
                 | SchemaUpdated { template_id, .. }
+                | SchemaPropertiesAttributesUpdated { template_id, .. }
                 | HolderAuthorizationUpdated { template_id, .. } => {
                     self.sync_from_view(template_id).await;
                 }
@@ -654,121 +757,296 @@ mod tests {
         assert!(!claim.mandatory);
     }
 
+    /// The claims descriptions of a `vc+sd-jwt` template with this schema and these attributes.
+    fn claims_of(
+        schema: serde_json::Value,
+        attributes: Option<HashMap<String, PropertyAttribute>>,
+    ) -> Vec<ClaimDescription> {
+        let template = Template {
+            template_id: "t_claims".to_string(),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            schema: Box::new(Some(schema)),
+            schema_properties_attributes: attributes,
+            ..Default::default()
+        };
+        credential_configuration_from_template(&template)
+            .credential_metadata
+            .claims
+            .expect("claims should be present")
+    }
+
+    fn paths(claims: &[ClaimDescription]) -> Vec<serde_json::Value> {
+        claims.iter().map(|claim| serde_json::json!(claim.path)).collect()
+    }
+
     /// The credential holds one key named `No. of credits`, so the path to it has one element for it.
     #[test]
     fn test_property_name_with_dots_is_one_path_element() {
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "No. of credits": { "type": "string" },
-                "grades": {
-                    "type": "object",
-                    "properties": { "v1.2": { "type": "string" } }
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "No. of credits": { "type": "string" },
+                    "grades": {
+                        "type": "object",
+                        "properties": { "v1.2": { "type": "string" } }
+                    }
                 }
-            }
-        });
-
-        let template = Template {
-            template_id: "t8".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            schema: Box::new(Some(schema)),
-            schema_properties_attributes: None,
-            ..Default::default()
-        };
-
-        let config = credential_configuration_from_template(&template);
-        let claims = config.credential_metadata.claims.expect("claims should be present");
-        let path = |segments: &[&str]| -> Vec<ClaimPathElement> {
-            segments
-                .iter()
-                .map(|segment| ClaimPathElement::String(segment.to_string()))
-                .collect()
-        };
-        let mut paths: Vec<Vec<ClaimPathElement>> = claims.iter().map(|claim| claim.path.as_ref().to_vec()).collect();
-        paths.sort_by_key(Vec::len);
+            }),
+            None,
+        );
 
         assert_eq!(
-            paths,
+            paths(&claims),
             vec![
-                path(&["credentialSubject", "No. of credits"]),
-                path(&["credentialSubject", "grades", "v1.2"]),
+                serde_json::json!(["credentialSubject", "No. of credits"]),
+                serde_json::json!(["credentialSubject", "grades"]),
+                serde_json::json!(["credentialSubject", "grades", "v1.2"]),
             ]
         );
     }
 
     #[test]
-    fn test_nested_object_claims_only_emit_leaf_fields() {
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "achievement": {
-                    "type": "object",
-                    "properties": {
-                        "name": { "type": "string" },
-                        "criteria": {
-                            "type": "object",
-                            "properties": {
-                                "narrative": { "type": "string" }
+    fn test_object_is_described_before_its_properties() {
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "achievement": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "criteria": {
+                                "type": "object",
+                                "properties": {
+                                    "narrative": { "type": "string" }
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            }),
+            None,
+        );
 
-        let template = Template {
-            template_id: "t_nested".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            schema: Box::new(Some(schema)),
-            ..Default::default()
-        };
-
-        let claims = credential_configuration_from_template(&template)
-            .credential_metadata
-            .claims
-            .expect("claims should be present");
-
-        assert_eq!(claims.len(), 2);
-        assert!(claims.iter().any(|claim| {
-            claim.path.as_ref()
-                == &[
-                    ClaimPathElement::String("credentialSubject".to_string()),
-                    ClaimPathElement::String("achievement".to_string()),
-                    ClaimPathElement::String("name".to_string()),
-                ]
-        }));
-        assert!(claims.iter().any(|claim| {
-            claim.path.as_ref()
-                == &[
-                    ClaimPathElement::String("credentialSubject".to_string()),
-                    ClaimPathElement::String("achievement".to_string()),
-                    ClaimPathElement::String("criteria".to_string()),
-                    ClaimPathElement::String("narrative".to_string()),
-                ]
-        }));
+        assert_eq!(
+            paths(&claims),
+            vec![
+                serde_json::json!(["credentialSubject", "achievement"]),
+                serde_json::json!(["credentialSubject", "achievement", "name"]),
+                serde_json::json!(["credentialSubject", "achievement", "criteria"]),
+                serde_json::json!(["credentialSubject", "achievement", "criteria", "narrative"]),
+            ]
+        );
     }
 
     #[test]
-    fn test_array_claims_emit_only_the_array_field() {
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "achievements": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": { "type": "string" }
+    fn test_properties_of_array_items_are_described_through_null() {
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "achievements": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": { "type": "string" },
+                                "tasks": { "type": "array", "items": { "type": "string", "format": "uri" } }
+                            }
                         }
                     }
                 }
-            }
-        });
+            }),
+            None,
+        );
 
+        assert_eq!(
+            paths(&claims),
+            vec![
+                serde_json::json!(["credentialSubject", "achievements"]),
+                serde_json::json!(["credentialSubject", "achievements", null, "name"]),
+                serde_json::json!(["credentialSubject", "achievements", null, "tasks"]),
+                serde_json::json!(["credentialSubject", "achievements", null, "tasks", null]),
+            ]
+        );
+    }
+
+    /// The training record of issue #534, verbatim.
+    #[test]
+    fn test_claims_describe_objects_labels_and_value_formats() {
+        let claims = claims_of(
+            serde_json::json!({
+              "type": "object",
+              "properties": {
+                "Trainee": {
+                  "title": "Trainee",
+                  "type": "object",
+                  "properties": {
+                    "Full name": { "title": "Full name", "type": "string" },
+                    "Nationality": { "title": "Nationality", "type": "string", "format": "country" }
+                  },
+                  "required": ["Full name"]
+                },
+                "Skills": { "title": "Skills", "type": "array", "items": { "type": "string" } },
+                "Websites": { "title": "Websites", "type": "array", "items": { "type": "string", "format": "uri" } },
+                "Courses": {
+                  "title": "Courses",
+                  "type": "array",
+                  "format": "table",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "Code": { "title": "Code", "type": "string" },
+                      "Title": { "title": "Title", "type": "string" },
+                      "Country": { "title": "Country", "type": "string", "format": "country" },
+                      "Completed on": { "title": "Completed on", "type": "string", "format": "date" }
+                    },
+                    "required": ["Code", "Title"]
+                  }
+                }
+              },
+              "required": ["Trainee", "Courses"]
+            }),
+            None,
+        );
+
+        let expected: Vec<ClaimDescription> = serde_json::from_value(serde_json::json!([
+          { "path": ["credentialSubject", "Trainee"], "mandatory": true, "display": [{ "name": "Trainee" }] },
+          { "path": ["credentialSubject", "Trainee", "Full name"], "mandatory": true, "display": [{ "name": "Full name" }] },
+          { "path": ["credentialSubject", "Trainee", "Nationality"], "display": [{ "name": "Nationality", "format": "country" }] },
+          { "path": ["credentialSubject", "Skills"], "display": [{ "name": "Skills" }] },
+          { "path": ["credentialSubject", "Websites"], "display": [{ "name": "Websites" }] },
+          { "path": ["credentialSubject", "Websites", null], "display": [{ "format": "uri" }] },
+          { "path": ["credentialSubject", "Courses"], "mandatory": true, "display": [{ "name": "Courses", "format": "table" }] },
+          { "path": ["credentialSubject", "Courses", null, "Code"], "mandatory": true, "display": [{ "name": "Code" }] },
+          { "path": ["credentialSubject", "Courses", null, "Title"], "mandatory": true, "display": [{ "name": "Title" }] },
+          { "path": ["credentialSubject", "Courses", null, "Country"], "display": [{ "name": "Country", "format": "country" }] },
+          { "path": ["credentialSubject", "Courses", null, "Completed on"], "display": [{ "name": "Completed on", "format": "date" }] }
+        ]))
+        .unwrap();
+        assert_eq!(claims, expected);
+    }
+
+    /// The claims follow the order of `properties` as the schema was written, not the order of the property names.
+    #[test]
+    fn test_claims_follow_the_order_of_the_schema_properties() {
+        let schema: serde_json::Value = serde_json::from_str(
+            r#"{
+                "type": "object",
+                "properties": {
+                    "Zeta": { "type": "string" },
+                    "Alpha": {
+                        "type": "object",
+                        "properties": { "Two": { "type": "string" }, "One": { "type": "string" } }
+                    },
+                    "Mid": { "type": "string" }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            paths(&claims_of(schema, None)),
+            vec![
+                serde_json::json!(["credentialSubject", "Zeta"]),
+                serde_json::json!(["credentialSubject", "Alpha"]),
+                serde_json::json!(["credentialSubject", "Alpha", "Two"]),
+                serde_json::json!(["credentialSubject", "Alpha", "One"]),
+                serde_json::json!(["credentialSubject", "Mid"]),
+            ]
+        );
+    }
+
+    /// A display object holds what the schema gives: a `title` as name, and only the formats a Wallet knows.
+    #[test]
+    fn test_display_holds_title_and_known_formats_only() {
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "untitled": { "type": "string" },
+                    "blank title": { "title": " ", "type": "string" },
+                    "email": { "title": "Email", "type": "string", "format": "email" },
+                    "born": { "type": "string", "format": "date-time" },
+                    "group": { "type": "object", "format": "table", "properties": { "a": { "type": "string" } } },
+                    "list": { "title": "List", "type": "array", "format": "uri", "items": { "type": "string" } }
+                }
+            }),
+            None,
+        );
+        let display = |path: serde_json::Value| -> serde_json::Value {
+            let claim = claims
+                .iter()
+                .find(|claim| serde_json::json!(claim.path) == path)
+                .expect("claim should exist");
+            serde_json::json!(claim.display)
+        };
+
+        assert_eq!(
+            display(serde_json::json!(["credentialSubject", "untitled"])),
+            serde_json::json!([])
+        );
+        assert_eq!(
+            display(serde_json::json!(["credentialSubject", "blank title"])),
+            serde_json::json!([])
+        );
+        assert_eq!(
+            display(serde_json::json!(["credentialSubject", "email"])),
+            serde_json::json!([{ "name": "Email" }])
+        );
+        assert_eq!(
+            display(serde_json::json!(["credentialSubject", "born"])),
+            serde_json::json!([{ "format": "date-time" }])
+        );
+        assert_eq!(
+            display(serde_json::json!(["credentialSubject", "group"])),
+            serde_json::json!([])
+        );
+        assert_eq!(
+            display(serde_json::json!(["credentialSubject", "list"])),
+            serde_json::json!([{ "name": "List" }])
+        );
+    }
+
+    /// In an Open Badges template, the properties of OB 3.0 and UniCore's own are named by the standard: only the
+    /// properties the template adds get the display name of their `title`. Formats stay.
+    #[test]
+    fn test_open_badges_template_names_only_added_properties() {
         let template = Template {
-            template_id: "t_array".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            schema: Box::new(Some(schema)),
+            template_id: "t_open_badges".to_string(),
+            data_model: DataModel::OpenBadges3_0,
+            schema: Box::new(Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "achievement": {
+                        "title": "Achievement",
+                        "type": "object",
+                        "properties": {
+                            "name": { "title": "Name", "type": "string" },
+                            "criteria": {
+                                "title": "Criteria",
+                                "type": "object",
+                                "properties": { "narrative": { "title": "Narrative", "type": "string" } }
+                            }
+                        }
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "object",
+                        "properties": {
+                            "givenName": { "title": "Given name", "type": "string" },
+                            "dateOfBirth": { "title": "Date of birth", "type": "string", "format": "date" }
+                        }
+                    },
+                    "narrative": {
+                        "title": "Narrative",
+                        "type": "object",
+                        "properties": { "en": { "title": "English", "type": "string" } }
+                    }
+                }
+            }))),
             ..Default::default()
         };
 
@@ -777,12 +1055,60 @@ mod tests {
             .claims
             .expect("claims should be present");
 
-        assert_eq!(claims.len(), 1);
+        let expected: Vec<ClaimDescription> = serde_json::from_value(serde_json::json!([
+          { "path": ["credentialSubject", "achievement"] },
+          { "path": ["credentialSubject", "achievement", "name"] },
+          { "path": ["credentialSubject", "achievement", "criteria"] },
+          { "path": ["credentialSubject", "achievement", "criteria", "narrative"] },
+          { "path": ["credentialSubject", "profile"] },
+          { "path": ["credentialSubject", "profile", "givenName"] },
+          { "path": ["credentialSubject", "profile", "dateOfBirth"], "display": [{ "format": "date" }] },
+          { "path": ["credentialSubject", "narrative"] },
+          { "path": ["credentialSubject", "narrative", "en"], "display": [{ "name": "English" }] }
+        ]))
+        .unwrap();
+        assert_eq!(claims, expected);
+    }
+
+    /// A value whose `schemaPropertiesAttributes` type is `country` is a country, also when its schema has no `format`.
+    #[test]
+    fn test_country_attribute_gives_country_format() {
+        let country = PropertyAttribute {
+            r#type: Some(FormFieldType::Country),
+            ..PropertyAttribute::new(false, false)
+        };
+        let attributes = HashMap::from([
+            ("/Nationality".to_string(), country.clone()),
+            ("/Address/Land~1Region".to_string(), country),
+        ]);
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "Nationality": { "type": "string" },
+                    "Address": {
+                        "type": "object",
+                        "properties": {
+                            "Land/Region": { "type": "string" },
+                            "City": { "type": "string" }
+                        }
+                    }
+                }
+            }),
+            Some(attributes),
+        );
+
+        let formats: Vec<serde_json::Value> = claims
+            .iter()
+            .map(|claim| serde_json::json!(claim.display.first().map(|display| &display.additional_parameters)))
+            .collect();
         assert_eq!(
-            claims[0].path.as_ref(),
-            &[
-                ClaimPathElement::String("credentialSubject".to_string()),
-                ClaimPathElement::String("achievements".to_string()),
+            formats,
+            vec![
+                serde_json::json!({ "format": "country" }),
+                serde_json::Value::Null,
+                serde_json::json!({ "format": "country" }),
+                serde_json::Value::Null,
             ]
         );
     }
@@ -799,42 +1125,35 @@ mod tests {
         #[case] required_in_criteria: &[&str],
         #[case] mandatory: bool,
     ) {
-        let schema = serde_json::json!({
-            "type": "object",
-            "required": required_at_root,
-            "properties": {
-                "achievement": {
-                    "type": "object",
-                    "required": required_in_achievement,
-                    "properties": {
-                        "criteria": {
-                            "type": "object",
-                            "required": required_in_criteria,
-                            "properties": {
-                                "narrative": { "type": "string" }
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "required": required_at_root,
+                "properties": {
+                    "achievement": {
+                        "type": "object",
+                        "required": required_in_achievement,
+                        "properties": {
+                            "criteria": {
+                                "type": "object",
+                                "required": required_in_criteria,
+                                "properties": {
+                                    "narrative": { "type": "string" }
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            }),
+            None,
+        );
 
-        let template = Template {
-            template_id: "t_nested_required".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            schema: Box::new(Some(schema)),
-            ..Default::default()
-        };
-
-        let claim = credential_configuration_from_template(&template)
-            .credential_metadata
-            .claims
-            .expect("claims should be present")
-            .into_iter()
-            .next()
-            .expect("claim should exist");
-
-        assert_eq!(claim.mandatory, mandatory);
+        let narrative = claims.last().expect("claim should exist");
+        assert_eq!(
+            serde_json::json!(narrative.path),
+            serde_json::json!(["credentialSubject", "achievement", "criteria", "narrative"])
+        );
+        assert_eq!(narrative.mandatory, mandatory);
     }
 
     /// A required property that may be something else than an object, such as `null`, need not hold what the schema
@@ -863,110 +1182,144 @@ mod tests {
             schema["properties"]["address"].as_object_mut().unwrap().remove("type");
         }
 
-        let template = Template {
-            template_id: "t_nullable_object".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            schema: Box::new(Some(schema)),
-            ..Default::default()
-        };
+        let claims = claims_of(schema, None);
 
-        let claims = credential_configuration_from_template(&template)
-            .credential_metadata
-            .claims
-            .expect("claims should be present");
-
-        assert_eq!(claims.len(), 1);
-        assert_eq!(claims[0].mandatory, mandatory);
+        assert_eq!(claims.len(), 2);
+        // The property itself is always there: the schema requires it.
+        assert!(claims[0].mandatory);
+        assert_eq!(claims[1].mandatory, mandatory);
     }
 
-    /// The leaves of nested objects are claims of their own; a list or a table is one claim, whatever its items hold.
-    /// The claims the schema requires are mandatory, marked with `*` here.
+    /// Through an array, a claim is always there only when the array is, with at least one item, and the items require
+    /// it.
+    #[rstest::rstest]
+    #[case::array_required_with_items(serde_json::json!("array"), &["Courses"], Some(1), &["Code"], true)]
+    #[case::array_optional(serde_json::json!("array"), &[], Some(1), &["Code"], false)]
+    #[case::array_may_be_empty(serde_json::json!("array"), &["Courses"], Some(0), &["Code"], false)]
+    #[case::no_min_items(serde_json::json!("array"), &["Courses"], None, &["Code"], false)]
+    #[case::item_property_optional(serde_json::json!("array"), &["Courses"], Some(1), &[], false)]
+    #[case::nullable_array(serde_json::json!(["array", "null"]), &["Courses"], Some(1), &["Code"], false)]
+    fn test_claim_through_array_is_mandatory_when_always_in_every_item(
+        #[case] courses_type: serde_json::Value,
+        #[case] required_at_root: &[&str],
+        #[case] min_items: Option<u64>,
+        #[case] required_in_items: &[&str],
+        #[case] mandatory: bool,
+    ) {
+        let items_always_there = !required_at_root.is_empty()
+            && courses_type == serde_json::json!("array")
+            && min_items.is_some_and(|min_items| min_items >= 1);
+        let mut courses = serde_json::json!({
+            "type": courses_type,
+            "items": {
+                "type": "object",
+                "required": required_in_items,
+                "properties": { "Code": { "type": "string" } }
+            }
+        });
+        let mut websites = serde_json::json!({
+            "type": courses["type"],
+            "items": { "type": "string", "format": "uri" }
+        });
+        if let Some(min_items) = min_items {
+            courses["minItems"] = min_items.into();
+            websites["minItems"] = min_items.into();
+        }
+
+        let claims = claims_of(
+            serde_json::json!({
+                "type": "object",
+                "required": required_at_root.iter().flat_map(|name| [*name, "Websites"]).collect::<Vec<_>>(),
+                "properties": { "Courses": courses, "Websites": websites }
+            }),
+            None,
+        );
+
+        assert_eq!(
+            paths(&claims),
+            vec![
+                serde_json::json!(["credentialSubject", "Courses"]),
+                serde_json::json!(["credentialSubject", "Courses", null, "Code"]),
+                serde_json::json!(["credentialSubject", "Websites"]),
+                serde_json::json!(["credentialSubject", "Websites", null]),
+            ]
+        );
+        assert_eq!(claims[1].mandatory, mandatory);
+        // The items of a List of values are there whenever the List holds at least one.
+        assert_eq!(claims[3].mandatory, items_always_there);
+    }
+
+    /// The leaves of nested objects, the objects, the lists and tables and what their items hold, in schema order.
     #[test]
-    fn test_structured_schema_claims_are_leaves_and_whole_arrays() {
+    fn test_structured_schema_claims() {
         use agent_library::template::aggregate::test_utils::{
             structured_schema, structured_schema_properties_attributes,
         };
 
+        let claims = claims_of(structured_schema(), Some(structured_schema_properties_attributes()));
+
+        let expected: Vec<ClaimDescription> = serde_json::from_value(serde_json::json!([
+          { "path": ["credentialSubject", "Full name"], "mandatory": true, "display": [{ "name": "Full name" }] },
+          { "path": ["credentialSubject", "Address"], "mandatory": true, "display": [{ "name": "Address" }] },
+          { "path": ["credentialSubject", "Address", "Street"], "mandatory": true, "display": [{ "name": "Street" }] },
+          { "path": ["credentialSubject", "Address", "City"], "display": [{ "name": "City" }] },
+          { "path": ["credentialSubject", "Address", "Country"], "display": [{ "name": "Country", "format": "country" }] },
+          { "path": ["credentialSubject", "Address", "Coordinates"], "display": [{ "name": "Coordinates" }] },
+          { "path": ["credentialSubject", "Address", "Coordinates", "Latitude"], "display": [{ "name": "Latitude" }] },
+          { "path": ["credentialSubject", "Address", "Coordinates", "Longitude"], "display": [{ "name": "Longitude" }] },
+          { "path": ["credentialSubject", "Skills"], "mandatory": true, "display": [{ "name": "Skills" }] },
+          { "path": ["credentialSubject", "Accreditations"], "display": [{ "name": "Accreditations" }] },
+          { "path": ["credentialSubject", "Accreditations", null], "display": [{ "format": "uri" }] },
+          { "path": ["credentialSubject", "Work experience"], "display": [{ "name": "Work experience" }] },
+          { "path": ["credentialSubject", "Work experience", null, "Employer"], "display": [{ "name": "Employer" }] },
+          { "path": ["credentialSubject", "Work experience", null, "Since"], "display": [{ "name": "Since", "format": "date" }] },
+          { "path": ["credentialSubject", "Work experience", null, "Roles"], "display": [{ "name": "Roles" }] },
+          { "path": ["credentialSubject", "Completed classes"], "mandatory": true, "display": [{ "name": "Completed classes", "format": "table" }] },
+          { "path": ["credentialSubject", "Completed classes", null, "Code"], "display": [{ "name": "Code" }] },
+          { "path": ["credentialSubject", "Completed classes", null, "Name"], "display": [{ "name": "Name" }] },
+          { "path": ["credentialSubject", "Completed classes", null, "Passed on"], "display": [{ "name": "Passed on", "format": "date" }] },
+          { "path": ["credentialSubject", "Credits"], "display": [{ "name": "Credits" }] }
+        ]))
+        .unwrap();
+        assert_eq!(claims, expected);
+    }
+
+    /// The claims descriptions of every data model never break the rules of OpenID4VCI 1.0, Appendix B.3.
+    #[rstest::rstest]
+    fn test_claims_descriptions_pass_appendix_b3(
+        #[values(
+            DataModel::W3CVcDataModelV1_1,
+            DataModel::W3CVcDataModelV2_0,
+            DataModel::OpenBadges3_0,
+            DataModel::EuropeanLearningModelV3_3
+        )]
+        data_model: DataModel,
+        #[values(HolderType::Individual, HolderType::Organization)] holder_type: HolderType,
+    ) {
+        use agent_library::template::aggregate::test_utils::{
+            structured_schema, structured_schema_properties_attributes,
+        };
+        use oid4vc_core::claim_path_pointer::{check_claims_description_paths, ClaimPathSemantics};
+
         let template = Template {
-            template_id: "t_structured".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
+            template_id: "t_appendix_b3".to_string(),
+            data_model: data_model.clone(),
+            holder_type: holder_type.clone(),
             schema: Box::new(Some(structured_schema())),
             schema_properties_attributes: Some(structured_schema_properties_attributes()),
             ..Default::default()
         };
 
         let config = credential_configuration_from_template(&template);
-        assert_eq!(config.format, "vc+sd-jwt");
-
-        let mut paths: Vec<String> = config
-            .credential_metadata
-            .claims
-            .expect("claims should be present")
-            .iter()
-            .map(|claim| {
-                let path = claim
-                    .path
-                    .as_ref()
-                    .iter()
-                    .map(|element| match element {
-                        ClaimPathElement::String(segment) => segment.as_str(),
-                        other => panic!("unexpected path element: {other:?}"),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" > ");
-                format!("{path}{}", if claim.mandatory { " *" } else { "" })
-            })
-            .collect();
-        paths.sort();
-
+        let claims = config.credential_metadata.claims.unwrap_or_default();
         assert_eq!(
-            paths,
-            vec![
-                "credentialSubject > Accreditations",
-                "credentialSubject > Address > City",
-                "credentialSubject > Address > Coordinates > Latitude",
-                "credentialSubject > Address > Coordinates > Longitude",
-                "credentialSubject > Address > Country",
-                "credentialSubject > Address > Street *",
-                "credentialSubject > Completed classes *",
-                "credentialSubject > Credits",
-                "credentialSubject > Full name *",
-                "credentialSubject > Skills *",
-                "credentialSubject > Work experience",
-            ]
+            config.format == "vc+sd-jwt",
+            !claims.is_empty(),
+            "{data_model:?}, {holder_type:?}"
         );
-    }
-
-    #[test]
-    fn test_array_with_properties_is_one_claim() {
-        let template = Template {
-            template_id: "t_array_properties".to_string(),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            schema: Box::new(Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "skills": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "properties": { "label": { "type": "string" } }
-                    }
-                }
-            }))),
-            ..Default::default()
-        };
-
-        let claims = credential_configuration_from_template(&template)
-            .credential_metadata
-            .claims
-            .expect("claims should be present");
-
-        assert_eq!(claims.len(), 1);
         assert_eq!(
-            claims[0].path.as_ref(),
-            &[
-                ClaimPathElement::String("credentialSubject".to_string()),
-                ClaimPathElement::String("skills".to_string()),
-            ]
+            check_claims_description_paths(claims.iter().map(|claim| &claim.path), ClaimPathSemantics::Json),
+            Ok(())
         );
     }
 

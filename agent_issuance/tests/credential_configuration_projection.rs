@@ -5,7 +5,7 @@ use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 use agent_library::library_state;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{DataModel, Display, PropertyAttribute, Status, Visibility};
+use agent_library::template::aggregate::{DataModel, Display, FormFieldType, PropertyAttribute, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
 use agent_library::template::event::{Expiration, HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
@@ -963,9 +963,10 @@ async fn test_schema_updated_refreshes_credential_configuration() {
     assert_eq!(claim_count, 1);
 }
 
-/// Attributes play no part in a credential configuration, so updating them leaves it as it is.
+/// A `country` attribute gives a claim the `country` format, so setting or removing one refreshes the credential
+/// configuration.
 #[tokio::test]
-async fn test_schema_properties_attributes_updated_leaves_credential_configuration_as_it_is() {
+async fn test_schema_properties_attributes_updated_refreshes_credential_configuration() {
     let (issuance, lib_state, projection) = setup().await;
 
     let template_id = "schema-attributes-update-template";
@@ -1032,39 +1033,62 @@ async fn test_schema_properties_attributes_updated_leaves_credential_configurati
         .unwrap();
     assert!(before.credential_configurations.contains_key(template_id));
 
-    let mut attrs = HashMap::new();
-    attrs.insert("/name".to_string(), PropertyAttribute::new(true, false));
+    let name_display = |attrs: HashMap<String, PropertyAttribute>, sequence: usize| {
+        let lib_state = lib_state.clone();
+        let issuance = issuance.clone();
+        let projection = &projection;
+        async move {
+            command_handler(
+                template_id,
+                &lib_state.command.template,
+                TemplateCommand::UpdateSchemaPropertiesAttributes {
+                    template_id: template_id.to_string(),
+                    schema_properties_attributes: attrs.clone(),
+                },
+            )
+            .await
+            .unwrap();
+            let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+                aggregate_id: template_id.to_string(),
+                sequence,
+                payload: TemplateEvent::SchemaPropertiesAttributesUpdated {
+                    template_id: template_id.to_string(),
+                    schema_properties_attributes: attrs,
+                    modified_at: "2024-01-01T00:01:00Z".to_string(),
+                },
+                metadata: HashMap::new(),
+            };
+            projection.dispatch(template_id, &[update_event]).await;
 
-    command_handler(
-        template_id,
-        &lib_state.command.template,
-        TemplateCommand::UpdateSchemaPropertiesAttributes {
-            template_id: template_id.to_string(),
-            schema_properties_attributes: attrs.clone(),
-        },
-    )
-    .await
-    .unwrap();
-
-    let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
-        aggregate_id: template_id.to_string(),
-        sequence: 2,
-        payload: TemplateEvent::SchemaPropertiesAttributesUpdated {
-            template_id: template_id.to_string(),
-            schema_properties_attributes: attrs,
-            modified_at: "2024-01-01T00:01:00Z".to_string(),
-        },
-        metadata: HashMap::new(),
+            let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+                .await
+                .unwrap()
+                .unwrap();
+            let claims = server_config.credential_configurations[template_id]
+                .1
+                .credential_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.claims.clone())
+                .unwrap();
+            serde_json::json!(claims[0].display)
+        }
     };
-    projection.dispatch(template_id, &[update_event]).await;
 
-    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
-        .await
-        .unwrap()
-        .unwrap();
+    let country = PropertyAttribute {
+        r#type: Some(FormFieldType::Country),
+        ..PropertyAttribute::new(true, false)
+    };
     assert_eq!(
-        server_config.credential_configurations,
-        before.credential_configurations
+        name_display(HashMap::from([("/name".to_string(), country)]), 2).await,
+        serde_json::json!([{ "format": "country" }])
+    );
+    assert_eq!(
+        name_display(
+            HashMap::from([("/name".to_string(), PropertyAttribute::new(true, false))]),
+            3
+        )
+        .await,
+        serde_json::json!([])
     );
 }
 
