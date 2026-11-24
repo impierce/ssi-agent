@@ -91,3 +91,9 @@ makes the endpoint a snapshot feed rather than an addressable collection. A read
 whether a template it previously imported has since changed. If re-synchronisation ever becomes a
 use case, a stable opaque handle — not necessarily the internal aggregate id — would need to be
 added.
+
+**Amended 2026-11-24**: Each entry now carries `id`, the template's aggregate id. An importer
+records it as `sourceTemplateId` of its copy's Template Origin, so both sides can name the same
+template later. The aggregate id is no secret: the ids of published templates are already public as
+the keys of `credential_configurations_supported` in the credential issuer metadata. `id` is not
+part of the public content, so it leaves the origin digest of ADR 0010 unchanged.

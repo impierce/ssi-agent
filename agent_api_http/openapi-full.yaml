@@ -5644,6 +5644,7 @@ components:
     PublicTemplate:
       type: object
       required:
+      - id
       - title
       - display
       - dataModel
@@ -5663,6 +5664,11 @@ components:
           $ref: '#/components/schemas/Display'
         holderType:
           $ref: '#/components/schemas/HolderType'
+        id:
+          type: string
+          description: |-
+            Identifier of the template at this agent, stable for the template's lifetime. An importer
+            records it as `sourceTemplateId` of its copy's origin.
         modifiedAt:
           type:
           - string
