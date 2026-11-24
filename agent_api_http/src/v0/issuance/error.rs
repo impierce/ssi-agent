@@ -68,6 +68,9 @@ impl IntoApiErrorExt for CredentialError {
             InvalidCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+
+            // `/openid4vci/notification` endpoint
+            InvalidNotificationIdError => ApiError::new(StatusCode::BAD_REQUEST),
         }
     }
 }
@@ -363,6 +366,7 @@ impl IntoPublicError for CredentialError {
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
             KeyIdError => PublicError::InternalServerError,
+            InvalidNotificationIdError => NotificationErrorResponse::InvalidNotificationId.into(),
         }
     }
 }
@@ -563,6 +567,11 @@ pub mod tests {
                 None,
             ),
             (CredentialError::KeyIdError, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                CredentialError::InvalidNotificationIdError,
+                StatusCode::BAD_REQUEST,
+                None,
+            ),
         ]);
     }
 
@@ -714,6 +723,16 @@ pub mod tests {
                 None,
             ),
         ])
+        .await;
+    }
+
+    #[tokio::test]
+    async fn credential_errors_successfully_convert_to_public_errors() {
+        assert_public_errors(vec![(
+            CredentialError::InvalidNotificationIdError,
+            StatusCode::BAD_REQUEST,
+            Some("invalid_notification_id"),
+        )])
         .await;
     }
 
