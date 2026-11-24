@@ -1201,6 +1201,7 @@ pub mod credential_tests {
             .given(vec![
                 CredentialEvent::UnsignedCredentialCreated {
                     credential_id: credential_id.clone(),
+                    template_id: Some("template".to_string()),
                     data: Data {
                         raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
                     },
