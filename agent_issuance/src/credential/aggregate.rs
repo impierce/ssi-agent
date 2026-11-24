@@ -9,13 +9,13 @@ use agent_secret_manager::signer::SubjectSigner;
 use agent_secret_manager::subject::Subject;
 use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::jose::{JwsHeader, Signer as _};
 use identity_kit::sd_jwt_vc::{Confirmation, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims};
 use identity_kit::status_list::{StatusListRef, StatusListToken, StatusType};
-use oid4vc_core::Subject as _;
+use jsonwebtoken::Header;
+use oid4vc_core::{jwt, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{self, VcSdJwt, VcSdJwtParameters};
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
@@ -352,11 +352,15 @@ impl Aggregate for Credential {
 
                         vc_jwt_object.insert("status".to_string(), json!(status_claim));
 
-                        json!(
-                            sign_jwt(&services.issuer, &default_did_method.to_string(), &vc_jwt_object)
-                                .await
-                                .map_err(|e| BuildCredentialError(format!("Failed to sign the credential: {e:#}")))?
+                        // jwt::encode sets the header by itself.
+                        json!(jwt::encode(
+                            services.issuer.clone(),
+                            Header::new(get_preferred_signing_algorithm()),
+                            vc_jwt_object,
+                            &default_did_method.to_string()
                         )
+                        .await
+                        .map_err(|error| CredentialError::SigningError(error.to_string()))?)
                     }
                     CredentialFormats::DcSdJwt(_) => {
                         sign_dc_sd_jwt(
@@ -898,30 +902,6 @@ fn build_unsigned_w3c_credential_data(
     ))
 }
 
-/// Signs `claims` as a JWT with the issuer's key for `did_method` and the preferred signing algorithm, named as the
-/// `kid`. The key is looked up once, so the signature is always of the key the `kid` names, also when another key is
-/// selected meanwhile.
-async fn sign_jwt(
-    issuer: &Arc<Subject>,
-    did_method: &str,
-    claims: &serde_json::Map<String, serde_json::Value>,
-) -> anyhow::Result<String> {
-    let signer = SubjectSigner::new(issuer.clone(), did_method, get_preferred_signing_algorithm())
-        .await
-        .ok_or_else(|| anyhow::anyhow!("The issuer has no key to sign with for `{did_method}`"))?;
-    // The header as `oid4vc_core::jwt::encode` writes it, which these credentials were signed with before.
-    let mut header = jsonwebtoken::Header::new(get_preferred_signing_algorithm());
-    header.kid = signer.kid().map(ToString::to_string);
-    let signing_input = [
-        oid4vc_core::jwt::base64_url_encode(&header)?,
-        oid4vc_core::jwt::base64_url_encode(claims)?,
-    ]
-    .join(".");
-    let signature = signer.sign(signing_input.as_bytes()).await?;
-
-    Ok(format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature)))
-}
-
 /// The signer of SD-JWT credentials: the issuer's key for the preferred DID method and signing algorithm.
 async fn sd_jwt_signer(issuer: &Arc<Subject>) -> Result<SubjectSigner, CredentialError> {
     SubjectSigner::new(
@@ -1224,6 +1204,43 @@ pub mod credential_tests {
         assert_eq!(json!(credential_subject), unsigned_credential["credentialSubject"]);
     }
 
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn a_credential_the_issuer_key_cannot_sign_is_not_issued(credential_id: String, created_at: DateTime<Utc>) {
+        use agent_secret_manager::subject::Subject as IssuerSubject;
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+        use identity_kit::keys::InMemoryKeyStore;
+
+        // A store without the issuer keys, so that every signature fails.
+        let mut issuer = IssuerSubject::test_subject().await;
+        issuer.key_store = Arc::new(InMemoryKeyStore::new());
+
+        let result = CredentialTestFramework::with(Arc::new(IssuanceServices::new(Arc::new(issuer))))
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: None,
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result();
+
+        assert!(matches!(result, Err(CredentialError::SigningError(_))));
+    }
+
     /// Decodes a base64url-encoded JSON segment of an SD-JWT.
     fn decode_segment(segment: &str) -> serde_json::Value {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -1408,50 +1425,6 @@ pub mod credential_tests {
             .when_async(command(credential_id))
             .await
             .then_expect_error_message(&InvalidCredentialDataError.to_string());
-    }
-
-    #[serial_test::serial]
-    #[tokio::test]
-    async fn a_credential_the_issuer_key_cannot_sign_is_not_issued() {
-        let services = IssuanceServices::default().await;
-        // An added verification method never signs with a configured issuer key, so without its own key it fails.
-        let verification_method_id = services
-            .issuer
-            .get_verification_method_id(agent_secret_manager::subject::StorageKey::new(
-                get_preferred_did_method(),
-                get_preferred_signing_algorithm(),
-            ))
-            .await
-            .unwrap();
-        services.issuer.insert_added_method(verification_method_id).await;
-        let credential_id = credential_id();
-
-        let result = CredentialTestFramework::with(services)
-            .given(vec![CredentialEvent::UnsignedCredentialCreated {
-                credential_id: credential_id.clone(),
-                data: Data {
-                    raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
-                },
-                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
-                notification_id: None,
-                created_at: Some(created_at()),
-                expires_at: None,
-            }])
-            .when_async(CredentialCommand::SignCredential {
-                credential_id,
-                subject_id: None,
-                overwrite: false,
-                proofs: None,
-                status_list_id: agent_shared::config::TEST_STATUS_LIST_ID.to_string(),
-                index: TESTINDEX,
-            })
-            .await
-            .inspect_result();
-
-        assert!(
-            matches!(&result, Err(BuildCredentialError(message)) if message.starts_with("Failed to sign the credential")),
-            "{result:?}"
-        );
     }
 
     pub mod expiry_tests {

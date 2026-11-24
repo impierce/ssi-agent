@@ -160,6 +160,10 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+        '501':
+          description: The key exists, but this instance can't sign with it
+        '502':
+          description: The key can't be had now, such as when its key provider doesn't answer
   /v0/add-linked-domains:
     post:
       tags:
@@ -1358,6 +1362,10 @@ paths:
       description: |-
         Lists, per algorithm, the key your organisation's `did:web` document signs with now, the key selected to sign, and
         why that key can't sign, if it can't.
+
+        Keys aren't checked in their key provider until they sign: a key deleted or disabled there is still listed as
+        signing, without a `problem`, until the next signature with it fails. From then on, its `problem` says why, and the
+        configured key signs instead while UniCore retries the key in the background.
       operationId: get_signing_keys
       responses:
         '200':
@@ -4586,7 +4594,7 @@ components:
       description: 'A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.'
     SigningKey:
       type: object
-      description: The key an algorithm of your organisation's `did:web` document signs with.
+      description: The key an algorithm of your organisation's `did:web` document signs with, as UniCore last saw it.
       required:
       - algorithm
       - verificationMethodId
@@ -4599,9 +4607,10 @@ components:
           - string
           - 'null'
           description: |-
-            Why the selected key, or else the signing key, can't sign: it isn't available, or it failed the last time it
-            signed. Selecting another key with `select-signing-key`, or the configured one with `deselect-signing-key`,
-            resolves it.
+            Why the selected key, or else the signing key, can't sign: it couldn't be loaded, it failed the last time it
+            signed, or it was deleted. `null` doesn't prove the key works: a key deleted or disabled in its provider shows
+            `null` until a signature with it fails. Selecting another key with `select-signing-key`, or the configured one
+            with `deselect-signing-key`, resolves it.
         selectedVerificationMethodId:
           type:
           - string

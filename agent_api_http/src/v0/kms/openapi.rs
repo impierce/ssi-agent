@@ -7,7 +7,10 @@ use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(add_key_provider, adopt_key, create_key, delete_key, get_all_key_providers, get_all_keys, get_key_provider_keys, remove_key_provider, test_key_provider_connection),
+    paths(
+        add_key_provider, get_all_key_providers, get_key_provider_keys, remove_key_provider, test_key_provider_connection,
+        create_key, adopt_key, delete_key, get_all_keys
+    ),
     tags(
         (name = "Key Management", description = "Connect key providers and create keys in them that never leave the provider. Only available when the `kms` feature flag is enabled.")
     )

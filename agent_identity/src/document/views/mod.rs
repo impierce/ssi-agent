@@ -1,12 +1,48 @@
 pub mod all_documents;
 
 use super::aggregate::Document;
-use cqrs_es::{Aggregate as _, EventEnvelope, View};
+use cqrs_es::{Aggregate, EventEnvelope, View};
 
 pub type DocumentView = Document;
 impl View<Document> for Document {
-    /// The view is the aggregate itself, so it changes as the aggregate does.
     fn update(&mut self, event: &EventEnvelope<Document>) {
-        self.apply(event.payload.clone());
+        use crate::document::event::DocumentEvent::*;
+
+        match &event.payload {
+            DocumentCreated {
+                document_id,
+                did_method,
+                document,
+                status,
+                with_fixed_algorithm: signing_algorithm,
+            } => {
+                self.document_id = document_id.clone();
+                self.did_method.replace(*did_method);
+                self.document.replace(document.clone());
+                self.status.clone_from(status);
+                self.with_fixed_algorithm.clone_from(signing_algorithm);
+            }
+            PublicKeyUpdated { document_id, document } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+            }
+            DocumentDidWebOverwritten { .. }
+            | PublicKeyAdded { .. }
+            | PublicKeyRemoved { .. }
+            | SigningKeySelected { .. }
+            | SigningKeyDeselected { .. } => self.apply(event.payload.clone()),
+            DocumentStatusUpdated { document_id, status } => {
+                self.document_id.clone_from(document_id);
+                self.status.clone_from(status);
+            }
+            ServiceAdded { document_id, document } | ServiceRemoved { document_id, document } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+            }
+            DocumentDeleted { document_id, document } => {
+                self.document_id.clone_from(document_id);
+                self.document.replace(document.clone());
+            }
+        }
     }
 }

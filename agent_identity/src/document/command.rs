@@ -5,9 +5,11 @@ use identity_kit::jose::Jwk;
 use jsonwebtoken::Algorithm;
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
+use strum::EnumDiscriminants;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, EnumDiscriminants)]
 #[serde(untagged)]
+#[strum_discriminants(name(DocumentOperation))]
 pub enum DocumentCommand {
     CreateDocument {
         document_id: String,
@@ -24,26 +26,6 @@ pub enum DocumentCommand {
     UpdatePublicKeys {
         public_key_jwks: Vec<Jwk>,
     },
-    /// Adds a verification method for a key that isn't a configured issuer key, such as a KMS key. Only `did:web`
-    /// documents can add keys, and the keys stay when the configured ones are updated.
-    AddPublicKey {
-        public_key_jwk: Box<Jwk>,
-        /// The ID of the key in the Key Management System, if it is one of its keys.
-        key_id: Option<String>,
-    },
-    /// Removes the verification method of an added key. Credentials it signed no longer verify. The selected signing
-    /// key of an algorithm can't be removed.
-    RemovePublicKey {
-        verification_method_id: DidUrl,
-    },
-    /// Signs with the verification method `verification_method_id` from now on, for the algorithm of its key.
-    SelectSigningKey {
-        verification_method_id: DidUrl,
-    },
-    /// Signs with the configured issuer key of `algorithm` again.
-    DeselectSigningKey {
-        algorithm: Algorithm,
-    },
     AddService {
         service_id: String,
         service: Box<DocumentService>,
@@ -51,21 +33,49 @@ pub enum DocumentCommand {
     RemoveService {
         service_id: String,
     },
+    /// Adds a verification method for `public_key`, a key that isn't a configured issuer key, such as the key the Key
+    /// Management System names `key_id`. The method is named by the key's thumbprint and doesn't sign until it is
+    /// selected. `did:web` only; adding a key again adds nothing.
+    AddPublicKey {
+        public_key: Box<Jwk>,
+        key_id: String,
+    },
+    /// Removes the verification method of an added key. The selected signing key of an algorithm isn't removed.
+    RemovePublicKey {
+        verification_method_id: DidUrl,
+    },
+    /// Signs with the verification method from now on, for the algorithm of its key. Selecting the selected method
+    /// again selects nothing.
+    SelectSigningKey {
+        verification_method_id: DidUrl,
+    },
+    /// Signs with the configured issuer key of `algorithm` again. Without a selected method, nothing changes.
+    DeselectSigningKey {
+        algorithm: Algorithm,
+    },
+}
+
+/// A document command's operation is known before the command is: adding a key is authorized before the Key
+/// Management System is asked for its public key.
+impl CommandOperation for DocumentOperation {
+    fn operation_name(&self) -> &'static str {
+        match self {
+            Self::CreateDocument => "identity.documents.create",
+            Self::OverwritePreviousDidWeb => "identity.documents.previous_did_web.overwrite",
+            Self::UpdateDocumentStatus => "identity.documents.status.update",
+            Self::UpdatePublicKeys => "identity.documents.public_keys.update",
+            Self::AddService => "identity.documents.services.add",
+            Self::RemoveService => "identity.documents.services.remove",
+            Self::AddPublicKey => "identity.documents.public_keys.add",
+            Self::RemovePublicKey => "identity.documents.public_keys.remove",
+            Self::SelectSigningKey => "identity.documents.signing_keys.select",
+            Self::DeselectSigningKey => "identity.documents.signing_keys.deselect",
+        }
+    }
 }
 
 impl CommandOperation for DocumentCommand {
     fn operation_name(&self) -> &'static str {
-        match self {
-            Self::CreateDocument { .. } => "identity.documents.create",
-            Self::OverwritePreviousDidWeb { .. } => "identity.documents.previous_did_web.overwrite",
-            Self::UpdateDocumentStatus { .. } => "identity.documents.status.update",
-            Self::UpdatePublicKeys { .. } => "identity.documents.public_keys.update",
-            Self::AddPublicKey { .. } => "identity.documents.public_keys.add",
-            Self::RemovePublicKey { .. } => "identity.documents.public_keys.remove",
-            Self::SelectSigningKey { .. } => "identity.documents.signing_key.select",
-            Self::DeselectSigningKey { .. } => "identity.documents.signing_key.deselect",
-            Self::AddService { .. } => "identity.documents.services.add",
-            Self::RemoveService { .. } => "identity.documents.services.remove",
-        }
+        DocumentOperation::from(self).operation_name()
     }
 }

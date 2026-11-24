@@ -1,4 +1,5 @@
 use agent_shared::config::SupportedDidMethod;
+use identity_kit::did::DidUrl;
 use identity_kit::keys::KeyId;
 use jsonwebtoken::Algorithm;
 use thiserror::Error;
@@ -30,20 +31,6 @@ pub enum DocumentError {
     VerificationMethodInsertionError(String),
     #[error("Failed to generate DID from key with Key ID: {0}")]
     GenerateDidError(KeyId),
-    #[error("Only `did:web` documents can add public keys, not `{0}` documents")]
-    AddPublicKeyUnsupportedError(SupportedDidMethod),
-    #[error("The public key to add is invalid: {0}")]
-    InvalidPublicKeyError(String),
-    #[error("The document has no verification method `{0}`")]
-    UnknownVerificationMethodError(String),
-    #[error("The key of verification method `{0}` names no supported algorithm")]
-    VerificationMethodAlgorithmError(String),
-    #[error("The verification method `{0}` is not of an added key, so it can't be removed")]
-    NotAnAddedKeyError(String),
-    #[error(
-        "The verification method `{0}` is the selected signing key of its algorithm. Select another key, or deselect it with `deselect-signing-key`, before removing it"
-    )]
-    SelectedSigningKeyError(String),
 
     // did:web specific Errors
     #[error("Opaque origin not supported")]
@@ -52,4 +39,21 @@ pub enum DocumentError {
     HostError,
     #[error("Invalid domain or origin: {0}")]
     InvalidOriginError(String),
+
+    // Errors of added keys and signing keys
+    /// Keys are only added to `did:web` documents, the only ones that change.
+    #[error("Only `did:web` documents add public keys")]
+    DidWebOnlyError,
+    /// The key of the verification method names no algorithm UniCore signs with.
+    #[error("The key of `{0}` names no supported algorithm")]
+    NoKeyAlgorithmError(DidUrl),
+    /// Only a verification method of the document can be selected to sign.
+    #[error("The document has no verification method `{0}`")]
+    UnknownVerificationMethodError(DidUrl),
+    /// The verification method is one of the configured issuer keys, or isn't in the document.
+    #[error("`{0}` is not the verification method of an added key")]
+    NotAnAddedKeyError(DidUrl),
+    /// The verification method is selected to sign for its algorithm, which would be left without its key.
+    #[error("`{0}` is the selected signing key of its algorithm; select another key or deselect it first")]
+    SelectedSigningKeyError(DidUrl),
 }

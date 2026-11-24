@@ -108,13 +108,15 @@ mod tests {
                 payload: serde_json::json!({
                     "KeyCreated": {
                         "reference": {
-                            "provider_type": "in_memory",
-                            "provider_key_id": "issuer",
-                            "algorithm": "EdDSA",
+                            "provider_type": "aws_kms_ambient",
+                            "provider_key_id": "arn:aws:kms:eu-central-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+                            "label": "issuer",
+                            "algorithm": "ES256",
                             "public_key": {
-                                "kty": "OKP",
-                                "crv": "Ed25519",
-                                "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPZpiMlrwIaaPcHURo"
+                                "kty": "EC",
+                                "crv": "P-256",
+                                "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                                "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
                             }
                         }
                     }

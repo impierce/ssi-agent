@@ -3,10 +3,7 @@
 use crate::key_provider::aggregate::KeyProviderType;
 use async_trait::async_trait;
 pub use identity_kit::keys::InMemoryKeyStore;
-use identity_kit::{
-    jose::JwsAlgorithm,
-    keys::{KeyId, KeySpec, KeyStore, KeyStoreError},
-};
+use identity_kit::keys::{KeyId, KeySpec, KeyStore, KeyStoreError};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -15,26 +12,15 @@ use thiserror::Error;
 #[error("{0}")]
 pub struct ConnectionError(pub String);
 
-/// Why a provider can't give a key this label. The message is shown to the operator.
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct InvalidLabel(pub String);
-
-/// Why a provider refuses to create or adopt keys for an algorithm it can sign with. The message is shown to the
-/// operator.
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct RefusedAlgorithm(pub String);
-
-/// What signs with the keys of this instance, outside the Key Management System, such as DID documents.
-#[async_trait]
-pub trait KeyUsage: Send + Sync {
-    /// The verification method whose key is the key `key_id`, with the public key `public_key`, if any.
-    async fn verification_method(
-        &self,
-        key_id: &str,
-        public_key: &identity_kit::jose::Jwk,
-    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
+/// Why a provider refuses a key it could otherwise create or adopt. Providers tell this before anything is created.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum KeyRefusal {
+    /// The provider can't name a key by this label. The message says why.
+    #[error("{0}")]
+    InvalidLabel(String),
+    /// The provider signs with this algorithm, but not in a way credentials can rely on. The message says why.
+    #[error("{0}")]
+    AlgorithmRefused(String),
 }
 
 /// A key that exists in a key provider, as reported by the provider.
@@ -83,62 +69,28 @@ pub trait KeyProviderAdapter: KeyStore {
     /// sign with.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError>;
 
-    /// Checks, before anything is created, that the provider can give a key `label`.
+    /// Refuses a key the provider would create or hold, but that the KMS must not use, such as a label the provider
+    /// can't name a key by. Nothing is asked of the provider, so this is checked before a key is created or adopted.
     ///
     /// # Errors
     ///
-    /// Fails when the provider can't use `label` to name a key.
-    fn check_label(&self, _label: &str) -> Result<(), InvalidLabel> {
-        Ok(())
-    }
+    /// The refusal, when the provider refuses the key.
+    fn check_spec(&self, spec: &KeySpec) -> Result<(), KeyRefusal>;
 
-    /// Checks, before anything is created or adopted, that keys of this provider may sign with `algorithm`.
+    /// Creates a key as `spec` describes, and returns the id that names it for good, unlike a label that can later
+    /// name another key. The key is created, and named by its label, even when the returned future is dropped.
     ///
     /// # Errors
     ///
-    /// Fails when the provider can sign with `algorithm`, but not in a way credentials can rely on.
-    fn check_algorithm(&self, _algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
-        Ok(())
-    }
+    /// As [`KeyStore::generate`].
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError>;
 
-    /// Generates a key as [`KeyStore::generate`] does, but returns an id that names this key for good, also where
-    /// the provider lets a label be moved to another key. A labelled key can still be deleted by its label.
+    /// The id that names for good the key `label` names now, or `None` when no usable key has that label.
     ///
     /// # Errors
     ///
-    /// Fails as [`KeyStore::generate`] does.
-    async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
-        self.generate(spec).await
-    }
-
-    /// Returns the id that names the key labelled `label` for good, as [`create`](Self::create) does, to record a key
-    /// that exists in the provider but that this instance didn't record.
-    ///
-    /// By default a label is the key's id.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`KeyStoreError::NotFound`] when no key has the label, or as [`KeyStore::exists`] does.
-    async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
-        let key = KeyId::new(label);
-        if self.exists(&key).await? {
-            Ok(key)
-        } else {
-            Err(KeyStoreError::NotFound(key))
-        }
-    }
-
-    /// Deletes the key [`create`](Self::create) or [`adopt`](Self::adopt) returned `created` for, and frees `label`,
-    /// which names it, only while the label still names that key.
-    ///
-    /// By default the key is deleted by `created`, for providers whose label goes with the key.
-    ///
-    /// # Errors
-    ///
-    /// Fails as [`KeyStore::delete`] does.
-    async fn discard(&self, created: &KeyId, _label: Option<&str>) -> Result<(), KeyStoreError> {
-        self.delete(created).await
-    }
+    /// Only when the provider can't answer.
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError>;
 }
 
 /// The adapter for each provider type this instance can use.
@@ -155,15 +107,33 @@ impl KeyProviderAdapter for InMemoryKeyStore {
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
         Ok(ProviderKeys::default())
     }
+
+    fn check_spec(&self, _spec: &KeySpec) -> Result<(), KeyRefusal> {
+        Ok(())
+    }
+
+    /// A key's id is its label, or its thumbprint without one, and never names another key.
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        self.generate(spec).await
+    }
+
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+        let key = KeyId::new(label);
+        if self.exists(&key).await? {
+            Ok(Some(key))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test_utils"))]
 pub mod test_utils {
-    use super::{ConnectionError, KeyProviderAdapter, ProviderKeys};
+    use super::{ConnectionError, KeyProviderAdapter, KeyRefusal, ProviderKeys};
     use async_trait::async_trait;
     use identity_kit::{
         jose::{Jwk, JwsAlgorithm},
-        keys::{KeyId, KeyStore, KeyStoreCapabilities, KeyStoreError},
+        keys::{KeyId, KeySpec, KeyStore, KeyStoreCapabilities, KeyStoreError},
     };
 
     /// A provider that can't be reached: every request fails with "connection refused".
@@ -193,7 +163,7 @@ pub mod test_utils {
             Err(KeyStoreError::backend(refused()))
         }
 
-        async fn generate(&self, _spec: identity_kit::keys::KeySpec) -> Result<KeyId, KeyStoreError> {
+        async fn generate(&self, _spec: KeySpec) -> Result<KeyId, KeyStoreError> {
             Err(KeyStoreError::backend(refused()))
         }
     }
@@ -206,6 +176,18 @@ pub mod test_utils {
 
         async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
             Err(refused())
+        }
+
+        fn check_spec(&self, _spec: &KeySpec) -> Result<(), KeyRefusal> {
+            Ok(())
+        }
+
+        async fn create_key(&self, _spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+            Err(KeyStoreError::backend(refused()))
+        }
+
+        async fn find_key(&self, _label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+            Err(KeyStoreError::backend(refused()))
         }
     }
 }

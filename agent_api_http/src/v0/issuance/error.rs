@@ -67,7 +67,7 @@ impl IntoApiErrorExt for CredentialError {
             // `/openid4vci/credential` endpoint
             InvalidCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            KeyIdError | SigningError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -361,7 +361,7 @@ impl IntoPublicError for CredentialError {
             InvalidCredentialStatus => PublicError::InternalServerError,
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
-            KeyIdError => PublicError::InternalServerError,
+            KeyIdError | SigningError(_) => PublicError::InternalServerError,
         }
     }
 }
@@ -559,6 +559,11 @@ pub mod tests {
                 None,
             ),
             (CredentialError::KeyIdError, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                CredentialError::SigningError("error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
         ]);
     }
 
@@ -720,6 +725,7 @@ pub mod tests {
                 CredentialError::BuildCredentialError("error".to_string()),
                 CredentialError::InvalidIssuerDidError,
                 CredentialError::KeyIdError,
+                CredentialError::SigningError("error".to_string()),
             ]
             .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None))
             .into(),

@@ -8,7 +8,7 @@ pub mod well_known;
 pub mod error;
 pub mod openapi;
 
-use agent_identity::state::IdentityState;
+use agent_identity::{document::key_source::KeySource, state::IdentityState};
 use axum::{
     routing::{get, post},
     Router,
@@ -70,20 +70,23 @@ pub fn router(identity_state: Arc<IdentityState>) -> Router {
         .with_state(identity_state)
 }
 
-/// The identity endpoints that only the Key Management System's keys make useful, mounted only when the Key Management
-/// System is enabled.
-pub fn kms_router(identity_state: Arc<IdentityState>) -> Router {
-    Router::new()
-        .nest(
-            API_VERSION,
-            Router::new()
-                .route("/add-key-to-document", post(post_add_key_to_document))
-                .route("/deselect-signing-key", post(post_deselect_signing_key))
-                .route("/get-signing-keys", get(get_signing_keys_endpoint))
-                .route("/remove-key-from-document", post(post_remove_key_from_document))
-                .route("/select-signing-key", post(post_select_signing_key)),
-        )
-        .with_state(identity_state)
+/// The routes that change and list the keys of the DID documents, adding keys from `key_source`. Only mounted with the
+/// Key Management System, since without its keys there is nothing to add or select.
+pub fn document_keys_router((identity_state, key_source): (Arc<IdentityState>, Arc<dyn KeySource>)) -> Router {
+    Router::new().nest(
+        API_VERSION,
+        Router::new()
+            .route("/add-key-to-document", post(post_add_key_to_document))
+            .with_state((identity_state.clone(), key_source))
+            .merge(
+                Router::new()
+                    .route("/remove-key-from-document", post(post_remove_key_from_document))
+                    .route("/select-signing-key", post(post_select_signing_key))
+                    .route("/deselect-signing-key", post(post_deselect_signing_key))
+                    .route("/get-signing-keys", get(get_signing_keys_endpoint))
+                    .with_state(identity_state),
+            ),
+    )
 }
 
 pub fn well_known_router(identity_state: Arc<IdentityState>) -> Router {
