@@ -107,13 +107,14 @@ pub(crate) async fn credential(
         };
 
     let proofs = credential_request.proofs.clone();
+    let is_public_offer = is_public_offer(&state, &offer_id).await?;
 
     let command = OfferCommand::VerifyCredentialRequest {
         offer_id: offer_id.clone(),
         credential_issuer_metadata,
         authorization_server_metadata,
         credential_request,
-        is_public_offer: is_public_offer(&state, &offer_id).await?,
+        is_public_offer,
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
@@ -189,10 +190,11 @@ pub(crate) async fn credential(
             .await?
             .ok_or(PublicError::InternalServerError)?;
 
+        // The credentials of a Public Offer are shared by all its holders: each one gets them signed for itself.
         let command = CredentialCommand::SignCredential {
             credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
-            overwrite: false,
+            overwrite: is_public_offer,
             proofs: proofs.clone(),
             status_list_id: status_list_id.clone(),
             index: status_list
@@ -695,16 +697,22 @@ pub mod tests {
         };
 
         let holder = holder_did("did:key").await;
+        let other_holder = holder_did("did:jwk").await;
+        let subject =
+            |body: &Value| get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap()["sub"].clone();
 
         // The first holder redeems the offer.
-        let (status, _) = request_credential("did:key", Some(holder.clone())).await;
+        let (status, body) = request_credential("did:key", Some(holder.clone())).await;
         assert_eq!(status, StatusCode::OK);
+        assert_eq!(subject(&body), json!(holder));
 
-        // Another holder (the `did:jwk` key), also when its proof claims the first holder's DID as `iss`.
+        // Another holder (the `did:jwk` key), also when its proof claims the first holder's DID as `iss`. A Public
+        // Offer issues to it a credential of its own.
         for iss in [None, Some(holder.clone())] {
             let (status, body) = request_credential("did:jwk", iss).await;
             if is_public_offer {
                 assert_eq!(status, StatusCode::OK);
+                assert_eq!(subject(&body), json!(other_holder));
             } else {
                 assert_eq!(status, StatusCode::BAD_REQUEST);
                 assert_eq!(body["error"], "credential_request_denied");
@@ -712,7 +720,8 @@ pub mod tests {
         }
 
         // The first holder again, also without `iss`.
-        let (status, _) = request_credential("did:key", None).await;
+        let (status, body) = request_credential("did:key", None).await;
         assert_eq!(status, StatusCode::OK);
+        assert_eq!(subject(&body), json!(holder));
     }
 }
