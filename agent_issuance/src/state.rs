@@ -11,6 +11,7 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::application::signing_at_creation::{SignOnRedemption, SigningAtCreationPolicy};
 use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
@@ -82,6 +83,8 @@ impl QueryOperation for AllPublicOffersView {
 #[derive(Clone)]
 pub struct IssuanceState {
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
+    /// Which templates' Credentials are signed when they are created. None by default.
+    pub signing_at_creation: Arc<dyn SigningAtCreationPolicy>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
@@ -414,6 +417,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
 
     IssuanceState {
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        signing_at_creation: Arc::new(SignOnRedemption),
         command: CommandHandlers {
             credential: credential_command_handler,
             reissuance: reissuance_command_handler,

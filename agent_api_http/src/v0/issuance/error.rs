@@ -3,6 +3,7 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::application::credential_offer::PrepareOfferError;
+use agent_issuance::application::signing_at_creation::SigningAtCreationError;
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError,
     application::template_issuance::TemplateIssuanceError,
@@ -193,6 +194,7 @@ impl IntoApiErrorExt for ReissuanceServiceError {
             ReissuanceServiceError::Offer(error) => error.into_api_error(),
             ReissuanceServiceError::Reissuance(error) => error.into_api_error(),
             ReissuanceServiceError::Template(error) => error.into_api_error(),
+            ReissuanceServiceError::SigningAtCreation(error) => error.into_api_error(),
             ReissuanceServiceError::OriginalCredentialNotIssued => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Original Credential Not Issued")
                 .type_url(type_url("issuance#original-credential-not-issued"))
@@ -203,6 +205,15 @@ impl IntoApiErrorExt for ReissuanceServiceError {
                 .type_url(type_url("issuance#credential-configuration-mismatch"))
                 .message("The requested configuration must match the original credential type.")
                 .finish(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for SigningAtCreationError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            Self::IndexAllocation(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            Self::Credential(error) => error.into_api_error(),
         }
     }
 }

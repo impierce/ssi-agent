@@ -19,25 +19,21 @@ use agent_issuance::{
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
-    status_list::command::StatusListCommand,
+    status_list::application::index_allocation::{add_index, status_list_with_room},
 };
-use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
+use agent_shared::config::config;
 use axum::{
     extract::{rejection::JsonRejection, Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use identity_kit::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
-
-#[cfg(feature = "test_utils")]
-use agent_shared::config::TEST_STATUS_LIST_ID;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
@@ -146,61 +142,50 @@ pub(crate) async fn credential(
         }
     };
 
-    let all_status_lists = public_query_handler("all_status_lists", &state.query.all_status_lists)
-        .await?
-        .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+    // A Credential signed at creation already has its status-list index and is handed out as it is.
+    let mut unsigned_credential_ids = vec![];
+    for credential_id in &credential_ids {
+        match public_query_handler(credential_id, &state.query.credential).await? {
+            Some(CredentialView { signed: Some(_), .. }) => {}
+            Some(_) => unsigned_credential_ids.push(credential_id.clone()),
+            None => return Err(internal_server_error()),
+        }
+    }
 
     // Find a status list which is not full
     // TODO: this contains quite some domain logic and should actually be moved there.
-    let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
-    let available_status_list = all_status_lists
-        .into_iter()
-        .find(|status_list| status_list.used_indices.len() + credential_ids.len() <= (max_amount_indices * 7) / 10); // The 7/10 factor ensures status lists are at most 70% full, the remainder will always be preserverd for random values protecting Issuer and Holder privacy.
-
-    let status_list_id = match available_status_list {
-        Some(status_list) => status_list.id.clone(),
-        None => {
-            #[cfg(not(feature = "test_utils"))]
-            let id = uuid::Uuid::new_v4().to_string();
-
-            #[cfg(feature = "test_utils")]
-            let id = TEST_STATUS_LIST_ID.to_string();
-
-            let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            public_command_handler(&id, &state.command.status_list, command).await?;
-
-            id
-        }
+    let status_list_id = if unsigned_credential_ids.is_empty() {
+        None
+    } else {
+        Some(
+            status_list_with_room(&state, unsigned_credential_ids.len())
+                .await
+                .map_err(|_| PublicError::InternalServerError)?,
+        )
     };
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
-        let command = StatusListCommand::AddIndex {
-            status: StatusType::VALID,
-        };
+        if let Some(status_list_id) = status_list_id
+            .as_ref()
+            .filter(|_| unsigned_credential_ids.contains(&credential_id))
+        {
+            let index = add_index(&state, status_list_id)
+                .await
+                .map_err(|_| PublicError::InternalServerError)?;
 
-        public_command_handler(&status_list_id, &state.command.status_list, command).await?;
+            let command = CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: subject_id.clone(),
+                overwrite: false,
+                proofs: proofs.clone(),
+                status_list_id: status_list_id.clone(),
+                index,
+            };
 
-        let status_list = public_query_handler(&status_list_id, &state.query.status_list)
-            .await?
-            .ok_or(PublicError::InternalServerError)?;
-
-        let command = CredentialCommand::SignCredential {
-            credential_id: credential_id.clone(),
-            subject_id: subject_id.clone(),
-            overwrite: false,
-            proofs: proofs.clone(),
-            status_list_id: status_list_id.clone(),
-            index: status_list
-                .used_indices
-                .last()
-                .cloned()
-                .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
-        };
-
-        public_command_handler(&credential_id, &state.command.credential, command).await?;
+            public_command_handler(&credential_id, &state.command.credential, command).await?;
+        }
 
         let signed_credential = match public_query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
@@ -247,13 +232,14 @@ pub mod tests {
 
     use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::application::signing_at_creation::SigningAtCreationPolicy;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::issuance_state;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::{set_config, Events};
+    use agent_shared::config::{set_config, Events, TEST_STATUS_LIST_ID};
     use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
@@ -438,14 +424,24 @@ pub mod tests {
         (access_token, notification_id.to_string())
     }
 
+    struct SignsEveryTemplateAtCreation;
+
+    #[async_trait::async_trait]
+    impl SigningAtCreationPolicy for SignsEveryTemplateAtCreation {
+        async fn signs_at_creation(&self, _template_id: &str) -> bool {
+            true
+        }
+    }
+
     #[rstest]
-    #[case::pre_authorized_code(true, false, false, false, 0)]
-    #[case::authorization_code(false, false, false, false, 0)]
-    #[case::with_external_server(true, false, true, false, 0)]
-    #[case::with_anonymous_access(true, true, false, false, 0)]
-    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0)]
+    #[case::pre_authorized_code(true, false, false, false, 0, false)]
+    #[case::authorization_code(false, false, false, false, 0, false)]
+    #[case::with_external_server(true, false, true, false, 0, false)]
+    #[case::with_anonymous_access(true, true, false, false, 0, false)]
+    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0, false)]
+    #[case::signed_at_creation(true, false, false, false, 0, true)]
     #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100, false)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
@@ -455,6 +451,7 @@ pub mod tests {
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,
         #[case] delay: u64,
+        #[case] signs_at_creation: bool,
     ) {
         let (external_server, bus_opt) = if with_external_server {
             let external_server = MockServer::start().await;
@@ -480,7 +477,11 @@ pub mod tests {
         };
 
         let event_bus = bus_opt.unwrap_or_default();
-        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
+        let mut issuance_state = issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await;
+        if signs_at_creation {
+            issuance_state.signing_at_creation = Arc::new(SignsEveryTemplateAtCreation);
+        }
+        let issuance_state = Arc::new(issuance_state);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -534,7 +535,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
         let jwt = if with_anonymous_access {
@@ -572,10 +573,21 @@ pub mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
 
-        if with_anonymous_access {
+        // A credential signed at creation carries no holder binding, like one issued to an anonymous holder.
+        if with_anonymous_access || signs_at_creation {
             assert_eq!(body["credentials"][0]["credential"], json!(ANONYMOUS_CREDENTIAL_JWT));
         } else {
             assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        }
+
+        // The credential keeps the status-list index it got when it was signed.
+        if !is_self_signed {
+            let status_list =
+                agent_shared::handlers::public_query_handler(TEST_STATUS_LIST_ID, &issuance_state.query.status_list)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(status_list.used_indices.len(), 1);
         }
 
         if let Some(external_server) = external_server {
