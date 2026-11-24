@@ -213,7 +213,9 @@ impl IntoApiErrorExt for ReissuanceServiceError {
 impl IntoApiErrorExt for SigningAtCreationError {
     fn into_api_error(self) -> ApiError {
         match self {
-            Self::IndexAllocation(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            Self::IndexAllocation(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .source(self)
+                .finish(),
             Self::Credential(error) => error.into_api_error(),
         }
     }
