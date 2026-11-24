@@ -75,7 +75,8 @@ Terms with a fixed meaning in this codebase. Pick these words; avoid the alterna
 
 **Credential Offer**:
 The unit a wallet redeems: one holder, one pre-authorized code, one issued credential. Offers are
-not shared between holders.
+not shared between holders: an offer belongs to the holder of its first verified Credential Request,
+identified by the DID of the key its proof is signed with.
 _Avoid_: invitation, link
 
 **Public Offer**:
@@ -104,8 +105,9 @@ _Avoid_: dry run, preview, validation-only mode
 
 **Signing at Creation**:
 Signing a credential, without holder binding, and giving it its status-list index when it is created,
-so it is Issued without a wallet redeeming its offer. `IssuanceState::signing_at_creation` decides per
-template; by default no template's credentials are (`agent_issuance/src/application/signing_at_creation.rs`).
+so it is Issued without a wallet redeeming its offer. A wallet that redeems the offer gets it signed again,
+bound to its key, on the same status-list entry. `IssuanceState::signing_at_creation` decides per template;
+by default no template's credentials are (`agent_issuance/src/application/signing_at_creation.rs`).
 _Avoid_: pre-signing, eager issuance
 
 **Credential Offer String**:

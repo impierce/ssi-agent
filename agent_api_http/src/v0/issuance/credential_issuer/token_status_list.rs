@@ -81,7 +81,7 @@ pub mod tests {
     use oid4vc_core::authentication::verify::Verify;
     use shared_kernel::authorization::Caller;
 
-    use crate::tests::TEMPLATE_ID;
+    use crate::tests::{holder_did, key_proof, TEMPLATE_ID};
     use crate::v0::{
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
@@ -257,7 +257,7 @@ pub mod tests {
         let mut authorization_app = authorization::router((authorization_state, issuance_state.to_owned()));
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
-        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
+        let jwt = key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await;
 
         let response = app
             .clone()
