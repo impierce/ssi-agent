@@ -29,6 +29,7 @@ use axum::{
 };
 use axum_auth::AuthBearer;
 use identity_kit::status_list::StatusType;
+use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
@@ -117,12 +118,20 @@ pub(crate) async fn credential(
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
     public_command_handler(&offer_id, &state.command.offer, command).await?;
 
+    // The holder of this request: the `iss` of the proof just verified, as the offer records it. Read from the request
+    // itself, since the `subject_id` of the offer is overwritten by every other request for it that is verified.
+    let subject_id = proofs
+        .as_ref()
+        .and_then(|proofs| proofs.jwt.first())
+        .and_then(|proof| get_unverified_jwt_claims(&serde_json::json!(proof)).ok())
+        .and_then(|claims| claims.get("iss")?.as_str().map(ToString::to_string));
+
     let timeout = config().external_server_response_timeout_ms;
     let start_time = Instant::now();
 
     // TODO: replace this polling solution with a call to the `TxChannelRegistry` as described here: https://github.com/impierce/ssi-agent/issues/75
-    // Use the `offer_id` to get the `credential_ids` and `subject_id` from the `OfferView`.
-    let (credential_ids, subject_id) = loop {
+    // Use the `offer_id` to get the `credential_ids` from the `OfferView`.
+    let credential_ids = loop {
         match public_query_handler(&offer_id, &state.query.offer).await? {
             // When the Offer does not include the credential id's yet, wait for the external server to provide them.
             Some(OfferView { credential_ids, .. }) if credential_ids.is_empty() => {
@@ -133,12 +142,8 @@ pub(crate) async fn credential(
                     return Err(internal_server_error());
                 }
             }
-            Some(OfferView {
-                credential_ids,
-                subject_id,
-                ..
-            }) => {
-                break (credential_ids, subject_id);
+            Some(OfferView { credential_ids, .. }) => {
+                break credential_ids;
             }
             _ => {
                 return Err(internal_server_error());
