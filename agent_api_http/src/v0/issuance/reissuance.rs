@@ -170,6 +170,7 @@ pub(crate) async fn credential_reissuance(
 mod tests {
     use super::*;
     use crate::{
+        tests::{holder_did, key_proof},
         v0::{
             authorization,
             authorization::authorization_server::token::tests::token,
@@ -200,8 +201,6 @@ mod tests {
     use serde_json::{json, Value};
     use serial_test::serial;
     use tower::ServiceExt;
-
-    const CREDENTIAL_PROOF_JWT: &str = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
 
     async fn test_state() -> Arc<IssuanceState> {
         let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
@@ -446,6 +445,7 @@ mod tests {
         .await
         .unwrap();
 
+        let proof = key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await;
         let app = router((state.clone(), test_library_state().await));
         let response = app
             .oneshot(
@@ -458,7 +458,7 @@ mod tests {
                         serde_json::to_vec(&json!({
                             "credential_configuration_id": "SD-JWT VC",
                             "proofs": {
-                                "jwt": [CREDENTIAL_PROOF_JWT]
+                                "jwt": [proof]
                             }
                         }))
                         .unwrap(),
