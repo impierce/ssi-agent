@@ -488,7 +488,65 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enforces_the_template_state_schema_and_expiration() {
+    async fn enforces_the_template_state() {
+        let state = test_state().await;
+        issue_original(&state, DC_SD_JWT, json!({"first_name": "Ferris"})).await;
+        let library_state = test_library_state().await;
+        update_template(
+            &library_state,
+            TemplateCommand::UpdateStatus {
+                template_id: DC_SD_JWT.to_owned(),
+                status: TemplateStatus::Archived,
+            },
+        )
+        .await;
+
+        let error = reissue(
+            &state,
+            &library_state,
+            replacement(DC_SD_JWT, json!({"first_name": "Ferris"})),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ReissuanceError::Template(TemplateIssuanceError::TemplateNotPublished)
+        ));
+        assert_eq!(credentials_and_offers(&state).await, (1, 0));
+    }
+
+    #[tokio::test]
+    async fn enforces_the_template_schema() {
+        let state = test_state().await;
+        issue_original(&state, DC_SD_JWT, json!({"first_name": "Ferris"})).await;
+        let library_state = test_library_state().await;
+        update_template(
+            &library_state,
+            TemplateCommand::UpdateSchema {
+                template_id: DC_SD_JWT.to_owned(),
+                schema: json!({"type": "object", "required": ["dob"], "properties": {"dob": {"type": "string"}}}),
+            },
+        )
+        .await;
+
+        let error = reissue(
+            &state,
+            &library_state,
+            replacement(DC_SD_JWT, json!({"first_name": "Ferris"})),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ReissuanceError::Template(TemplateIssuanceError::SchemaValidation { .. })
+        ));
+        assert_eq!(credentials_and_offers(&state).await, (1, 0));
+    }
+
+    #[tokio::test]
+    async fn enforces_the_template_expiration() {
         let state = test_state().await;
         issue_original(&state, DC_SD_JWT, json!({"first_name": "Ferris"})).await;
         let library_state = test_library_state().await;
@@ -502,7 +560,6 @@ mod tests {
         .await;
         let mut too_late = replacement(DC_SD_JWT, json!({"first_name": "Ferris"}));
         too_late.expires_at = Some(CredentialExpiry::Fixed("2099-01-01T00:00:00Z".parse().unwrap()));
-
         let error = reissue(&state, &library_state, too_late).await.unwrap_err();
 
         assert!(matches!(
