@@ -3,7 +3,7 @@
 //!
 //! Traces and metrics are exported via OTLP/gRPC, logs via OTLP/HTTP, to cover both supported protocols.
 
-use agent_application::{router, state, telemetry::init_telemetry};
+use agent_application::{router, state, telemetry::init_telemetry, IssuancePorts};
 use agent_secret_manager::subject::Subject;
 use agent_shared::config::LogFormat;
 use axum::{body::Body, extract::Request, http::StatusCode};
@@ -84,7 +84,11 @@ async fn traces_logs_and_metrics_are_exported_via_otlp() {
 
     let guard = init_telemetry(&LogFormat::Json);
 
-    let app = router(state(Arc::new(Subject::test_subject().await)).await.unwrap());
+    let app = router(
+        state(Arc::new(Subject::test_subject().await), IssuancePorts::default())
+            .await
+            .unwrap(),
+    );
     for uri in ["/v0/profile", "/healthz"] {
         let response = app
             .clone()

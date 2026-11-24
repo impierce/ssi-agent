@@ -2,16 +2,11 @@ use crate::{
     error::{type_url, IntoApiErrorExt},
     DOCUMENTATION_URL,
 };
-use agent_issuance::application::credential_offer::PrepareOfferError;
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError,
-    application::template_issuance::TemplateIssuanceError,
-    credential::error::CredentialError,
-    offer::error::OfferError,
-    public_offer::error::PublicOfferError,
-    reissuance::{error::ReissuanceError, service::ReissuanceServiceError},
-    server_config::error::ServerConfigError,
-    status_list::error::StatusListError,
+    application::template_issuance::TemplateIssuanceError, credential::error::CredentialError,
+    offer::error::OfferError, public_offer::error::PublicOfferError, reissuance::error::ReissuanceError,
+    server_config::error::ServerConfigError, status_list::error::StatusListError,
 };
 use axum::Json;
 use http_api_problem::ApiError;
@@ -160,80 +155,61 @@ impl IntoApiErrorExt for StatusListError {
     }
 }
 
-impl IntoApiErrorExt for ReissuanceServiceError {
+impl IntoApiErrorExt for ReissuanceError {
     fn into_api_error(self) -> ApiError {
         match self {
-            ReissuanceServiceError::OriginalCredentialNotFound(credential_id) => {
-                ApiError::builder(StatusCode::NOT_FOUND)
-                    .title("Original Credential Not Found")
-                    .type_url(type_url("issuance#original-credential-not-found"))
-                    .message(format!("Original credential `{credential_id}` was not found."))
-                    .finish()
-            }
-            ReissuanceServiceError::CredentialConfigurationNotFound(configuration_id) => {
+            ReissuanceError::OriginalCredentialNotFound(credential_id) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Original Credential Not Found")
+                .type_url(type_url("issuance#original-credential-not-found"))
+                .message(format!("Original credential `{credential_id}` was not found."))
+                .finish(),
+            ReissuanceError::CredentialConfigurationNotFound(configuration_id) => {
                 ApiError::builder(StatusCode::NOT_FOUND)
                     .title("Credential Configuration Not Found")
                     .type_url(type_url("issuance#no-credential-configuration-found"))
                     .message(format!("Credential configuration `{configuration_id}` was not found."))
                     .finish()
             }
-            ReissuanceServiceError::InvalidCredentialPayload => ApiError::builder(StatusCode::BAD_REQUEST)
+            ReissuanceError::InvalidCredentialPayload => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Invalid Credential Type")
                 .type_url(type_url("issuance#invalid-credential-type"))
                 .message("Credential payload must be a JSON object.")
                 .finish(),
-            ReissuanceServiceError::UnsupportedCredentialFormat(format) => ApiError::builder(StatusCode::BAD_REQUEST)
+            ReissuanceError::UnsupportedCredentialFormat(format) => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Unsupported Credential Format")
                 .type_url(type_url("issuance#unsupported-credential-format"))
                 .message(format!("Credential format is not supported for reissuance: {format}"))
                 .finish(),
-            ReissuanceServiceError::Policy(error) => ApiError::builder(StatusCode::FORBIDDEN)
+            ReissuanceError::NotAllowed(error) => ApiError::builder(StatusCode::FORBIDDEN)
                 .title("Reissuance Not Allowed")
                 .type_url(type_url("issuance#reissuance-not-allowed"))
                 .message(error.to_string())
                 .finish(),
-            ReissuanceServiceError::Query(error) => error.into_api_error(),
-            ReissuanceServiceError::Credential(error) => error.into_api_error(),
-            ReissuanceServiceError::Offer(error) => error.into_api_error(),
-            ReissuanceServiceError::Reissuance(error) => error.into_api_error(),
-            ReissuanceServiceError::Template(error) => error.into_api_error(),
-            ReissuanceServiceError::OriginalCredentialNotIssued => ApiError::builder(StatusCode::BAD_REQUEST)
+            ReissuanceError::OriginalCredentialNotIssued => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Original Credential Not Issued")
                 .type_url(type_url("issuance#original-credential-not-issued"))
                 .message("Only issued credentials can be reissued.")
                 .finish(),
-            ReissuanceServiceError::CredentialConfigurationMismatch => ApiError::builder(StatusCode::BAD_REQUEST)
+            ReissuanceError::CredentialConfigurationMismatch => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Credential Configuration Mismatch")
                 .type_url(type_url("issuance#credential-configuration-mismatch"))
                 .message("The requested configuration must match the original credential type.")
                 .finish(),
-        }
-    }
-}
-
-impl IntoApiErrorExt for PrepareOfferError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            Self::Query(error) => error.into_api_error(),
-            Self::Command(error) => error.into_api_error(),
-        }
-    }
-}
-
-impl IntoApiErrorExt for ReissuanceError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            Self::AlreadyExists => ApiError::builder(StatusCode::CONFLICT)
+            ReissuanceError::AlreadyExists => ApiError::builder(StatusCode::CONFLICT)
                 .title("Reissuance Already Exists")
                 .type_url(type_url("issuance#reissuance-already-exists"))
                 .message("The reissuance relation already exists.")
                 .finish(),
-            Self::BuildReissuanceError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+            ReissuanceError::Failed(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Credential Reissuance Failed")
                 .type_url(type_url("issuance#credential-reissuance-failed"))
                 .source(self)
                 .message("Unable to create the reissuance relation.")
                 .finish(),
+            ReissuanceError::Template(error) => error.into_api_error(),
+            ReissuanceError::ReplacementRejected(error) => error.into_api_error(),
+            ReissuanceError::Authorization(error) => error.into_api_error(),
+            ReissuanceError::Persistence(error) => error.into_api_error(),
         }
     }
 }

@@ -1,49 +1,29 @@
+use crate::{credential::aggregate::Credential, reissuance::service::Replacement};
 use async_trait::async_trait;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReissuancePolicyRequest {
-    pub original_credential_id: String,
-    pub credential_configuration_id: String,
-    pub triggered_by: Option<String>,
-    pub trigger_type: Option<String>,
+/// Decides whether an original credential may be replaced. Issuance asks it after every other check passed and
+/// before anything is written. Set once where the application is composed, in
+/// [`IssuancePorts`](crate::ports::IssuancePorts); the default is [`AllowEveryReissuance`].
+#[async_trait]
+pub trait ReissuancePolicy: Send + Sync {
+    /// `Ok(())` lets the reissuance proceed; an error refuses it, and nothing is written.
+    async fn check(&self, original: &Credential, replacement: &Replacement) -> Result<(), ReissuancePolicyError>;
 }
 
+/// Why a [`ReissuancePolicy`] refused a reissuance.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ReissuancePolicyError {
     #[error("Reissuance is not allowed")]
     NotAllowed,
 }
 
-#[async_trait]
-pub trait ReissuancePolicy: Send + Sync {
-    async fn authorize(&self, request: &ReissuancePolicyRequest) -> Result<(), ReissuancePolicyError>;
-}
-
+/// The default [`ReissuancePolicy`]: every reissuance that passes issuance's own checks is allowed.
 #[derive(Debug, Default)]
-pub struct NoOpReissuancePolicy;
+pub struct AllowEveryReissuance;
 
 #[async_trait]
-impl ReissuancePolicy for NoOpReissuancePolicy {
-    async fn authorize(&self, _request: &ReissuancePolicyRequest) -> Result<(), ReissuancePolicyError> {
+impl ReissuancePolicy for AllowEveryReissuance {
+    async fn check(&self, _original: &Credential, _replacement: &Replacement) -> Result<(), ReissuancePolicyError> {
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn noop_reissuance_policy_allows_requests() {
-        let policy = NoOpReissuancePolicy;
-
-        let request = ReissuancePolicyRequest {
-            original_credential_id: "original-credential-id".to_string(),
-            credential_configuration_id: "credential-configuration-id".to_string(),
-            triggered_by: Some("unitrust".to_string()),
-            trigger_type: Some("manual".to_string()),
-        };
-
-        assert_eq!(policy.authorize(&request).await, Ok(()));
     }
 }
