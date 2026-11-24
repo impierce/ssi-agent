@@ -279,7 +279,7 @@ impl Aggregate for Credential {
                     .ok_or(InvalidIssuerDidError)?;
 
                 // Status claim as per the IETF OAuth Token Status List specification.
-                let status_list_url = get_status_list_url(status_list_id)?;
+                let status_list_url = get_status_list_url(status_list_id.clone())?;
 
                 let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
                     status_list_url.to_string(),
@@ -441,10 +441,11 @@ impl Aggregate for Credential {
                     }
                 };
 
-                // Signed again on the same status-list entry, the credential keeps the status it has there.
+                // Signed again on the same status-list entry, the credential keeps the status it has there. The entry is
+                // matched by list id, since the URL follows the configured base URL.
                 let status = if self.signed.is_some()
                     && self.credential_status.index == index
-                    && self.credential_status.status_list_url == status_list_url.as_str()
+                    && status_list_id_of(&self.credential_status.status_list_url).as_ref() == Some(&status_list_id)
                 {
                     self.credential_status.status
                 } else {
@@ -1189,12 +1190,17 @@ pub mod credential_tests {
     ) {
         use agent_shared::config::TEST_STATUS_LIST_ID;
 
-        let revoked = CredentialStatus {
+        // Signed at creation under an earlier base URL of the status lists, then revoked.
+        let revoked_at_old_url = CredentialStatus {
             index: TESTINDEX,
+            status_list_url: format!("https://old.example.org/status-lists/{TEST_STATUS_LIST_ID}"),
+            status: StatusType::INVALID,
+        };
+        let revoked = CredentialStatus {
             status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
                 .unwrap()
                 .to_string(),
-            status: StatusType::INVALID,
+            ..revoked_at_old_url.clone()
         };
 
         CredentialTestFramework::with(IssuanceServices::default().await)
@@ -1215,13 +1221,13 @@ pub mod credential_tests {
                     signed_credential: json!("signed at creation"),
                     credential_status: CredentialStatus {
                         status: StatusType::VALID,
-                        ..revoked.clone()
+                        ..revoked_at_old_url.clone()
                     },
                     status: Status::Issued,
                 },
                 CredentialEvent::CredentialStatusUpdated {
                     credential_id: credential_id.clone(),
-                    credential_status: revoked.clone(),
+                    credential_status: revoked_at_old_url,
                 },
             ])
             .when_async(CredentialCommand::SignCredential {
