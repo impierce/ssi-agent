@@ -39,7 +39,7 @@ pub fn router(kms_state: Arc<KmsState>) -> Router {
 mod tests {
     use crate::{app_with_base_path, ApiState};
     use agent_kms::adapter::InMemoryKeyStore;
-    use agent_kms::adapter::{test_utils::UnreachableKeyProvider, FixedAdapter, KeyProviderFactories};
+    use agent_kms::adapter::{KeyProviderAdapter, KeyProviderAdapters, UnreachableKeyProvider};
     use agent_kms::key_provider::aggregate::KeyProviderType;
     use agent_kms::kms_state;
     use agent_store::in_memory::InMemory;
@@ -53,18 +53,25 @@ mod tests {
     use tower::ServiceExt;
 
     async fn app_with_kms() -> Router {
-        let factories: KeyProviderFactories = [
+        let adapters: KeyProviderAdapters = [
             (
                 KeyProviderType::InMemory,
-                Arc::new(FixedAdapter(Arc::new(InMemoryKeyStore::new()))) as _,
+                Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
             ),
             (
                 KeyProviderType::AwsKmsAmbient,
-                Arc::new(FixedAdapter(Arc::new(UnreachableKeyProvider))) as _,
+                Arc::new(UnreachableKeyProvider("connection refused".to_string())),
             ),
         ]
         .into();
-        let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, factories).await;
+        let kms_state = kms_state(
+            &InMemory,
+            &EventBusHandle::default(),
+            true,
+            adapters,
+            Arc::new(agent_kms::key::usage::Unused),
+        )
+        .await;
 
         app_with_base_path(
             ApiState {
@@ -89,27 +96,9 @@ mod tests {
         let body = if bytes.is_empty() {
             Value::Null
         } else {
-            // Axum answers a body that does not match the schema in plain text.
-            serde_json::from_slice(&bytes).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into()))
+            serde_json::from_slice(&bytes).unwrap()
         };
         (status, body)
-    }
-
-    fn stackit_settings() -> Value {
-        json!({
-            "projectId": "00000000-0000-0000-0000-000000000001",
-            "region": "eu01",
-            "keyRingId": "00000000-0000-0000-0000-000000000002",
-            "serviceAccountEmail": "unicore@sa.stackit.cloud"
-        })
-    }
-
-    fn stackit_provider() -> Value {
-        json!({ "providerType": "stackit_kms", "name": "Own keys", "settings": stackit_settings() })
-    }
-
-    async fn add_stackit(app: &Router) -> (StatusCode, Value) {
-        send(app, "POST", "/v0/add-key-provider", Some(stackit_provider())).await
     }
 
     async fn add(app: &Router, provider_type: &str) {
@@ -131,6 +120,8 @@ mod tests {
             ("POST", "/v0/test-key-provider-connection"),
             ("GET", "/v0/get-key-provider-keys/aws_kms_ambient"),
             ("POST", "/v0/create-key"),
+            ("POST", "/v0/adopt-key"),
+            ("POST", "/v0/delete-key"),
             ("GET", "/v0/get-all-keys"),
         ] {
             assert_eq!(send(&app, method, uri, None).await.0, StatusCode::NOT_FOUND, "{uri}");
@@ -165,6 +156,84 @@ mod tests {
             (
                 StatusCode::OK,
                 json!([{ "providerType": "in_memory", "name": "in_memory" }])
+            )
+        );
+    }
+
+    fn stackit_settings() -> Value {
+        json!({
+            "projectId": "4a1d2f6e-0f33-4c55-9b56-6f8e8a2b1c3d",
+            "region": "eu01",
+            "keyRingId": "9c0e7b52-5d2a-4f0e-8a51-3b6d1e2f4a7c",
+            "serviceAccountEmail": "unicore-kms@sa.stackit.cloud"
+        })
+    }
+
+    #[tokio::test]
+    async fn adding_a_provider_answers_with_its_settings() {
+        let app = app_with_kms().await;
+
+        let body = json!({ "providerType": "stackit_kms", "name": "Customer keys", "settings": stackit_settings() });
+        let response = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        assert_eq!(
+            response,
+            (
+                StatusCode::CREATED,
+                json!({ "providerType": "stackit_kms", "name": "Customer keys", "settings": stackit_settings() })
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn lists_a_provider_with_its_settings() {
+        let app = app_with_kms().await;
+        let body = json!({ "providerType": "stackit_kms", "name": "Customer keys", "settings": stackit_settings() });
+        send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        let response = send(&app, "GET", "/v0/get-all-key-providers", None).await;
+
+        assert_eq!(
+            response,
+            (
+                StatusCode::OK,
+                json!([{ "providerType": "stackit_kms", "name": "Customer keys", "settings": stackit_settings() }])
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn names_what_is_wrong_with_settings() {
+        let app = app_with_kms().await;
+        let mut settings = stackit_settings();
+        settings.as_object_mut().unwrap().remove("keyRingId");
+
+        let body = json!({ "providerType": "stackit_kms", "name": "Customer keys", "settings": settings });
+        let (status, problem) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(
+            problem["detail"]
+                .as_str()
+                .unwrap()
+                .contains("missing field `keyRingId`"),
+            "{problem}"
+        );
+    }
+
+    #[tokio::test]
+    async fn refuses_settings_for_a_provider_type_without_settings() {
+        let app = app_with_kms().await;
+
+        let body =
+            json!({ "providerType": "aws_kms_ambient", "name": "Production keys", "settings": stackit_settings() });
+        let (status, problem) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
+
+        assert_eq!(
+            (status, &problem["type"]),
+            (
+                StatusCode::BAD_REQUEST,
+                &json!(crate::error::type_url("kms#wrong-key-provider-settings"))
             )
         );
     }
@@ -210,24 +279,37 @@ mod tests {
         );
     }
 
-    async fn create_in_memory_key(app: &Router) -> (StatusCode, Value) {
-        add(app, "in_memory").await;
-        let body = json!({ "providerType": "in_memory", "algorithm": "EdDSA" });
-        send(app, "POST", "/v0/create-key", Some(body)).await
+    async fn create(app: &Router, label: &str) -> Value {
+        let body = json!({ "providerType": "in_memory", "algorithm": "ES256", "label": label });
+        let (status, key) = send(app, "POST", "/v0/create-key", Some(body)).await;
+        assert_eq!(status, StatusCode::CREATED);
+        key
     }
 
     #[tokio::test]
     async fn creating_a_key_answers_with_its_reference() {
         let app = app_with_kms().await;
+        add(&app, "in_memory").await;
 
-        let (status, body) = create_in_memory_key(&app).await;
+        let body = json!({ "providerType": "in_memory", "algorithm": "ES256", "label": "issuer" });
+        let (status, key) = send(&app, "POST", "/v0/create-key", Some(body)).await;
 
-        let fields: Vec<_> = body.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(
-            (status, fields),
+            (
+                status,
+                &key["providerType"],
+                &key["providerKeyId"],
+                &key["label"],
+                &key["algorithm"],
+                &key["publicKey"]["crv"]
+            ),
             (
                 StatusCode::CREATED,
-                vec!["id", "providerType", "providerKeyId", "algorithm", "publicKey"]
+                &json!("in_memory"),
+                &json!("issuer"),
+                &json!("issuer"),
+                &json!("ES256"),
+                &json!("P-256")
             )
         );
     }
@@ -244,11 +326,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lists_created_keys() {
+        let app = app_with_kms().await;
+        add(&app, "in_memory").await;
+        let key = create(&app, "issuer").await;
+
+        let response = send(&app, "GET", "/v0/get-all-keys", None).await;
+
+        assert_eq!(response, (StatusCode::OK, json!([key])));
+    }
+
+    #[tokio::test]
     async fn deleting_a_key_answers_without_content() {
         let app = app_with_kms().await;
-        let (_, created) = create_in_memory_key(&app).await;
+        add(&app, "in_memory").await;
+        let key = create(&app, "issuer").await;
 
-        let response = send(&app, "POST", "/v0/delete-key", Some(json!({ "id": created["id"] }))).await;
+        let response = send(&app, "POST", "/v0/delete-key", Some(json!({ "id": key["id"] }))).await;
 
         assert_eq!(response, (StatusCode::NO_CONTENT, Value::Null));
     }
@@ -258,63 +352,15 @@ mod tests {
         let app = app_with_kms().await;
         add(&app, "in_memory").await;
 
-        let body = json!({ "providerType": "in_memory", "label": "issuer" });
-        let (status, _) = send(&app, "POST", "/v0/adopt-key", Some(body)).await;
+        let body = json!({ "providerType": "in_memory", "label": "missing" });
+        let (status, problem) = send(&app, "POST", "/v0/adopt-key", Some(body)).await;
 
-        assert_eq!(status, StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn lists_created_keys() {
-        let app = app_with_kms().await;
-        let (_, created) = create_in_memory_key(&app).await;
-
-        let response = send(&app, "GET", "/v0/get-all-keys", None).await;
-
-        assert_eq!(response, (StatusCode::OK, json!([created])));
-    }
-
-    #[tokio::test]
-    async fn adding_a_provider_answers_with_its_settings() {
-        let app = app_with_kms().await;
-
-        let response = add_stackit(&app).await;
-
-        assert_eq!(response, (StatusCode::CREATED, stackit_provider()));
-    }
-
-    #[tokio::test]
-    async fn names_what_is_wrong_with_settings() {
-        let app = app_with_kms().await;
-        let mut settings = stackit_settings();
-        settings.as_object_mut().unwrap().remove("keyRingId");
-        let body = json!({ "providerType": "stackit_kms", "name": "Own keys", "settings": settings });
-
-        let (_, error) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
-
-        assert!(
-            error["detail"].as_str().unwrap().contains("missing field `keyRingId`"),
-            "{error}"
+        assert_eq!(
+            (status, &problem["type"]),
+            (
+                StatusCode::NOT_FOUND,
+                &json!(crate::error::type_url("kms#key-not-found"))
+            )
         );
-    }
-
-    #[tokio::test]
-    async fn refuses_settings_for_a_provider_type_without_settings() {
-        let app = app_with_kms().await;
-        let body = json!({ "providerType": "aws_kms_ambient", "name": "AWS", "settings": {} });
-
-        let (_, error) = send(&app, "POST", "/v0/add-key-provider", Some(body)).await;
-
-        assert_eq!(error["type"], crate::error::type_url("kms#wrong-key-provider-settings"));
-    }
-
-    #[tokio::test]
-    async fn lists_a_provider_with_its_settings() {
-        let app = app_with_kms().await;
-        add_stackit(&app).await;
-
-        let response = send(&app, "GET", "/v0/get-all-key-providers", None).await;
-
-        assert_eq!(response.1, json!([stackit_provider()]));
     }
 }

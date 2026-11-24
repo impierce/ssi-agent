@@ -1,10 +1,7 @@
-use crate::adapter::{
-    ConnectionError, InvalidLabel, KeyProviderAdapter, KeyProviderFactories, KeyUsage, ProviderKeys, RefusedAlgorithm,
-};
+use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
 use crate::key::{
-    aggregate::{Key, KeyReference},
-    command::{AdoptKey, CreateKey, KeyCommand},
-    error::KeyError,
+    aggregate::Key,
+    usage::KeyUsage,
     views::{AllKeysView, KeyView},
 };
 use crate::key_provider::{
@@ -22,33 +19,16 @@ use agent_shared::{
     },
 };
 use cqrs_es::persist::PersistenceError;
-use identity_kit::{
-    jose::{JwsAlgorithm, KeyType},
-    keys::{KeyId, KeySpec, KeyStoreError},
-};
 use shared_kernel::authorization::{
-    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation, QueryOperation,
+    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, QueryOperation,
 };
 use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 use thiserror::Error;
-use tracing::error;
-use uuid::Uuid;
 
 impl QueryOperation for KeyProvidersView {
     const OPERATION_NAME: &'static str = "kms.key_providers.list";
-}
-
-impl QueryOperation for KeyView {
-    const OPERATION_NAME: &'static str = "kms.keys.get";
-}
-
-impl QueryOperation for AllKeysView {
-    const OPERATION_NAME: &'static str = "kms.keys.list";
 }
 
 #[derive(Clone)]
@@ -56,17 +36,12 @@ pub struct KmsState {
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
-    pub factories: Arc<KeyProviderFactories>,
-    /// The adapters built so far, by provider type and the settings each was built from.
-    built: Arc<Mutex<BuiltAdapters>>,
+    pub adapters: Arc<KeyProviderAdapters>,
     /// Whether development-only providers, such as the in-memory provider, may be used.
     pub development_providers_allowed: bool,
-    /// What signs with the keys, set once the contexts that use them exist.
-    pub key_usage: Arc<std::sync::OnceLock<Arc<dyn KeyUsage>>>,
+    /// What signs with the keys, asked before a key is deleted.
+    pub key_usage: Arc<dyn KeyUsage>,
 }
-
-/// The adapters built so far, by provider type and the settings each was built from.
-type BuiltAdapters = HashMap<(KeyProviderType, Option<KeyProviderSettings>), Arc<dyn KeyProviderAdapter>>;
 
 #[derive(Clone)]
 pub struct CommandHandlers {
@@ -83,12 +58,14 @@ pub struct Queries {
 
 /// Constructs the CQRS components of the KMS bounded context.
 ///
-/// `factories` holds a factory for every provider type this instance can connect to.
+/// `adapters` holds the adapters, or the factories that build them, for every provider type this instance can connect
+/// to. `key_usage` tells what signs with a key, so that no such key is deleted.
 pub async fn kms_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_bus: &EventBusHandle,
     development_providers_allowed: bool,
-    factories: KeyProviderFactories,
+    adapters: KeyProviderAdapters,
+    key_usage: Arc<dyn KeyUsage>,
 ) -> KmsState {
     let services = Arc::new(KeyProviderServices::new(development_providers_allowed));
 
@@ -112,10 +89,9 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
             key,
             all_keys,
         },
-        factories: Arc::new(factories),
-        built: Arc::default(),
+        adapters: Arc::new(adapters),
         development_providers_allowed,
-        key_usage: Arc::default(),
+        key_usage,
     }
 }
 
@@ -137,15 +113,14 @@ pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyPr
     )
     .await?
     .unwrap_or_default();
-    let visible =
-        |provider_type: &KeyProviderType| KeyProviders::is_visible(*provider_type, state.development_providers_allowed);
-    view.providers.retain(|provider_type, _| visible(provider_type));
-    view.settings.retain(|provider_type, _| visible(provider_type));
+    view.providers
+        .retain(|provider_type, _| KeyProviders::is_visible(*provider_type, state.development_providers_allowed));
     Ok(view)
 }
 
+/// Why an added key provider could not be used.
 #[derive(Debug, Error)]
-pub enum TestConnectionError {
+pub enum KeyProviderAccessError {
     #[error(transparent)]
     Authorization(AuthorizationError),
     #[error(transparent)]
@@ -154,25 +129,6 @@ pub enum TestConnectionError {
     NotFound(KeyProviderType),
     #[error("This instance has no adapter for `{0}` key providers")]
     Unsupported(KeyProviderType),
-}
-
-/// The adapter of an added provider, or why it can't be reached.
-type ProviderAdapter = Result<Arc<dyn KeyProviderAdapter>, ConnectionError>;
-
-/// Returns the name of the provider of the given type, or `None` if it hasn't been added or has been removed.
-///
-/// # Errors
-///
-/// Fails when the caller isn't authorized or the providers can't be loaded.
-pub async fn get_key_provider(
-    state: &KmsState,
-    caller: Caller,
-    provider_type: KeyProviderType,
-) -> Result<Option<String>, QueryHandlerError> {
-    Ok(get_key_providers(state, caller)
-        .await?
-        .providers
-        .shift_remove(&provider_type))
 }
 
 /// Checks whether an added provider is reachable. The outcome is returned, not stored.
@@ -186,16 +142,18 @@ pub async fn test_key_provider_connection(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Result<(), ConnectionError>, TestConnectionError> {
-    Ok(
-        match added_provider_adapter(state, caller, provider_type, &TestKeyProviderConnection)
-            .await?
-            .0
-        {
-            Ok(adapter) => adapter.test_connection().await,
-            Err(error) => Err(error),
-        },
+) -> Result<Result<(), ConnectionError>, KeyProviderAccessError> {
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        &provider_type.to_string(),
+        &TestKeyProviderConnection,
     )
+    .await
+    .map_err(KeyProviderAccessError::Authorization)?;
+
+    let provider = added_provider(state, caller, provider_type).await?;
+    Ok(provider.adapter.test_connection().await)
 }
 
 /// Lists the keys that exist in an added provider. Nothing is stored.
@@ -209,86 +167,74 @@ pub async fn list_key_provider_keys(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Result<ProviderKeys, ConnectionError>, TestConnectionError> {
-    Ok(
-        match added_provider_adapter(state, caller, provider_type, &ListKeyProviderKeys)
-            .await?
-            .0
-        {
-            Ok(adapter) => adapter.list_keys().await,
-            Err(error) => Err(error),
-        },
+) -> Result<Result<ProviderKeys, ConnectionError>, KeyProviderAccessError> {
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        &provider_type.to_string(),
+        &ListKeyProviderKeys,
     )
+    .await
+    .map_err(KeyProviderAccessError::Authorization)?;
+
+    let provider = added_provider(state, caller, provider_type).await?;
+    Ok(provider.adapter.list_keys().await)
 }
 
-/// The adapter of an added provider, after checking that the caller may perform `operation` on it.
+/// An added provider: the settings it was added with, and the adapter built from them.
+pub(crate) struct AddedProvider {
+    pub(crate) settings: Option<KeyProviderSettings>,
+    pub(crate) adapter: Arc<dyn KeyProviderAdapter>,
+}
+
+/// The added provider of `provider_type`. Whether the caller may use it for an operation is checked by the caller.
 ///
-/// The adapter is built from the settings the provider was added with the first time it is needed, and kept for later
-/// requests. A provider that was removed and added again with other settings gets a new adapter. The settings are
-/// returned too.
-async fn added_provider_adapter<C: CommandOperation>(
+/// # Errors
+///
+/// Fails when the providers can't be loaded, the provider hasn't been added, or this instance has no adapter for it.
+pub(crate) async fn added_provider(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-    operation: &C,
-) -> Result<(ProviderAdapter, Option<KeyProviderSettings>), TestConnectionError> {
-    let id = provider_type.to_string();
-    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, operation)
-        .await
-        .map_err(TestConnectionError::Authorization)?;
-
+) -> Result<AddedProvider, KeyProviderAccessError> {
     let mut providers = get_key_providers(state, caller).await?;
     if !providers.providers.contains_key(&provider_type) {
-        return Err(TestConnectionError::NotFound(provider_type));
+        return Err(KeyProviderAccessError::NotFound(provider_type));
     }
     let settings = providers.settings.shift_remove(&provider_type);
-    let adapter =
-        adapter(state, provider_type, settings.clone()).ok_or(TestConnectionError::Unsupported(provider_type))?;
-    Ok((adapter, settings))
+    let Some(adapter) = state.adapters.get(provider_type, settings.as_ref()) else {
+        return Err(KeyProviderAccessError::Unsupported(provider_type));
+    };
+    Ok(AddedProvider { settings, adapter })
 }
 
-/// The adapter of the provider of `provider_type` added with `settings`, built on first use and built again when the
-/// provider was added again with other settings. `None` when this instance can't use providers of this type.
-fn adapter(
-    state: &KmsState,
-    provider_type: KeyProviderType,
-    settings: Option<KeyProviderSettings>,
-) -> Option<ProviderAdapter> {
-    let factory = state.factories.get(&provider_type)?;
-
-    let mut built = state.built.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    let built_for = (provider_type, settings);
-    if let Some(existing) = built.get(&built_for) {
-        return Some(Ok(existing.clone()));
-    }
-    let adapter = factory.build(built_for.1.as_ref());
-    if let Ok(adapter) = &adapter {
-        built.insert(built_for, adapter.clone());
-    }
-    Some(adapter)
+/// Every key that is recorded and not deleted. Read for the rules of the KMS itself, so it isn't authorized.
+pub(crate) async fn all_keys(state: &KmsState) -> Result<AllKeysView, PersistenceError> {
+    Ok(public_query_handler(AllKeysView::ID, &state.query.all_keys)
+        .await?
+        .unwrap_or_default())
 }
 
+/// Why a key provider could not be removed.
 #[derive(Debug, Error)]
 pub enum RemoveKeyProviderError {
-    #[error(
-        "The `{provider_type}` key provider still has {keys} key(s). Delete them with `delete-key` before removing it"
-    )]
-    HasKeys {
-        provider_type: KeyProviderType,
-        keys: usize,
-    },
     #[error(transparent)]
-    Query(#[from] QueryHandlerError),
+    Authorization(AuthorizationError),
+    #[error(transparent)]
+    Persistence(#[from] PersistenceError),
+    /// A recorded key that isn't deleted lives in the provider.
+    #[error("The `{0}` key provider still has keys; delete them first")]
+    HasKeys(KeyProviderType),
     #[error(transparent)]
     Command(#[from] CommandHandlerError<KeyProviderError>),
 }
 
-/// Removes an added provider. A provider that still has keys isn't removed, so that its keys aren't left without the
-/// provider that holds them; deleting them first is the caller's choice.
+/// Disconnects this instance from a key provider. A provider that still has keys is kept, so that no recorded key
+/// loses the provider that holds it.
 ///
 /// # Errors
 ///
-/// Fails when the caller isn't authorized, the provider hasn't been added, or keys of the provider exist.
+/// Fails when the caller isn't authorized, the provider still has keys, or the provider can't be removed.
 pub async fn remove_key_provider(
     state: &KmsState,
     caller: Caller,
@@ -302,699 +248,111 @@ pub async fn remove_key_provider(
         &command,
     )
     .await
-    .map_err(CommandHandlerError::Authorization)?;
+    .map_err(RemoveKeyProviderError::Authorization)?;
 
-    let keys = get_keys(state, caller.clone())
+    if all_keys(state)
         .await?
         .keys
         .values()
-        .filter(|reference| reference.provider_type == provider_type)
-        .count();
-    if keys > 0 {
-        return Err(RemoveKeyProviderError::HasKeys { provider_type, keys });
+        .any(|reference| reference.provider_type == provider_type)
+    {
+        return Err(RemoveKeyProviderError::HasKeys(provider_type));
     }
 
-    Ok(command_handler(
+    command_handler(
         state.authorization_checker.clone(),
         caller,
         KeyProviders::ID,
         &state.command.key_providers,
         command,
     )
-    .await?)
-}
-
-#[derive(Debug, Error)]
-pub enum CreateKeyError {
-    #[error(transparent)]
-    Provider(#[from] TestConnectionError),
-    #[error(transparent)]
-    Unreachable(#[from] ConnectionError),
-    #[error("Keys that sign with {0} can't be created")]
-    UnsupportedAlgorithm(JwsAlgorithm),
-    #[error(transparent)]
-    AlgorithmRefused(#[from] RefusedAlgorithm),
-    #[error("The key `{0}` is neither a P-256 nor an Ed25519 key")]
-    UnsupportedKey(KeyId),
-    #[error("The key `{0}` has already been recorded")]
-    AlreadyRecorded(KeyId),
-    #[error(transparent)]
-    InvalidLabel(#[from] InvalidLabel),
-    #[error(transparent)]
-    KeyStore(#[from] KeyStoreError),
-    #[error(transparent)]
-    Record(#[from] CommandHandlerError<KeyError>),
-}
-
-/// Creates a key in an added provider and records its reference. Returns the new key's ID and its reference.
-///
-/// The key is generated before it is recorded. When it can't be recorded, it is deleted from the provider again, which
-/// also frees its label. Once the key is being generated, a caller that gives up doesn't stop this.
-///
-/// # Errors
-///
-/// Fails when the algorithm isn't supported, the caller isn't authorized, the provider hasn't been added or has no
-/// adapter, the provider can't give the key its label, or the provider can't create the key.
-pub async fn create_key(
-    state: &KmsState,
-    caller: Caller,
-    provider_type: KeyProviderType,
-    algorithm: JwsAlgorithm,
-    label: Option<String>,
-) -> Result<(String, KeyReference), CreateKeyError> {
-    let key_type = match algorithm {
-        JwsAlgorithm::ES256 => KeyType::P256,
-        JwsAlgorithm::EdDSA => KeyType::Ed25519,
-        algorithm => return Err(CreateKeyError::UnsupportedAlgorithm(algorithm)),
-    };
-    let (adapter, settings) = added_provider_adapter(state, caller.clone(), provider_type, &CreateKey).await?;
-    let adapter = adapter?;
-    adapter.check_algorithm(algorithm)?;
-    if let Some(label) = &label {
-        adapter.check_label(label)?;
-    }
-    // Recording the key is authorized on its own id, which a checker can decide on differently than on the provider.
-    // It is checked before the key is created, so a refusal doesn't create a key only to delete it again.
-    let id = Uuid::new_v4().to_string();
-    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, &CreateKey)
-        .await
-        .map_err(|error| CreateKeyError::Record(CommandHandlerError::Authorization(error)))?;
-
-    let state = state.clone();
-    let spec = KeySpec::new(key_type, algorithm);
-    tokio::spawn(async move {
-        let spec = match &label {
-            Some(label) => spec.with_label(label),
-            None => spec,
-        };
-        let provider_key_id = adapter.create(spec).await?;
-
-        let recorded = record_created_key(
-            &state,
-            caller,
-            id,
-            adapter.as_ref(),
-            provider_type,
-            settings,
-            &provider_key_id,
-            label.clone(),
-            algorithm,
-        )
-        .await;
-        if recorded.is_err() {
-            if let Err(error) = adapter.discard(&provider_key_id, label.as_deref()).await {
-                let key = &provider_key_id;
-                error!(%key, %error, "A key was created in the `{provider_type}` key provider but neither recorded nor deleted");
-            }
-        }
-        recorded
-    })
-    .await
-    .unwrap_or_else(|error| std::panic::resume_unwind(error.into_panic()))
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn record_created_key(
-    state: &KmsState,
-    caller: Caller,
-    id: String,
-    adapter: &dyn KeyProviderAdapter,
-    provider_type: KeyProviderType,
-    settings: Option<KeyProviderSettings>,
-    provider_key_id: &KeyId,
-    label: Option<String>,
-    algorithm: JwsAlgorithm,
-) -> Result<(String, KeyReference), CreateKeyError> {
-    let reference = KeyReference {
-        provider_type,
-        settings,
-        public_key: adapter.public_jwk(provider_key_id).await?,
-        provider_key_id: provider_key_id.as_str().to_string(),
-        label,
-        algorithm,
-    };
-
-    command_handler(
-        state.authorization_checker.clone(),
-        caller,
-        &id,
-        &state.command.keys,
-        KeyCommand::RecordCreatedKey {
-            reference: reference.clone(),
-        },
-    )
     .await?;
-
-    Ok((id, reference))
-}
-
-/// Records the key labelled `label` in an added provider, which exists there but which this instance didn't record,
-/// such as a key whose creation was interrupted before it was recorded. Returns its key ID and its reference.
-///
-/// # Errors
-///
-/// Fails when the caller isn't authorized, the provider hasn't been added or has no adapter, no key has the label,
-/// the key is already recorded, or it isn't a key of an algorithm keys can be created for.
-pub async fn adopt_key(
-    state: &KmsState,
-    caller: Caller,
-    provider_type: KeyProviderType,
-    label: String,
-) -> Result<(String, KeyReference), CreateKeyError> {
-    let (adapter, settings) = added_provider_adapter(state, caller.clone(), provider_type, &AdoptKey).await?;
-    let adapter = adapter?;
-    adapter.check_label(&label)?;
-    let id = Uuid::new_v4().to_string();
-    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, &AdoptKey)
-        .await
-        .map_err(|error| CreateKeyError::Record(CommandHandlerError::Authorization(error)))?;
-
-    let provider_key_id = adapter.adopt(&label).await?;
-    let recorded = get_keys(state, caller.clone())
-        .await
-        .map_err(TestConnectionError::from)?;
-    if recorded.keys.values().any(|reference| {
-        reference.provider_type == provider_type && adapter.same_key(&reference.provider_key_id, &provider_key_id)
-    }) {
-        return Err(CreateKeyError::AlreadyRecorded(provider_key_id));
-    }
-
-    let public_key = adapter.public_jwk(&provider_key_id).await?;
-    let algorithm = match (public_key.kty(), public_key.crv()) {
-        ("EC", Some("P-256")) => JwsAlgorithm::ES256,
-        ("OKP", Some("Ed25519")) => JwsAlgorithm::EdDSA,
-        _ => return Err(CreateKeyError::UnsupportedKey(provider_key_id)),
-    };
-    adapter.check_algorithm(algorithm)?;
-
-    let reference = KeyReference {
-        provider_type,
-        settings,
-        provider_key_id: provider_key_id.as_str().to_string(),
-        label: Some(label),
-        algorithm,
-        public_key,
-    };
-    command_handler(
-        state.authorization_checker.clone(),
-        caller,
-        &id,
-        &state.command.keys,
-        KeyCommand::RecordAdoptedKey {
-            reference: reference.clone(),
-        },
-    )
-    .await?;
-
-    Ok((id, reference))
-}
-
-#[derive(Debug, Error)]
-pub enum DeleteKeyError {
-    #[error("There is no key `{0}`")]
-    NotFound(String),
-    #[error("This instance has no adapter for `{0}` key providers")]
-    Unsupported(KeyProviderType),
-    #[error(transparent)]
-    Unreachable(#[from] ConnectionError),
-    #[error(
-        "The key `{id}` is the key of the verification method `{verification_method}`. Remove it with `remove-key-from-document` before deleting it"
-    )]
-    InUse { id: String, verification_method: String },
-    #[error("Whether the key `{0}` signs can't be told: {1}")]
-    Usage(String, Box<dyn std::error::Error + Send + Sync>),
-    #[error(transparent)]
-    KeyStore(#[from] KeyStoreError),
-    #[error(transparent)]
-    Query(#[from] QueryHandlerError),
-    #[error(transparent)]
-    Record(#[from] CommandHandlerError<KeyError>),
-}
-
-/// Deletes the key `id` from its provider, which schedules its deletion where the provider does, and frees its label.
-/// A key its provider no longer has is only recorded as deleted. Its provider doesn't need to be added anymore. The key
-/// of a verification method isn't deleted, as anything signing for that method, such as a Domain Linkage Credential,
-/// would break; removing the method first is the caller's choice.
-///
-/// # Errors
-///
-/// Fails when the caller isn't authorized, there is no such key, it is the key of a verification method, or the
-/// provider can't delete it.
-pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<(), DeleteKeyError> {
-    authorize_command(
-        state.authorization_checker.as_ref(),
-        caller.clone(),
-        id,
-        &KeyCommand::DeleteKey,
-    )
-    .await
-    .map_err(CommandHandlerError::Authorization)?;
-    let reference = query_handler(
-        state.authorization_checker.clone(),
-        caller.clone(),
-        id,
-        Some(id),
-        &state.query.key,
-    )
-    .await?
-    .filter(|key| !key.deleted)
-    .and_then(|key| key.reference)
-    .ok_or_else(|| DeleteKeyError::NotFound(id.to_string()))?;
-    if let Some(usage) = state.key_usage.get() {
-        if let Some(verification_method) = usage
-            .verification_method(id, &reference.public_key)
-            .await
-            .map_err(|error| DeleteKeyError::Usage(id.to_string(), error))?
-        {
-            return Err(DeleteKeyError::InUse {
-                id: id.to_string(),
-                verification_method,
-            });
-        }
-    }
-    let adapter = key_adapter(state, &reference).ok_or(DeleteKeyError::Unsupported(reference.provider_type))??;
-
-    match adapter
-        .discard(
-            &KeyId::new(reference.provider_key_id.as_str()),
-            reference.label.as_deref(),
-        )
-        .await
-    {
-        Ok(()) | Err(KeyStoreError::NotFound(_)) => {}
-        Err(error) => return Err(error.into()),
-    }
-
-    Ok(command_handler(
-        state.authorization_checker.clone(),
-        caller,
-        id,
-        &state.command.keys,
-        KeyCommand::DeleteKey,
-    )
-    .await?)
-}
-
-/// Returns every key this instance created, by key ID, in the order they were created.
-///
-/// # Errors
-///
-/// Fails when the caller isn't authorized or the keys can't be loaded.
-pub async fn get_keys(state: &KmsState, caller: Caller) -> Result<AllKeysView, QueryHandlerError> {
-    Ok(query_handler(
-        state.authorization_checker.clone(),
-        caller,
-        "all_keys",
-        None,
-        &state.query.all_keys,
-    )
-    .await?
-    .unwrap_or_default())
-}
-
-/// A key this instance created, with the adapter of its provider, which signs with it.
-#[derive(Clone)]
-pub struct SigningKey {
-    pub reference: KeyReference,
-    pub adapter: Arc<dyn KeyProviderAdapter>,
-}
-
-/// Returns the key `key_id` to sign with, or `None` when there is no such key, it was deleted, or this instance has no
-/// adapter for its provider.
-///
-/// # Errors
-///
-/// Fails when the key can't be loaded.
-pub async fn signing_key(state: &KmsState, key_id: &str) -> Result<Option<SigningKey>, PersistenceError> {
-    let Some(KeyView {
-        reference: Some(reference),
-        deleted: false,
-    }) = public_query_handler(key_id, &state.query.key).await?
-    else {
-        return Ok(None);
-    };
-    Ok(with_adapter(state, reference))
-}
-
-/// Returns every key this instance created and has an adapter for, to sign with.
-///
-/// # Errors
-///
-/// Fails when the keys can't be loaded.
-pub async fn signing_keys(state: &KmsState) -> Result<Vec<SigningKey>, PersistenceError> {
-    Ok(public_query_handler("all_keys", &state.query.all_keys)
-        .await?
-        .unwrap_or_default()
-        .keys
-        .into_values()
-        .filter_map(|reference| with_adapter(state, reference))
-        .collect())
-}
-
-/// The key with the adapter of its provider, built from the settings the key was created with. `None` when the
-/// adapter can't be built.
-fn with_adapter(state: &KmsState, reference: KeyReference) -> Option<SigningKey> {
-    let adapter = key_adapter(state, &reference)?.ok()?;
-    Some(SigningKey { reference, adapter })
-}
-
-/// The adapter of the provider of the key `reference`, built from the settings the key was created with, so that the
-/// key keeps signing when its provider is removed, or added again with other settings. `None` when this instance can't
-/// use its provider type.
-fn key_adapter(state: &KmsState, reference: &KeyReference) -> Option<ProviderAdapter> {
-    adapter(state, reference.provider_type, reference.settings.clone())
+    Ok(())
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use crate::adapter::test_utils::UnreachableKeyProvider;
-    use crate::adapter::{FixedAdapter, InMemoryKeyStore, KeyProviderFactory};
-    use crate::key_provider::command::KeyProviderCommand;
-    use crate::key_provider::settings::{StackitKmsSettings, StackitRegion};
+    use crate::adapter::{test_utils::InMemoryFactory, UnreachableKeyProvider};
+    use crate::key::{aggregate::tests::reference, command::KeyCommand, usage::Unused};
+    use crate::key_provider::settings::tests::stackit;
     use agent_store::in_memory::InMemory;
-    use async_trait::async_trait;
-    use identity_kit::{
-        jose::Jwk,
-        keys::{KeyStore, KeyStoreCapabilities},
-    };
-    use shared_kernel::authorization::{AuthorizationOperation, AuthorizationRequest};
-    use std::{
-        sync::atomic::{AtomicUsize, Ordering},
-        time::Duration,
-    };
 
-    async fn state_with(factories: KeyProviderFactories) -> KmsState {
-        kms_state(&InMemory, &EventBusHandle::default(), true, factories).await
-    }
-
-    fn fixed(adapter: Arc<dyn KeyProviderAdapter>) -> Arc<dyn KeyProviderFactory> {
-        Arc::new(FixedAdapter(adapter))
-    }
-
-    /// Only AWS has an adapter, and it is unreachable, so an added in-memory provider is unsupported.
+    /// Only AWS has an adapter, so an added in-memory provider is unsupported.
     async fn state() -> KmsState {
-        state_with([(KeyProviderType::AwsKmsAmbient, fixed(Arc::new(UnreachableKeyProvider)))].into()).await
-    }
-
-    /// An in-memory provider that can be made slow to generate, unable to return public keys, or refusing labels. It
-    /// counts the keys it generated.
-    #[allow(clippy::struct_excessive_bools)]
-    struct FakeProvider {
-        keys: InMemoryKeyStore,
-        generate_delay: Duration,
-        public_keys_fail: bool,
-        labels_refused: bool,
-        algorithms_refused: bool,
-        /// Takes every two keys for one key, as versions of one key are.
-        keys_alike: bool,
-        generated: AtomicUsize,
-    }
-
-    impl FakeProvider {
-        fn new() -> Self {
-            Self {
-                keys: InMemoryKeyStore::new(),
-                generate_delay: Duration::ZERO,
-                public_keys_fail: false,
-                labels_refused: false,
-                algorithms_refused: false,
-                keys_alike: false,
-                generated: AtomicUsize::new(0),
-            }
-        }
-    }
-
-    /// Allows commands only on the in-memory provider, as a checker that decides per resource could.
-    struct ProviderOnly;
-
-    #[async_trait]
-    impl AuthorizationChecker for ProviderOnly {
-        async fn is_authorized(&self, request: &AuthorizationRequest) -> Result<(), AuthorizationError> {
-            match &request.operation {
-                AuthorizationOperation::Command { aggregate_id, .. } if aggregate_id != "in_memory" => {
-                    Err(AuthorizationError::Forbidden)
-                }
-                _ => Ok(()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl KeyStore for FakeProvider {
-        fn capabilities(&self) -> KeyStoreCapabilities {
-            self.keys.capabilities()
-        }
-
-        async fn public_jwk(&self, key: &KeyId) -> Result<Jwk, KeyStoreError> {
-            if self.public_keys_fail {
-                return Err(KeyStoreError::backend(ConnectionError("not reachable".to_string())));
-            }
-            self.keys.public_jwk(key).await
-        }
-
-        async fn sign(&self, key: &KeyId, alg: JwsAlgorithm, data: &[u8]) -> Result<Vec<u8>, KeyStoreError> {
-            self.keys.sign(key, alg, data).await
-        }
-
-        async fn exists(&self, key: &KeyId) -> Result<bool, KeyStoreError> {
-            self.keys.exists(key).await
-        }
-
-        async fn generate(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
-            tokio::time::sleep(self.generate_delay).await;
-            self.generated.fetch_add(1, Ordering::SeqCst);
-            self.keys.generate(spec).await
-        }
-
-        async fn delete(&self, key: &KeyId) -> Result<(), KeyStoreError> {
-            self.keys.delete(key).await
-        }
-    }
-
-    #[async_trait]
-    impl KeyProviderAdapter for FakeProvider {
-        async fn test_connection(&self) -> Result<(), ConnectionError> {
-            Ok(())
-        }
-
-        async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
-            Ok(ProviderKeys::default())
-        }
-
-        fn check_algorithm(&self, algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
-            if self.algorithms_refused {
-                return Err(RefusedAlgorithm(format!("{algorithm} is refused")));
-            }
-            Ok(())
-        }
-
-        fn check_label(&self, label: &str) -> Result<(), InvalidLabel> {
-            if self.labels_refused {
-                return Err(InvalidLabel(format!("`{label}` is refused")));
-            }
-            Ok(())
-        }
-
-        fn same_key(&self, recorded: &str, key: &KeyId) -> bool {
-            self.keys_alike || recorded == key.as_str()
-        }
-    }
-
-    /// A state whose in-memory provider is `provider`, added.
-    async fn state_with_provider(provider: Arc<FakeProvider>) -> KmsState {
-        let state = state_with([(KeyProviderType::InMemory, fixed(provider))].into()).await;
-        add(&state, KeyProviderType::InMemory).await;
-        state
-    }
-
-    async fn create_labelled(state: &KmsState) -> Result<(String, KeyReference), CreateKeyError> {
-        create_key(
-            state,
-            Caller::Internal,
-            KeyProviderType::InMemory,
-            JwsAlgorithm::EdDSA,
-            Some("issuer".to_string()),
-        )
-        .await
+        let adapters: KeyProviderAdapters = [(
+            KeyProviderType::AwsKmsAmbient,
+            Arc::new(UnreachableKeyProvider("connection refused".to_string())) as Arc<dyn KeyProviderAdapter>,
+        )]
+        .into();
+        kms_state(&InMemory, &EventBusHandle::default(), true, adapters, Arc::new(Unused)).await
     }
 
     async fn add(state: &KmsState, provider_type: KeyProviderType) {
-        add_with(state, provider_type, None).await;
-    }
-
-    async fn add_with(state: &KmsState, provider_type: KeyProviderType, settings: Option<KeyProviderSettings>) {
-        change(
-            state,
-            KeyProviderCommand::AddKeyProvider {
-                provider_type,
-                name: provider_type.to_string(),
-                settings,
-            },
-        )
-        .await;
-    }
-
-    async fn change(state: &KmsState, command: KeyProviderCommand) {
         command_handler(
             state.authorization_checker.clone(),
             Caller::Internal,
             KeyProviders::ID,
             &state.command.key_providers,
-            command,
+            KeyProviderCommand::AddKeyProvider {
+                provider_type,
+                name: provider_type.to_string(),
+                settings: None,
+            },
         )
         .await
         .unwrap();
     }
 
-    fn stackit_settings(key_ring: u128) -> KeyProviderSettings {
-        KeyProviderSettings::StackitKms(StackitKmsSettings {
-            project_id: Uuid::from_u128(1),
-            region: StackitRegion::Eu01,
-            key_ring_id: Uuid::from_u128(key_ring),
-            service_account_email: "unicore@sa.stackit.cloud".to_string(),
-        })
+    /// A state with a STACKIT KMS provider added with `settings`, its adapters built by `factory`.
+    pub(crate) async fn stackit_state(factory: &InMemoryFactory, settings: KeyProviderSettings) -> KmsState {
+        let adapters = KeyProviderAdapters::default().with_factory(KeyProviderType::StackitKms, factory.clone());
+        let state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters, Arc::new(Unused)).await;
+        add_stackit(&state, settings).await;
+        state
     }
 
-    /// Builds reachable adapters, or fails to when `unavailable` is set, and records the settings of every build.
-    #[derive(Default)]
-    struct RecordingFactory {
-        builds: Mutex<Vec<Option<KeyProviderSettings>>>,
-        unavailable: bool,
-    }
-
-    impl RecordingFactory {
-        fn builds(&self) -> Vec<Option<KeyProviderSettings>> {
-            self.builds.lock().unwrap().clone()
-        }
-    }
-
-    impl KeyProviderFactory for RecordingFactory {
-        fn build(
-            &self,
-            settings: Option<&KeyProviderSettings>,
-        ) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError> {
-            self.builds.lock().unwrap().push(settings.cloned());
-            if self.unavailable {
-                return Err(ConnectionError("no workload identity token".to_string()));
-            }
-            Ok(Arc::new(FakeProvider::new()))
-        }
-    }
-
-    async fn stackit_state(factory: Arc<RecordingFactory>) -> KmsState {
-        state_with([(KeyProviderType::StackitKms, factory as Arc<dyn KeyProviderFactory>)].into()).await
-    }
-
-    async fn test_stackit(state: &KmsState) -> Result<(), ConnectionError> {
-        test_key_provider_connection(state, Caller::Internal, KeyProviderType::StackitKms)
-            .await
-            .unwrap()
+    /// Adds the STACKIT KMS provider with `settings`.
+    pub(crate) async fn add_stackit(state: &KmsState, settings: KeyProviderSettings) {
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            KeyProviders::ID,
+            &state.command.key_providers,
+            KeyProviderCommand::AddKeyProvider {
+                provider_type: KeyProviderType::StackitKms,
+                name: "Customer keys".to_string(),
+                settings: Some(settings),
+            },
+        )
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
     async fn builds_the_adapter_from_the_settings_the_provider_was_added_with() {
-        let factory = Arc::new(RecordingFactory::default());
-        let state = stackit_state(factory.clone()).await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
+        let factory = InMemoryFactory::default();
+        let state = stackit_state(&factory, stackit("key-ring")).await;
 
-        test_stackit(&state).await.unwrap();
+        test_key_provider_connection(&state, Caller::Internal, KeyProviderType::StackitKms)
+            .await
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(factory.builds(), vec![Some(stackit_settings(2))]);
-    }
-
-    #[tokio::test]
-    async fn reuses_the_adapter_it_built() {
-        let factory = Arc::new(RecordingFactory::default());
-        let state = stackit_state(factory.clone()).await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
-        test_stackit(&state).await.unwrap();
-
-        test_stackit(&state).await.unwrap();
-
-        assert_eq!(factory.builds().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn builds_a_new_adapter_for_a_provider_added_again_with_other_settings() {
-        let factory = Arc::new(RecordingFactory::default());
-        let state = stackit_state(factory.clone()).await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
-        test_stackit(&state).await.unwrap();
-        change(
-            &state,
-            KeyProviderCommand::RemoveKeyProvider {
-                provider_type: KeyProviderType::StackitKms,
-            },
-        )
-        .await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(3))).await;
-
-        test_stackit(&state).await.unwrap();
-
-        assert_eq!(factory.builds().last(), Some(&Some(stackit_settings(3))));
-    }
-
-    async fn create_stackit_key(state: &KmsState) -> (String, KeyReference) {
-        create_key(
-            state,
-            Caller::Internal,
-            KeyProviderType::StackitKms,
-            JwsAlgorithm::ES256,
-            None,
-        )
-        .await
-        .unwrap()
-    }
-
-    async fn remove_stackit(state: &KmsState) {
-        // Bypasses the refusal to remove a provider with keys, as for providers removed before it existed.
-        change(
-            state,
-            KeyProviderCommand::RemoveKeyProvider {
-                provider_type: KeyProviderType::StackitKms,
-            },
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    async fn a_key_signs_with_the_settings_it_was_created_with() {
-        let state = stackit_state(Arc::new(RecordingFactory::default())).await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
-        let (id, reference) = create_stackit_key(&state).await;
-        remove_stackit(&state).await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(3))).await;
-
-        let key = signing_key(&state, &id).await.unwrap().unwrap();
-
-        assert!(key.adapter.public_jwk(&reference.provider_key_id()).await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn a_key_signs_after_its_provider_is_removed() {
-        let state = stackit_state(Arc::new(RecordingFactory::default())).await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
-        let (id, _) = create_stackit_key(&state).await;
-        remove_stackit(&state).await;
-
-        let key = signing_key(&state, &id).await.unwrap();
-
-        assert!(key.is_some());
+        assert_eq!(*factory.builds.lock().unwrap(), [stackit("key-ring")]);
     }
 
     #[tokio::test]
     async fn a_provider_whose_adapter_cannot_be_built_is_reported_unreachable() {
-        let state = stackit_state(Arc::new(RecordingFactory {
-            unavailable: true,
-            ..RecordingFactory::default()
-        }))
-        .await;
-        add_with(&state, KeyProviderType::StackitKms, Some(stackit_settings(2))).await;
+        let factory = InMemoryFactory {
+            failure: Some("no workload identity token".to_string()),
+            ..InMemoryFactory::default()
+        };
+        let state = stackit_state(&factory, stackit("key-ring")).await;
 
-        let result = test_stackit(&state).await;
+        let result = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::StackitKms).await;
 
-        assert_eq!(result.unwrap_err().to_string(), "no workload identity token");
+        assert_eq!(result.unwrap().unwrap_err().to_string(), "no workload identity token");
     }
 
     #[tokio::test]
@@ -1039,7 +397,29 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TestConnectionError::NotFound(KeyProviderType::AwsKmsAmbient))
+            Err(KeyProviderAccessError::NotFound(KeyProviderType::AwsKmsAmbient))
+        ));
+    }
+
+    #[tokio::test]
+    async fn refuses_to_remove_a_provider_that_has_keys() {
+        let state = state().await;
+        add(&state, KeyProviderType::InMemory).await;
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            "key-id",
+            &state.command.keys,
+            KeyCommand::CreateKey { reference: reference() },
+        )
+        .await
+        .unwrap();
+
+        let result = remove_key_provider(&state, Caller::Internal, KeyProviderType::InMemory).await;
+
+        assert!(matches!(
+            result,
+            Err(RemoveKeyProviderError::HasKeys(KeyProviderType::InMemory))
         ));
     }
 
@@ -1052,319 +432,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TestConnectionError::Unsupported(KeyProviderType::InMemory))
+            Err(KeyProviderAccessError::Unsupported(KeyProviderType::InMemory))
         ));
-    }
-
-    #[tokio::test]
-    async fn records_the_public_key_the_provider_holds() {
-        let provider = Arc::new(FakeProvider::new());
-        let state = state_with_provider(provider.clone()).await;
-
-        let (_, reference) = create_labelled(&state).await.unwrap();
-
-        let held = provider
-            .public_jwk(&KeyId::new(reference.provider_key_id))
-            .await
-            .unwrap();
-        assert_eq!(reference.public_key, held);
-    }
-
-    #[tokio::test]
-    async fn refuses_a_label_the_provider_cannot_give() {
-        let state = state_with_provider(Arc::new(FakeProvider {
-            labels_refused: true,
-            ..FakeProvider::new()
-        }))
-        .await;
-
-        let result = create_labelled(&state).await;
-
-        assert_eq!(result.unwrap_err().to_string(), "`issuer` is refused");
-    }
-
-    #[tokio::test]
-    async fn deletes_a_key_it_could_not_record() {
-        let provider = Arc::new(FakeProvider {
-            public_keys_fail: true,
-            ..FakeProvider::new()
-        });
-        let state = state_with_provider(provider.clone()).await;
-        create_labelled(&state).await.unwrap_err();
-
-        let left = provider.exists(&KeyId::new("issuer")).await.unwrap();
-
-        assert!(!left);
-    }
-
-    #[tokio::test]
-    async fn refuses_an_algorithm_the_provider_refuses() {
-        let state = state_with_provider(Arc::new(FakeProvider {
-            algorithms_refused: true,
-            ..FakeProvider::new()
-        }))
-        .await;
-
-        let result = create_labelled(&state).await;
-
-        assert!(matches!(result, Err(CreateKeyError::AlgorithmRefused(_))), "{result:?}");
-    }
-
-    #[tokio::test]
-    async fn refuses_to_remove_a_provider_that_has_keys() {
-        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        create_labelled(&state).await.unwrap();
-
-        let result = remove_key_provider(&state, Caller::Internal, KeyProviderType::InMemory).await;
-
-        assert!(
-            matches!(result, Err(RemoveKeyProviderError::HasKeys { keys: 1, .. })),
-            "{result:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn deletes_a_key_from_its_provider() {
-        let provider = Arc::new(FakeProvider::new());
-        let state = state_with_provider(provider.clone()).await;
-        let (id, _) = create_labelled(&state).await.unwrap();
-
-        delete_key(&state, Caller::Internal, &id).await.unwrap();
-
-        assert!(!provider.exists(&KeyId::new("issuer")).await.unwrap());
-    }
-
-    /// Every key is the key of the verification method `did:web:example.org#kms`.
-    struct UsedEverywhere;
-
-    #[async_trait]
-    impl KeyUsage for UsedEverywhere {
-        async fn verification_method(
-            &self,
-            _key_id: &str,
-            _public_key: &Jwk,
-        ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-            Ok(Some("did:web:example.org#kms".to_string()))
-        }
-    }
-
-    #[tokio::test]
-    async fn refuses_to_delete_the_key_of_a_verification_method() {
-        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        let _ = state.key_usage.set(Arc::new(UsedEverywhere));
-        let (id, _) = create_labelled(&state).await.unwrap();
-
-        let result = delete_key(&state, Caller::Internal, &id).await;
-
-        assert!(matches!(result, Err(DeleteKeyError::InUse { .. })), "{result:?}");
-    }
-
-    #[tokio::test]
-    async fn records_a_key_its_provider_no_longer_has_as_deleted() {
-        let provider = Arc::new(FakeProvider::new());
-        let state = state_with_provider(provider.clone()).await;
-        let (id, _) = create_labelled(&state).await.unwrap();
-        provider.delete(&KeyId::new("issuer")).await.unwrap();
-
-        delete_key(&state, Caller::Internal, &id).await.unwrap();
-
-        assert!(get_keys(&state, Caller::Internal).await.unwrap().keys.is_empty());
-    }
-
-    #[tokio::test]
-    async fn adopts_a_key_its_provider_has_under_the_label() {
-        let provider = Arc::new(FakeProvider::new());
-        let state = state_with_provider(provider.clone()).await;
-        provider
-            .keys
-            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA).with_label("issuer"))
-            .await
-            .unwrap();
-
-        let (_, reference) = adopt_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::InMemory,
-            "issuer".to_string(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            (reference.provider_key_id.as_str(), reference.algorithm),
-            ("issuer", JwsAlgorithm::EdDSA)
-        );
-    }
-
-    #[tokio::test]
-    async fn refuses_to_adopt_a_recorded_key() {
-        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        create_labelled(&state).await.unwrap();
-
-        let result = adopt_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::InMemory,
-            "issuer".to_string(),
-        )
-        .await;
-
-        assert!(matches!(result, Err(CreateKeyError::AlreadyRecorded(_))), "{result:?}");
-    }
-
-    #[tokio::test]
-    async fn refuses_to_adopt_another_version_of_a_recorded_key() {
-        let provider = Arc::new(FakeProvider {
-            keys_alike: true,
-            ..FakeProvider::new()
-        });
-        let state = state_with_provider(provider.clone()).await;
-        create_labelled(&state).await.unwrap();
-        provider
-            .keys
-            .generate(KeySpec::new(KeyType::Ed25519, JwsAlgorithm::EdDSA).with_label("rotated"))
-            .await
-            .unwrap();
-
-        let result = adopt_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::InMemory,
-            "rotated".to_string(),
-        )
-        .await;
-
-        assert!(matches!(result, Err(CreateKeyError::AlreadyRecorded(_))), "{result:?}");
-    }
-
-    #[tokio::test]
-    async fn refuses_to_adopt_by_a_label_the_provider_refuses() {
-        let state = state_with_provider(Arc::new(FakeProvider {
-            labels_refused: true,
-            ..FakeProvider::new()
-        }))
-        .await;
-
-        let result = adopt_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::InMemory,
-            "issuer".to_string(),
-        )
-        .await;
-
-        assert!(matches!(result, Err(CreateKeyError::InvalidLabel(_))), "{result:?}");
-    }
-
-    #[tokio::test]
-    async fn creates_no_key_that_it_may_not_record() {
-        let provider = Arc::new(FakeProvider::new());
-        let mut state = state_with_provider(provider.clone()).await;
-        state.authorization_checker = Arc::new(ProviderOnly);
-
-        let result = create_labelled(&state).await;
-
-        assert!(matches!(
-            result,
-            Err(CreateKeyError::Record(CommandHandlerError::Authorization(_)))
-        ));
-        assert_eq!(provider.generated.load(Ordering::SeqCst), 0);
-    }
-
-    #[tokio::test]
-    async fn records_the_key_although_the_caller_gives_up() {
-        let state = state_with_provider(Arc::new(FakeProvider {
-            generate_delay: Duration::from_millis(100),
-            ..FakeProvider::new()
-        }))
-        .await;
-        tokio::time::timeout(Duration::from_millis(20), create_labelled(&state))
-            .await
-            .unwrap_err();
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        let keys = get_keys(&state, Caller::Internal).await.unwrap().keys;
-
-        assert_eq!(keys.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn refuses_an_algorithm_it_does_not_create_keys_for() {
-        let state = state().await;
-        add(&state, KeyProviderType::AwsKmsAmbient).await;
-
-        let result = create_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::AwsKmsAmbient,
-            JwsAlgorithm::ES384,
-            None,
-        )
-        .await;
-
-        assert!(matches!(
-            result,
-            Err(CreateKeyError::UnsupportedAlgorithm(JwsAlgorithm::ES384))
-        ));
-    }
-
-    #[tokio::test]
-    async fn records_nothing_when_the_provider_fails() {
-        let state = state().await;
-        add(&state, KeyProviderType::AwsKmsAmbient).await;
-
-        let _ = create_key(
-            &state,
-            Caller::Internal,
-            KeyProviderType::AwsKmsAmbient,
-            JwsAlgorithm::ES256,
-            None,
-        )
-        .await;
-
-        assert!(get_keys(&state, Caller::Internal).await.unwrap().keys.is_empty());
-    }
-
-    #[tokio::test]
-    async fn gives_a_key_to_sign_with_with_the_adapter_of_its_provider() {
-        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        let (id, reference) = create_labelled(&state).await.unwrap();
-
-        let signing_key = signing_key(&state, &id).await.unwrap();
-
-        assert_eq!(signing_key.map(|key| key.reference), Some(reference));
-    }
-
-    #[tokio::test]
-    async fn an_unknown_key_cannot_sign() {
-        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-
-        let signing_key = signing_key(&state, "unknown").await.unwrap();
-
-        assert!(signing_key.is_none());
-    }
-
-    #[tokio::test]
-    async fn a_key_without_an_adapter_for_its_provider_cannot_sign() {
-        let mut state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        let (id, _) = create_labelled(&state).await.unwrap();
-        state.factories = Arc::new(KeyProviderFactories::new());
-
-        let signing_key = signing_key(&state, &id).await.unwrap();
-
-        assert!(signing_key.is_none());
-    }
-
-    #[tokio::test]
-    async fn gives_every_created_key_to_sign_with() {
-        let state = state_with_provider(Arc::new(FakeProvider::new())).await;
-        let (_, reference) = create_labelled(&state).await.unwrap();
-
-        let signing_keys = signing_keys(&state).await.unwrap();
-
-        assert_eq!(
-            signing_keys.into_iter().map(|key| key.reference).collect::<Vec<_>>(),
-            vec![reference]
-        );
     }
 }

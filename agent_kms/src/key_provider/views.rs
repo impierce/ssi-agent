@@ -10,10 +10,9 @@ use serde::{Deserialize, Serialize};
 /// The key providers this instance is connected to, in the order they were added.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct KeyProvidersView {
-    /// Provider names by type.
     pub providers: IndexMap<KeyProviderType, String>,
-    /// The settings of the providers that have any, by type. Kept apart from the names so that views stored before
-    /// providers had settings can still be read.
+    /// The settings of every provider in `providers` that has any. Views stored before providers had settings have
+    /// none.
     #[serde(default)]
     pub settings: IndexMap<KeyProviderType, KeyProviderSettings>,
 }
@@ -25,7 +24,6 @@ impl View<KeyProviders> for KeyProvidersView {
                 provider_type,
                 name,
                 settings,
-                ..
             } => {
                 self.providers.insert(*provider_type, name.clone());
                 if let Some(settings) = settings {
@@ -43,10 +41,8 @@ impl View<KeyProviders> for KeyProvidersView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::key_provider::settings::{StackitKmsSettings, StackitRegion};
-    use serde_json::json;
+    use crate::key_provider::settings::tests::stackit;
     use std::collections::HashMap;
-    use uuid::Uuid;
 
     fn envelope(payload: KeyProviderEvent) -> EventEnvelope<KeyProviders> {
         EventEnvelope {
@@ -58,25 +54,12 @@ mod tests {
     }
 
     #[test]
-    fn reads_a_view_stored_before_providers_had_settings() {
-        let view: KeyProvidersView =
-            serde_json::from_value(json!({ "providers": { "aws_kms_ambient": "Production keys" } })).unwrap();
-
-        assert!(view.settings.is_empty());
-    }
-
-    #[test]
     fn forgets_the_settings_of_a_removed_provider() {
         let mut view = KeyProvidersView::default();
         view.update(&envelope(KeyProviderEvent::KeyProviderAdded {
             provider_type: KeyProviderType::StackitKms,
-            name: "Own keys".to_string(),
-            settings: Some(KeyProviderSettings::StackitKms(StackitKmsSettings {
-                project_id: Uuid::from_u128(1),
-                region: StackitRegion::Eu01,
-                key_ring_id: Uuid::from_u128(2),
-                service_account_email: "unicore@sa.stackit.cloud".to_string(),
-            })),
+            name: "Customer keys".to_string(),
+            settings: Some(stackit("key-ring")),
         }));
 
         view.update(&envelope(KeyProviderEvent::KeyProviderRemoved {
@@ -84,5 +67,17 @@ mod tests {
         }));
 
         assert!(view.settings.is_empty());
+    }
+
+    #[test]
+    fn reads_a_view_stored_before_providers_had_settings() {
+        let stored = serde_json::json!({ "providers": { "aws_kms_ambient": "Production keys" } });
+
+        let view: KeyProvidersView = serde_json::from_value(stored).unwrap();
+
+        assert_eq!(
+            view.providers,
+            IndexMap::from([(KeyProviderType::AwsKmsAmbient, "Production keys".to_string())])
+        );
     }
 }

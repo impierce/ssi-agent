@@ -1,40 +1,32 @@
-//! The port through which the KMS talks to key providers, and the in-memory provider.
+//! The port through which the KMS talks to key providers, how adapters are built from a provider's settings, and the
+//! in-memory provider.
 
 use crate::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use async_trait::async_trait;
+use identity_kit::jose::{Jwk, JwsAlgorithm};
 pub use identity_kit::keys::InMemoryKeyStore;
-use identity_kit::{
-    jose::JwsAlgorithm,
-    keys::{KeyId, KeySpec, KeyStore, KeyStoreError},
+use identity_kit::keys::{KeyId, KeySpec, KeyStore, KeyStoreCapabilities, KeyStoreError};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
-use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
+use tracing::warn;
 
 /// Why a key provider could not be reached. The message comes from the provider and is shown to the operator.
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct ConnectionError(pub String);
 
-/// Why a provider can't give a key this label. The message is shown to the operator.
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct InvalidLabel(pub String);
-
-/// Why a provider refuses to create or adopt keys for an algorithm it can sign with. The message is shown to the
-/// operator.
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub struct RefusedAlgorithm(pub String);
-
-/// What signs with the keys of this instance, outside the Key Management System, such as DID documents.
-#[async_trait]
-pub trait KeyUsage: Send + Sync {
-    /// The verification method whose key is the key `key_id`, with the public key `public_key`, if any.
-    async fn verification_method(
-        &self,
-        key_id: &str,
-        public_key: &identity_kit::jose::Jwk,
-    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
+/// Why a provider refuses a key it could otherwise create or adopt. Providers tell this before anything is created.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum KeyRefusal {
+    /// The provider can't name a key by this label. The message says why.
+    #[error("{0}")]
+    InvalidLabel(String),
+    /// The provider signs with this algorithm, but not in a way credentials can rely on. The message says why.
+    #[error("{0}")]
+    AlgorithmRefused(String),
 }
 
 /// A key that exists in a key provider, as reported by the provider.
@@ -83,90 +75,116 @@ pub trait KeyProviderAdapter: KeyStore {
     /// sign with.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError>;
 
-    /// Checks, before anything is created, that the provider can give a key `label`.
+    /// Refuses a key the provider would create or hold, but that the KMS must not use, such as a label the provider
+    /// can't name a key by. Nothing is asked of the provider, so this is checked before a key is created or adopted.
     ///
     /// # Errors
     ///
-    /// Fails when the provider can't use `label` to name a key.
-    fn check_label(&self, _label: &str) -> Result<(), InvalidLabel> {
-        Ok(())
+    /// The refusal, when the provider refuses the key.
+    fn check_spec(&self, spec: &KeySpec) -> Result<(), KeyRefusal>;
+
+    /// Creates a key as `spec` describes, and returns the id that names it for good, unlike a label that can later
+    /// name another key. The key is created, and named by its label, even when the returned future is dropped.
+    ///
+    /// # Errors
+    ///
+    /// As [`KeyStore::generate`].
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError>;
+
+    /// The id that names for good the key `label` names now, or `None` when no usable key has that label.
+    ///
+    /// # Errors
+    ///
+    /// Only when the provider can't answer.
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError>;
+
+    /// Whether `a` and `b` name one key, such as two versions of it. Only equal ids do, unless the provider names a
+    /// key in more than one way for good.
+    fn same_key(&self, a: &KeyId, b: &KeyId) -> bool {
+        a == b
+    }
+}
+
+/// Builds the adapter of a provider type whose providers are added with [`KeyProviderSettings`], such as STACKIT KMS,
+/// whose settings say where its keys are and who this instance signs in as.
+pub trait KeyProviderFactory: Send + Sync {
+    /// An adapter for a provider with `settings`. It is built on first use and then kept, so building does no I/O.
+    ///
+    /// # Errors
+    ///
+    /// Why no adapter can be built. It is shown to the operator as the reason the provider can't be reached.
+    fn build(&self, settings: &KeyProviderSettings) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError>;
+}
+
+/// The adapters of the provider types this instance can use: one adapter for a type without settings, and one for
+/// each settings of a type with a [`KeyProviderFactory`], built on first use and kept from then on.
+#[derive(Default)]
+pub struct KeyProviderAdapters {
+    fixed: HashMap<KeyProviderType, Arc<dyn KeyProviderAdapter>>,
+    factories: HashMap<KeyProviderType, Arc<dyn KeyProviderFactory>>,
+    built: Mutex<HashMap<KeyProviderSettings, Arc<dyn KeyProviderAdapter>>>,
+}
+
+impl KeyProviderAdapters {
+    /// These adapters, with `factory` building those of `provider_type` from the settings of its providers.
+    #[must_use]
+    pub fn with_factory(mut self, provider_type: KeyProviderType, factory: impl KeyProviderFactory + 'static) -> Self {
+        self.factories.insert(provider_type, Arc::new(factory));
+        self
     }
 
-    /// Checks, before anything is created or adopted, that keys of this provider may sign with `algorithm`.
+    /// The adapter for a provider of `provider_type` with `settings`, or `None` when this instance has none for the
+    /// type.
     ///
-    /// # Errors
+    /// An adapter that can't be built, also for want of settings, is an [`UnreachableKeyProvider`] that tells why. It
+    /// is not kept, so the next use tries again.
     ///
-    /// Fails when the provider can sign with `algorithm`, but not in a way credentials can rely on.
-    fn check_algorithm(&self, _algorithm: JwsAlgorithm) -> Result<(), RefusedAlgorithm> {
-        Ok(())
-    }
+    /// # Panics
+    ///
+    /// When a factory panicked while building an adapter before.
+    pub fn get(
+        &self,
+        provider_type: KeyProviderType,
+        settings: Option<&KeyProviderSettings>,
+    ) -> Option<Arc<dyn KeyProviderAdapter>> {
+        if let Some(adapter) = self.fixed.get(&provider_type) {
+            return Some(adapter.clone());
+        }
+        let factory = self.factories.get(&provider_type)?;
+        let Some(settings) = settings else {
+            return Some(unbuilt(
+                provider_type,
+                ConnectionError(format!("A `{provider_type}` key provider needs its settings")),
+            ));
+        };
 
-    /// Generates a key as [`KeyStore::generate`] does, but returns an id that names this key for good, also where
-    /// the provider lets a label be moved to another key. A labelled key can still be deleted by its label.
-    ///
-    /// # Errors
-    ///
-    /// Fails as [`KeyStore::generate`] does.
-    async fn create(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
-        self.generate(spec).await
-    }
-
-    /// Returns the id that names the key labelled `label` for good, as [`create`](Self::create) does, to record a key
-    /// that exists in the provider but that this instance didn't record.
-    ///
-    /// By default a label is the key's id.
-    ///
-    /// # Errors
-    ///
-    /// Fails with [`KeyStoreError::NotFound`] when no key has the label, or as [`KeyStore::exists`] does.
-    async fn adopt(&self, label: &str) -> Result<KeyId, KeyStoreError> {
-        let key = KeyId::new(label);
-        if self.exists(&key).await? {
-            Ok(key)
-        } else {
-            Err(KeyStoreError::NotFound(key))
+        let mut built = self.built.lock().expect("lock poisoned");
+        if let Some(adapter) = built.get(settings) {
+            return Some(adapter.clone());
+        }
+        match factory.build(settings) {
+            Ok(adapter) => {
+                built.insert(settings.clone(), adapter.clone());
+                Some(adapter)
+            }
+            Err(error) => Some(unbuilt(provider_type, error)),
         }
     }
-
-    /// Deletes the key [`create`](Self::create) or [`adopt`](Self::adopt) returned `created` for, and frees `label`,
-    /// which names it, only while the label still names that key.
-    ///
-    /// By default the key is deleted by `created`, for providers whose label goes with the key.
-    ///
-    /// Whether the recorded key `recorded` and the key `key` are one key of the provider, such as two of its versions.
-    fn same_key(&self, recorded: &str, key: &KeyId) -> bool {
-        recorded == key.as_str()
-    }
-
-    /// # Errors
-    ///
-    /// Fails as [`KeyStore::delete`] does.
-    async fn discard(&self, created: &KeyId, _label: Option<&str>) -> Result<(), KeyStoreError> {
-        self.delete(created).await
-    }
 }
 
-/// Builds the adapter of a provider from the settings it was added with. Providers are added at runtime, so their
-/// adapters can only be built once their settings are known.
-pub trait KeyProviderFactory: Send + Sync {
-    /// Builds the adapter for a provider added with `settings`, which match the factory's provider type.
-    ///
-    /// # Errors
-    ///
-    /// Fails when the provider can't be reached with these settings in this environment, for example because a
-    /// workload identity token it needs isn't available.
-    fn build(&self, settings: Option<&KeyProviderSettings>) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError>;
+/// Stands in for an adapter of `provider_type` that couldn't be built, failing every request with `error`.
+fn unbuilt(provider_type: KeyProviderType, error: ConnectionError) -> Arc<dyn KeyProviderAdapter> {
+    warn!(%provider_type, %error, "Key provider adapter could not be built");
+    Arc::new(UnreachableKeyProvider(error.0))
 }
 
-/// The factory for each provider type this instance can use.
-pub type KeyProviderFactories = HashMap<KeyProviderType, Arc<dyn KeyProviderFactory>>;
-
-/// A factory for a provider type that takes no settings, which always hands out the same adapter.
-pub struct FixedAdapter(pub Arc<dyn KeyProviderAdapter>);
-
-impl KeyProviderFactory for FixedAdapter {
-    fn build(&self, _settings: Option<&KeyProviderSettings>) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError> {
-        Ok(self.0.clone())
+/// Every adapter given is used for every provider of its type, which takes no settings.
+impl<const N: usize> From<[(KeyProviderType, Arc<dyn KeyProviderAdapter>); N]> for KeyProviderAdapters {
+    fn from(fixed: [(KeyProviderType, Arc<dyn KeyProviderAdapter>); N]) -> Self {
+        Self {
+            fixed: fixed.into(),
+            ..Self::default()
+        }
     }
 }
 
@@ -181,57 +199,177 @@ impl KeyProviderAdapter for InMemoryKeyStore {
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
         Ok(ProviderKeys::default())
     }
+
+    fn check_spec(&self, _spec: &KeySpec) -> Result<(), KeyRefusal> {
+        Ok(())
+    }
+
+    /// A key's id is its label, or its thumbprint without one, and never names another key.
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        self.generate(spec).await
+    }
+
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+        let key = KeyId::new(label);
+        if self.exists(&key).await? {
+            Ok(Some(key))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// A provider that can't be reached: every request fails with its reason, such as why its adapter couldn't be built.
+pub struct UnreachableKeyProvider(
+    /// Why the provider can't be reached, shown to the operator.
+    pub String,
+);
+
+impl UnreachableKeyProvider {
+    fn error(&self) -> ConnectionError {
+        ConnectionError(self.0.clone())
+    }
+}
+
+#[async_trait]
+impl KeyStore for UnreachableKeyProvider {
+    fn capabilities(&self) -> KeyStoreCapabilities {
+        KeyStoreCapabilities::new([JwsAlgorithm::ES256])
+            .with_generate()
+            .with_delete()
+            .remote()
+    }
+
+    async fn public_jwk(&self, _key: &KeyId) -> Result<Jwk, KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
+
+    async fn sign(&self, _key: &KeyId, _alg: JwsAlgorithm, _data: &[u8]) -> Result<Vec<u8>, KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
+
+    async fn exists(&self, _key: &KeyId) -> Result<bool, KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
+
+    async fn generate(&self, _spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
+
+    async fn delete(&self, _key: &KeyId) -> Result<(), KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
+}
+
+#[async_trait]
+impl KeyProviderAdapter for UnreachableKeyProvider {
+    async fn test_connection(&self) -> Result<(), ConnectionError> {
+        Err(self.error())
+    }
+
+    async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
+        Err(self.error())
+    }
+
+    fn check_spec(&self, _spec: &KeySpec) -> Result<(), KeyRefusal> {
+        Ok(())
+    }
+
+    async fn create_key(&self, _spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
+
+    async fn find_key(&self, _label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+        Err(KeyStoreError::backend(self.error()))
+    }
 }
 
 #[cfg(any(test, feature = "test_utils"))]
 pub mod test_utils {
-    use super::{ConnectionError, KeyProviderAdapter, ProviderKeys};
-    use async_trait::async_trait;
-    use identity_kit::{
-        jose::{Jwk, JwsAlgorithm},
-        keys::{KeyId, KeyStore, KeyStoreCapabilities, KeyStoreError},
-    };
+    use super::{ConnectionError, InMemoryKeyStore, KeyProviderAdapter, KeyProviderFactory};
+    use crate::key_provider::settings::KeyProviderSettings;
+    use std::sync::{Arc, Mutex};
 
-    /// A provider that can't be reached: every request fails with "connection refused".
-    pub struct UnreachableKeyProvider;
-
-    fn refused() -> ConnectionError {
-        ConnectionError("connection refused".to_string())
+    /// Builds an in-memory provider for each settings, and records the settings of every build it is asked for. Fails
+    /// every build when `failure` is set, with it as the reason.
+    #[derive(Clone, Default)]
+    pub struct InMemoryFactory {
+        pub builds: Arc<Mutex<Vec<KeyProviderSettings>>>,
+        pub failure: Option<String>,
     }
 
-    #[async_trait]
-    impl KeyStore for UnreachableKeyProvider {
-        fn capabilities(&self) -> KeyStoreCapabilities {
-            KeyStoreCapabilities::new([JwsAlgorithm::ES256])
-                .with_generate()
-                .remote()
-        }
-
-        async fn public_jwk(&self, _key: &KeyId) -> Result<Jwk, KeyStoreError> {
-            Err(KeyStoreError::backend(refused()))
-        }
-
-        async fn sign(&self, _key: &KeyId, _alg: JwsAlgorithm, _data: &[u8]) -> Result<Vec<u8>, KeyStoreError> {
-            Err(KeyStoreError::backend(refused()))
-        }
-
-        async fn exists(&self, _key: &KeyId) -> Result<bool, KeyStoreError> {
-            Err(KeyStoreError::backend(refused()))
-        }
-
-        async fn generate(&self, _spec: identity_kit::keys::KeySpec) -> Result<KeyId, KeyStoreError> {
-            Err(KeyStoreError::backend(refused()))
+    impl KeyProviderFactory for InMemoryFactory {
+        fn build(&self, settings: &KeyProviderSettings) -> Result<Arc<dyn KeyProviderAdapter>, ConnectionError> {
+            self.builds.lock().unwrap().push(settings.clone());
+            if let Some(failure) = &self.failure {
+                return Err(ConnectionError(failure.clone()));
+            }
+            Ok(Arc::new(InMemoryKeyStore::new()))
         }
     }
+}
 
-    #[async_trait]
-    impl KeyProviderAdapter for UnreachableKeyProvider {
-        async fn test_connection(&self) -> Result<(), ConnectionError> {
-            Err(refused())
-        }
+#[cfg(test)]
+mod tests {
+    use super::test_utils::InMemoryFactory;
+    use super::*;
+    use crate::key_provider::settings::tests::stackit;
 
-        async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
-            Err(refused())
-        }
+    fn adapters(factory: &InMemoryFactory) -> KeyProviderAdapters {
+        KeyProviderAdapters::default().with_factory(KeyProviderType::StackitKms, factory.clone())
+    }
+
+    #[test]
+    fn reuses_the_adapter_it_built() {
+        let factory = InMemoryFactory::default();
+        let adapters = adapters(&factory);
+        adapters.get(KeyProviderType::StackitKms, Some(&stackit("key-ring")));
+
+        adapters.get(KeyProviderType::StackitKms, Some(&stackit("key-ring")));
+
+        assert_eq!(*factory.builds.lock().unwrap(), [stackit("key-ring")]);
+    }
+
+    #[test]
+    fn builds_another_adapter_for_other_settings() {
+        let factory = InMemoryFactory::default();
+        let adapters = adapters(&factory);
+        adapters.get(KeyProviderType::StackitKms, Some(&stackit("key-ring")));
+
+        adapters.get(KeyProviderType::StackitKms, Some(&stackit("other-key-ring")));
+
+        assert_eq!(
+            *factory.builds.lock().unwrap(),
+            [stackit("key-ring"), stackit("other-key-ring")]
+        );
+    }
+
+    #[test]
+    fn tries_again_to_build_an_adapter_that_could_not_be_built() {
+        let factory = InMemoryFactory {
+            failure: Some("no workload identity token".to_string()),
+            ..InMemoryFactory::default()
+        };
+        let adapters = adapters(&factory);
+        adapters.get(KeyProviderType::StackitKms, Some(&stackit("key-ring")));
+
+        adapters.get(KeyProviderType::StackitKms, Some(&stackit("key-ring")));
+
+        assert_eq!(
+            *factory.builds.lock().unwrap(),
+            [stackit("key-ring"), stackit("key-ring")]
+        );
+    }
+
+    #[tokio::test]
+    async fn builds_no_adapter_without_settings() {
+        let adapters = adapters(&InMemoryFactory::default());
+
+        let adapter = adapters.get(KeyProviderType::StackitKms, None).unwrap();
+
+        assert_eq!(
+            adapter.test_connection().await.unwrap_err().to_string(),
+            "A `stackit_kms` key provider needs its settings"
+        );
     }
 }

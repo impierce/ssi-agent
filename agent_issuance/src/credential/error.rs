@@ -22,4 +22,6 @@ pub enum CredentialError {
     InvalidIssuerDidError,
     #[error("Failed to get a key identifier for signing the credential")]
     KeyIdError,
+    #[error("Failed to sign the credential: {0}")]
+    SigningError(String),
 }

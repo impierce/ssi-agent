@@ -1,13 +1,39 @@
 use crate::error::{type_url, IntoApiErrorExt};
 use agent_identity::{
     connection::error::ConnectionError,
-    document::error::DocumentError,
+    document::{
+        error::DocumentError,
+        key_source::KeySourceError,
+        keys::{AddKeyError, DidWebDocumentError, SelectSigningKeyError},
+    },
     profile::error::ProfileError,
     service::error::ServiceError,
-    state::{AddKeyError, ChangeDocumentKeyError, SelectSigningKeyError},
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+
+/// A problem of type `identity#<anchor>` in `docs/problem-details/identity.md`, detailed by `error`.
+fn problem<E: std::error::Error + Send + Sync + 'static>(
+    status: StatusCode,
+    title: &str,
+    anchor: &str,
+    error: E,
+) -> ApiError {
+    ApiError::builder(status)
+        .title(title)
+        .type_url(type_url(&format!("identity#{anchor}")))
+        .message(error.to_string())
+        .source(error)
+        .finish()
+}
+
+/// A problem without a documented type, detailed by `error`.
+fn undocumented<E: std::error::Error + Send + Sync + 'static>(status: StatusCode, error: E) -> ApiError {
+    ApiError::builder(status)
+        .message(error.to_string())
+        .source(error)
+        .finish()
+}
 
 impl IntoApiErrorExt for ConnectionError {
     fn into_api_error(self) -> ApiError {
@@ -52,89 +78,18 @@ impl IntoApiErrorExt for DocumentError {
                 .type_url(type_url("identity#invalid-origin"))
                 .message(self.to_string())
                 .finish(),
-            UnknownVerificationMethodError(_) => verification_method_not_found(self.to_string()),
-            VerificationMethodAlgorithmError(_) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Unsupported Verification Method Algorithm")
-                .type_url(type_url("identity#unsupported-verification-method-algorithm"))
-                .message(self.to_string())
-                .finish(),
-            NotAnAddedKeyError(_) => ApiError::builder(StatusCode::CONFLICT)
-                .title("Not An Added Key")
-                .type_url(type_url("identity#not-an-added-key"))
-                .message(self.to_string())
-                .finish(),
-            SelectedSigningKeyError(_) => ApiError::builder(StatusCode::CONFLICT)
-                .title("Selected Signing Key")
-                .type_url(type_url("identity#selected-signing-key"))
-                .message(self.to_string())
-                .finish(),
+            DidWebOnlyError => undocumented(StatusCode::CONFLICT, self),
+            NoKeyAlgorithmError(_) => undocumented(StatusCode::BAD_REQUEST, self),
+            UnknownVerificationMethodError(_) => undocumented(StatusCode::NOT_FOUND, self),
+            NotAnAddedKeyError(_) => problem(StatusCode::CONFLICT, "Not An Added Key", "not-an-added-key", self),
+            SelectedSigningKeyError(_) => problem(
+                StatusCode::CONFLICT,
+                "Selected Signing Key",
+                "selected-signing-key",
+                self,
+            ),
             // TODO: Implement appropriate Problem Details responses
             _ => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-        }
-    }
-}
-
-fn verification_method_not_found(message: String) -> ApiError {
-    ApiError::builder(StatusCode::NOT_FOUND)
-        .title("Verification Method Not Found")
-        .type_url(type_url("identity#verification-method-not-found"))
-        .message(message)
-        .finish()
-}
-
-impl IntoApiErrorExt for SelectSigningKeyError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            SelectSigningKeyError::NotFound(_) => verification_method_not_found(self.to_string()),
-            SelectSigningKeyError::KeyUnavailable(_) => ApiError::builder(StatusCode::CONFLICT)
-                .title("Signing Key Unavailable")
-                .type_url(type_url("identity#signing-key-unavailable"))
-                .message(self.to_string())
-                .finish(),
-            SelectSigningKeyError::Command(error) => error.into_api_error(),
-            SelectSigningKeyError::Infrastructure(error) => {
-                tracing::error!("Selecting a signing key failed: {error:#}");
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
-}
-
-impl IntoApiErrorExt for AddKeyError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            AddKeyError::KeyNotFound(_) => ApiError::builder(StatusCode::NOT_FOUND)
-                .title("Key Not Found")
-                .type_url(type_url("identity#key-not-found"))
-                .message(self.to_string())
-                .finish(),
-            AddKeyError::DocumentNotFound => ApiError::builder(StatusCode::CONFLICT)
-                .title("No did:web Document")
-                .type_url(type_url("identity#did-web-document-not-found"))
-                .message(self.to_string())
-                .finish(),
-            AddKeyError::Command(error) => error.into_api_error(),
-            AddKeyError::Infrastructure(error) => {
-                tracing::error!("Adding a key to a document failed: {error:#}");
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
-}
-
-impl IntoApiErrorExt for ChangeDocumentKeyError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            ChangeDocumentKeyError::DocumentNotFound => ApiError::builder(StatusCode::CONFLICT)
-                .title("No did:web Document")
-                .type_url(type_url("identity#did-web-document-not-found"))
-                .message(self.to_string())
-                .finish(),
-            ChangeDocumentKeyError::Command(error) => error.into_api_error(),
-            ChangeDocumentKeyError::Infrastructure(error) => {
-                tracing::error!("Changing the keys of a document failed: {error:#}");
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR)
-            }
         }
     }
 }
@@ -155,6 +110,14 @@ impl IntoApiErrorExt for ProfileError {
 
 impl IntoApiErrorExt for ServiceError {
     fn into_api_error(self) -> ApiError {
+        if let ServiceError::SigningError(_) = self {
+            return problem(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Signing Key Failed",
+                "signing-key-failed",
+                self,
+            );
+        }
         let (status, title, kind) = match &self {
             ServiceError::AlreadyExists => (StatusCode::CONFLICT, "Service already exists", "service-already-exists"),
             ServiceError::NotFound => (StatusCode::NOT_FOUND, "Service not found", "service-not-found"),
@@ -177,11 +140,6 @@ impl IntoApiErrorExt for ServiceError {
                 "Presentation Invalid",
                 "presentation-invalid",
             ),
-            ServiceError::SigningError(_) => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Signing Key Failed",
-                "signing-key-failed",
-            ),
             // TODO: Implement appropriate Problem Details responses
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -194,6 +152,58 @@ impl IntoApiErrorExt for ServiceError {
             .type_url(type_url(&format!("identity#{kind}")))
             .message(self.to_string())
             .finish()
+    }
+}
+
+impl IntoApiErrorExt for AddKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            AddKeyError::Authorization(error) => error.into_api_error(),
+            AddKeyError::Persistence(error) => error.into_api_error(),
+            AddKeyError::NoDidWebDocument => undocumented(StatusCode::CONFLICT, self),
+            AddKeyError::Key(error) => error.into_api_error(),
+            AddKeyError::Document(error) => error.into_api_error(),
+            AddKeyError::Command(error) => error.into_api_error(),
+        }
+    }
+}
+
+/// The keys `add-key-to-document` adds are keys of the Key Management System, so a missing one is its `key-not-found`.
+impl IntoApiErrorExt for KeySourceError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            KeySourceError::NotFound(_) => {
+                crate::v0::kms::error::problem(StatusCode::NOT_FOUND, "Key Not Found", "key-not-found", self)
+            }
+            KeySourceError::Unusable { .. } => {
+                problem(StatusCode::NOT_IMPLEMENTED, "Key Unusable", "key-unusable", self)
+            }
+            KeySourceError::Unavailable { .. } => {
+                problem(StatusCode::BAD_GATEWAY, "Key Unavailable", "key-unavailable", self)
+            }
+        }
+    }
+}
+
+impl IntoApiErrorExt for DidWebDocumentError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            DidWebDocumentError::Persistence(error) => error.into_api_error(),
+            DidWebDocumentError::NoDidWebDocument => undocumented(StatusCode::CONFLICT, self),
+            DidWebDocumentError::Command(error) => error.into_api_error(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for SelectSigningKeyError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            SelectSigningKeyError::Authorization(error) => error.into_api_error(),
+            SelectSigningKeyError::Persistence(error) => error.into_api_error(),
+            SelectSigningKeyError::UnknownDid(_) => undocumented(StatusCode::NOT_FOUND, self),
+            SelectSigningKeyError::NotAvailable { .. } => undocumented(StatusCode::CONFLICT, self),
+            SelectSigningKeyError::Command(error) => error.into_api_error(),
+        }
     }
 }
 
@@ -260,61 +270,107 @@ mod tests {
                 Some("identity#invalid-origin"),
             ),
             (
-                DocumentError::UnknownVerificationMethodError("did:web:example.org#key".to_string()),
-                StatusCode::NOT_FOUND,
-                Some("identity#verification-method-not-found"),
-            ),
-            (
-                DocumentError::VerificationMethodAlgorithmError("did:web:example.org#key".to_string()),
-                StatusCode::BAD_REQUEST,
-                Some("identity#unsupported-verification-method-algorithm"),
-            ),
-            (
                 DocumentError::MissingDocumentError,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),
+            (DocumentError::DidWebOnlyError, StatusCode::CONFLICT, None),
+            (
+                DocumentError::NoKeyAlgorithmError(method()),
+                StatusCode::BAD_REQUEST,
+                None,
+            ),
+            (
+                DocumentError::UnknownVerificationMethodError(method()),
+                StatusCode::NOT_FOUND,
+                None,
+            ),
+            (
+                DocumentError::NotAnAddedKeyError(method()),
+                StatusCode::CONFLICT,
+                Some("identity#not-an-added-key"),
+            ),
+            (
+                DocumentError::SelectedSigningKeyError(method()),
+                StatusCode::CONFLICT,
+                Some("identity#selected-signing-key"),
+            ),
         ]);
     }
 
-    #[test]
-    fn select_signing_key_errors_successfully_convert_to_problem_details() {
-        let verification_method_id = || "did:web:example.org#key".parse().unwrap();
-        assert_problems([
-            (
-                SelectSigningKeyError::NotFound(verification_method_id()),
-                StatusCode::NOT_FOUND,
-                Some("identity#verification-method-not-found"),
-            ),
-            (
-                SelectSigningKeyError::KeyUnavailable(verification_method_id()),
-                StatusCode::CONFLICT,
-                Some("identity#signing-key-unavailable"),
-            ),
-            (
-                SelectSigningKeyError::Infrastructure(anyhow::anyhow!("error")),
-                StatusCode::INTERNAL_SERVER_ERROR,
-                None,
-            ),
-        ]);
+    fn method() -> identity_kit::did::DidUrl {
+        "did:web:example.org#key".parse().unwrap()
     }
 
     #[test]
     fn add_key_errors_successfully_convert_to_problem_details() {
         assert_problems([
+            (AddKeyError::NoDidWebDocument, StatusCode::CONFLICT, None),
             (
-                AddKeyError::KeyNotFound("key".to_string()),
+                AddKeyError::Key(KeySourceError::NotFound("key-id".to_string())),
                 StatusCode::NOT_FOUND,
-                Some("identity#key-not-found"),
+                Some("kms#key-not-found"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn key_source_errors_successfully_convert_to_problem_details() {
+        let reason = || "connection refused".to_string();
+        assert_problems([
+            (
+                KeySourceError::Unusable {
+                    id: "key-id".to_string(),
+                    reason: reason(),
+                },
+                StatusCode::NOT_IMPLEMENTED,
+                Some("identity#key-unusable"),
             ),
             (
-                AddKeyError::DocumentNotFound,
+                KeySourceError::Unavailable {
+                    id: "key-id".to_string(),
+                    reason: reason(),
+                },
+                StatusCode::BAD_GATEWAY,
+                Some("identity#key-unavailable"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn a_key_that_cannot_be_had_is_detailed_by_its_id_and_reason() {
+        let error = KeySourceError::Unavailable {
+            id: "key-id".to_string(),
+            reason: "connection refused".to_string(),
+        };
+
+        let api_error = error.into_api_error();
+
+        assert_eq!(
+            api_error.message(),
+            Some("The key `key-id` is not available now: connection refused")
+        );
+    }
+
+    #[test]
+    fn did_web_document_errors_successfully_convert_to_problem_details() {
+        assert_problems([(DidWebDocumentError::NoDidWebDocument, StatusCode::CONFLICT, None)]);
+    }
+
+    #[test]
+    fn select_signing_key_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                SelectSigningKeyError::UnknownDid("did:web:example.org".parse().unwrap()),
+                StatusCode::NOT_FOUND,
+                None,
+            ),
+            (
+                SelectSigningKeyError::NotAvailable {
+                    method: method(),
+                    reason: "its provider no longer holds it".to_string(),
+                },
                 StatusCode::CONFLICT,
-                Some("identity#did-web-document-not-found"),
-            ),
-            (
-                AddKeyError::Infrastructure(anyhow::anyhow!("error")),
-                StatusCode::INTERNAL_SERVER_ERROR,
                 None,
             ),
         ]);

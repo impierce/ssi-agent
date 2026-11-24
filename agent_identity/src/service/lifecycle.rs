@@ -10,7 +10,6 @@ use crate::{
     state::{query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID},
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
-use cqrs_es::AggregateError;
 use identity_kit::{did::Service as DocumentService, vc::Jwt};
 use serde::Serialize;
 use shared_kernel::authorization::{
@@ -339,10 +338,8 @@ fn renewal_command(only_if_expiring: bool) -> ServiceCommand {
     }
 }
 
-/// Startup and runtime share the same renewal policy. Deleted services are never renewed. A key that can't sign, such
-/// as one whose provider can't be reached, keeps the current credentials published, and the next maintenance tries
-/// again. Renewal starts [`LINKED_DOMAINS_RENEWAL_WINDOW_DAYS`](super::aggregate::LINKED_DOMAINS_RENEWAL_WINDOW_DAYS)
-/// days before they expire, but they expire if it keeps failing that long. It doesn't stop the instance from starting.
+/// Startup and runtime share the same renewal policy. Deleted services are never renewed. A renewal that fails, such
+/// as when a key of the document can't sign, keeps the published credentials and is tried again next time.
 pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
     let _guard = state.service_lifecycle_lock.lock().await;
     if linked_domains(state)
@@ -354,12 +351,12 @@ pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
             warn!("Linked domains need renewal, but no eligible signing DID is enabled");
         } else {
             match execute_locked(state, renewal_command(true)).await {
-                Err(ServiceManagementError::Command(CommandHandlerError::Aggregate(AggregateError::UserError(
-                    ServiceError::SigningError(error),
-                )))) => warn!("Renewing the linked domains failed, the current credentials stay published: {error}"),
-                result => result?,
+                Ok(()) => return Ok(()),
+                Err(error) => warn!(
+                    error = format!("{error:#}"),
+                    "Renewing the linked domains failed; the published credentials stay"
+                ),
             }
-            return Ok(());
         }
     }
     synchronize_services(state).await?;
@@ -381,4 +378,87 @@ pub fn spawn_maintenance(state: &Arc<IdentityState>) -> tokio::task::JoinHandle<
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::key_source::NoKeys;
+    use crate::document::keys::load_signing_keys;
+    use crate::services::IdentityServices;
+    use crate::state::{identity_state, initialize_documents};
+    use agent_secret_manager::subject::Subject;
+    use agent_shared::config::{config, SupportedDidMethod, ToggleOptions};
+    use agent_store::in_memory::InMemory;
+    use chrono::{DateTime, TimeDelta};
+    use shared_kernel::event_bus::EventBusHandle;
+    use std::sync::atomic::{AtomicI64, Ordering};
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn linked_domains_due_for_renewal_with_a_key_that_cannot_sign_do_not_fail_maintenance() {
+        let now = Arc::new(AtomicI64::new(0));
+        let services = IdentityServices {
+            linkage_clock: {
+                let now = now.clone();
+                Arc::new(move || DateTime::from_timestamp(now.load(Ordering::SeqCst), 0).unwrap())
+            },
+            ..IdentityServices::new(
+                Arc::new(Subject::new().await),
+                "https://my-domain.example.org/".parse().unwrap(),
+            )
+        };
+        let state = identity_state(&InMemory, Arc::new(services), &EventBusHandle::default()).await;
+        let mut configuration = config().clone();
+        configuration.did_methods = [(
+            SupportedDidMethod::Web,
+            ToggleOptions {
+                enabled: true,
+                preferred: Some(true),
+            },
+        )]
+        .into();
+        initialize_documents(&state, &configuration, &NoKeys).await.unwrap();
+        execute(
+            &state,
+            None,
+            ServiceCommand::AddLinkedDomains {
+                service_id: LINKED_DOMAINS_SERVICE_ID.to_string(),
+                verification_methods: vec![],
+                origins: vec!["https://my-domain.example.org".parse().unwrap()],
+            },
+        )
+        .await
+        .unwrap();
+        // An added key, which no key source has, so it can't sign.
+        let (document_id, _) = query_all_documents(&state, |_| true)
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        public_command_handler(
+            &document_id,
+            &state.command.document,
+            DocumentCommand::AddPublicKey {
+                public_key: serde_json::from_value(serde_json::json!({
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "alg": "ES256",
+                    "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                    "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+                }))
+                .unwrap(),
+                key_id: "key-id".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        load_signing_keys(&state, &NoKeys).await.unwrap();
+        now.store(TimeDelta::days(350).num_seconds(), Ordering::SeqCst);
+
+        let result = maintain_services(&state).await;
+
+        assert!(result.is_ok(), "{result:?}");
+    }
 }

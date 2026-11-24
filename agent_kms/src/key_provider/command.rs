@@ -6,6 +6,7 @@ pub enum KeyProviderCommand {
     AddKeyProvider {
         provider_type: KeyProviderType,
         name: String,
+        /// Required for, and only taken by, the provider types that [need settings](KeyProviderType::needs_settings).
         settings: Option<KeyProviderSettings>,
     },
     RemoveKeyProvider {

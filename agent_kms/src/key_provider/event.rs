@@ -8,7 +8,7 @@ pub enum KeyProviderEvent {
     KeyProviderAdded {
         provider_type: KeyProviderType,
         name: String,
-        /// Absent for provider types without settings, and in events recorded before providers had any.
+        /// `None` for a provider type without settings, and for providers added before providers had settings.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         settings: Option<KeyProviderSettings>,
     },
@@ -30,16 +30,39 @@ impl DomainEvent for KeyProviderEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::key_provider::settings::{StackitKmsSettings, StackitRegion};
+    use crate::key_provider::settings::tests::stackit;
     use serde_json::json;
-    use uuid::Uuid;
+
+    #[test]
+    fn records_the_settings_of_a_provider() {
+        let event = KeyProviderEvent::KeyProviderAdded {
+            provider_type: KeyProviderType::StackitKms,
+            name: "Customer keys".to_string(),
+            settings: Some(stackit("key-ring")),
+        };
+
+        assert_eq!(
+            serde_json::to_value(event).unwrap(),
+            json!({
+                "KeyProviderAdded": {
+                    "provider_type": "stackit_kms",
+                    "name": "Customer keys",
+                    "settings": {
+                        "projectId": "4a1d2f6e-0f33-4c55-9b56-6f8e8a2b1c3d",
+                        "region": "eu01",
+                        "keyRingId": "key-ring",
+                        "serviceAccountEmail": "unicore-kms@sa.stackit.cloud"
+                    }
+                }
+            })
+        );
+    }
 
     #[test]
     fn reads_a_provider_added_before_providers_had_settings() {
-        let event: KeyProviderEvent = serde_json::from_value(json!({
-            "KeyProviderAdded": { "provider_type": "aws_kms_ambient", "name": "Production keys" }
-        }))
-        .unwrap();
+        let stored = json!({ "KeyProviderAdded": { "provider_type": "aws_kms_ambient", "name": "Production keys" } });
+
+        let event: KeyProviderEvent = serde_json::from_value(stored).unwrap();
 
         assert_eq!(
             event,
@@ -48,38 +71,6 @@ mod tests {
                 name: "Production keys".to_string(),
                 settings: None,
             }
-        );
-    }
-
-    #[test]
-    fn records_the_settings_of_a_provider() {
-        let event = KeyProviderEvent::KeyProviderAdded {
-            provider_type: KeyProviderType::StackitKms,
-            name: "Own keys".to_string(),
-            settings: Some(KeyProviderSettings::StackitKms(StackitKmsSettings {
-                project_id: Uuid::from_u128(1),
-                region: StackitRegion::Eu01,
-                key_ring_id: Uuid::from_u128(2),
-                service_account_email: "unicore@sa.stackit.cloud".to_string(),
-            })),
-        };
-
-        assert_eq!(
-            serde_json::to_value(event).unwrap(),
-            json!({
-                "KeyProviderAdded": {
-                    "provider_type": "stackit_kms",
-                    "name": "Own keys",
-                    "settings": {
-                        "stackit_kms": {
-                            "project_id": "00000000-0000-0000-0000-000000000001",
-                            "region": "eu01",
-                            "key_ring_id": "00000000-0000-0000-0000-000000000002",
-                            "service_account_email": "unicore@sa.stackit.cloud"
-                        }
-                    }
-                }
-            })
         );
     }
 }

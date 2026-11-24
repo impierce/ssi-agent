@@ -24,28 +24,6 @@ pub enum DocumentEvent {
         document_id: String,
         document: DidDocument,
     },
-    PublicKeyAdded {
-        document_id: String,
-        document: DidDocument,
-        verification_method_id: DidUrl,
-        /// The ID of the key in the Key Management System. Absent for keys added before it was recorded.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        key_id: Option<String>,
-    },
-    PublicKeyRemoved {
-        document_id: String,
-        document: DidDocument,
-        verification_method_id: DidUrl,
-    },
-    SigningKeySelected {
-        document_id: String,
-        algorithm: Algorithm,
-        verification_method_id: DidUrl,
-    },
-    SigningKeyDeselected {
-        document_id: String,
-        algorithm: Algorithm,
-    },
     DocumentStatusUpdated {
         document_id: String,
         status: Status,
@@ -61,6 +39,31 @@ pub enum DocumentEvent {
     DocumentDeleted {
         document_id: String,
         document: DidDocument,
+    },
+    /// A key that isn't a configured issuer key, such as the key the Key Management System names `key_id`, became
+    /// the verification method `verification_method_id` of `document`.
+    PublicKeyAdded {
+        document_id: String,
+        verification_method_id: DidUrl,
+        key_id: String,
+        document: DidDocument,
+    },
+    /// The verification method of an added key left `document`.
+    PublicKeyRemoved {
+        document_id: String,
+        verification_method_id: DidUrl,
+        document: DidDocument,
+    },
+    /// `verification_method_id` signs for `algorithm` from now on.
+    SigningKeySelected {
+        document_id: String,
+        algorithm: Algorithm,
+        verification_method_id: DidUrl,
+    },
+    /// The configured issuer key signs for `algorithm` again.
+    SigningKeyDeselected {
+        document_id: String,
+        algorithm: Algorithm,
     },
 }
 

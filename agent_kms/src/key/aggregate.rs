@@ -6,41 +6,33 @@ use identity_kit::{
     keys::KeyId,
 };
 use serde::{Deserialize, Serialize};
-use tracing::info;
-use utoipa::ToSchema;
 
-/// Where a key lives and what it is. A reference never changes once the key is created: new key material always
-/// gets a new reference.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// What this instance knows about a key in one of its providers. The private key never leaves the provider.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KeyReference {
     pub provider_type: KeyProviderType,
-    /// The settings the provider had when the key was recorded, which say where in the provider the key is.
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is. The key
+    /// is reached with them, also once the provider is removed or added again with other settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Object>)]
     pub settings: Option<KeyProviderSettings>,
-    /// The provider's identifier for the key, which names this key for good.
-    pub provider_key_id: String,
-    /// The label the key was created with, which also names it in the provider unless it is moved to another key.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// The provider's id for the key, which names this key for good: an alias can later name another key, so for
+    /// AWS KMS this is the key ARN.
+    pub provider_key_id: KeyId,
+    /// The label that named the key in the provider when it was recorded, if any.
     pub label: Option<String>,
+    /// The one algorithm the key signs with.
     pub algorithm: JwsAlgorithm,
     pub public_key: Jwk,
 }
 
-impl KeyReference {
-    /// The ID that names this key in its provider for good.
-    #[must_use]
-    pub fn provider_key_id(&self) -> KeyId {
-        KeyId::new(&self.provider_key_id)
-    }
-}
-
-/// A key this instance created or adopted in one of its key providers.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct Key {
-    pub reference: Option<KeyReference>,
-    #[serde(default)]
-    pub deleted: bool,
+/// A key in one of this instance's key providers, identified by an id of this instance's own. A key is recorded once,
+/// when it is created or adopted, and stays deleted once deleted. What the key is lives in its events and views.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub enum Key {
+    #[default]
+    Unrecorded,
+    Recorded,
+    Deleted,
 }
 
 impl Aggregate for Key {
@@ -57,58 +49,45 @@ impl Aggregate for Key {
         _services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
-        info!("Handling command: {:?}", command);
-
-        let event = match command {
-            KeyCommand::RecordCreatedKey { reference } => {
-                if self.reference.is_some() {
-                    return Err(KeyError::AlreadyRecorded);
-                }
-                KeyEvent::KeyCreated { reference }
-            }
-            KeyCommand::RecordAdoptedKey { reference } => {
-                if self.reference.is_some() {
-                    return Err(KeyError::AlreadyRecorded);
-                }
-                KeyEvent::KeyAdopted { reference }
-            }
-            KeyCommand::DeleteKey => {
-                if self.reference.is_none() || self.deleted {
-                    return Err(KeyError::NotFound);
-                }
-                KeyEvent::KeyDeleted
-            }
+        let event = match (command, &*self) {
+            (KeyCommand::CreateKey { reference }, Key::Unrecorded) => KeyEvent::KeyCreated { reference },
+            (KeyCommand::AdoptKey { reference }, Key::Unrecorded) => KeyEvent::KeyAdopted { reference },
+            (KeyCommand::CreateKey { .. } | KeyCommand::AdoptKey { .. }, _) => return Err(KeyError::AlreadyRecorded),
+            (KeyCommand::DeleteKey, Key::Recorded) => KeyEvent::KeyDeleted,
+            (KeyCommand::DeleteKey, _) => return Err(KeyError::NotFound),
         };
-        sink.write(event, self).await;
 
+        sink.write(event, self).await;
         Ok(())
     }
 
     fn apply(&mut self, event: Self::Event) {
-        match event {
-            KeyEvent::KeyCreated { reference } | KeyEvent::KeyAdopted { reference } => self.reference = Some(reference),
-            KeyEvent::KeyDeleted => self.deleted = true,
-        }
+        *self = match event {
+            KeyEvent::KeyCreated { .. } | KeyEvent::KeyAdopted { .. } => Key::Recorded,
+            KeyEvent::KeyDeleted => Key::Deleted,
+        };
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use cqrs_es::test::TestFramework;
 
-    fn reference(provider_key_id: &str) -> KeyReference {
+    /// An ES256 key in the in-memory provider.
+    pub(crate) fn reference() -> KeyReference {
         KeyReference {
             provider_type: KeyProviderType::InMemory,
             settings: None,
-            provider_key_id: provider_key_id.to_string(),
-            label: None,
-            algorithm: JwsAlgorithm::EdDSA,
-            // The public key of RFC 8032's first Ed25519 test vector.
-            public_key: Jwk::from_ed25519_public(&[
-                0xd7, 0x5a, 0x98, 0x01, 0x82, 0xb1, 0x0a, 0xb7, 0xd5, 0x4b, 0xfe, 0xd3, 0xc9, 0x64, 0x07, 0x3a, 0x0e,
-                0xe1, 0x72, 0xf3, 0xda, 0xa6, 0x23, 0x25, 0xaf, 0x02, 0x1a, 0x68, 0xf7, 0x07, 0x51, 0x1a,
-            ])
+            provider_key_id: KeyId::new("issuer"),
+            label: Some("issuer".to_string()),
+            algorithm: JwsAlgorithm::ES256,
+            public_key: serde_json::from_value(serde_json::json!({
+                "kty": "EC",
+                "crv": "P-256",
+                "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+            }))
             .unwrap(),
         }
     }
@@ -116,12 +95,8 @@ mod tests {
     #[test]
     fn a_key_is_recorded_only_once() {
         TestFramework::<Key>::with(())
-            .given(vec![KeyEvent::KeyCreated {
-                reference: reference("first"),
-            }])
-            .when(KeyCommand::RecordCreatedKey {
-                reference: reference("second"),
-            })
+            .given(vec![KeyEvent::KeyCreated { reference: reference() }])
+            .when(KeyCommand::AdoptKey { reference: reference() })
             .then_expect_error(KeyError::AlreadyRecorded);
     }
 
@@ -129,9 +104,7 @@ mod tests {
     fn a_deleted_key_cannot_be_deleted_again() {
         TestFramework::<Key>::with(())
             .given(vec![
-                KeyEvent::KeyCreated {
-                    reference: reference("first"),
-                },
+                KeyEvent::KeyCreated { reference: reference() },
                 KeyEvent::KeyDeleted,
             ])
             .when(KeyCommand::DeleteKey)

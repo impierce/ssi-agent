@@ -344,7 +344,7 @@ Connects UniCore to external key providers, so that keys can be generated in, an
 `stackit_federated_token_file` is where UniCore reads the workload identity token it signs in to STACKIT with.
 
 
-Every instance loads the KMS keys of the `did:web` document, and the keys selected to sign, again every 30 seconds. A key added, selected or deleted through another instance signs, or stops signing, there within that time, and a key that couldn't be loaded is tried again. Until then, a selected key that isn't available gives way to the configured key of its algorithm; `get-signing-keys` shows which key signs.
+UniCore loads the KMS keys of the `did:web` document once, at startup, and doesn't ask their provider about them again while they sign. A key deleted or disabled in its provider still shows as available in `get-signing-keys` until the next signature with it fails. From then on, the configured key of its algorithm signs instead, and UniCore asks the provider for the key again in the background, after 1 second and then twice as long each time, up to every 5 minutes, until the key signs again or turns out to be deleted. A key that couldn't be loaded at startup is retried the same way. Keys that sign are never asked about. This assumes a single UniCore instance per deployment: keys added, selected or removed through another instance aren't picked up.
 
 With PostgreSQL, the KMS's tables are only created with a new database. Enabling the feature on an existing database
 needs them created by hand, until the KMS leaves development and gets an upgrade note.
