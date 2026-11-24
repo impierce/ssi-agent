@@ -117,10 +117,11 @@ impl Credential {
     }
 
     /// The DIDs of the holder the credential was signed for, from the first of these claims of the signed credential
-    /// that names one: the `id` of every `credentialSubject`, at the root (`dc+sd-jwt`, `vc+sd-jwt`) or nested in `vc`
-    /// (`jwt_vc_json`); else `sub`; else the DID of the `cnf.kid` DID URL, the only one in a `dc+sd-jwt`. The
-    /// disclosures of an SD-JWT are resolved first, since a `vc+sd-jwt` conceals its `credentialSubject.id`. Empty for
-    /// a credential that is not signed yet.
+    /// that names one: the DID of the `cnf.kid` DID URL, its explicit holder binding (`dc+sd-jwt`, `vc+sd-jwt`); else
+    /// `sub` (`jwt_vc_json`); else the `id` of every `credentialSubject`, at the root or nested in `vc`. A credential
+    /// with several subjects is thus only handed again to the one it is bound to. The disclosures of an SD-JWT are
+    /// resolved first, since a `vc+sd-jwt` conceals its `credentialSubject.id`. Empty for a credential that is not
+    /// signed yet.
     pub fn signed_holders(&self) -> Vec<String> {
         let Some(signed) = &self.signed else {
             return vec![];
@@ -139,9 +140,9 @@ impl Credential {
             .get("credentialSubject")
             .or_else(|| claims.pointer("/vc/credentialSubject"));
         let holders = [
-            credential_subject_ids(credential_subject),
-            claims.get("sub").into_iter().collect(),
             claims.pointer("/cnf/kid").into_iter().collect(),
+            claims.get("sub").into_iter().collect(),
+            credential_subject_ids(credential_subject),
         ]
         .into_iter()
         .map(dids)
@@ -1179,23 +1180,27 @@ pub mod credential_tests {
     }
 
     #[rstest]
-    #[case::credential_subject_id_before_sub_and_cnf(
+    #[case::cnf_before_sub_and_credential_subject_id(
         json!({
             "credentialSubject": {"id": "did:key:z6MkFirst"},
             "sub": "did:key:z6MkSecond",
             "cnf": {"kid": "did:key:z6MkThird#z6MkThird"}
         }),
-        "did:key:z6MkFirst"
+        "did:key:z6MkThird"
     )]
-    #[case::credential_subject_id_nested_in_vc(
+    #[case::sub_before_credential_subject_id(
         json!({"vc": {"credentialSubject": {"id": "did:key:z6MkFirst"}}, "sub": "did:key:z6MkSecond"}),
-        "did:key:z6MkFirst"
-    )]
-    #[case::sub_before_cnf(
-        json!({"sub": "did:key:z6MkSecond", "cnf": {"kid": "did:key:z6MkThird#z6MkThird"}}),
         "did:key:z6MkSecond"
     )]
     #[case::cnf_kid_only(json!({"cnf": {"kid": "did:key:z6MkThird#z6MkThird"}}), "did:key:z6MkThird")]
+    #[case::credential_subject_id_without_binding(
+        json!({"credentialSubject": {"id": "did:key:z6MkFirst"}}),
+        "did:key:z6MkFirst"
+    )]
+    #[case::credential_subject_id_nested_in_vc_without_binding(
+        json!({"vc": {"credentialSubject": {"id": "did:key:z6MkFirst"}}}),
+        "did:key:z6MkFirst"
+    )]
     fn signed_credential_is_only_handed_to_holder_it_was_signed_for(
         #[case] claims: serde_json::Value,
         #[case] signed_for: &str,
@@ -1211,15 +1216,27 @@ pub mod credential_tests {
         assert!(credential.check_recipient(Some("did:key:z6MkIntended")).is_err());
     }
 
+    #[test]
+    fn signed_credential_with_several_subjects_is_only_handed_to_bound_one() {
+        let credential = signed_credential(
+            VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+            json!({
+                "credentialSubject": [{"id": "did:key:z6MkFirst"}, {"id": "did:key:z6MkSecond"}],
+                "cnf": {"kid": "did:key:z6MkFirst#z6MkFirst"}
+            }),
+        );
+
+        assert_eq!(credential.signed_holders(), vec!["did:key:z6MkFirst"]);
+        assert!(credential.check_recipient(Some("did:key:z6MkFirst")).is_ok());
+        assert!(credential.check_recipient(Some("did:key:z6MkSecond")).is_err());
+    }
+
     #[serial_test::serial]
     #[tokio::test]
     async fn concealed_credential_subject_id_of_signed_vc_sd_jwt_is_read() {
         let issuer = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
         let signer = sd_jwt_signer(&issuer).await.unwrap();
-        let claims = json!({
-            "credentialSubject": {"id": "did:key:z6MkFirst", "first_name": "Ferris"},
-            "cnf": {"kid": "did:key:z6MkThird#z6MkThird"}
-        });
+        let claims = json!({"credentialSubject": {"id": "did:key:z6MkFirst", "first_name": "Ferris"}});
         let sd_jwt = SdJwtBuilder::new(claims.as_object().cloned().unwrap())
             .conceal(["credentialSubject", "id"])
             .conceal(["credentialSubject", "first_name"])
@@ -1233,7 +1250,7 @@ pub mod credential_tests {
 
         assert_eq!(credential.signed_holders(), vec!["did:key:z6MkFirst"]);
         assert!(credential.check_recipient(Some("did:key:z6MkFirst")).is_ok());
-        assert!(credential.check_recipient(Some("did:key:z6MkThird")).is_err());
+        assert!(credential.check_recipient(Some("did:key:z6MkOther")).is_err());
     }
 
     #[test]
