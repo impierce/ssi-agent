@@ -9,10 +9,10 @@ use super::aggregate::{DataModel, Display, Expiration, HolderType, PropertyAttri
 pub const DIGEST_PREFIX: &str = "sha256-";
 
 /// Public content of a template: the fields of the public template projection
-/// (`GET /public/templates`) without `modifiedAt`.
+/// (`GET /public/templates`) without `id` and `modifiedAt`.
 ///
 /// Unknown fields are ignored on deserialization, so an entry of a source's public template
-/// projection, `modifiedAt` included, deserializes into its public content.
+/// projection, `id` and `modifiedAt` included, deserializes into its public content.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicTemplateContent {
@@ -336,8 +336,8 @@ mod tests {
     }
 
     #[test]
-    fn public_projection_with_modified_at_deserializes_into_its_content() {
-        let projection = r#"{"title":"Diploma","description":null,"display":{"name":"Diploma"},"dataModel":"w3c_vc_data_model_v2-0","holderType":"individual","type":["VerifiableCredential"],"tags":null,"credentialExpiration":{"type":"never"},"schema":null,"schemaPropertiesAttributes":null,"modifiedAt":"2026-01-01T00:00:00Z"}"#;
+    fn public_projection_with_id_and_modified_at_deserializes_into_its_content() {
+        let projection = r#"{"id":"0b7c","title":"Diploma","description":null,"display":{"name":"Diploma"},"dataModel":"w3c_vc_data_model_v2-0","holderType":"individual","type":["VerifiableCredential"],"tags":null,"credentialExpiration":{"type":"never"},"schema":null,"schemaPropertiesAttributes":null,"modifiedAt":"2026-01-01T00:00:00Z"}"#;
 
         assert_eq!(from_json(projection), minimal());
     }

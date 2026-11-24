@@ -123,7 +123,7 @@ public content at import time (`agent_library/src/template/origin.rs`). Not the 
 _Avoid_: source template, parent template
 
 **Public Content**:
-The fields of the public template projection without `modifiedAt`; the input of the origin digest
+The fields of the public template projection without `id` and `modifiedAt`; the input of the origin digest
 (`PublicTemplateContent::digest` in `agent_library/src/template/public_content.rs`). See ADR 0010.
 
 ## When to Update This Guide
