@@ -86,8 +86,7 @@ mod tests {
         let body = if bytes.is_empty() {
             Value::Null
         } else {
-            // Axum answers a body that does not match the schema in plain text.
-            serde_json::from_slice(&bytes).unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into()))
+            serde_json::from_slice(&bytes).unwrap()
         };
         (status, body)
     }
@@ -111,6 +110,8 @@ mod tests {
             ("POST", "/v0/test-key-provider-connection"),
             ("GET", "/v0/get-key-provider-keys/aws_kms_ambient"),
             ("POST", "/v0/create-key"),
+            ("POST", "/v0/adopt-key"),
+            ("POST", "/v0/delete-key"),
             ("GET", "/v0/get-all-keys"),
         ] {
             assert_eq!(send(&app, method, uri, None).await.0, StatusCode::NOT_FOUND, "{uri}");
@@ -190,24 +191,37 @@ mod tests {
         );
     }
 
-    async fn create_in_memory_key(app: &Router) -> (StatusCode, Value) {
-        add(app, "in_memory").await;
-        let body = json!({ "providerType": "in_memory", "algorithm": "EdDSA" });
-        send(app, "POST", "/v0/create-key", Some(body)).await
+    async fn create(app: &Router, label: &str) -> Value {
+        let body = json!({ "providerType": "in_memory", "algorithm": "ES256", "label": label });
+        let (status, key) = send(app, "POST", "/v0/create-key", Some(body)).await;
+        assert_eq!(status, StatusCode::CREATED);
+        key
     }
 
     #[tokio::test]
     async fn creating_a_key_answers_with_its_reference() {
         let app = app_with_kms().await;
+        add(&app, "in_memory").await;
 
-        let (status, body) = create_in_memory_key(&app).await;
+        let body = json!({ "providerType": "in_memory", "algorithm": "ES256", "label": "issuer" });
+        let (status, key) = send(&app, "POST", "/v0/create-key", Some(body)).await;
 
-        let fields: Vec<_> = body.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(
-            (status, fields),
+            (
+                status,
+                &key["providerType"],
+                &key["providerKeyId"],
+                &key["label"],
+                &key["algorithm"],
+                &key["publicKey"]["crv"]
+            ),
             (
                 StatusCode::CREATED,
-                vec!["id", "providerType", "providerKeyId", "algorithm", "publicKey"]
+                &json!("in_memory"),
+                &json!("issuer"),
+                &json!("issuer"),
+                &json!("ES256"),
+                &json!("P-256")
             )
         );
     }
@@ -224,11 +238,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lists_created_keys() {
+        let app = app_with_kms().await;
+        add(&app, "in_memory").await;
+        let key = create(&app, "issuer").await;
+
+        let response = send(&app, "GET", "/v0/get-all-keys", None).await;
+
+        assert_eq!(response, (StatusCode::OK, json!([key])));
+    }
+
+    #[tokio::test]
     async fn deleting_a_key_answers_without_content() {
         let app = app_with_kms().await;
-        let (_, created) = create_in_memory_key(&app).await;
+        add(&app, "in_memory").await;
+        let key = create(&app, "issuer").await;
 
-        let response = send(&app, "POST", "/v0/delete-key", Some(json!({ "id": created["id"] }))).await;
+        let response = send(&app, "POST", "/v0/delete-key", Some(json!({ "id": key["id"] }))).await;
 
         assert_eq!(response, (StatusCode::NO_CONTENT, Value::Null));
     }
@@ -238,19 +264,15 @@ mod tests {
         let app = app_with_kms().await;
         add(&app, "in_memory").await;
 
-        let body = json!({ "providerType": "in_memory", "label": "issuer" });
-        let (status, _) = send(&app, "POST", "/v0/adopt-key", Some(body)).await;
+        let body = json!({ "providerType": "in_memory", "label": "missing" });
+        let (status, problem) = send(&app, "POST", "/v0/adopt-key", Some(body)).await;
 
-        assert_eq!(status, StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn lists_created_keys() {
-        let app = app_with_kms().await;
-        let (_, created) = create_in_memory_key(&app).await;
-
-        let response = send(&app, "GET", "/v0/get-all-keys", None).await;
-
-        assert_eq!(response, (StatusCode::OK, json!([created])));
+        assert_eq!(
+            (status, &problem["type"]),
+            (
+                StatusCode::NOT_FOUND,
+                &json!(crate::error::type_url("kms#key-not-found"))
+            )
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! The Key Management System (KMS).
 //!
-//! Lets an instance connect to one or more key providers, such as AWS KMS, and create keys in them that sign inside
+//! Lets an instance connect to one or more key providers, such as AWS KMS, and create keys in them that never leave
 //! the provider. Nothing signs with these keys yet. It is independent of the Stronghold-based `agent_secret_manager`.
 
 pub mod adapter;

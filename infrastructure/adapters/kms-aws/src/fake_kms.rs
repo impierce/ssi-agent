@@ -30,7 +30,6 @@ struct FakeKey {
     /// `None` for a key spec the fake does not sign with.
     signing_key: Option<SigningKey>,
     state: &'static str,
-    /// The tags it was created with, as key and value.
     tags: Vec<(String, String)>,
 }
 
@@ -67,10 +66,12 @@ struct State {
     aliases: BTreeMap<String, String>,
     created: u8,
     refused: BTreeSet<&'static str>,
-    /// Operations that take effect but answer with an error, as when a response is lost.
-    failing_after: BTreeSet<&'static str>,
-    /// Operations answered this many more times before every request for them fails.
-    refused_after: BTreeMap<&'static str, usize>,
+    /// Operations refused only once a key has been created.
+    refused_once_created: BTreeSet<&'static str>,
+    /// Operations that take effect but answer with an error, as when their response is lost.
+    lost: BTreeSet<&'static str>,
+    /// An alias that another key takes just before the next key is created.
+    taken_on_create: Option<String>,
     delayed: BTreeMap<&'static str, Duration>,
 }
 
@@ -93,6 +94,45 @@ impl State {
             "KeySpec": key.spec,
             "KeyUsage": "SIGN_VERIFY",
         })
+    }
+
+    /// Creates a key as a `CreateKey` request `body` asks, after letting another key take an alias if one was set.
+    fn create_key(&mut self, body: &Value) -> ResponseTemplate {
+        if let Some(alias) = self.taken_on_create.take() {
+            self.created += 1;
+            let seed = [self.created; 32];
+            let other = self.insert(
+                "ECC_NIST_P256",
+                Some(SigningKey::P256(p256::ecdsa::SigningKey::from_slice(&seed).unwrap())),
+            );
+            self.aliases.insert(alias, other);
+        }
+        self.created += 1;
+        let seed = [self.created; 32];
+        let (spec, signing_key) = match body["KeySpec"].as_str() {
+            Some("ECC_NIST_P256") => (
+                "ECC_NIST_P256",
+                SigningKey::P256(p256::ecdsa::SigningKey::from_slice(&seed).unwrap()),
+            ),
+            Some("ECC_NIST_EDWARDS25519") => (
+                "ECC_NIST_EDWARDS25519",
+                SigningKey::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)),
+            ),
+            _ => return error("ValidationException"),
+        };
+        let id = self.insert(spec, Some(signing_key));
+        self.keys.get_mut(&id).unwrap().tags = body["Tags"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|tag| {
+                (
+                    tag["TagKey"].as_str().unwrap_or_default().to_string(),
+                    tag["TagValue"].as_str().unwrap_or_default().to_string(),
+                )
+            })
+            .collect();
+        ResponseTemplate::new(200).set_body_json(json!({ "KeyMetadata": self.metadata(&id) }))
     }
 
     fn insert(&mut self, spec: &'static str, signing_key: Option<SigningKey>) -> String {
@@ -155,22 +195,36 @@ impl FakeKms {
         self.state.lock().unwrap().refused.insert(operation);
     }
 
-    /// Makes every request for `operation` take effect but answer with an error, as when its response is lost.
-    pub fn fail_after(&self, operation: &'static str) {
-        self.state.lock().unwrap().failing_after.insert(operation);
+    /// Makes every request for `operation` fail once a key has been created.
+    pub fn refuse_once_created(&self, operation: &'static str) {
+        self.state.lock().unwrap().refused_once_created.insert(operation);
     }
 
-    /// Answers the next `answered` requests for `operation`, then makes every one fail.
-    pub fn refuse_after(&self, operation: &'static str, answered: usize) {
-        self.state.lock().unwrap().refused_after.insert(operation, answered);
+    /// Carries out every request for `operation`, but answers it with an error, as when its response is lost.
+    pub fn lose_responses(&self, operation: &'static str) {
+        self.state.lock().unwrap().lost.insert(operation);
+    }
+
+    /// Lets another key take `alias` just before the next key is created, as a concurrent request could.
+    pub fn take_on_create(&self, alias: &str) {
+        self.state.lock().unwrap().taken_on_create = Some(alias.to_string());
+    }
+
+    /// The key ID `alias` names, if any.
+    pub fn alias_target(&self, alias: &str) -> Option<String> {
+        self.state.lock().unwrap().aliases.get(alias).cloned()
+    }
+
+    /// The tags of the key `id` names, as key and value.
+    pub fn tags(&self, id: &str) -> Vec<(String, String)> {
+        let state = self.state.lock().unwrap();
+        let id = state.resolve(id).unwrap();
+        state.keys[&id].tags.clone()
     }
 
     /// Answers requests for `operation` again.
     pub fn allow(&self, operation: &'static str) {
-        let mut state = self.state.lock().unwrap();
-        state.refused.remove(operation);
-        state.failing_after.remove(operation);
-        state.refused_after.remove(operation);
+        self.state.lock().unwrap().refused.remove(operation);
     }
 
     /// Answers every request for `operation` only after `delay`.
@@ -183,22 +237,6 @@ impl FakeKms {
         let mut state = self.state.lock().unwrap();
         let target = state.resolve(id).unwrap();
         state.aliases.insert(alias.to_string(), target);
-    }
-
-    /// Every alias, in order.
-    pub fn aliases(&self) -> Vec<String> {
-        self.state.lock().unwrap().aliases.keys().cloned().collect()
-    }
-
-    /// The tags of every key, in the order they were created.
-    pub fn key_tags(&self) -> Vec<Vec<(String, String)>> {
-        self.state
-            .lock()
-            .unwrap()
-            .keys
-            .values()
-            .map(|key| key.tags.clone())
-            .collect()
     }
 
     /// The state of every key, in the order they were created.
@@ -235,12 +273,9 @@ impl Respond for Responder {
     fn respond(&self, request: &Request) -> ResponseTemplate {
         let operation = operation(request);
         let delay = self.0.lock().unwrap().delayed.get(operation.as_str()).copied();
+        let lost = self.0.lock().unwrap().lost.contains(operation.as_str());
         let response = self.answer(&operation, request);
-        let response = if self.0.lock().unwrap().failing_after.contains(operation.as_str()) {
-            error("KMSInternalException")
-        } else {
-            response
-        };
+        let response = if lost { error("KMSInternalException") } else { response };
         match delay {
             Some(delay) => response.set_delay(delay),
             None => response,
@@ -253,45 +288,12 @@ impl Responder {
         let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
         let mut state = self.0.lock().unwrap();
 
-        if state.refused.contains(operation) {
+        if state.refused.contains(operation) || (state.created > 0 && state.refused_once_created.contains(operation)) {
             return error("LimitExceededException");
-        }
-        if let Some(answered) = state.refused_after.get_mut(operation) {
-            if *answered == 0 {
-                return error("LimitExceededException");
-            }
-            *answered -= 1;
         }
 
         if operation == "CreateKey" {
-            state.created += 1;
-            let seed = [state.created; 32];
-            let (spec, signing_key) = match body["KeySpec"].as_str() {
-                Some("ECC_NIST_P256") => (
-                    "ECC_NIST_P256",
-                    SigningKey::P256(p256::ecdsa::SigningKey::from_slice(&seed).unwrap()),
-                ),
-                Some("ECC_NIST_EDWARDS25519") => (
-                    "ECC_NIST_EDWARDS25519",
-                    SigningKey::Ed25519(ed25519_dalek::SigningKey::from_bytes(&seed)),
-                ),
-                _ => return error("ValidationException"),
-            };
-            let id = state.insert(spec, Some(signing_key));
-            if let Some(key) = state.keys.get_mut(&id) {
-                key.tags = body["Tags"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(|tag| {
-                        (
-                            tag["TagKey"].as_str().unwrap_or_default().to_string(),
-                            tag["TagValue"].as_str().unwrap_or_default().to_string(),
-                        )
-                    })
-                    .collect();
-            }
-            return ResponseTemplate::new(200).set_body_json(json!({ "KeyMetadata": state.metadata(&id) }));
+            return state.create_key(&body);
         }
 
         if operation == "CreateAlias" {
@@ -304,6 +306,17 @@ impl Responder {
             };
             state.aliases.insert(alias, target);
             return ResponseTemplate::new(200).set_body_json(json!({}));
+        }
+
+        if operation == "ListAliases" {
+            let key = state.resolve(body["KeyId"].as_str().unwrap_or_default());
+            let aliases: Vec<Value> = state
+                .aliases
+                .iter()
+                .filter(|(_, target)| Some(*target) == key.as_ref())
+                .map(|(alias, target)| json!({ "AliasName": alias, "TargetKeyId": target }))
+                .collect();
+            return ResponseTemplate::new(200).set_body_json(json!({ "Aliases": aliases, "Truncated": false }));
         }
 
         if operation == "DeleteAlias" {

@@ -61,6 +61,7 @@ agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
 reqwest.workspace = true
 serde_norway.workspace = true
+serial_test = "3.0"
 testcontainers-modules = { version = "0.15", features = ["postgres"] }
 tower.workspace = true
 

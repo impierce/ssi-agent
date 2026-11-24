@@ -1,6 +1,8 @@
 //! Shared flow for the event store integration tests.
 
 use agent_application::{router, state, ApplicationState};
+use agent_kms::key::{aggregate::KeyReference, command::KeyCommand};
+use agent_kms::key_provider::aggregate::KeyProviderType;
 use agent_secret_manager::subject::Subject;
 use agent_shared::config::{config_mut, EventStoreConfig, EventStoreType};
 use axum::{body::Body, extract::Request, http::StatusCode, Router};
@@ -52,22 +54,7 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     )
     .await
     .unwrap();
-    let kms = state.api.kms_state.as_ref().expect("the KMS is enabled");
-    agent_shared::handlers::public_command_handler(
-        "persisted-key",
-        &kms.command.keys,
-        agent_kms::key::command::KeyCommand::RecordCreatedKey {
-            reference: serde_json::from_value(json!({
-                "provider_type": "aws_kms_ambient",
-                "provider_key_id": "arn:aws:kms:eu-central-1:123456789012:key/00000000-0000-0000-0000-000000000001",
-                "algorithm": "EdDSA",
-                "public_key": { "kty": "OKP", "crv": "Ed25519", "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPZpiMlrwIaaPcHURo" }
-            }))
-            .unwrap(),
-        },
-    )
-    .await
-    .unwrap();
+    let kms = state.api.kms_state.clone().expect("the KMS is enabled");
     let app = router(state);
     assert_reissuance_views(&app).await;
 
@@ -85,6 +72,31 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+
+    // Recorded directly: a key can't be created in AWS KMS here, and in-memory keys need the `development` profile.
+    agent_shared::handlers::command_handler(
+        kms.authorization_checker.clone(),
+        shared_kernel::authorization::Caller::Internal,
+        "persisted-key",
+        &kms.command.keys,
+        KeyCommand::CreateKey {
+            reference: KeyReference {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                provider_key_id: "arn:aws:kms:eu-central-1:123456789012:key/persisted".into(),
+                label: Some("issuer".to_string()),
+                algorithm: identity_kit::jose::JwsAlgorithm::ES256,
+                public_key: serde_json::from_value(json!({
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                    "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+                }))
+                .unwrap(),
+            },
+        },
+    )
+    .await
+    .unwrap();
 
     let (status, catalog) = send(
         &app,

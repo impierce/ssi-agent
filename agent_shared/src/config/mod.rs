@@ -66,8 +66,8 @@ fn into_directory(url: Url) -> Url {
     convert_url(url, true)
 }
 
-/// Trims a value and treats an empty one, such as an empty environment variable, as none.
-fn non_empty(value: Option<String>) -> Option<String> {
+/// The value without surrounding whitespace, or `None` when nothing else is left.
+fn non_empty_trimmed(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -127,11 +127,9 @@ pub struct ApplicationConfiguration {
     pub public_url: Url,
     #[config(default)]
     pub overwrite_previous_did_web: Option<String>,
-    /// The alias the hosting environment knows this deployment by, such as `eridani`. Every key this deployment
-    /// creates in AWS KMS is tagged with it, so IAM policies can limit a deployment to its own keys. Set through
-    /// `UNICORE__DEPLOYMENT_ALIAS`; empty means none. Left out of `docs/configuration` until how a deployment is
-    /// named is settled.
-    #[config(default, transform_with = "non_empty")]
+    /// The name of the deployment this instance belongs to, such as `eridani`, which scopes its keys in AWS KMS. Set
+    /// through `UNICORE__DEPLOYMENT_ALIAS`; trimmed, and empty means none.
+    #[config(default, transform_with = "non_empty_trimmed")]
     pub deployment_alias: Option<String>,
     #[config(
         default = r#"{
@@ -1725,28 +1723,8 @@ mod tests {
         })
     }
 
-    #[test]
-    #[serial]
-    fn kms_feature_is_disabled_when_its_variable_is_missing_or_empty() {
-        assert!(!kms_feature_flag(None).unwrap());
-        assert!(!kms_feature_flag(Some("")).unwrap());
-        assert!(!kms_feature_flag(Some("false")).unwrap());
-    }
-
-    #[test]
-    #[serial]
-    fn kms_feature_is_enabled_when_its_variable_is_true() {
-        assert!(kms_feature_flag(Some("true")).unwrap());
-    }
-
-    #[test]
-    #[serial]
-    fn kms_feature_flag_rejects_unrecognized_values() {
-        assert!(kms_feature_flag(Some("maybe")).is_err());
-    }
-
-    fn deployment_alias(value: Option<&str>) -> Option<String> {
-        temp_env::with_var("UNICORE__DEPLOYMENT_ALIAS", value, || {
+    fn deployment_alias(value: &str) -> Option<String> {
+        temp_env::with_var("UNICORE__DEPLOYMENT_ALIAS", Some(value), || {
             let provisioned_config = config::Config::builder()
                 .add_source(config::File::from_str(
                     r#"
@@ -1767,19 +1745,39 @@ mod tests {
 
     #[test]
     #[serial]
-    fn an_empty_deployment_alias_is_none() {
-        assert_eq!(deployment_alias(Some("")), None);
-    }
-
-    #[test]
-    #[serial]
     fn reads_the_deployment_alias() {
-        assert_eq!(deployment_alias(Some("eridani")), Some("eridani".to_string()));
+        assert_eq!(deployment_alias("eridani"), Some("eridani".to_string()));
     }
 
     #[test]
     #[serial]
     fn trims_the_deployment_alias() {
-        assert_eq!(deployment_alias(Some(" eridani ")), Some("eridani".to_string()));
+        assert_eq!(deployment_alias("  eridani "), Some("eridani".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn an_empty_deployment_alias_is_none() {
+        assert_eq!(deployment_alias("  "), None);
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_disabled_when_its_variable_is_missing_or_empty() {
+        assert!(!kms_feature_flag(None).unwrap());
+        assert!(!kms_feature_flag(Some("")).unwrap());
+        assert!(!kms_feature_flag(Some("false")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_enabled_when_its_variable_is_true() {
+        assert!(kms_feature_flag(Some("true")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_flag_rejects_unrecognized_values() {
+        assert!(kms_feature_flag(Some("maybe")).is_err());
     }
 }
