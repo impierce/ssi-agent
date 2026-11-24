@@ -3752,6 +3752,11 @@ components:
           enum:
           - Pending
           - Issued
+        template_id:
+          type:
+          - string
+          - 'null'
+          description: The template the credential was created from.
     CredentialConfigurationIds:
       type: array
       items:

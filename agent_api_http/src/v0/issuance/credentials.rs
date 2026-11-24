@@ -304,6 +304,7 @@ impl ResolvedTemplate {
 
         Ok(CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.to_owned(),
+            template_id: self.template.template_id.clone(),
             data: Data {
                 raw: credential.clone(),
             },
@@ -330,6 +331,7 @@ impl ResolvedTemplate {
 
         Ok(CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.to_owned(),
+            template_id: self.template.template_id.clone(),
             signed_credential: credential.clone(),
         })
     }
@@ -2488,13 +2490,17 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_credentials_endpoint_signs_at_creation_when_the_policy_asks() {
+    async fn test_credentials_endpoint_records_the_template_and_signs_at_creation_when_the_policy_asks() {
         for signs_at_creation in [false, true] {
             let (mut app, template_id) = app_signing_at_creation(signs_at_creation).await;
 
             let credential_endpoint = credentials_with_template(&mut app, &template_id).await;
             let credential_id = credential_endpoint.rsplit('/').next().unwrap();
             let credential = credential_by_id(&mut app, credential_id).await;
+            assert_eq!(
+                credential["template_id"], TEMPLATE_ID,
+                "the credential records its template"
+            );
 
             if signs_at_creation {
                 assert_signed_at_creation(&credential);
