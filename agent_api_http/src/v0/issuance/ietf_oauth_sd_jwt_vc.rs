@@ -10,6 +10,7 @@ use axum::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use identity_kit::sd_jwt_vc::{ClaimDisplay, ClaimMetadata, ClaimPath, DisplayMetadata, SdPolicy, TypeMetadata};
+use oid4vci::credential_format_profiles::CredentialFormats;
 use oid4vci::credential_issuer::credential_configurations_supported::{
     ClaimDescription, CredentialConfigurationsSupportedDisplay,
 };
@@ -60,6 +61,12 @@ pub(crate) async fn type_metadata(
         })
         .ok_or(PublicError::NotFoundError)?;
 
+    // Issuance conceals each top-level property of the credential subject (`vc+sd-jwt`) or of the credential
+    // (`dc+sd-jwt`) as a whole.
+    let top_level_path_len = match credential_configuration.credential_format {
+        CredentialFormats::VcSdJwt(_) => 2,
+        _ => 1,
+    };
     let (display, claims) = credential_configuration
         .credential_metadata
         .map(|credential_metadata| {
@@ -69,7 +76,7 @@ pub(crate) async fn type_metadata(
                 .unwrap_or_default();
             let claims = credential_metadata
                 .claims
-                .map(claim_description_to_claims)
+                .map(|claims| claim_description_to_claims(claims, top_level_path_len))
                 .unwrap_or_default();
 
             (display, claims)
@@ -102,13 +109,23 @@ fn credential_configuration_display_to_display_metadata(
         .collect()
 }
 
-fn claim_description_to_claims(claim_descriptions: Vec<ClaimDescription>) -> Vec<ClaimMetadata> {
+/// Converts claims descriptions to the claims of type metadata. A top-level claim, whose path has
+/// `top_level_path_len` elements, is always selectively disclosable; a claim inside one never is.
+fn claim_description_to_claims(
+    claim_descriptions: Vec<ClaimDescription>,
+    top_level_path_len: usize,
+) -> Vec<ClaimMetadata> {
     claim_descriptions
         .into_iter()
         .filter_map(|claim| {
+            let sd = if claim.path.as_ref().len() == top_level_path_len {
+                SdPolicy::Always
+            } else {
+                SdPolicy::Never
+            };
             let path: ClaimPath = serde_json::from_value(serde_json::json!(claim.path)).ok()?;
 
-            let mut claim_metadata = ClaimMetadata::new(path).with_sd(SdPolicy::Always);
+            let mut claim_metadata = ClaimMetadata::new(path).with_sd(sd);
             claim_metadata.mandatory = claim.mandatory.then_some(true);
             claim_metadata.display = claim
                 .display
@@ -211,10 +228,43 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            serde_json::to_value(claim_description_to_claims(claim_descriptions)).unwrap(),
+            serde_json::to_value(claim_description_to_claims(claim_descriptions, 2)).unwrap(),
             serde_json::json!([
                 { "path": ["credentialSubject", "first_name"], "mandatory": true, "sd": "always" },
                 { "path": ["credentialSubject", "last_name"], "sd": "always" },
+            ])
+        );
+    }
+
+    /// Only a top-level claim is selectively disclosable: a claim inside one is disclosed with it.
+    #[rstest::rstest]
+    #[case::vc_sd_jwt(serde_json::json!(["credentialSubject"]))]
+    #[case::dc_sd_jwt(serde_json::json!([]))]
+    fn only_top_level_claims_are_selectively_disclosable(#[case] prefix: serde_json::Value) {
+        let path = |segments: serde_json::Value| {
+            let mut path = prefix.as_array().unwrap().clone();
+            path.extend(segments.as_array().unwrap().iter().cloned());
+            path
+        };
+        let claim_descriptions = serde_json::from_value(serde_json::json!([
+            { "path": path(serde_json::json!(["Address"])) },
+            { "path": path(serde_json::json!(["Address", "Street"])) },
+            { "path": path(serde_json::json!(["Courses"])) },
+            { "path": path(serde_json::json!(["Courses", null, "Code"])) },
+        ]))
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(claim_description_to_claims(
+                claim_descriptions,
+                prefix.as_array().unwrap().len() + 1
+            ))
+            .unwrap(),
+            serde_json::json!([
+                { "path": path(serde_json::json!(["Address"])), "sd": "always" },
+                { "path": path(serde_json::json!(["Address", "Street"])), "sd": "never" },
+                { "path": path(serde_json::json!(["Courses"])), "sd": "always" },
+                { "path": path(serde_json::json!(["Courses", null, "Code"])), "sd": "never" },
             ])
         );
     }
