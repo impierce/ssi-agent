@@ -551,6 +551,7 @@ impl Query<Template> for CredentialConfigurationProjection {
                 | DisplayUpdated { template_id, .. }
                 | TypeUpdated { template_id, .. }
                 | SchemaUpdated { template_id, .. }
+                | SchemaPropertiesAttributesUpdated { template_id, .. }
                 | HolderAuthorizationUpdated { template_id, .. } => {
                     self.sync_from_view(template_id).await;
                 }
