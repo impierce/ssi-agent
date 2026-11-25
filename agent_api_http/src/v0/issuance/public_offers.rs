@@ -1,6 +1,7 @@
 use crate::error::IntoApiErrorExt;
 use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::{caller, command_handler, public_query_handler, query_handler};
+use crate::v0::issuance::error::PublicError;
 use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::public_offer::error::PublicOfferError;
@@ -346,6 +347,15 @@ pub(crate) async fn delete_public_offer(
     .await?;
 
     Ok((StatusCode::NO_CONTENT).into_response())
+}
+
+/// Whether `offer_id` is a Public Offer, also a deleted or inactive one: an offer redeemable by any number of wallets.
+pub(crate) async fn is_public_offer(state: &IssuanceState, offer_id: &str) -> Result<bool, PublicError> {
+    let aggregate_id = public_offer_aggregate_id(offer_id);
+
+    Ok(public_query_handler(&aggregate_id, &state.query.public_offer)
+        .await?
+        .is_some())
 }
 
 /// Check if a public offer can be resolved (is active and not deleted)

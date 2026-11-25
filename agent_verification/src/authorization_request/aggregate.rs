@@ -291,6 +291,7 @@ impl Aggregate for AuthorizationRequest {
 }
 
 #[cfg(test)]
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 pub mod tests {
 
     use agent_secret_manager::service::Service as _;
