@@ -3,16 +3,18 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::{
-    application::access_token_validation_service::AccessTokenValidationError, credential::error::CredentialError,
-    offer::error::OfferError, public_offer::error::PublicOfferError, reissuance::service::ReissuanceServiceError,
-    server_config::error::ServerConfigError, status_list::error::StatusListError,
+    application::access_token_validation_service::AccessTokenValidationError,
+    application::credential_creation::CreateCredentialError, application::template_issuance::TemplateIssuanceError,
+    credential::error::CredentialError, offer::error::OfferError, public_offer::error::PublicOfferError,
+    refresh::service::RefreshError, reissuance::error::ReissuanceError, server_config::error::ServerConfigError,
+    status_list::error::StatusListError,
 };
-use axum::{response::IntoResponse, response::Response, Json};
+use axum::Json;
 use http_api_problem::ApiError;
 use hyper::StatusCode;
 use oid4vci::errors::{
-    AuthorizationErrorResponse, CredentialErrorResponse, DeferredCredentialErrorResponse, ErrorStatusCode,
-    NotificationErrorResponse, OID4VCError, TokenErrorResponse,
+    AuthorizationErrorResponse, CredentialErrorResponse, ErrorStatusCode, NotificationErrorResponse, OID4VCError,
+    TokenErrorResponse,
 };
 
 impl IntoApiErrorExt for CredentialError {
@@ -62,6 +64,9 @@ impl IntoApiErrorExt for CredentialError {
             InvalidCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+
+            // `/openid4vci/notification` endpoint
+            InvalidNotificationIdError => ApiError::new(StatusCode::BAD_REQUEST),
         }
     }
 }
@@ -72,7 +77,7 @@ impl IntoApiErrorExt for OfferError {
 
         match self {
             // UniCore API Problem Details
-            MissingCredentialOfferError => ApiError::builder(StatusCode::BAD_REQUEST)
+            MissingCredentialOfferError => ApiError::builder(StatusCode::NOT_FOUND)
                 .title("Missing Credential Offer")
                 .type_url(type_url("issuance#missing-credential-offer"))
                 .source(self)
@@ -105,6 +110,7 @@ impl IntoApiErrorExt for OfferError {
             MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            HolderMismatchError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -141,13 +147,176 @@ impl IntoApiErrorExt for StatusListError {
         match self {
             AggregateNotFound => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             FailedToSetIndex(_, _) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            GzipCompressionError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             JwtEncodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListEncodingError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListQueryError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListUrlParsingError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
+    }
+}
+
+impl IntoApiErrorExt for ReissuanceError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            ReissuanceError::OriginalCredentialNotFound(credential_id) => ApiError::builder(StatusCode::NOT_FOUND)
+                .title("Original Credential Not Found")
+                .type_url(type_url("issuance#original-credential-not-found"))
+                .message(format!("Original credential `{credential_id}` was not found."))
+                .finish(),
+            ReissuanceError::CredentialConfigurationNotFound(configuration_id) => {
+                ApiError::builder(StatusCode::NOT_FOUND)
+                    .title("Credential Configuration Not Found")
+                    .type_url(type_url("issuance#no-credential-configuration-found"))
+                    .message(format!("Credential configuration `{configuration_id}` was not found."))
+                    .finish()
+            }
+            ReissuanceError::InvalidCredentialPayload => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Invalid Credential Type")
+                .type_url(type_url("issuance#invalid-credential-type"))
+                .message("Credential payload must be a JSON object.")
+                .finish(),
+            ReissuanceError::UnsupportedCredentialFormat(format) => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Unsupported Credential Format")
+                .type_url(type_url("issuance#unsupported-credential-format"))
+                .message(format!("Credential format is not supported for reissuance: {format}"))
+                .finish(),
+            ReissuanceError::NotAllowed(error) => ApiError::builder(StatusCode::FORBIDDEN)
+                .title("Reissuance Not Allowed")
+                .type_url(type_url("issuance#reissuance-not-allowed"))
+                .message(error.to_string())
+                .finish(),
+            ReissuanceError::OriginalCredentialNotIssued => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Original Credential Not Issued")
+                .type_url(type_url("issuance#original-credential-not-issued"))
+                .message("Only issued credentials can be reissued.")
+                .finish(),
+            ReissuanceError::CredentialConfigurationMismatch => ApiError::builder(StatusCode::BAD_REQUEST)
+                .title("Credential Configuration Mismatch")
+                .type_url(type_url("issuance#credential-configuration-mismatch"))
+                .message("The requested configuration must match the original credential type.")
+                .finish(),
+            ReissuanceError::AlreadyExists => ApiError::builder(StatusCode::CONFLICT)
+                .title("Reissuance Already Exists")
+                .type_url(type_url("issuance#reissuance-already-exists"))
+                .message("The reissuance relation already exists.")
+                .finish(),
+            ReissuanceError::Failed(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .title("Credential Reissuance Failed")
+                .type_url(type_url("issuance#credential-reissuance-failed"))
+                .source(self)
+                .message("Unable to create the reissuance relation.")
+                .finish(),
+            ReissuanceError::RefreshCapabilityFailed => create_refresh_capability_failed(self),
+            ReissuanceError::Template(error) => error.into_api_error(),
+            ReissuanceError::ReplacementRejected(error) => error.into_api_error(),
+            ReissuanceError::Authorization(error) => error.into_api_error(),
+            ReissuanceError::Persistence(error) => error.into_api_error(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for RefreshError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            RefreshError::NotFound => issuance_problem(
+                StatusCode::NOT_FOUND,
+                "Refresh Reference Not Found",
+                "refresh-reference-not-found",
+                "The refresh token is unknown or no longer refreshes a credential.",
+            ),
+            RefreshError::Unavailable => issuance_problem(
+                StatusCode::FORBIDDEN,
+                "Credential Refresh Unavailable",
+                "credential-refresh-unavailable",
+                "The credential cannot be refreshed.",
+            ),
+            RefreshError::PreparationFailed => issuance_problem(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Credential Refresh Preparation Failed",
+                "credential-refresh-preparation-failed",
+                "Preparing the replacement credential failed.",
+            ),
+            RefreshError::Failed => issuance_problem(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Credential Refresh Failed",
+                "credential-refresh-failed",
+                "The credential refresh failed.",
+            ),
+        }
+    }
+}
+
+/// A problem documented under `anchor` in the issuance problem details.
+fn issuance_problem(status: StatusCode, title: &str, anchor: &str, message: &str) -> ApiError {
+    ApiError::builder(status)
+        .title(title)
+        .type_url(type_url(&format!("issuance#{anchor}")))
+        .message(message)
+        .finish()
+}
+
+impl IntoApiErrorExt for CreateCredentialError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            Self::RefreshCapability => create_refresh_capability_failed(self),
+            Self::Credential(error) => error.into_api_error(),
+        }
+    }
+}
+
+/// An opted-in credential is never issued without its refresh capability.
+fn create_refresh_capability_failed(error: impl std::error::Error + Send + Sync + 'static) -> ApiError {
+    ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+        .title("Create Refresh Capability Failed")
+        .type_url(type_url("issuance#create-refresh-capability-failed"))
+        .message("The credential's refresh capability could not be created, so the credential was not issued.")
+        .source(error)
+        .finish()
+}
+
+impl IntoApiErrorExt for TemplateIssuanceError {
+    fn into_api_error(self) -> ApiError {
+        use TemplateIssuanceError::*;
+        let message = self.to_string();
+        let (status, title, anchor) = match self {
+            Query(error) => return error.into_api_error(),
+            MissingTemplateId => (StatusCode::BAD_REQUEST, "Missing Template ID", "missing-template-id"),
+            TemplateNotFound(_) => (StatusCode::NOT_FOUND, "Template Not Found", "template-not-found"),
+            TemplateNotPublished => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "Template Not Published",
+                "template-not-published",
+            ),
+            InvalidExpiration(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid Template Expiration",
+                "invalid-template-expiration",
+            ),
+            ExpirationExceedsTemplateLimit(_) => (
+                StatusCode::BAD_REQUEST,
+                "Expiration Exceeds Template Limit",
+                "expiration-exceeds-template-limit",
+            ),
+            InvalidSchema(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid Template Schema",
+                "invalid-template-schema",
+            ),
+            SchemaValidation { violations, .. } => {
+                return ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                    .title("Credential Schema Validation Failed")
+                    .type_url(type_url("issuance#credential-schema-validation-failed"))
+                    .message(message)
+                    .field("violations", violations)
+                    .finish()
+            }
+        };
+        ApiError::builder(status)
+            .title(title)
+            .type_url(type_url(&format!("issuance#{anchor}")))
+            .message(message)
+            .finish()
     }
 }
 
@@ -174,8 +343,11 @@ pub enum PublicError {
     CredentialError(OID4VCError<CredentialErrorResponse>),
     NotificationError(OID4VCError<NotificationErrorResponse>),
     AccessTokenError(AccessTokenValidationError),
+    /// No bearer token in the `Authorization` header: a challenge without error code (RFC 6750, section 3.1).
+    MissingAccessToken,
     InternalServerError,
     NotFoundError,
+    UnsupportedMediaType,
 }
 
 impl axum::response::IntoResponse for PublicError {
@@ -204,8 +376,12 @@ impl axum::response::IntoResponse for PublicError {
                 Json(serde_json::json!({"error": "invalid_token"})),
             )
                 .into_response(),
+            PublicError::MissingAccessToken => {
+                (StatusCode::UNAUTHORIZED, [("WWW-Authenticate", "Bearer")]).into_response()
+            }
             PublicError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
             PublicError::NotFoundError => StatusCode::NOT_FOUND.into_response(),
+            PublicError::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
         }
     }
 }
@@ -227,6 +403,7 @@ impl IntoPublicError for CredentialError {
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
             KeyIdError => PublicError::InternalServerError,
+            InvalidNotificationIdError => NotificationErrorResponse::InvalidNotificationId.into(),
         }
     }
 }
@@ -266,6 +443,9 @@ impl IntoPublicError for OfferError {
             UnsupportedCredentialIdentifierError => {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
             }
+            HolderMismatchError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::CredentialRequestDenied))
+            }
             // Internal errors that shouldn't reach the public API
             SendCredentialOfferError(_) => PublicError::InternalServerError,
             UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
@@ -300,7 +480,6 @@ impl IntoPublicError for StatusListError {
         match self {
             AggregateNotFound => PublicError::InternalServerError,
             FailedToSetIndex(_, _) => PublicError::InternalServerError,
-            GzipCompressionError => PublicError::InternalServerError,
             JwtEncodeError => PublicError::InternalServerError,
             StatusListEncodingError(_) => PublicError::InternalServerError,
             StatusListNotFound(_) => PublicError::NotFoundError,
@@ -346,110 +525,354 @@ impl From<AccessTokenValidationError> for PublicError {
     }
 }
 
-pub fn authorization_error(error: AuthorizationErrorResponse) -> Response {
-    let error: OID4VCError<AuthorizationErrorResponse> = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn token_error(error: TokenErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn credential_error(error: CredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn deferred_credential_error(error: DeferredCredentialErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
-pub fn notification_error(error: NotificationErrorResponse) -> Response {
-    let error = OID4VCError::new(error);
-    let status = error.error.status_code();
-    (status, Json(error)).into_response()
-}
-
 pub fn internal_server_error() -> PublicError {
     PublicError::InternalServerError
-}
-
-pub fn access_token_error(err: AccessTokenValidationError) -> PublicError {
-    PublicError::AccessTokenError(err)
-}
-
-impl IntoApiErrorExt for ReissuanceServiceError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            ReissuanceServiceError::Authorization(_) => ApiError::new(StatusCode::FORBIDDEN),
-            ReissuanceServiceError::OriginalCredentialNotFound(credential_id) => {
-                ApiError::builder(StatusCode::NOT_FOUND)
-                    .title("Original Credential Not Found")
-                    .type_url(type_url("issuance#original-credential-not-found"))
-                    .message(format!("Original credential `{credential_id}` was not found."))
-                    .finish()
-            }
-            ReissuanceServiceError::CredentialConfigurationNotFound(configuration_id) => {
-                ApiError::builder(StatusCode::NOT_FOUND)
-                    .title("Credential Configuration Not Found")
-                    .type_url(type_url("issuance#credential-configuration-not-found"))
-                    .message(format!("Credential configuration `{configuration_id}` was not found."))
-                    .finish()
-            }
-            ReissuanceServiceError::InvalidCredentialPayload => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Invalid Credential Payload")
-                .type_url(type_url("issuance#invalid-credential-payload"))
-                .message("Credential payload must be a JSON object.")
-                .finish(),
-            ReissuanceServiceError::UnsupportedCredentialFormat(format) => ApiError::builder(StatusCode::BAD_REQUEST)
-                .title("Unsupported Credential Format")
-                .type_url(type_url("issuance#unsupported-credential-format"))
-                .message(format!("Credential format is not supported for reissuance: {format}"))
-                .finish(),
-            ReissuanceServiceError::Policy(error) => ApiError::builder(StatusCode::FORBIDDEN)
-                .title("Reissuance Not Allowed")
-                .type_url(type_url("issuance#reissuance-not-allowed"))
-                .message(error.to_string())
-                .finish(),
-            ReissuanceServiceError::Query(error) | ReissuanceServiceError::Command(error) => {
-                ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                    .title("Credential Reissuance Failed")
-                    .type_url(type_url("issuance#credential-reissuance-failed"))
-                    .message(error)
-                    .finish()
-            }
-            ReissuanceServiceError::RefreshCapability(error) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .title("Credential Reissuance Failed")
-                .type_url(type_url("issuance#credential-reissuance-failed"))
-                .message(error.to_string())
-                .finish(),
-        }
-    }
-}
-
-impl IntoApiErrorExt for agent_issuance::reissuance::error::ReissuanceError {
-    fn into_api_error(self) -> ApiError {
-        match self {
-            Self::AlreadyExists => ApiError::new(StatusCode::CONFLICT),
-            Self::BuildReissuanceError(message) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
-                .message(message)
-                .finish(),
-        }
-    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::error::tests::into_json_value;
+    use crate::error::tests::{assert_problems, into_json_value};
     use crate::DOCUMENTATION_URL;
-    use serde_json::json;
+    use agent_library::json_schema_validation::JsonSchemaError;
+    use axum::response::IntoResponse as _;
+    use identity_kit::status_list::StatusListError as TokenStatusListError;
+    use serde_json::{json, Value};
+
+    const UNEXPECTED: Option<&str> = Some("unexpected#unexpected-error");
+
+    async fn public_response(error: PublicError) -> (StatusCode, Value) {
+        let response = error.into_response();
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+    }
+
+    /// Asserts the status code and OpenID4VCI `error` code of each public error; `None` means an empty body.
+    pub async fn assert_public_errors<E: IntoPublicError>(cases: Vec<(E, StatusCode, Option<&str>)>) {
+        for (error, status, error_code) in cases {
+            let description = error.to_string();
+            let (actual_status, body) = public_response(error.into_public_error()).await;
+
+            assert_eq!(actual_status, status, "{description}");
+            assert_eq!(body.get("error").and_then(Value::as_str), error_code, "{description}");
+        }
+    }
+
+    #[test]
+    fn credential_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                CredentialError::UnsupportedCredentialFormat(json!("ldp_vc")),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Some("issuance#unsupported-credential-format"),
+            ),
+            (
+                CredentialError::InvalidCredentialPayloadError(JsonSchemaError::InvalidJsonData("{".to_string())),
+                StatusCode::BAD_REQUEST,
+                Some("issuance#invalid-credential-payload"),
+            ),
+            (
+                CredentialError::InvalidIdentifierError,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#invalid-identifier"),
+            ),
+            (
+                CredentialError::InvalidExpirationDateError,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#invalid-expiration-date"),
+            ),
+            (
+                CredentialError::InvalidCredentialStatus,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                UNEXPECTED,
+            ),
+            (
+                CredentialError::BuildCredentialError("error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                UNEXPECTED,
+            ),
+            (
+                CredentialError::InvalidCredentialDataError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                CredentialError::InvalidIssuerDidError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (CredentialError::KeyIdError, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                CredentialError::InvalidNotificationIdError,
+                StatusCode::BAD_REQUEST,
+                None,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn offer_errors_successfully_convert_to_problem_details() {
+        assert_problems([
+            (
+                OfferError::MissingCredentialOfferError,
+                StatusCode::NOT_FOUND,
+                Some("issuance#missing-credential-offer"),
+            ),
+            (
+                OfferError::InvalidCredentialOfferUriError(url::ParseError::EmptyHost),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                UNEXPECTED,
+            ),
+        ]);
+
+        // These only occur on the OpenID4VCI endpoints, which map them to `PublicError`s instead.
+        assert_problems(
+            [
+                OfferError::UnsupportedTokenRequestGrantTypeError,
+                OfferError::MissingTxCodeError,
+                OfferError::InvalidTxCodeError,
+                OfferError::InvalidPreAuthorizedCodeError,
+                OfferError::UnrequestedTxCodeError,
+                OfferError::MissingCredentialError,
+                OfferError::MissingProofError,
+                OfferError::InvalidProofError("error".to_string()),
+                OfferError::MissingProofIssuerError,
+                OfferError::MissingCredentialConfigurationIdsError,
+                OfferError::UnknownCredentialConfiguration("id".to_string()),
+                OfferError::UnsupportedCredentialIdentifierError,
+                OfferError::HolderMismatchError,
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None)),
+        );
+    }
+
+    #[test]
+    fn server_config_status_list_and_public_offer_errors_successfully_convert_to_problem_details() {
+        assert_problems([(
+            ServerConfigError::UnsupportedCredentialFormatIdentifierError("ldp_vc".to_string()),
+            StatusCode::BAD_REQUEST,
+            Some("issuance#unsupported-credential-format-identifier-error"),
+        )]);
+
+        assert_problems(
+            [
+                StatusListError::AggregateNotFound,
+                StatusListError::FailedToSetIndex(0, "error".to_string()),
+                StatusListError::JwtEncodeError,
+                StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
+                StatusListError::StatusListNotFound("0".to_string()),
+                StatusListError::StatusListQueryError,
+                StatusListError::StatusListUrlParsingError,
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None)),
+        );
+
+        assert_problems([
+            (PublicOfferError::AlreadyExists, StatusCode::CONFLICT, None),
+            (PublicOfferError::NotFound, StatusCode::NOT_FOUND, None),
+            (PublicOfferError::TemplateNotFound, StatusCode::NOT_FOUND, None),
+            (
+                PublicOfferError::TemplateNotEligible,
+                StatusCode::BAD_REQUEST,
+                Some("issuance#template-not-eligible-for-public-offer"),
+            ),
+        ]);
+    }
+
+    #[tokio::test]
+    async fn offer_errors_successfully_convert_to_public_errors() {
+        assert_public_errors(vec![
+            (
+                OfferError::MissingTxCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_request"),
+            ),
+            (
+                OfferError::InvalidTxCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_grant"),
+            ),
+            (
+                OfferError::InvalidPreAuthorizedCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_grant"),
+            ),
+            (
+                OfferError::UnrequestedTxCodeError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_request"),
+            ),
+            (
+                OfferError::MissingCredentialOfferError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_credential_request"),
+            ),
+            (
+                OfferError::MissingCredentialError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_credential_request"),
+            ),
+            (
+                OfferError::MissingProofError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_proof"),
+            ),
+            (
+                OfferError::InvalidProofError("error".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("invalid_proof"),
+            ),
+            (
+                OfferError::MissingProofIssuerError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_proof"),
+            ),
+            (
+                OfferError::MissingCredentialConfigurationIdsError,
+                StatusCode::BAD_REQUEST,
+                Some("invalid_credential_request"),
+            ),
+            (
+                OfferError::UnknownCredentialConfiguration("id".to_string()),
+                StatusCode::BAD_REQUEST,
+                Some("unknown_credential_configuration"),
+            ),
+            (
+                OfferError::UnsupportedCredentialIdentifierError,
+                StatusCode::BAD_REQUEST,
+                Some("unknown_credential_identifier"),
+            ),
+            (
+                OfferError::HolderMismatchError,
+                StatusCode::BAD_REQUEST,
+                Some("credential_request_denied"),
+            ),
+            (
+                OfferError::UnsupportedTokenRequestGrantTypeError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                OfferError::InvalidCredentialOfferUriError(url::ParseError::EmptyHost),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ])
+        .await;
+    }
+
+    #[tokio::test]
+    async fn credential_errors_successfully_convert_to_public_errors() {
+        assert_public_errors(vec![(
+            CredentialError::InvalidNotificationIdError,
+            StatusCode::BAD_REQUEST,
+            Some("invalid_notification_id"),
+        )])
+        .await;
+    }
+
+    #[tokio::test]
+    async fn internal_issuance_errors_are_not_exposed_through_public_errors() {
+        assert_public_errors(
+            [
+                CredentialError::UnsupportedCredentialFormat(json!("ldp_vc")),
+                CredentialError::InvalidCredentialPayloadError(JsonSchemaError::InvalidJsonData("{".to_string())),
+                CredentialError::InvalidIdentifierError,
+                CredentialError::InvalidCredentialDataError,
+                CredentialError::InvalidExpirationDateError,
+                CredentialError::InvalidCredentialStatus,
+                CredentialError::BuildCredentialError("error".to_string()),
+                CredentialError::InvalidIssuerDidError,
+                CredentialError::KeyIdError,
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None))
+            .into(),
+        )
+        .await;
+
+        assert_public_errors(
+            [
+                ServerConfigError::UpdateProvisionedCredentialConfigurationError,
+                ServerConfigError::RemoveProvisionedCredentialConfigurationError,
+                ServerConfigError::UnsupportedCredentialFormatIdentifierError("ldp_vc".to_string()),
+            ]
+            .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None))
+            .into(),
+        )
+        .await;
+
+        assert_public_errors(vec![
+            (PublicOfferError::NotFound, StatusCode::NOT_FOUND, None),
+            (PublicOfferError::AlreadyExists, StatusCode::INTERNAL_SERVER_ERROR, None),
+        ])
+        .await;
+
+        assert_public_errors(vec![
+            (
+                StatusListError::StatusListNotFound("0".to_string()),
+                StatusCode::NOT_FOUND,
+                None,
+            ),
+            (
+                StatusListError::AggregateNotFound,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::FailedToSetIndex(0, "error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (StatusListError::JwtEncodeError, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                StatusListError::StatusListEncodingError(TokenStatusListError::InvalidBits(3)),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::StatusListQueryError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+            (
+                StatusListError::StatusListUrlParsingError,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
+        ])
+        .await;
+    }
+
+    #[tokio::test]
+    async fn public_errors_successfully_convert_to_responses() {
+        let (status, body) = public_response(AuthorizationErrorResponse::InvalidRequest.into()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("invalid_request"))
+        );
+
+        let (status, body) = public_response(TokenErrorResponse::InvalidClient.into()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (StatusCode::UNAUTHORIZED, Some("invalid_client"))
+        );
+
+        let (status, body) = public_response(NotificationErrorResponse::InvalidNotificationId.into()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("invalid_notification_id"))
+        );
+
+        let response = PublicError::from(AccessTokenValidationError::InvalidToken).into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()["WWW-Authenticate"], "Bearer error=\"invalid_token\"");
+        assert_eq!(into_json_value(response).await, json!({ "error": "invalid_token" }));
+
+        let (status, _) = public_response(internal_server_error()).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
 
     #[tokio::test]
     async fn issuance_errors_successfully_convert_to_problem_details() {
@@ -493,7 +916,7 @@ pub mod tests {
             json!({
                 "type": format!("{DOCUMENTATION_URL}problem-details/issuance#missing-credential-offer"),
                 "title": "Missing Credential Offer",
-                "status": 400,
+                "status": 404,
                 "detail": "Credential Offer does not exist"
             }),
         );

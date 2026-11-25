@@ -9,15 +9,16 @@ use axum::{
 };
 use http::StatusCode;
 use hyper::header;
-use oauth_tsl::relying_party::StatusListTokenResponseType;
+use identity_kit::status_list::StatusListToken;
 
 use crate::v0::issuance::error::PublicError;
 use crate::v0::openapi::PROTOCOL_TAG;
 
 /// Get a status list token
 ///
-/// Returns a gzip-encoded Status List Token, as defined by
+/// Returns a Status List Token, as defined by
 /// [Token Status List](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list#name-status-list-request).
+/// The response is gzip-encoded if the request's `Accept-Encoding` allows it.
 #[utoipa::path(
     get,
     path = "/ietf-oauth-token-status-list/{path}",
@@ -32,7 +33,7 @@ use crate::v0::openapi::PROTOCOL_TAG;
             description = "Status List Token as a compact JWT",
             body = String,
             content_type = "application/statuslist+jwt",
-            headers(("Content-Encoding" = String, description = "Always `gzip`")),
+            headers(("Content-Encoding" = String, description = "`gzip` if the request's `Accept-Encoding` allows it")),
         ),
         (status = 404, description = "The status list does not exist"),
     )
@@ -43,20 +44,14 @@ pub async fn token_status_list(
 ) -> Result<Response, PublicError> {
     let token_status_list_service = TokenStatusListService {};
 
-    let compressed_jwt_token = token_status_list_service
-        .create_gzip_status_list_jwt_token(status_list_id, &state)
+    let jwt_token = token_status_list_service
+        .create_status_list_jwt_token(status_list_id, &state)
         .await?;
 
     Ok((
         StatusCode::OK,
-        [
-            (
-                header::CONTENT_TYPE,
-                StatusListTokenResponseType::Jwt.to_string().as_str(),
-            ),
-            (header::CONTENT_ENCODING, "gzip"),
-        ],
-        compressed_jwt_token,
+        [(header::CONTENT_TYPE, StatusListToken::MEDIA_TYPE)],
+        jwt_token,
     )
         .into_response())
 }
@@ -65,28 +60,28 @@ pub async fn token_status_list(
 pub mod tests {
     use std::sync::Arc;
 
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::{
         services::IssuanceServices,
         state::{initialize, IssuanceState},
     };
     use agent_secret_manager::{service::Service, subject::Subject};
     use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_shared::credential_status_checker::{decode_status_list_token, decompress_gzip};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::{self, Body},
         Router,
     };
     use http::{Request, StatusCode};
+    use identity_kit::status_list::StatusListToken;
     use jsonwebtoken::{decode_header, Algorithm, DecodingKey};
-    use oauth_tsl::{
-        relying_party::{decompress_gzip, decrypt_status_list_token, StatusListTokenResponseType},
-        tokens::status_list_token::StatusListTyp,
-    };
     use oid4vc_core::authentication::verify::Verify;
     use shared_kernel::authorization::Caller;
 
-    use crate::tests::TEMPLATE_ID;
+    use crate::tests::{holder_did, key_proof, TEMPLATE_ID};
     use crate::v0::{
         authorization::{self, authorization_server::token::tests::token},
         issuance::{
@@ -103,15 +98,8 @@ pub mod tests {
     /// The remainder of the test breaks down the Token Status List response in various steps and checks these steps one by one.
     #[tokio::test]
     pub async fn test_token_status_list() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -128,7 +116,8 @@ pub mod tests {
                 Request::builder()
                     .method(http::Method::GET)
                     .uri("/ietf-oauth-token-status-list/0")
-                    .header(http::header::ACCEPT, StatusListTokenResponseType::Jwt.to_string())
+                    .header(http::header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                    .header(http::header::ACCEPT_ENCODING, "gzip")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -142,6 +131,13 @@ pub mod tests {
                 .get(http::header::CONTENT_TYPE)
                 .unwrap(),
             "application/statuslist+jwt"
+        );
+        assert_eq!(
+            token_status_list_response
+                .headers()
+                .get(http::header::CONTENT_ENCODING)
+                .unwrap(),
+            "gzip"
         );
 
         let body_bytes = body::to_bytes(token_status_list_response.into_body(), usize::MAX)
@@ -161,17 +157,59 @@ pub mod tests {
             }
         };
 
-        let decoded_jwt = decrypt_status_list_token(&jwt_status_list_token, decoding_key).unwrap();
+        let status_list_token =
+            decode_status_list_token(&jwt_status_list_token, &decoding_key, chrono::Utc::now()).unwrap();
 
-        assert_eq!(jwt_header.typ.unwrap(), StatusListTyp::Jwt.to_string());
+        assert_eq!(jwt_header.typ.unwrap(), StatusListToken::TYP);
         assert_eq!(
-            decoded_jwt.claims.sub,
+            status_list_token.sub,
             config().public_url.as_str().to_owned() + "ietf-oauth-token-status-list/0"
         );
-        assert_eq!(decoded_jwt.claims.encoded_status_list.status_size, BITS_PER_STATUS);
+        assert_eq!(status_list_token.status_list.bits(), BITS_PER_STATUS);
+        assert_eq!(status_list_token.status_list.as_bytes().len(), STATUS_LIST_BYTES_AMOUNT);
+    }
 
-        let status_list = decoded_jwt.claims.encoded_status_list.decode_decompress().unwrap();
-        assert_eq!(status_list.len(), STATUS_LIST_BYTES_AMOUNT);
+    /// Without `Accept-Encoding: gzip`, the Status List Token is returned uncompressed.
+    #[tokio::test]
+    pub async fn test_token_status_list_without_gzip() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
+
+        let mut app = issuance::router((issuance_state.clone(), library_state));
+
+        create_test_signed_credential(&mut app, &issuance_state, TEMPLATE_ID).await;
+
+        let token_status_list_response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri("/ietf-oauth-token-status-list/0")
+                    .header(http::header::ACCEPT, StatusListToken::MEDIA_TYPE)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(token_status_list_response.status(), StatusCode::OK);
+        assert!(token_status_list_response
+            .headers()
+            .get(http::header::CONTENT_ENCODING)
+            .is_none());
+
+        let body_bytes = body::to_bytes(token_status_list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let jwt_status_list_token = String::from_utf8(body_bytes.to_vec()).unwrap();
+
+        assert_eq!(
+            decode_header(&jwt_status_list_token).unwrap().typ.unwrap(),
+            StatusListToken::TYP
+        );
     }
 
     /// This test helper creates a signed credential with the following parameters:
@@ -209,7 +247,6 @@ pub mod tests {
                 AuthorizationServices::default().await,
                 &Default::default(),
                 Default::default(),
-                Default::default(),
             )
             .await,
         );
@@ -220,7 +257,7 @@ pub mod tests {
         let mut authorization_app = authorization::router((authorization_state, issuance_state.to_owned()));
 
         let access_token: String = token(&mut authorization_app, true, grants).await;
-        let jwt = "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ";
+        let jwt = key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await;
 
         let response = app
             .clone()

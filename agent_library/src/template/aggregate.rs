@@ -4,13 +4,16 @@ use agent_shared::config::Authorization;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use tracing::{debug, info};
 
-pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
     ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
 };
-use super::{command::TemplateCommand, error::TemplateError, event::TemplateEvent};
+pub use super::open_badges::{is_open_badges_standard_property, open_badges_required_leaf_paths};
+use super::{
+    command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin,
+    public_content::PublicTemplateContent,
+};
+use crate::json_schema_validation::template_schema_validator;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -146,7 +149,7 @@ pub enum FormFieldType {
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     pub selectively_disclosable: bool,
-    /// Whether this property is non-removable — its leaf field must remain present in the schema
+    /// Whether this property is non-removable — it must remain present in the schema
     /// and cannot be removed by the caller. Determined by the data model; system-controlled only.
     /// For OpenBadges 3.0 templates, only the required standard fields are non-removable.
     /// Defaults to `false`.
@@ -206,6 +209,9 @@ pub struct Template {
     pub schema: Box<Option<serde_json::Value>>,
     pub schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
     pub holder_authorization: Authorization,
+    /// Where the template was imported from. Unrelated to `source_template_id`.
+    #[serde(default)]
+    pub origin: Option<TemplateOrigin>,
 }
 
 impl Aggregate for Template {
@@ -222,12 +228,416 @@ impl Aggregate for Template {
         _services: &Self::Services,
         sink: &EventSink<Self>,
     ) -> Result<(), Self::Error> {
+        for event in self.decide(command)? {
+            sink.write(event, self).await;
+        }
+
+        Ok(())
+    }
+
+    fn apply(&mut self, event: Self::Event) {
+        use TemplateEvent::*;
+
+        match event {
+            TemplateCreated {
+                template_id,
+                source_template_id,
+                title,
+                display,
+                data_model,
+                holder_type,
+                modified_at,
+                tags,
+                status,
+                visibility,
+                credential_expiration,
+                description,
+                r#type,
+                schema,
+                schema_properties_attributes,
+                holder_authorization,
+                origin,
+            } => {
+                self.template_id = template_id;
+                self.source_template_id = source_template_id;
+                self.title = title;
+                self.display = *display;
+                self.data_model = data_model;
+                self.holder_type = holder_type;
+                self.modified_at.replace(modified_at);
+                self.tags = tags;
+                self.status = status;
+                self.visibility = visibility;
+                self.credential_expiration = credential_expiration;
+                self.description = description;
+                self.r#type = r#type;
+                self.schema = schema;
+                self.schema_properties_attributes = schema_properties_attributes;
+                self.holder_authorization = holder_authorization;
+                self.origin = origin.map(|origin| *origin);
+            }
+            TitleUpdated {
+                template_id: _,
+                title,
+                modified_at,
+            } => {
+                self.title = title;
+                self.modified_at.replace(modified_at);
+            }
+            DisplayUpdated {
+                template_id: _,
+                display,
+                modified_at,
+            } => {
+                self.display = Some(display);
+                self.modified_at.replace(modified_at);
+            }
+            TagsUpdated {
+                template_id: _,
+                tags,
+                modified_at,
+            } => {
+                self.tags = if tags.is_empty() { None } else { Some(tags) };
+                self.modified_at.replace(modified_at);
+            }
+            StatusUpdated {
+                template_id: _,
+                status,
+                modified_at,
+            } => {
+                self.status = status;
+                self.modified_at.replace(modified_at);
+            }
+            VisibilityUpdated {
+                template_id: _,
+                visibility,
+                modified_at,
+            } => {
+                self.visibility = visibility;
+                self.modified_at.replace(modified_at);
+            }
+            DescriptionUpdated {
+                template_id: _,
+                description,
+                modified_at,
+            } => {
+                self.description = if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                };
+                self.modified_at.replace(modified_at);
+            }
+            TypeUpdated {
+                template_id: _,
+                r#type,
+                modified_at,
+            } => {
+                self.r#type = r#type;
+                self.modified_at.replace(modified_at);
+            }
+            SchemaUpdated {
+                template_id: _,
+                schema,
+                modified_at,
+            } => {
+                *self.schema = Some(schema);
+                self.modified_at.replace(modified_at);
+            }
+            SchemaPropertiesAttributesUpdated {
+                template_id: _,
+                schema_properties_attributes,
+                modified_at,
+            } => {
+                // No attributes are stored as `None`, as `CreateNewTemplate` stores them.
+                self.schema_properties_attributes =
+                    (!schema_properties_attributes.is_empty()).then_some(schema_properties_attributes);
+                self.modified_at.replace(modified_at);
+            }
+            CredentialExpirationUpdated {
+                template_id: _,
+                credential_expiration,
+                modified_at,
+            } => {
+                self.credential_expiration = credential_expiration;
+                self.modified_at.replace(modified_at);
+            }
+            HolderAuthorizationUpdated {
+                template_id: _,
+                holder_authorization,
+                modified_at,
+            } => {
+                self.holder_authorization = holder_authorization;
+                self.modified_at.replace(modified_at);
+            }
+            OriginUpdated {
+                template_id: _,
+                origin,
+                modified_at,
+            } => {
+                self.origin = origin;
+                self.modified_at.replace(modified_at);
+            }
+            TemplateDeleted { template_id } => {
+                *self = Self::default();
+                self.template_id = template_id;
+                self.status = Status::Deleted;
+            }
+        }
+    }
+}
+
+fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    template_schema_validator(schema)
+        .map(|_| ())
+        .map_err(TemplateError::InvalidSchema)?;
+
+    // The schema describes the claims of a credential, which are an object. Arrays belong to its properties.
+    if is_array_schema(schema) {
+        return Err(TemplateError::InvalidSchema(
+            "The schema of a template describes an object and cannot be an array. \
+             Define arrays as properties of the schema."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Whether a schema node describes an array: its `type` is `"array"`, or a list of types that has it.
+pub fn is_array_schema(schema: &serde_json::Value) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(r#type)) => r#type == "array",
+        Some(serde_json::Value::Array(types)) => types.iter().any(|r#type| r#type.as_str() == Some("array")),
+        _ => false,
+    }
+}
+
+/// Validates that no property of an Open Badges template schema (at any nesting level) has `"type": "array"`.
+///
+/// The shape of an Open Badges credential is given by the standard, and UniCore checks the schema against it property
+/// by property. Templates of the other data models may hold arrays, see ADR 0012.
+fn validate_open_badges_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    if is_array_schema(schema) {
+        return Err(TemplateError::InvalidSchema(
+            "Array types are not supported in Open Badges template schemas. \
+             Define only object and scalar fields."
+                .to_string(),
+        ));
+    }
+
+    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+        for value in properties.values() {
+            validate_open_badges_schema_no_array_types(value)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Normalizes and validates the `type` field.
+///
+/// - Drops blank/whitespace-only entries.
+/// - For OpenBadges 3.0: enforces that exactly one badge-specific subtype is present,
+///   that no extra types are included, and defaults to `['VerifiableCredential', 'OpenBadgeCredential']`
+///   for empty or incomplete input.
+/// - For all other data models: ensures `VerifiableCredential` is present (adds it if missing),
+///   deduplicates, and applies canonical ordering (VerifiableCredential first).
+fn normalize_and_validate_type(type_input: Vec<String>, data_model: &DataModel) -> Result<Vec<String>, TemplateError> {
+    // Drop blank/whitespace-only entries.
+    let filtered: Vec<String> = type_input.into_iter().filter(|t| !t.trim().is_empty()).collect();
+
+    match data_model {
+        DataModel::OpenBadges3_0 => normalize_open_badges_type(filtered),
+        _ => normalize_standard_type(filtered),
+    }
+}
+
+fn normalize_standard_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
+    const VC: &str = "VerifiableCredential";
+
+    // Empty input defaults to ['VerifiableCredential'].
+    if filtered.is_empty() {
+        return Ok(vec![VC.to_string()]);
+    }
+
+    // Deduplicate preserving first-seen order.
+    let mut seen = std::collections::HashSet::new();
+    let deduped: Vec<String> = filtered.into_iter().filter(|t| seen.insert(t.clone())).collect();
+
+    // Canonical order: VerifiableCredential first, then extras.
+    let mut result = vec![VC.to_string()];
+    for t in &deduped {
+        if t != VC {
+            result.push(t.clone());
+        }
+    }
+
+    Ok(result)
+}
+
+fn normalize_open_badges_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
+    const OBC: &str = "OpenBadgeCredential";
+    const AC: &str = "AchievementCredential";
+    const VC: &str = "VerifiableCredential";
+
+    // Empty or only-VC input defaults to ['VerifiableCredential', 'OpenBadgeCredential'].
+    if filtered.is_empty() || (filtered.len() == 1 && filtered[0] == VC) {
+        return Ok(vec![VC.to_string(), OBC.to_string()]);
+    }
+
+    let has_obc = filtered.contains(&OBC.to_string());
+    let has_ac = filtered.contains(&AC.to_string());
+
+    if has_obc && has_ac {
+        return Err(TemplateError::InvalidType(
+            "OpenBadges type cannot include both `OpenBadgeCredential` and `AchievementCredential`".to_string(),
+        ));
+    }
+
+    // No extra types allowed beyond VC, OBC, AC.
+    let allowed = [VC, OBC, AC];
+    let extras: Vec<&str> = filtered
+        .iter()
+        .filter(|t| !allowed.contains(&t.as_str()))
+        .map(|t| t.as_str())
+        .collect();
+    if !extras.is_empty() {
+        return Err(TemplateError::InvalidType(format!(
+            "OpenBadges type includes disallowed extra entries: [{}]",
+            extras.join(", ")
+        )));
+    }
+
+    // Must contain exactly one badge-specific subtype; deduplicate preserving order.
+    let badge_type = if has_obc { OBC } else { AC };
+
+    Ok(vec![VC.to_string(), badge_type.to_string()])
+}
+
+/// Trims a description. A blank one is absent, so `CreateNewTemplate` and `UpdateDescription` store the same value for
+/// the same input.
+fn normalize_description(description: &str) -> Option<String> {
+    let description = description.trim();
+    (!description.is_empty()).then(|| description.to_string())
+}
+
+/// Normalizes a tags vector: trims each entry, drops empty entries, deduplicates
+/// preserving first-seen order.  Returns `None` when the result would be empty.
+fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
+    let tags = tags?;
+
+    let mut seen = std::collections::HashSet::new();
+    let normalized: Vec<String> = tags
+        .into_iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .filter(|t| seen.insert(t.clone()))
+        .collect();
+
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+impl Template {
+    /// The events of `ReplaceContent`: each field's own update command, decided in turn against the template as the
+    /// earlier ones left it, so every field is validated by the same rules as on its own and nothing is emitted unless
+    /// all of them pass. A command that changes no public content emits nothing; the origin is always set, last.
+    fn replace_content(
+        &self,
+        template_id: String,
+        content: PublicTemplateContent,
+        origin: Option<TemplateOrigin>,
+    ) -> Result<Vec<TemplateEvent>, TemplateError> {
+        use TemplateCommand::*;
+
+        ensure_template_editable(&self.status)?;
+        if content.data_model != self.data_model {
+            return Err(TemplateError::DataModelImmutable);
+        }
+        if content.holder_type != self.holder_type {
+            return Err(TemplateError::HolderTypeImmutable);
+        }
+
+        let PublicTemplateContent {
+            title,
+            description,
+            display,
+            r#type,
+            tags,
+            credential_expiration,
+            schema,
+            schema_properties_attributes,
+            ..
+        } = content;
+
+        let mut commands = vec![
+            UpdateTitle {
+                template_id: template_id.clone(),
+                title,
+            },
+            UpdateDisplay {
+                template_id: template_id.clone(),
+                display,
+            },
+            // Empty tags and an empty description clear the field.
+            UpdateTags {
+                template_id: template_id.clone(),
+                tags: tags.unwrap_or_default(),
+            },
+            UpdateCredentialExpiration {
+                template_id: template_id.clone(),
+                credential_expiration,
+            },
+            UpdateDescription {
+                template_id: template_id.clone(),
+                description: description.unwrap_or_default(),
+            },
+            UpdateType {
+                template_id: template_id.clone(),
+                r#type,
+            },
+        ];
+        if let Some(schema) = schema {
+            commands.push(UpdateSchema {
+                template_id: template_id.clone(),
+                schema,
+            });
+        }
+        // No attributes clear them, except for W3C VC 1.1, which never has any.
+        let schema_properties_attributes = schema_properties_attributes.unwrap_or_default();
+        if self.data_model != DataModel::W3CVcDataModelV1_1 || !schema_properties_attributes.is_empty() {
+            commands.push(UpdateSchemaPropertiesAttributes {
+                template_id: template_id.clone(),
+                schema_properties_attributes,
+            });
+        }
+
+        let mut template = self.clone();
+        let mut events = Vec::new();
+        for command in commands {
+            let before = template.public_content();
+            let emitted = template.decide(command)?;
+            for event in &emitted {
+                template.apply(event.clone());
+            }
+            if template.public_content() != before {
+                events.extend(emitted);
+            }
+        }
+
+        events.extend(template.decide(UpdateOrigin { template_id, origin })?);
+        Ok(events)
+    }
+
+    /// The events `command` emits against this template, or why it is refused. Nothing is written.
+    fn decide(&self, command: TemplateCommand) -> Result<Vec<TemplateEvent>, TemplateError> {
         use TemplateCommand::*;
         use TemplateEvent::*;
 
-        info!("Handling command: {:?}", command);
-
-        let events: Vec<Self::Event> = match command {
+        match command {
             CreateNewTemplate {
                 template_id,
                 source_template_id,
@@ -244,6 +654,7 @@ impl Aggregate for Template {
                 schema,
                 schema_properties_attributes,
                 holder_authorization,
+                origin,
             } => {
                 // Only Draft and Published are allowed on creation.
                 if matches!(status, Status::Archived | Status::Deleted) {
@@ -262,9 +673,21 @@ impl Aggregate for Template {
                 // Normalize tags.
                 let tags = normalize_tags(tags);
 
+                // Normalized like `UpdateDescription`, so the same input stores the same description either way.
+                let description = description.as_deref().and_then(normalize_description);
+
+                // Trimmed like `UpdateSchemaPropertiesAttributes`.
+                let schema_properties_attributes = schema_properties_attributes
+                    .map(trim_and_deduplicate_attribute_keys)
+                    .transpose()?;
+
                 // Validate the credential expiration value if provided.
                 let credential_expiration = credential_expiration.unwrap_or_default();
                 validate_expiration(&credential_expiration)?;
+
+                if let Some(ref origin) = origin {
+                    origin.validate()?;
+                }
 
                 // W3C VC 1.1 does not expose claim metadata and must not have
                 // schemaPropertiesAttributes.
@@ -293,9 +716,9 @@ impl Aggregate for Template {
 
                 if let Some(ref s) = *schema {
                     validate_json_schema(s)?;
-                    validate_schema_no_array_types(s)?;
 
                     if data_model == DataModel::OpenBadges3_0 {
+                        validate_open_badges_schema_no_array_types(s)?;
                         validate_open_badges_schema_properties(s)?;
                     }
                 }
@@ -353,6 +776,7 @@ impl Aggregate for Template {
                     schema,
                     schema_properties_attributes,
                     holder_authorization,
+                    origin,
                 }])
             }
             UpdateTitle { template_id, title } => {
@@ -449,8 +873,8 @@ impl Aggregate for Template {
             } => {
                 ensure_template_editable(&self.status)?;
 
-                // Trim whitespace.  An empty description clears the field (stored as None via apply).
-                let description = description.trim().to_string();
+                // An empty description clears the field (stored as None via apply).
+                let description = normalize_description(&description).unwrap_or_default();
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -483,9 +907,9 @@ impl Aggregate for Template {
                 ensure_template_editable(&self.status)?;
 
                 validate_json_schema(&schema)?;
-                validate_schema_no_array_types(&schema)?;
 
                 if self.data_model == DataModel::OpenBadges3_0 {
+                    validate_open_badges_schema_no_array_types(&schema)?;
                     validate_open_badges_schema_properties(&schema)?;
                     validate_open_badges_required_properties(&schema)?;
                 }
@@ -499,11 +923,11 @@ impl Aggregate for Template {
                 // Enforce non-removable properties: reject if any property with non_removable=true
                 // is missing from the new schema.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
-                    let new_leaf_paths = collect_leaf_paths(&schema);
+                    let new_property_paths = collect_property_paths(&schema);
                     let immutable_missing: Vec<&str> = existing_attrs
                         .iter()
                         .filter(|(_, attr)| attr.non_removable)
-                        .filter(|(k, _)| !new_leaf_paths.contains(*k))
+                        .filter(|(k, _)| !new_property_paths.contains(*k))
                         .map(|(k, _)| k.as_str())
                         .collect();
 
@@ -528,10 +952,10 @@ impl Aggregate for Template {
 
                 // Prune schema_properties_attributes whose keys no longer exist in the new schema.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
-                    let new_leaf_paths = collect_leaf_paths(&schema);
+                    let new_property_paths = collect_property_paths(&schema);
                     let pruned: HashMap<String, PropertyAttribute> = existing_attrs
                         .iter()
-                        .filter(|(k, _)| new_leaf_paths.contains(*k))
+                        .filter(|(k, _)| new_property_paths.contains(*k))
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
 
@@ -565,8 +989,11 @@ impl Aggregate for Template {
 
                 // The `non_removable` flag is system-determined by the data model and cannot
                 // be altered through any command. Override it with the existing values.
-                let schema_properties_attributes =
-                    enforce_non_removable_flag(schema_properties_attributes, &self.schema_properties_attributes);
+                let schema_properties_attributes = enforce_non_removable_flag(
+                    schema_properties_attributes,
+                    &self.schema_properties_attributes,
+                    &self.data_model,
+                );
 
                 #[cfg(not(test))]
                 let modified_at = chrono::Utc::now().to_rfc3339();
@@ -619,289 +1046,30 @@ impl Aggregate for Template {
                     modified_at,
                 }])
             }
-        }?;
-
-        for event in events {
-            sink.write(event, self).await;
-        }
-
-        Ok(())
-    }
-
-    fn apply(&mut self, event: Self::Event) {
-        use TemplateEvent::*;
-
-        debug!("Applying event: {:?}", event);
-
-        match event {
-            TemplateCreated {
+            ReplaceContent {
                 template_id,
-                source_template_id,
-                title,
-                display,
-                data_model,
-                holder_type,
-                modified_at,
-                tags,
-                status,
-                visibility,
-                credential_expiration,
-                description,
-                r#type,
-                schema,
-                schema_properties_attributes,
-                holder_authorization,
-            } => {
-                self.template_id = template_id;
-                self.source_template_id = source_template_id;
-                self.title = title;
-                self.display = *display;
-                self.data_model = data_model;
-                self.holder_type = holder_type;
-                self.modified_at.replace(modified_at);
-                self.tags = tags;
-                self.status = status;
-                self.visibility = visibility;
-                self.credential_expiration = credential_expiration;
-                self.description = description;
-                self.r#type = r#type;
-                self.schema = schema;
-                self.schema_properties_attributes = schema_properties_attributes;
-                self.holder_authorization = holder_authorization;
-            }
-            TitleUpdated {
-                template_id: _,
-                title,
-                modified_at,
-            } => {
-                self.title = title;
-                self.modified_at.replace(modified_at);
-            }
-            DisplayUpdated {
-                template_id: _,
-                display,
-                modified_at,
-            } => {
-                self.display = Some(display);
-                self.modified_at.replace(modified_at);
-            }
-            TagsUpdated {
-                template_id: _,
-                tags,
-                modified_at,
-            } => {
-                self.tags = if tags.is_empty() { None } else { Some(tags) };
-                self.modified_at.replace(modified_at);
-            }
-            StatusUpdated {
-                template_id: _,
-                status,
-                modified_at,
-            } => {
-                self.status = status;
-                self.modified_at.replace(modified_at);
-            }
-            VisibilityUpdated {
-                template_id: _,
-                visibility,
-                modified_at,
-            } => {
-                self.visibility = visibility;
-                self.modified_at.replace(modified_at);
-            }
-            DescriptionUpdated {
-                template_id: _,
-                description,
-                modified_at,
-            } => {
-                self.description = if description.is_empty() {
-                    None
-                } else {
-                    Some(description)
-                };
-                self.modified_at.replace(modified_at);
-            }
-            TypeUpdated {
-                template_id: _,
-                r#type,
-                modified_at,
-            } => {
-                self.r#type = r#type;
-                self.modified_at.replace(modified_at);
-            }
-            SchemaUpdated {
-                template_id: _,
-                schema,
-                modified_at,
-            } => {
-                *self.schema = Some(schema);
-                self.modified_at.replace(modified_at);
-            }
-            SchemaPropertiesAttributesUpdated {
-                template_id: _,
-                schema_properties_attributes,
-                modified_at,
-            } => {
-                self.schema_properties_attributes = Some(schema_properties_attributes);
-                self.modified_at.replace(modified_at);
-            }
-            CredentialExpirationUpdated {
-                template_id: _,
-                credential_expiration,
-                modified_at,
-            } => {
-                self.credential_expiration = credential_expiration;
-                self.modified_at.replace(modified_at);
-            }
-            HolderAuthorizationUpdated {
-                template_id: _,
-                holder_authorization,
-                modified_at,
-            } => {
-                self.holder_authorization = holder_authorization;
-                self.modified_at.replace(modified_at);
-            }
-            TemplateDeleted { template_id } => {
-                *self = Self::default();
-                self.template_id = template_id;
-                self.status = Status::Deleted;
+                content,
+                origin,
+            } => self.replace_content(template_id, *content, origin),
+            UpdateOrigin { template_id, origin } => {
+                ensure_template_editable(&self.status)?;
+
+                if let Some(ref origin) = origin {
+                    origin.validate()?;
+                }
+
+                #[cfg(not(test))]
+                let modified_at = chrono::Utc::now().to_rfc3339();
+                #[cfg(test)]
+                let modified_at = test_utils::modified_at();
+
+                Ok(vec![OriginUpdated {
+                    template_id,
+                    origin,
+                    modified_at,
+                }])
             }
         }
-    }
-}
-
-fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    jsonschema::validator_for(schema)
-        .map(|_| ())
-        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
-}
-
-/// Validates that no field in the schema (at any nesting level) has `"type": "array"`.
-///
-/// Arrays are not supported in template schemas at this time. Supporting arrays would require
-/// a strategy for addressing individual array item fields in `schemaPropertiesAttributes` and
-/// in SD-JWT claim paths, which is deferred to a future release.
-fn validate_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    validate_no_array_types_recursive(schema)
-}
-
-fn validate_no_array_types_recursive(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    if let Some(type_val) = schema.get("type").and_then(|t| t.as_str()) {
-        if type_val == "array" {
-            return Err(TemplateError::InvalidSchema(
-                "Array types are not supported in template schemas. \
-                 Define only object and scalar fields."
-                    .to_string(),
-            ));
-        }
-    }
-
-    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
-        for value in properties.values() {
-            validate_no_array_types_recursive(value)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Normalizes and validates the `type` field.
-///
-/// - Drops blank/whitespace-only entries.
-/// - For OpenBadges 3.0: enforces that exactly one badge-specific subtype is present,
-///   that no extra types are included, and defaults to `['VerifiableCredential', 'OpenBadgeCredential']`
-///   for empty or incomplete input.
-/// - For all other data models: ensures `VerifiableCredential` is present (adds it if missing),
-///   deduplicates, and applies canonical ordering (VerifiableCredential first).
-fn normalize_and_validate_type(type_input: Vec<String>, data_model: &DataModel) -> Result<Vec<String>, TemplateError> {
-    // Drop blank/whitespace-only entries.
-    let filtered: Vec<String> = type_input.into_iter().filter(|t| !t.trim().is_empty()).collect();
-
-    match data_model {
-        DataModel::OpenBadges3_0 => normalize_open_badges_type(filtered),
-        _ => normalize_standard_type(filtered),
-    }
-}
-
-fn normalize_standard_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
-    const VC: &str = "VerifiableCredential";
-
-    // Empty input defaults to ['VerifiableCredential'].
-    if filtered.is_empty() {
-        return Ok(vec![VC.to_string()]);
-    }
-
-    // Deduplicate preserving first-seen order.
-    let mut seen = std::collections::HashSet::new();
-    let deduped: Vec<String> = filtered.into_iter().filter(|t| seen.insert(t.clone())).collect();
-
-    // Canonical order: VerifiableCredential first, then extras.
-    let mut result = vec![VC.to_string()];
-    for t in &deduped {
-        if t != VC {
-            result.push(t.clone());
-        }
-    }
-
-    Ok(result)
-}
-
-fn normalize_open_badges_type(filtered: Vec<String>) -> Result<Vec<String>, TemplateError> {
-    const OBC: &str = "OpenBadgeCredential";
-    const AC: &str = "AchievementCredential";
-    const VC: &str = "VerifiableCredential";
-
-    // Empty or only-VC input defaults to ['VerifiableCredential', 'OpenBadgeCredential'].
-    if filtered.is_empty() || (filtered.len() == 1 && filtered[0] == VC) {
-        return Ok(vec![VC.to_string(), OBC.to_string()]);
-    }
-
-    let has_obc = filtered.contains(&OBC.to_string());
-    let has_ac = filtered.contains(&AC.to_string());
-
-    if has_obc && has_ac {
-        return Err(TemplateError::InvalidType(
-            "OpenBadges type cannot include both `OpenBadgeCredential` and `AchievementCredential`".to_string(),
-        ));
-    }
-
-    // No extra types allowed beyond VC, OBC, AC.
-    let allowed = [VC, OBC, AC];
-    let extras: Vec<&str> = filtered
-        .iter()
-        .filter(|t| !allowed.contains(&t.as_str()))
-        .map(|t| t.as_str())
-        .collect();
-    if !extras.is_empty() {
-        return Err(TemplateError::InvalidType(format!(
-            "OpenBadges type includes disallowed extra entries: [{}]",
-            extras.join(", ")
-        )));
-    }
-
-    // Must contain exactly one badge-specific subtype; deduplicate preserving order.
-    let badge_type = if has_obc { OBC } else { AC };
-
-    Ok(vec![VC.to_string(), badge_type.to_string()])
-}
-
-/// Normalizes a tags vector: trims each entry, drops empty entries, deduplicates
-/// preserving first-seen order.  Returns `None` when the result would be empty.
-fn normalize_tags(tags: Option<Vec<String>>) -> Option<Vec<String>> {
-    let tags = tags?;
-
-    let mut seen = std::collections::HashSet::new();
-    let normalized: Vec<String> = tags
-        .into_iter()
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty())
-        .filter(|t| seen.insert(t.clone()))
-        .collect();
-
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
     }
 }
 
@@ -959,26 +1127,31 @@ fn validate_expiration(expiration: &Expiration) -> Result<(), TemplateError> {
     }
 }
 
-/// Recursively collects JSON Pointer paths (RFC 6901) to all leaf fields in a JSON Schema.
+/// Collects the JSON Pointer paths (RFC 6901) of all leaf properties in a JSON Schema: `/fieldName`, `/parent/child`.
 ///
-/// Rules:
-/// - Object nodes with defined, non-empty sub-properties are NOT added themselves; only their
-///   leaf descendants are added.
-/// - Object nodes with no defined sub-properties (or empty `properties`) are treated as leaves.
-/// - Arrays are not currently supported and must be rejected separately.
-/// - Paths follow RFC 6901 format: `/fieldName`, `/parent/child`, `/a/b/c`.
-///
-/// This matches how `schemaPropertiesAttributes` keys must be addressed, and maps 1:1 to
-/// SD-JWT claim paths without any translation step.
+/// - An object with defined, non-empty sub-properties is not a leaf; its descendants are collected instead.
+/// - An object without sub-properties is a leaf.
+/// - An array is a leaf, whatever else its schema holds: paths never descend into `items`, and `properties` say
+///   nothing about an array.
 fn collect_leaf_paths(schema: &serde_json::Value) -> std::collections::HashSet<String> {
     let mut paths = std::collections::HashSet::new();
-    collect_leaf_paths_with_prefix(schema, "", &mut paths);
+    collect_paths_with_prefix(schema, "", false, &mut paths);
     paths
 }
 
-fn collect_leaf_paths_with_prefix(
+/// Collects the JSON Pointer paths (RFC 6901) of all properties in a JSON Schema: the leaves of
+/// [`collect_leaf_paths`] and the objects that hold them. These are the paths a `schemaPropertiesAttributes` key may
+/// address: a leaf, or an object or array as a whole (ADR 0012).
+fn collect_property_paths(schema: &serde_json::Value) -> std::collections::HashSet<String> {
+    let mut paths = std::collections::HashSet::new();
+    collect_paths_with_prefix(schema, "", true, &mut paths);
+    paths
+}
+
+fn collect_paths_with_prefix(
     schema: &serde_json::Value,
     prefix: &str,
+    include_objects: bool,
     paths: &mut std::collections::HashSet<String>,
 ) {
     let properties = match schema.get("properties").and_then(|p| p.as_object()) {
@@ -991,16 +1164,16 @@ fn collect_leaf_paths_with_prefix(
         let escaped_key = key.replace('~', "~0").replace('/', "~1");
         let path = format!("{}/{}", prefix, escaped_key);
 
-        // A node is a "nested object" only when it has defined, non-empty sub-properties.
-        // Such nodes are not added themselves — only their leaf descendants are.
-        let has_sub_properties = value
-            .get("properties")
-            .and_then(|p| p.as_object())
-            .is_some_and(|p| !p.is_empty());
+        let has_sub_properties = !is_array_schema(value)
+            && value
+                .get("properties")
+                .and_then(|p| p.as_object())
+                .is_some_and(|p| !p.is_empty());
 
         if has_sub_properties {
-            collect_leaf_paths_with_prefix(value, &path, paths);
-        } else {
+            collect_paths_with_prefix(value, &path, include_objects, paths);
+        }
+        if include_objects || !has_sub_properties {
             paths.insert(path);
         }
     }
@@ -1010,14 +1183,14 @@ fn validate_schema_properties_attributes(
     schema: &Option<serde_json::Value>,
     attributes: &HashMap<String, PropertyAttribute>,
 ) -> Result<(), TemplateError> {
-    let leaf_paths = match schema {
-        Some(s) => collect_leaf_paths(s),
+    let property_paths = match schema {
+        Some(s) => collect_property_paths(s),
         None => std::collections::HashSet::new(),
     };
 
     let mut invalid_keys: Vec<&str> = attributes
         .keys()
-        .filter(|k| !leaf_paths.contains(*k))
+        .filter(|k| !property_paths.contains(*k))
         .map(|k| k.as_str())
         .collect();
 
@@ -1048,26 +1221,27 @@ fn trim_and_deduplicate_attribute_keys(
     Ok(result)
 }
 
-/// Ensures the `non_removable` flag on each property attribute preserves the existing
-/// system-determined value. Users cannot alter `non_removable` through commands.
+/// Ensures the `non_removable` flag on each property attribute is the system-determined one. Users cannot alter
+/// `non_removable` through commands.
+///
+/// An attribute the template already has keeps its flag. One it doesn't have gets the flag the data model gives it,
+/// as on create: an Open Badges template that lost the attribute of a required property gets a non-removable one
+/// back.
 fn enforce_non_removable_flag(
     mut new_attrs: HashMap<String, PropertyAttribute>,
     existing_attrs: &Option<HashMap<String, PropertyAttribute>>,
+    data_model: &DataModel,
 ) -> HashMap<String, PropertyAttribute> {
-    if let Some(existing) = existing_attrs {
-        for (key, new_attr) in new_attrs.iter_mut() {
-            if let Some(existing_attr) = existing.get(key) {
-                new_attr.non_removable = existing_attr.non_removable;
-            } else {
-                // New properties not previously tracked default to non-removable=false.
-                new_attr.non_removable = false;
-            }
-        }
+    let required_paths = if *data_model == DataModel::OpenBadges3_0 {
+        open_badges_required_leaf_paths()
     } else {
-        // No existing attributes means no non-removable flags to preserve.
-        for attr in new_attrs.values_mut() {
-            attr.non_removable = false;
-        }
+        Vec::new()
+    };
+    for (key, new_attr) in &mut new_attrs {
+        new_attr.non_removable = match existing_attrs.as_ref().and_then(|existing| existing.get(key)) {
+            Some(existing_attr) => existing_attr.non_removable,
+            None => required_paths.contains(key),
+        };
     }
     new_attrs
 }
@@ -1165,5 +1339,25 @@ pub mod test_utils {
             },
         );
         Some(config)
+    }
+
+    /// A template with nested objects, lists and tables as a form builder writes it, and claims that satisfy it:
+    /// `schema`, `schemaPropertiesAttributes` and `claims`.
+    fn structured_template_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!("structured_template_fixture.json"))
+            .expect("structured_template_fixture.json must be valid JSON")
+    }
+
+    pub fn structured_schema() -> serde_json::Value {
+        structured_template_fixture()["schema"].clone()
+    }
+
+    pub fn structured_schema_properties_attributes() -> HashMap<String, PropertyAttribute> {
+        serde_json::from_value(structured_template_fixture()["schemaPropertiesAttributes"].clone())
+            .expect("the fixture's attributes must be property attributes")
+    }
+
+    pub fn structured_claims() -> serde_json::Value {
+        structured_template_fixture()["claims"].clone()
     }
 }

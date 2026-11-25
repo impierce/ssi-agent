@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 /// Identifies the provenance on whose behalf an operation is dispatched.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,11 +19,123 @@ pub enum Caller {
     Internal,
 }
 
+/// Identifies an authenticated external actor's subject and type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "type", content = "id")]
+pub enum ActorSubject {
+    User(String),
+    ServiceAccount(String),
+}
+
+impl ActorSubject {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::User(id) | Self::ServiceAccount(id) => id.as_str(),
+        }
+    }
+
+    #[must_use]
+    pub fn id(&self) -> &str {
+        self.as_str()
+    }
+
+    #[must_use]
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::User(_) => "user",
+            Self::ServiceAccount(_) => "service-account",
+        }
+    }
+}
+
+impl std::ops::Deref for ActorSubject {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl std::fmt::Display for ActorSubject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for ActorSubject {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl PartialEq<str> for ActorSubject {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for ActorSubject {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for ActorSubject {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
 /// Identifies an authenticated external actor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Actor {
-    /// Stable subject identifier for the caller.
-    pub subject: String,
+    /// Stable typed authentication subject for the caller (e.g. user email).
+    pub subject: ActorSubject,
+    /// Optional internal entity identifier (e.g. database UUID) used for event provenance.
+    pub caller_id: Option<String>,
+}
+
+impl Actor {
+    #[must_use]
+    pub fn new(subject: ActorSubject) -> Self {
+        Self {
+            subject,
+            caller_id: None,
+        }
+    }
+
+    #[must_use]
+    pub fn user(id: impl Into<String>) -> Self {
+        Self {
+            subject: ActorSubject::User(id.into()),
+            caller_id: None,
+        }
+    }
+
+    #[must_use]
+    pub fn service_account(id: impl Into<String>) -> Self {
+        Self {
+            subject: ActorSubject::ServiceAccount(id.into()),
+            caller_id: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_caller_id(mut self, caller_id: impl Into<String>) -> Self {
+        self.caller_id = Some(caller_id.into());
+        self
+    }
+
+    #[must_use]
+    pub fn id(&self) -> &str {
+        self.caller_id.as_deref().unwrap_or_else(|| self.subject.as_str())
+    }
+
+    #[must_use]
+    pub fn type_name(&self) -> &'static str {
+        self.subject.type_name()
+    }
 }
 
 /// Provides the stable operation name for a command.
@@ -49,9 +162,6 @@ pub trait QueryOperation {
 
 /// Adapter trait for request-like inputs that can expose actor information.
 pub trait ToActor: Sync {
-    /// Returns the actor represented by this input, if one can be derived.
-    fn to_actor(&self) -> Option<Actor>;
-
     /// Returns an authentication-related value by key when the input can expose one.
     fn auth_value(&self, _key: &str) -> Option<&str> {
         None

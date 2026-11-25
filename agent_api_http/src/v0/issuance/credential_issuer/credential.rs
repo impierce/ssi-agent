@@ -3,7 +3,11 @@ use std::time::{Duration, Instant};
 use crate::{
     handlers::{public_command_handler, public_query_handler},
     v0::{
-        issuance::error::{internal_server_error, PublicError},
+        issuance::{
+            credential_issuer::protocol_request,
+            error::{internal_server_error, PublicError},
+            public_offers::is_public_offer,
+        },
         openapi::PROTOCOL_TAG,
     },
 };
@@ -20,12 +24,12 @@ use agent_issuance::{
 };
 use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
 use axum::{
-    extract::{Json, State},
+    extract::{rejection::JsonRejection, Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use oauth_tsl::status_list::StatusType;
+use identity_kit::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
@@ -53,26 +57,28 @@ const POLLING_INTERVAL_MS: u64 = 100;
         (status = 200, description = "Credentials issued", body = CredentialResponse),
         (
             status = 400,
-            description = "The credential request is invalid, or the `Authorization` header is missing",
+            description = "The credential request is invalid",
             body = OID4VCError<CredentialErrorResponse>,
         ),
         (
             status = 401,
-            description = "The access token is invalid or expired",
+            description = "The access token is missing (`WWW-Authenticate: Bearer`, empty body), or invalid or expired",
             content_type = "application/json",
-            headers(("WWW-Authenticate" = String, description = "`Bearer error=\"invalid_token\"`")),
+            headers(("WWW-Authenticate" = String, description = "`Bearer` without an access token, otherwise `Bearer error=\"invalid_token\"`")),
             example = json!({"error": "invalid_token"}),
         ),
         (status = 415, description = "The request body is not `application/json`"),
-        (status = 422, description = "The request body is not a valid credential request"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn credential(
     State(state): State<Arc<IssuanceState>>,
-    AuthBearer(access_token): AuthBearer,
-    Json(credential_request): Json<CredentialRequest>,
+    bearer: Result<AuthBearer, axum_auth::Rejection>,
+    credential_request: Result<Json<CredentialRequest>, JsonRejection>,
 ) -> Result<Response, PublicError> {
+    let (access_token, credential_request) = protocol_request(bearer, credential_request, || {
+        CredentialErrorResponse::InvalidCredentialRequest.into()
+    })?;
     let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
 
     // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
@@ -101,12 +107,14 @@ pub(crate) async fn credential(
         };
 
     let proofs = credential_request.proofs.clone();
+    let is_public_offer = is_public_offer(&state, &offer_id).await?;
 
     let command = OfferCommand::VerifyCredentialRequest {
         offer_id: offer_id.clone(),
         credential_issuer_metadata,
         authorization_server_metadata,
         credential_request,
+        is_public_offer,
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
@@ -182,10 +190,11 @@ pub(crate) async fn credential(
             .await?
             .ok_or(PublicError::InternalServerError)?;
 
+        // The credentials of a Public Offer are shared by all its holders: each one gets them signed for itself.
         let command = CredentialCommand::SignCredential {
             credential_id: credential_id.clone(),
             subject_id: subject_id.clone(),
-            overwrite: false,
+            overwrite: is_public_offer,
             proofs: proofs.clone(),
             status_list_id: status_list_id.clone(),
             index: status_list
@@ -236,25 +245,26 @@ pub mod tests {
     };
     use crate::API_VERSION;
     use crate::{
-        tests::OFFER_ID,
+        tests::{holder_did, key_proof, OFFER_ID},
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
-    use agent_event_publisher_http::EventPublisherHttp;
     use agent_issuance::credential::aggregate::CredentialExpiry;
+    use agent_issuance::issuance_state;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{set_config, Events};
-    use agent_store::authorization_state;
-    use agent_store::{in_memory::InMemory, issuance_state, EventPublisher};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
+    use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
     use rstest::rstest;
     use serde_json::{json, Value};
     use shared_kernel::authorization::Caller;
@@ -266,10 +276,21 @@ pub mod tests {
         Mock, MockServer, ResponseTemplate,
     };
 
-    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7ImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.LOTI6t7MmHb-cJVRZA_xh6S4lOfqkKjQScAVpMLuh5HlytNrg1Kp0-oiJQXjxfvxUfnaiDL-J6Q1V95XtjscBA";
-    const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJqdGkiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.aQQJE7l3OtZP6tYju17t8DZqtQ505PGDTVVm3LBcwIpdYq31ywrWzqKz3F6aWnuRoIUVMbSm-ECI_aufeDVECw";
+    const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7ImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.COxDXhB4zmiP79bU2wVGCWXMjk24z38vCjC8j23sXjaEhzvsCr_v_HuhPDVh3pkNzcF09tULDZiwjg0tgM19Cw";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
     pub const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+
+    /// The claims of `CREDENTIAL_JWT`, but for the test holder's `did:key`: the DID of the key of its proofs.
+    async fn credential_jwt_claims_for_holder() -> Value {
+        let claims = get_unverified_jwt_claims(&json!(CREDENTIAL_JWT))
+            .unwrap()
+            .to_string()
+            .replace(
+                "did:key:z6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd",
+                &holder_did("did:key").await,
+            );
+        serde_json::from_str(&claims).unwrap()
+    }
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(
@@ -294,8 +315,14 @@ pub mod tests {
         ) {
             Mock::given(method("POST"))
                 .and(path("/ssi-events-subscriber"))
-                .and(
-                    move |request: &wiremock::Request| match request.body_json::<OfferEvent>().unwrap() {
+                .and(move |request: &wiremock::Request| {
+                    let cloud_event: shared_kernel::event_bus::CloudEvent = request.body_json().unwrap();
+                    let data = cloud_event.data.unwrap();
+                    let offer_event: OfferEvent = serde_json::from_value(serde_json::json!({
+                        "CredentialRequestVerified": data
+                    }))
+                    .unwrap();
+                    match offer_event {
                         // Validate that the event is a `CredentialRequestVerified` event.
                         OfferEvent::CredentialRequestVerified { offer_id, subject_id } => {
                             let app_clone = app.clone();
@@ -354,8 +381,8 @@ pub mod tests {
                             true
                         }
                         _ => false,
-                    },
-                )
+                    }
+                })
                 .respond_with(ResponseTemplate::new(200))
                 .mount(self)
                 .await;
@@ -382,6 +409,8 @@ pub mod tests {
         .await
         .unwrap();
 
+        let proof = key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await;
+
         let response = issuance_app
             .oneshot(
                 Request::builder()
@@ -392,16 +421,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "credential_configuration_id": template_id,
-                            "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
-                                        IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
-                                        a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
-                                        OGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFa\
-                                        djdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8v\
-                                        ZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAs\
-                                        Im5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkz\
-                                        ZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
-                                        tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"]
-                            }
+                            "proofs": { "jwt": [proof] }
                         }))
                         .unwrap(),
                     ))
@@ -415,7 +435,10 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        assert_eq!(
+            get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap(),
+            credential_jwt_claims_for_holder().await
+        );
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
@@ -445,7 +468,7 @@ pub mod tests {
         #[case] is_self_signed: bool,
         #[case] delay: u64,
     ) {
-        let (external_server, issuance_event_publishers) = if with_external_server {
+        let (external_server, bus_opt) = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
@@ -455,33 +478,21 @@ pub mod tests {
             set_config().set_event_publisher_http_target_events(
                 0,
                 Events {
-                    offer: vec![agent_shared::config::OfferEvent::CredentialRequestVerified],
-                    ..Default::default()
+                    types: vec!["CredentialRequestVerified".to_string()],
                 },
             );
 
-            (
-                Some(external_server),
-                EventPublisherHttp::load()
-                    .unwrap()
-                    .into_iter()
-                    .map(|p| Box::new(p) as Box<dyn EventPublisher>)
-                    .collect(),
-            )
+            let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+            if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&bus) {
+                publisher.spawn();
+            }
+            (Some(external_server), Some(bus))
         } else {
-            (None, Default::default())
+            (None, None)
         };
 
-        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &event_bus,
-                issuance_event_publishers,
-            )
-            .await,
-        );
+        let event_bus = bus_opt.unwrap_or_default();
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -528,7 +539,6 @@ pub mod tests {
                 AuthorizationServices::default().await,
                 &event_bus,
                 Default::default(),
-                Default::default(),
             )
             .await,
         );
@@ -540,11 +550,10 @@ pub mod tests {
 
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
         let jwt = if with_anonymous_access {
-            // This JWT has no nonce, so no need to pre-generate
-            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVTMjU2Iiwia2lkIjoiZGlkOmp3azpleUpoYkdjaU9pSkZVekkxTmlJc0ltTnlkaUk2SWxBdE1qVTJJaXdpYTJsa0lqb2lhMUoyYms1M1N6QlhSbTlWZEVGR1JEZDFSbGN6Y3pSbWVFbDBVVmRKZGpaTU9FRldYMEV0VTFOV2J5SXNJbXQwZVNJNklrVkRJaXdpZUNJNklrSXRWblp4V2xsMVUyVmlXbXBoWVRNMlExcGhaMnRKVFZWeU9ERlZRMjR0U0ROZlJXbHBYMnByUlRBaUxDSjVJam9pZW01SFgwVXhiWFZQT1dsWGNFbHdPWE16VUZWbWRXUnlZelpNV2pBdGEwNDJVREJrUm5neldFeDRXU0o5IzAifQ.eyJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMzMvIiwiaWF0IjoxNzcxNDE1OTg2LCJub25jZSI6IjdlMDNhZDNmNzZjYjMzMzhjM2E1NjQyZmU3NjM0NDc2YWEzYWQ5M2ZhMWQ1ODQwMTFiYTIxNTBkOWRhNDcxMzMifQ.1vmzQVFvo90TSp8Yh9CbqJHyrzjE3U5xQN4G8BGPk6-vlrWHejVPjk-oWW8uXRmdiRsmJjRCUeSN3fLKdlTK_g"
+            // With anonymous access to the token endpoint, the proof has no `iss` (OpenID4VCI 1.0, Appendix F.1).
+            key_proof("did:jwk", None, TEST_NONCE).await
         } else {
-            // This JWT contains the nonce we just generated
-            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+            key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await
         };
 
         let response = issuance_app
@@ -575,14 +584,144 @@ pub mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         if with_anonymous_access {
-            assert_eq!(body["credentials"][0]["credential"], json!(ANONYMOUS_CREDENTIAL_JWT));
-        } else {
+            // Without `iss`, the credential is still bound to the holder: the DID of the key of its proof.
+            let credential = get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap();
+            assert_eq!(credential["sub"], json!(holder_did("did:jwk").await));
+        } else if is_self_signed {
             assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        } else {
+            assert_eq!(
+                get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap(),
+                credential_jwt_claims_for_holder().await
+            );
         }
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
+    }
+
+    /// A fresh nonce for a key proof: each Credential Request redeems its own.
+    async fn generate_nonce(issuance_state: &IssuanceState) -> String {
+        let c_nonce = agent_shared::generate_random_string();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            Caller::Internal,
+            &c_nonce,
+            &issuance_state.command.nonce,
+            agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+                c_nonce: c_nonce.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        c_nonce
+    }
+
+    #[rstest]
+    #[case::credential_offer(false)]
+    #[case::public_offer(true)]
+    #[serial_test::serial]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn credential_offer_belongs_to_holder_of_first_verified_request(#[case] is_public_offer: bool) {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_auth(&library_state, true).await;
+
+        let mut issuance_app = router((issuance_state.clone(), library_state));
+        credentials_with_template(&mut issuance_app, &template_id).await;
+        let grants = offers(&mut issuance_app, &template_id).await.unwrap();
+
+        if is_public_offer {
+            crate::handlers::public_command_handler(
+                &format!("public_offer:{OFFER_ID}"),
+                &issuance_state.command.public_offer,
+                agent_issuance::public_offer::command::PublicOfferCommand::Create {
+                    offer_id: OFFER_ID.to_string(),
+                    template_id: template_id.clone(),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &event_bus,
+                Default::default(),
+            )
+            .await,
+        );
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+
+        let request_credential = |did_method: &'static str, iss: Option<String>| {
+            let issuance_app = issuance_app.clone();
+            let issuance_state = issuance_state.clone();
+            let access_token = access_token.clone();
+            let template_id = template_id.clone();
+            async move {
+                let nonce = generate_nonce(&issuance_state).await;
+                let proof = key_proof(did_method, iss, &nonce).await;
+                let response = issuance_app
+                    .oneshot(
+                        Request::builder()
+                            .method(http::Method::POST)
+                            .uri("/openid4vci/credential")
+                            .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                            .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
+                            .body(Body::from(
+                                serde_json::to_vec(&json!({
+                                    "credential_configuration_id": template_id,
+                                    "proofs": { "jwt": [proof] }
+                                }))
+                                .unwrap(),
+                            ))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let status = response.status();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                (status, serde_json::from_slice::<Value>(&body).unwrap_or_default())
+            }
+        };
+
+        let holder = holder_did("did:key").await;
+        let other_holder = holder_did("did:jwk").await;
+        let subject =
+            |body: &Value| get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap()["sub"].clone();
+
+        // The first holder redeems the offer.
+        let (status, body) = request_credential("did:key", Some(holder.clone())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(subject(&body), json!(holder));
+
+        // Another holder (the `did:jwk` key), also when its proof claims the first holder's DID as `iss`. A Public
+        // Offer issues to it a credential of its own.
+        for iss in [None, Some(holder.clone())] {
+            let (status, body) = request_credential("did:jwk", iss).await;
+            if is_public_offer {
+                assert_eq!(status, StatusCode::OK);
+                assert_eq!(subject(&body), json!(other_holder));
+            } else {
+                assert_eq!(status, StatusCode::BAD_REQUEST);
+                assert_eq!(body["error"], "credential_request_denied");
+            }
+        }
+
+        // The first holder again, also without `iss`.
+        let (status, body) = request_credential("did:key", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(subject(&body), json!(holder));
     }
 }

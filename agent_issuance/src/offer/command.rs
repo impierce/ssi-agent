@@ -35,6 +35,9 @@ pub enum OfferCommand {
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
         authorization_server_metadata: Box<AuthorizationServerMetadata>,
         credential_request: CredentialRequest,
+        /// A Public Offer is redeemable by any number of wallets, so it is not bound to the holder of its first
+        /// verified Credential Request.
+        is_public_offer: bool,
     },
     CreateCredentialResponse {
         offer_id: String,

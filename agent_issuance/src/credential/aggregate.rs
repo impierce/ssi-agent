@@ -2,21 +2,24 @@ use super::entity::Data;
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
-use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
+use crate::credential::openapi::{
+    credential_configurations_supported, credential_data, holder_notifications, status_type,
+};
+use crate::refresh::token::CredentialRefreshService;
+use crate::server_config::supported_configuration::SupportedCredentialConfiguration;
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
+use agent_secret_manager::signer::SubjectSigner;
 use agent_secret_manager::subject::Subject;
-use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm, AlgorithmExt};
+use agent_shared::config::{config, get_preferred_did_method, get_preferred_signing_algorithm};
 use agent_shared::serde_json_value_ext::SerdeJsonValueExt;
 use chrono::{DateTime, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_core::common::Timestamp;
-use identity_core::convert::FromJson;
-use identity_credential::sd_jwt_vc::{self, SdJwtVcBuilder, SdJwtVcClaims, StatusListRef, StatusMechanism};
+use identity_kit::jose::{JwsHeader, Signer as _};
+use identity_kit::sd_jwt_vc::{Confirmation, SdJwtBuilder, SdJwtCredentialV2, SdJwtVcBuilder, SdJwtVcClaims};
+use identity_kit::status_list::{StatusListRef, StatusListToken, StatusType};
 use jsonwebtoken::Header;
-use oauth_tsl::status_list::StatusType;
-use oauth_tsl::tokens::status_list_token::StatusListTyp;
-use oid4vc_core::{jwt, Sign as _, Subject as _};
+use oid4vc_core::{jwt, Subject as _};
 use oid4vci::credential_format_profiles::ietf_sd_jwt_vc::dc_sd_jwt::{DcSdJwt, DcSdJwtParameters};
 use oid4vci::credential_format_profiles::vc_jose_cose::vc_sd_jwt::{self, VcSdJwt, VcSdJwtParameters};
 use oid4vci::credential_format_profiles::w3c_verifiable_credentials::jwt_vc_json::{
@@ -26,11 +29,9 @@ use oid4vci::credential_format_profiles::{CredentialFormats, Parameters};
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::notification_request::NotificationRequest;
 use oid4vci::VerifiableCredentialJwt;
-use sd_jwt::{RequiredKeyBinding, SdJwtBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
@@ -71,7 +72,7 @@ mod never_as_str {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CredentialStatus {
     pub index: usize,
     #[schema(schema_with = status_type)]
@@ -79,13 +80,14 @@ pub struct CredentialStatus {
     pub status_list_url: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct CredentialRefreshService {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub url: String,
-    pub refresh_token: String,
+impl Default for CredentialStatus {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            status: StatusType::VALID,
+            status_list_url: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, utoipa::ToSchema)]
@@ -93,16 +95,16 @@ pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
     pub notification_id: Option<String>,
+    #[schema(schema_with = credential_data)]
     pub data: Option<Data>,
     #[schema(schema_with = credential_configurations_supported)]
-    pub credential_configuration: CredentialConfigurationsSupportedObject,
+    pub credential_configuration: SupportedCredentialConfiguration,
     pub signed: Option<serde_json::Value>,
     #[schema(inline)]
     pub status: Status,
     #[schema(schema_with = holder_notifications)]
     pub holder_notifications: Vec<NotificationRequest>,
     pub credential_status: CredentialStatus,
-    pub refresh_service: Option<CredentialRefreshService>,
     #[schema(value_type = Option<String>)]
     pub created_at: Option<DateTime<Utc>>,
     #[schema(value_type = Option<String>)]
@@ -127,15 +129,13 @@ impl Aggregate for Credential {
         use CredentialError::*;
         use CredentialEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
                 credential_id,
                 data,
                 credential_configuration,
-                refresh_service,
                 expires_at,
+                refresh_token,
             } => {
                 #[cfg(feature = "test_utils")]
                 let notification_id = test_utils::notification_id();
@@ -158,7 +158,7 @@ impl Aggregate for Credential {
 
                 let mut credential_data = data.raw.clone();
 
-                let mut credential_data = match &credential_configuration.credential_format {
+                let credential_data = match &credential_configuration.metadata.credential_format {
                     CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                         parameters:
                             JwtVcJsonParameters {
@@ -176,7 +176,7 @@ impl Aggregate for Credential {
                         build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
-                            &credential_configuration,
+                            &credential_configuration.metadata,
                             &credential_id,
                             expires_at,
                         )?
@@ -205,39 +205,44 @@ impl Aggregate for Credential {
                         build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
-                            &credential_configuration,
+                            &credential_configuration.metadata,
                             &credential_id,
                             expires_at,
                         )?
                     }
                     _ => {
                         return Err(UnsupportedCredentialFormat(serde_json::json!(
-                            credential_configuration.credential_format
+                            credential_configuration.metadata.credential_format
                         )))
                     }
                 };
 
-                if let Some(refresh_service) = &refresh_service {
-                    credential_data
-                        .insert_at_path(
-                            &["refreshService"],
-                            json!({
-                                "type": refresh_service.type_,
-                                "url": refresh_service.url,
-                                "refreshToken": refresh_service.refresh_token,
-                            }),
-                        )
-                        .ok_or(BuildCredentialError(
-                            "Failed to enter refreshService into the credential".to_string(),
-                        ))?;
-                }
+                // An opted-in credential carries its refresh service at the root of its content, in every format.
+                let credential_data = match (&credential_configuration.refresh_service, refresh_token) {
+                    (Some(refresh_service), Some(refresh_token)) => {
+                        let refresh_service =
+                            CredentialRefreshService::new(refresh_service.type_.clone(), &refresh_token);
+                        let mut credential_data = credential_data;
+                        credential_data
+                            .insert_at_path(&["refreshService"], json!(refresh_service))
+                            .ok_or(BuildCredentialError(
+                                "Failed to enter the refresh service into the credential".to_string(),
+                            ))?;
+                        credential_data
+                    }
+                    (Some(_), None) => {
+                        return Err(BuildCredentialError(
+                            "A credential configuration with a refresh service needs a refresh token".to_string(),
+                        ))
+                    }
+                    (None, _) => credential_data,
+                };
 
                 Ok(vec![UnsignedCredentialCreated {
                     credential_id,
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
-                    refresh_service,
                     created_at: Some(created_at),
                     expires_at,
                 }])
@@ -278,12 +283,14 @@ impl Aggregate for Credential {
                 let iat = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
                 let created_at = iat.clone();
-                let iat = identity_core::common::Timestamp::parse(&iat).expect("Could not parse issuance_date");
+                let iat = DateTime::parse_from_rfc3339(&iat)
+                    .expect("Could not parse issuance_date")
+                    .timestamp();
 
                 // iss is set to the issuer DID
                 let default_did_method = get_preferred_did_method();
 
-                let iss: identity_core::common::Url = services
+                let iss: Url = services
                     .issuer
                     .identifier(&default_did_method.to_string(), get_preferred_signing_algorithm())
                     .await
@@ -294,23 +301,23 @@ impl Aggregate for Credential {
                 // Status claim as per the IETF OAuth Token Status List specification.
                 let status_list_url = get_status_list_url(status_list_id)?;
 
-                let status_claim = sd_jwt_vc::Status(StatusMechanism::StatusList(StatusListRef {
-                    idx: index,
-                    uri: status_list_url.clone(),
-                }));
+                let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
+                    status_list_url.to_string(),
+                    index as u64,
+                ));
 
-                // W3C credentials use their root ID; flat dc+sd-jwt payloads use the aggregate ID.
-                let jti: Url = match &self.credential_configuration.credential_format {
-                    CredentialFormats::DcSdJwt(_) => Url::parse(&format!("urn:uuid:{}", self.credential_id))
-                        .map_err(|_| InvalidCredentialDataError)?,
-                    _ => self
-                        .data
-                        .as_ref()
-                        .and_then(|data| data.raw.get("id"))
-                        .and_then(|id| id.as_str())
-                        .and_then(|id| Url::parse(id).ok())
-                        .ok_or(InvalidCredentialDataError)?,
-                };
+                // Use the credential root `id` as `jti`. DC SD-JWTs have no root `id`, so derive the same
+                // `urn:uuid:` identifier that W3C credentials receive during unsigned credential creation.
+                let jti: Url = match self.data.as_ref().and_then(|data| data.raw.get("id")) {
+                    Some(id) => id.as_str().and_then(|id| Url::parse(id).ok()),
+                    None => match &self.credential_configuration.metadata.credential_format {
+                        CredentialFormats::DcSdJwt(_) => uuid::Uuid::parse_str(&credential_id)
+                            .ok()
+                            .and_then(|id| Url::parse(&format!("urn:uuid:{id}")).ok()),
+                        _ => None,
+                    },
+                }
+                .ok_or(InvalidCredentialDataError)?;
 
                 let credential_data = self.data.as_ref().ok_or(InvalidCredentialDataError)?.raw.clone();
 
@@ -324,7 +331,7 @@ impl Aggregate for Credential {
                 });
 
                 // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
-                let signed_credential = match &self.credential_configuration.credential_format {
+                let signed_credential = match &self.credential_configuration.metadata.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
                         let credential_data = build_signed_w3c_credential_data(
                             credential_data,
@@ -339,8 +346,8 @@ impl Aggregate for Credential {
 
                         let mut vc_jwt_builder = VerifiableCredentialJwt::builder()
                             .iss(iss.to_string())
-                            .iat(iat.to_unix())
-                            .nbf(iat.to_unix()); // setting the `nbf` to `iat` makes the JWT immediately usable
+                            .iat(iat)
+                            .nbf(iat); // setting the `nbf` to `iat` makes the JWT immediately usable
 
                         if let Some(subject_id) = subject_id {
                             vc_jwt_builder = vc_jwt_builder.sub(subject_id);
@@ -388,7 +395,7 @@ impl Aggregate for Credential {
                             credential_data,
                             jti,
                             iss,
-                            iat,
+                            DateTime::from_timestamp(iat, 0).ok_or(InvalidCredentialDataError)?,
                             status_claim,
                             self.expires_at,
                             holder_kid,
@@ -405,30 +412,21 @@ impl Aggregate for Credential {
                             status_list_url.to_string(),
                         )?;
 
-                        // Get the kid for the header of the VcSdJwt
-                        let issuer = &services.issuer;
-                        let algorithm = get_preferred_signing_algorithm();
-                        let kid = issuer
-                            .key_id(&get_preferred_did_method().to_string(), algorithm)
-                            .await
-                            .ok_or(KeyIdError)?;
+                        let signer = sd_jwt_signer(&services.issuer).await?;
 
-                        let mut builder = SdJwtBuilder::new(&credential_data)
-                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
-                            .header("typ", "vc+sd-jwt")
-                            .header("kid", kid)
-                            .insert_claim("status", status_claim)
-                            .and_then(|builder| builder.insert_claim("jti", jti.to_string()))
-                            .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?;
+                        let mut claims = credential_data.as_object().cloned().ok_or(BuildCredentialError(
+                            "Failed to convert credential data to JSON object".to_string(),
+                        ))?;
+                        claims.insert("status".to_string(), json!(status_claim));
+                        claims.insert("jti".to_string(), json!(jti));
+                        claims.insert("iss".to_string(), json!(iss));
 
                         // This sets the `cnf` claim
                         if let Some(holder_kid) = holder_kid.clone() {
-                            builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+                            claims.insert("cnf".to_string(), json!(Confirmation::kid(holder_kid)));
                         }
 
-                        builder = builder
-                            .insert_claim("iss", iss)
-                            .map_err(|_| BuildCredentialError("Failed to insert 'iss' claim".to_string()))?;
+                        let mut builder = SdJwtBuilder::new(claims);
 
                         // By default set all custom claims to concealable.
                         // TODO: This only makes the credentialSubject properties concealable. Further research needed to see which properties should be conceleable, also depending on what Credential Data Model.
@@ -443,18 +441,14 @@ impl Aggregate for Credential {
                             .collect::<Vec<String>>();
 
                         for path in paths {
-                            builder = builder
-                                .make_concealable(&format!("/credentialSubject/{}", path))
-                                .map_err(|e| {
-                                    BuildCredentialError(format!(
-                                        "Failed to make claim at path `/credentialSubject/{}` concealable: {}",
-                                        path, e
-                                    ))
-                                })?;
+                            builder = builder.conceal(["credentialSubject", path.as_str()]);
                         }
 
+                        let mut header = JwsHeader::new(signer.alg()).with_typ(SdJwtCredentialV2::TYP);
+                        header.kid = signer.kid().map(str::to_owned);
+
                         let vc_sd_jwt_credential = builder
-                            .finish(&**issuer, algorithm.as_str())
+                            .sign(&header, &signer)
                             .await
                             .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
@@ -462,7 +456,7 @@ impl Aggregate for Credential {
                     }
                     _ => {
                         return Err(UnsupportedCredentialFormat(serde_json::json!(
-                            self.credential_configuration.credential_format
+                            self.credential_configuration.metadata.credential_format
                         )));
                     }
                 };
@@ -481,10 +475,24 @@ impl Aggregate for Credential {
             AddNotification {
                 credential_id,
                 notification,
-            } => Ok(vec![CredentialEvent::NotificationReceived {
-                credential_id,
-                notification,
-            }]),
+            } => {
+                // Notifications must be handled idempotently, so a repeated event is not recorded again.
+                let is_duplicate = self
+                    .holder_notifications
+                    .iter()
+                    .any(|received| received.event == notification.event);
+
+                if self.notification_id.as_ref() != Some(&notification.notification_id) {
+                    Err(InvalidNotificationIdError)
+                } else if is_duplicate {
+                    Ok(vec![])
+                } else {
+                    Ok(vec![CredentialEvent::NotificationReceived {
+                        credential_id,
+                        notification,
+                    }])
+                }
+            }
             UpdateCredentialStatus {
                 credential_id,
                 credential_status,
@@ -504,14 +512,11 @@ impl Aggregate for Credential {
     fn apply(&mut self, event: Self::Event) {
         use CredentialEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             UnsignedCredentialCreated {
                 credential_id,
                 data,
                 credential_configuration,
-                refresh_service,
                 notification_id,
                 created_at,
                 expires_at,
@@ -519,7 +524,6 @@ impl Aggregate for Credential {
                 self.credential_id = credential_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
-                self.refresh_service = refresh_service;
                 self.notification_id = notification_id;
                 self.created_at = created_at;
                 self.expires_at = expires_at;
@@ -610,7 +614,7 @@ fn build_signed_w3c_credential_data(
     credential_data.insert_if_none(
         &["credentialStatus"],
         json!({
-            "type": StatusListTyp::Jwt.to_string(),
+            "type": StatusListToken::TYP,
             "id": status_list_url.to_string(),
             "uri": status_list_url.to_string(),
             "idx": status_index,
@@ -939,66 +943,59 @@ fn build_unsigned_w3c_credential_data(
     ))
 }
 
+/// The signer of SD-JWT credentials: the issuer's key for the preferred DID method and signing algorithm.
+async fn sd_jwt_signer(issuer: &Arc<Subject>) -> Result<SubjectSigner, CredentialError> {
+    SubjectSigner::new(
+        issuer.clone(),
+        get_preferred_did_method().to_string(),
+        get_preferred_signing_algorithm(),
+    )
+    .await
+    .ok_or(KeyIdError)
+}
+
 /// Signs an IETF Digital Credentials SD-JWT (DC SD-JWT) credential.
 #[allow(clippy::too_many_arguments)]
 async fn sign_dc_sd_jwt(
     issuer: &Arc<Subject>,
     credential_data: serde_json::Value,
     jti: Url,
-    iss: identity_core::common::Url,
-    iat: Timestamp,
-    status_claim: identity_credential::sd_jwt_vc::Status,
+    iss: Url,
+    iat: DateTime<Utc>,
+    status_claim: identity_kit::status_list::Status,
     expires_at: Option<DateTime<Utc>>,
     holder_kid: Option<String>,
 ) -> Result<serde_json::Value, CredentialError> {
-    // Get the kid for the header of the DcSdJwt
-    let algorithm = get_preferred_signing_algorithm();
-    let kid = issuer
-        .key_id(&get_preferred_did_method().to_string(), algorithm)
-        .await
-        .ok_or(KeyIdError)?;
+    let signer = sd_jwt_signer(issuer).await?;
 
-    // Inject `jti` into a payload copy before building, as `SdJwtVcBuilder` lacks a `jti()` method
-    // and `credential_data` must stay immutable & non-concealable.
-    let mut credential_data_with_jti = credential_data.clone();
-    credential_data_with_jti
-        .insert_at_path(&["jti"], serde_json::Value::String(jti.to_string()))
-        .ok_or(BuildCredentialError("Failed to set jti claim".to_string()))?;
+    let claims: SdJwtVcClaims = serde_json::from_value(credential_data)
+        .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
 
-    let mut builder = SdJwtVcBuilder::new(&credential_data_with_jti)
-        .map_err(|e| BuildCredentialError(format!("Failed to create SD-JWT VC builder: {}", e)))?
-        .header("typ", "dc+sd-jwt")
-        .header("kid", kid);
+    // By default set all custom claims to concealable.
+    let paths = claims.claims.keys().cloned().collect::<Vec<String>>();
 
-    // Set the JWT claims
-    builder = builder.iss(iss);
-    builder = builder.iat(iat);
-    builder = builder.nbf(iat);
-    builder = builder.status(status_claim);
+    let mut builder = SdJwtVcBuilder::from_claims(claims)
+        .with_jti(jti)
+        .with_issuer(iss.to_string())
+        .with_issued_at(iat)
+        .with_not_before(iat)
+        .with_status(status_claim);
 
-    if let Some(expiration_date) = expires_at {
-        builder = builder.exp(Timestamp::parse(&expiration_date.to_rfc3339()).expect("Could not parse issuance_date"));
+    if let Some(expires_at) = expires_at {
+        builder = builder.with_expires_at(expires_at);
     }
 
     // This sets the `cnf` claim
     if let Some(holder_kid) = holder_kid {
-        builder = builder.require_key_binding(RequiredKeyBinding::Kid(holder_kid));
+        builder = builder.with_confirmation(Confirmation::kid(holder_kid));
     }
 
-    // By default set all custom claims to concealable.
-    let sd_jwt_vc_claims = SdJwtVcClaims::from_json_value(credential_data.clone())
-        .map_err(|e| BuildCredentialError(format!("Failed to extract SD-JWT VC claims: {}", e)))?;
-
-    let paths = sd_jwt_vc_claims.keys().cloned().collect::<Vec<String>>();
-
     for path in paths {
-        builder = builder.make_concealable(&format!("/{}", path)).map_err(|e| {
-            BuildCredentialError(format!("Failed to make claim at path `/{}` concealable: {}", path, e))
-        })?;
+        builder = builder.conceal([path.as_str()]);
     }
 
     let sd_jwt_credential = builder
-        .finish(&**issuer, algorithm.as_str())
+        .sign(&signer)
         .await
         .map_err(|e| BuildCredentialError(format!("Failed to build SD-JWT credential: {}", e)))?;
 
@@ -1023,14 +1020,14 @@ fn filter_schema_errors(errors: &mut JsonSchemaError) -> bool {
     }
 }
 
-pub fn get_status_list_url(id: String) -> Result<identity_core::common::Url, CredentialError> {
+pub fn get_status_list_url(id: String) -> Result<Url, CredentialError> {
     let mut status_list_url = config().ietf_oauth_token_status_list_uri.clone();
     status_list_url
         .path_segments_mut()
         .map_err(|_| CredentialError::InvalidCredentialStatus)?
         .push(&id);
 
-    Ok(status_list_url.into())
+    Ok(status_list_url)
 }
 
 #[cfg(test)]
@@ -1041,8 +1038,7 @@ pub mod credential_tests {
     use agent_shared::config::TESTINDEX;
     use jsonwebtoken::Algorithm;
 
-    use identity_core::common::{Timestamp, Url};
-    use identity_credential::sd_jwt_vc::SdJwtVc;
+    use identity_kit::sd_jwt_vc::SdJwtVc;
     use rstest::rstest;
     use serde_json::json;
 
@@ -1053,8 +1049,142 @@ pub mod credential_tests {
     use crate::offer::aggregate::test_utils::holder;
     use agent_secret_manager::service::Service;
     use oid4vc_core::Subject;
+    use oid4vci::notification_request::NotificationEvent;
 
     type CredentialTestFramework = TestFramework<Credential>;
+
+    async fn create_dc_sd_jwt(
+        refresh_service: Option<agent_shared::config::RefreshServiceConfiguration>,
+        refresh_token: Option<crate::refresh::token::RefreshToken>,
+    ) -> serde_json::Value {
+        let sink = EventSink::default();
+        Credential::default()
+            .handle(
+                CredentialCommand::CreateUnsignedCredential {
+                    credential_id: credential_id(),
+                    data: Data {
+                        raw: json!({"first_name": "Ferris"}),
+                    },
+                    credential_configuration: Box::new(SupportedCredentialConfiguration {
+                        metadata: DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+                        refresh_service,
+                    }),
+                    expires_at: CredentialExpiry::Never,
+                    refresh_token,
+                },
+                &IssuanceServices::default().await,
+                &sink,
+            )
+            .await
+            .unwrap();
+        match sink.collect().await.remove(0) {
+            CredentialEvent::UnsignedCredentialCreated { data, .. } => data.raw,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_opted_in_credential_embeds_its_refresh_service() {
+        let content = create_dc_sd_jwt(
+            Some(agent_shared::config::RefreshServiceConfiguration {
+                type_: "VerifiableCredentialRefreshService2021".to_owned(),
+            }),
+            Some(crate::refresh::token::RefreshToken::from("refresh-token".to_owned())),
+        )
+        .await;
+
+        assert_eq!(
+            content["refreshService"],
+            json!({
+                "type": "VerifiableCredentialRefreshService2021",
+                "url": "https://my-domain.example.org/v0/refresh-credential",
+                "refreshToken": "refresh-token"
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn a_credential_without_refresh_configuration_embeds_none() {
+        let content = create_dc_sd_jwt(
+            None,
+            Some(crate::refresh::token::RefreshToken::from("refresh-token".to_owned())),
+        )
+        .await;
+
+        assert_eq!(content.get("refreshService"), None);
+    }
+
+    fn signed_credential_created() -> CredentialEvent {
+        CredentialEvent::SignedCredentialCreated {
+            credential_id: credential_id(),
+            signed_credential: json!(JWT_VC_JSON_OBV3_JWT),
+            notification_id: Some(notification_id()),
+        }
+    }
+
+    fn notification_received(event: NotificationEvent) -> CredentialEvent {
+        CredentialEvent::NotificationReceived {
+            credential_id: credential_id(),
+            notification: NotificationRequest {
+                notification_id: notification_id(),
+                event,
+                event_description: None,
+            },
+        }
+    }
+
+    fn add_notification(notification_id: String, event: NotificationEvent) -> CredentialCommand {
+        CredentialCommand::AddNotification {
+            credential_id: credential_id(),
+            notification: NotificationRequest {
+                notification_id,
+                event,
+                event_description: None,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn a_repeated_notification_event_is_not_recorded_again() {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![
+                signed_credential_created(),
+                notification_received(NotificationEvent::CredentialAccepted),
+            ])
+            .when_async(add_notification(
+                notification_id(),
+                NotificationEvent::CredentialAccepted,
+            ))
+            .await
+            .then_expect_events(vec![])
+    }
+
+    #[tokio::test]
+    async fn a_later_different_notification_event_is_recorded() {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![
+                signed_credential_created(),
+                notification_received(NotificationEvent::CredentialAccepted),
+            ])
+            .when_async(add_notification(
+                notification_id(),
+                NotificationEvent::CredentialDeleted,
+            ))
+            .await
+            .then_expect_events(vec![notification_received(NotificationEvent::CredentialDeleted)])
+    }
+
+    #[tokio::test]
+    async fn a_notification_for_another_notification_id_is_rejected() {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![signed_credential_created()])
+            .when_async(add_notification(
+                "another_notification_id".to_string(),
+                NotificationEvent::CredentialAccepted,
+            ))
+            .await
+            .then_expect_error_message("The `notification_id` does not belong to this credential")
+    }
 
     #[rstest]
     #[case::jwt_vc_json_vc1_1(
@@ -1094,6 +1224,7 @@ pub mod credential_tests {
         UNSIGNED_ELM_CREDENTIAL.clone()
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_unsigned_credential(
         #[case] credential_subject: serde_json::Value,
         #[case] credential_configuration: CredentialConfigurationsSupportedObject,
@@ -1104,90 +1235,28 @@ pub mod credential_tests {
     ) {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given_no_previous_events()
-            .when(CredentialCommand::CreateUnsignedCredential {
+            .when_async(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
                 data: Data {
                     raw: credential_subject,
                 },
-                credential_configuration: Box::new(credential_configuration.clone()),
-                refresh_service: None,
+                credential_configuration: Box::new(credential_configuration.clone().into()),
                 expires_at: CredentialExpiry::Never,
+                refresh_token: None,
             })
+            .await
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
                 data: Data {
                     raw: unsigned_credential,
                 },
                 notification_id: Some(notification_id.clone()),
-                credential_configuration: Box::new(credential_configuration),
-                refresh_service: None,
+                credential_configuration: Box::new(credential_configuration.into()),
                 created_at: Some(created_at),
                 expires_at: None,
             }])
     }
 
-    #[async_std::test]
-    async fn create_unsigned_credential_embeds_refresh_service() {
-        let refresh_service = CredentialRefreshService {
-            type_: "VerifiableCredentialRefreshService2021".to_string(),
-            url: "https://issuer.example.com/credential-refresh".to_string(),
-            refresh_token: "opaque-refresh-reference".to_string(),
-        };
-
-        let mut expected_credential = UNSIGNED_DC_SD_JWT_CREDENTIAL.clone();
-        expected_credential["refreshService"] = json!({
-            "type": "VerifiableCredentialRefreshService2021",
-            "url": "https://issuer.example.com/credential-refresh",
-            "refreshToken": "opaque-refresh-reference"
-        });
-
-        CredentialTestFramework::with(IssuanceServices::default().await)
-            .given_no_previous_events()
-            .when(CredentialCommand::CreateUnsignedCredential {
-                credential_id: "credential-id".to_string(),
-                data: Data {
-                    raw: BASIC_CREDENTIAL_SUBJECT["credentialSubject"].clone(),
-                },
-                credential_configuration: Box::new(DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone()),
-                refresh_service: Some(refresh_service.clone()),
-                expires_at: CredentialExpiry::Never,
-            })
-            .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
-                credential_id: "credential-id".to_string(),
-                data: Data {
-                    raw: expected_credential,
-                },
-                notification_id: Some(test_utils::notification_id()),
-                credential_configuration: Box::new(DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone()),
-                refresh_service: Some(refresh_service),
-                created_at: Some(test_utils::created_at()),
-                expires_at: None,
-            }])
-    }
-
-    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`,
-    // which is used by the `.then_expect_events` method in the tests.
-    //
-    // #[case::dc_sd_jwt(
-    //     UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
-    //     DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     DC_SD_JWT.to_string()
-    // )]
-    // #[case::vc2_sd_jwt(
-    //     UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(),
-    //     VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     VC2_SD_JWT.to_string()
-    // )]
-    // #[case::obv3_sd_jwt(
-    //     UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
-    //     OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     OBV3_SD_JWT.to_string()
-    // )]
-    // #[case::elm_sd_jwt(
-    //     UNSIGNED_ELM_CREDENTIAL.clone(),
-    //     ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
-    //     ELM_SD_JWT.to_string()
-    // )]
     #[rstest]
     #[case::jwt_vc_json_vc1_1(
         UNSIGNED_VC1_1_CREDENTIAL.clone(),
@@ -1205,6 +1274,7 @@ pub mod credential_tests {
         JWT_VC_JSON_ELM_JWT.to_string()
     )]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_sign_credential(
         #[future(awt)] holder: Arc<dyn Subject>,
         #[case] unsigned_credential: serde_json::Value,
@@ -1229,13 +1299,12 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration: Box::new(credential_configuration),
+                credential_configuration: Box::new(credential_configuration.into()),
                 notification_id: None,
-                refresh_service: None,
                 created_at: Some(created_at),
                 expires_at: None,
             }])
-            .when(CredentialCommand::SignCredential {
+            .when_async(CredentialCommand::SignCredential {
                 credential_id: credential_id.clone(),
                 subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
                 overwrite: false,
@@ -1243,12 +1312,258 @@ pub mod credential_tests {
                 status_list_id: TEST_STATUS_LIST_ID.to_string(),
                 index: TESTINDEX,
             })
+            .await
             .then_expect_events(vec![CredentialEvent::CredentialSigned {
                 credential_id,
                 signed_credential: json!(verifiable_credential_jwt),
                 credential_status,
                 status: Status::Issued,
             }])
+    }
+
+    /// `credential` with the claims of the structured template (nested objects, lists and tables) in place of its own.
+    fn with_structured_claims(mut credential: serde_json::Value) -> serde_json::Value {
+        let claims = agent_library::template::aggregate::test_utils::structured_claims();
+        if credential.get("credentialSubject").is_some() {
+            credential["credentialSubject"] = claims;
+        } else {
+            let vct = credential["vct"].clone();
+            credential = claims;
+            credential["vct"] = vct;
+        }
+        credential
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_jwt_vc_json_credential_keeps_nested_claims(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        let unsigned_credential = with_structured_claims(UNSIGNED_VC1_1_CREDENTIAL.clone());
+
+        let events = CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: unsigned_credential.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone().into()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result()
+            .unwrap();
+
+        let [CredentialEvent::CredentialSigned { signed_credential, .. }] = &events[..] else {
+            panic!("unexpected events: {events:?}");
+        };
+        let payload = decode_segment(signed_credential.as_str().unwrap().split('.').nth(1).unwrap());
+        let mut credential_subject = payload["vc"]["credentialSubject"].as_object().unwrap().clone();
+        // The holder's identifier is added on signing.
+        credential_subject.remove("id");
+
+        assert_eq!(json!(credential_subject), unsigned_credential["credentialSubject"]);
+    }
+
+    /// Decodes a base64url-encoded JSON segment of an SD-JWT.
+    fn decode_segment(segment: &str) -> serde_json::Value {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(segment).unwrap()).unwrap()
+    }
+
+    // SD-JWTs contain random salts, so instead of comparing them with a fixed SD-JWT, this checks their structure and
+    // that every concealed claim can be disclosed with its original value.
+    #[rstest]
+    #[case::dc_sd_jwt(UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(), DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "dc+sd-jwt")]
+    #[case::vc2_sd_jwt(
+        UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone(),
+        VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
+    #[case::obv3_sd_jwt(
+        UNSIGNED_OPENBADGE_CREDENTIAL.clone(),
+        OBv3_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
+    #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "vc+sd-jwt")]
+    // Nested objects, lists and tables are each disclosed as a whole, with the top-level claim that holds them.
+    #[case::dc_sd_jwt_structured(
+        with_structured_claims(UNSIGNED_DC_SD_JWT_CREDENTIAL.clone()),
+        DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "dc+sd-jwt"
+    )]
+    #[case::vc2_sd_jwt_structured(
+        with_structured_claims(UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone()),
+        VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_sd_jwt_credential(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        #[case] unsigned_credential: serde_json::Value,
+        #[case] credential_configuration: CredentialConfigurationsSupportedObject,
+        #[case] typ: &str,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        let events = CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: unsigned_credential.clone(),
+                },
+                credential_configuration: Box::new(credential_configuration.into()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result()
+            .unwrap();
+
+        let [CredentialEvent::CredentialSigned {
+            signed_credential,
+            credential_status,
+            status: Status::Issued,
+            ..
+        }] = &events[..]
+        else {
+            panic!("unexpected events: {events:?}");
+        };
+        assert_eq!(credential_status.index, TESTINDEX);
+
+        let mut parts = signed_credential.as_str().unwrap().split('~');
+        let issuer_signed_jwt = parts.next().unwrap();
+        let mut jwt = issuer_signed_jwt.split('.');
+        let header = decode_segment(jwt.next().unwrap());
+        let payload = decode_segment(jwt.next().unwrap());
+        assert_eq!(header["typ"], typ);
+
+        // The issuer-signed JWT verifies with the key its `kid` names.
+        let public_key = agent_secret_manager::subject::Subject::test_subject()
+            .await
+            .resolve_public_key(header["kid"].as_str().unwrap())
+            .await
+            .unwrap();
+        let decoding_key =
+            jsonwebtoken::DecodingKey::from_jwk(&serde_json::from_value(json!(public_key)).unwrap()).unwrap();
+        let mut validation = jsonwebtoken::Validation::new(serde_json::from_value(header["alg"].clone()).unwrap());
+        validation.required_spec_claims = Default::default();
+        validation.validate_exp = false;
+        jsonwebtoken::decode::<serde_json::Value>(issuer_signed_jwt, &decoding_key, &validation).unwrap();
+
+        assert!(payload["iss"].is_string());
+        assert_eq!(payload["jti"], format!("urn:uuid:{credential_id}"));
+        assert_eq!(payload["status"]["status_list"]["idx"], TESTINDEX);
+
+        // A DC SD-JWT conceals its claims at the top level, except registered claims such as `vct`. A W3C SD-JWT
+        // conceals the properties of its `credentialSubject`.
+        let (original_claims, concealing_object) = if typ == "dc+sd-jwt" {
+            assert_eq!(payload["vct"], unsigned_credential["vct"]);
+            let mut claims = unsigned_credential.as_object().unwrap().clone();
+            claims.remove("vct");
+            (claims, payload.clone())
+        } else {
+            (
+                unsigned_credential["credentialSubject"].as_object().unwrap().clone(),
+                payload["credentialSubject"].clone(),
+            )
+        };
+
+        let disclosures: std::collections::HashMap<String, serde_json::Value> = parts
+            .filter(|disclosure| !disclosure.is_empty())
+            .map(|disclosure| {
+                let disclosure = decode_segment(disclosure);
+                (disclosure[1].as_str().unwrap().to_string(), disclosure[2].clone())
+            })
+            .collect();
+        for (name, value) in &original_claims {
+            assert_eq!(disclosures.get(name), Some(value), "claim `{name}` is not disclosable");
+            assert!(concealing_object.get(name).is_none(), "claim `{name}` is not concealed");
+        }
+        assert_eq!(
+            concealing_object["_sd"].as_array().unwrap().len(),
+            disclosures.len(),
+            "every disclosure has a digest"
+        );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_credential_rejects_invalid_or_missing_jti_sources() {
+        let services = IssuanceServices::default().await;
+        let command = |credential_id: String| CredentialCommand::SignCredential {
+            credential_id,
+            subject_id: None,
+            overwrite: false,
+            proofs: None,
+            status_list_id: agent_shared::config::TEST_STATUS_LIST_ID.to_string(),
+            index: TESTINDEX,
+        };
+        let unsigned = |credential_id: String,
+                        raw: serde_json::Value,
+                        credential_configuration: CredentialConfigurationsSupportedObject| {
+            CredentialEvent::UnsignedCredentialCreated {
+                credential_id,
+                data: Data { raw },
+                credential_configuration: Box::new(credential_configuration.into()),
+                notification_id: None,
+                created_at: Some(created_at()),
+                expires_at: None,
+            }
+        };
+
+        let invalid_id = "not-a-uuid".to_string();
+        CredentialTestFramework::with(services.clone())
+            .given(vec![unsigned(
+                invalid_id.clone(),
+                UNSIGNED_DC_SD_JWT_CREDENTIAL.clone(),
+                DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+            )])
+            .when_async(command(invalid_id))
+            .await
+            .then_expect_error_message(&InvalidCredentialDataError.to_string());
+
+        let mut w3c_without_id = UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone();
+        w3c_without_id.as_object_mut().unwrap().remove("id");
+        let credential_id = credential_id();
+        CredentialTestFramework::with(services)
+            .given(vec![unsigned(
+                credential_id.clone(),
+                w3c_without_id,
+                VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+            )])
+            .when_async(command(credential_id))
+            .await
+            .then_expect_error_message(&InvalidCredentialDataError.to_string());
     }
 
     pub mod expiry_tests {
@@ -1264,9 +1579,10 @@ pub mod credential_tests {
         }
     }
 
-    // Ensures the `jti` claim is present and un-concealed in the signed DC SD-JWT.
+    // Ensures the registered claims are set and not concealed in the signed DC SD-JWT: `SdJwtVc::parse` rejects a
+    // registered claim that comes from a disclosure.
     #[tokio::test]
-    async fn test_sign_dc_sd_jwt_jti_not_concealed() {
+    async fn test_sign_dc_sd_jwt_registered_claims_not_concealed() {
         let issuer = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
         let credential_data = serde_json::json!({
             "vct": "http://localhost:3033/vct/U0QtSldU/0",
@@ -1275,8 +1591,13 @@ pub mod credential_tests {
         });
         let jti = url::Url::parse("urn:uuid:123e4567-e89b-12d3-a456-426614174000").unwrap();
         let iss = Url::parse("https://example.com/issuer").unwrap();
-        let iat = Timestamp::now_utc();
-        let status_claim = identity_credential::sd_jwt_vc::Status(StatusMechanism::Custom(serde_json::json!({})));
+        let iat = DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let expires_at = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
+            "https://example.com/status-lists/0",
+            TESTINDEX as u64,
+        ));
+        let holder_kid = "did:example:holder#key-1".to_string();
 
         let result = sign_dc_sd_jwt(
             &issuer,
@@ -1284,17 +1605,28 @@ pub mod credential_tests {
             jti.clone(),
             iss,
             iat,
-            status_claim,
-            None,
-            None,
+            status_claim.clone(),
+            Some(expires_at),
+            Some(holder_kid.clone()),
         )
         .await
         .unwrap();
 
-        let sd_jwt_str = result.as_str().expect("Expected JSON string output");
-        let parsed_vc = SdJwtVc::parse(sd_jwt_str).expect("Failed to parse string into SdJwtVc");
+        let credential = SdJwtVc::parse(result.as_str().expect("Expected JSON string output"))
+            .expect("Failed to parse string into SdJwtVc");
+        let claims = credential.claims();
 
-        assert_eq!(parsed_vc.claims()["jti"], json!(jti.to_string()));
+        assert_eq!(credential.header().typ.as_deref(), Some("dc+sd-jwt"));
+        assert!(credential.header().kid.is_some());
+        assert_eq!(claims.jti.as_deref(), Some(jti.as_str()));
+        assert_eq!(claims.iss.as_deref(), Some("https://example.com/issuer"));
+        assert_eq!(claims.iat, Some(1_700_000_000));
+        assert_eq!(claims.nbf, Some(1_700_000_000));
+        assert_eq!(claims.exp, Some(1_800_000_000));
+        assert_eq!(claims.cnf, Some(Confirmation::kid(holder_kid)));
+        assert_eq!(claims.status, Some(status_claim));
+        assert_eq!(claims.claims["first_name"], "Ferris");
+        assert_eq!(claims.claims["last_name"], "Rustacean");
     }
 }
 
@@ -1334,16 +1666,9 @@ pub mod test_utils {
         CREDENTIAL_ID.to_string()
     }
 
-    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWxvZ28ucG5nIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fX0.jCS4N963nNaXz0C-_cEfC_Nfaam6apAFhMCxgafHoOruoZXVQYyXVUXs6qii3tgnktZUQWcSuXXccIFy4jphCw";
-    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvZXh0ZW5zaW9ucy5qc29uIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwibG9nb191cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJjcmVkZW50aWFsU3ViamVjdCI6eyJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifSwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319fQ.7P_MfG49CYmmIM63i63i90uEr1XR9qoTh-1OgKGdW34rYmjfCeGTMwOweG_XrP1GMiR_CEm_eLDeG9V9HgsdCA";
-    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIkV1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sIm5hbWUiOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImNyZWRlbnRpYWxQcm9maWxlcyI6e30sImRpc3BsYXlQYXJhbWV0ZXIiOnsidGl0bGUiOnsiZW4iOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwifSwicHJpbWFyeUxhbmd1YWdlIjp7fSwibGFuZ3VhZ2UiOnt9LCJpbmRpdmlkdWFsRGlzcGxheSI6eyJsYW5ndWFnZSI6e30sImRpc3BsYXlEZXRhaWwiOnsicGFnZSI6MSwiaW1hZ2UiOnsiY29udGVudCI6IltQTEFDRUhPTERFUl0iLCJjb250ZW50RW5jb2RpbmciOnt9LCJjb250ZW50VHlwZSI6e319fX19LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9ldWRpdy5vcmcvY3JlZGVudGlhbHMvc2NoZW1hcy9FdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsVjNfMy5qc29uIiwidHlwZSI6Ikpzb25TY2hlbWEifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6IkNyZWRlbnRpYWxTdGF0dXMiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfSwiaXNzdWVkIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7InVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX19.a0HBjHyJATMTACRxLfJOjU5_pHQpjpCV_k67_HIKX1gpYSs6VRCmk2nw07uXnWcHD1JL-Fu3brdAMAYzwZ2gBA";
-
-    // TODO: enable sd-jwt testing, since the salts change everytime we need to come up with an alternative to `assert_eq!`
-    //
-    // pub const DC_SD_JWT: &str = "placeholder";
-    // pub const VC2_SD_JWT: &str = "placeholder";
-    // pub const OBV3_SD_JWT: &str = "placeholder";
-    // pub const ELM_SD_JWT: &str = "placeholder";
+    pub const JWT_VC_JSON_VC1_1_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sImlzc3VlciI6eyJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlZlcmlmaWFibGUgQ3JlZGVudGlhbCIsImxvZ29fdXJpIjoiaHR0cHM6Ly93d3cuaW1waWVyY2UuY29tL2V4dGVybmFsL2ltcGllcmNlLWxvZ28ucG5nIiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWQiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAiLCJpZHgiOjEyM319LCJzdGF0dXMiOnsic3RhdHVzX2xpc3QiOnsiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fX0.smOr1FnJ-W-oxcWP_v4It4MCpDvdOo6b8inXO4jEWhkmAjew9tfmW40T-rhyPB228c0djHylT3UQ4Q0YBcSIAQ";
+    pub const JWT_VC_JSON_OBV3_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy9ucy9jcmVkZW50aWFscy92MiIsImh0dHBzOi8vcHVybC5pbXNnbG9iYWwub3JnL3NwZWMvb2IvdjNwMC9jb250ZXh0LTMuMC4zLmpzb24iLCJodHRwczovL3B1cmwuaW1zZ2xvYmFsLm9yZy9zcGVjL29iL3YzcDAvZXh0ZW5zaW9ucy5qc29uIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiT3BlbkJhZGdlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOnsidHlwZSI6IlByb2ZpbGUiLCJuYW1lIjoiVW5pQ29yZSIsImlkIjoiZGlkOmtleTp6Nk1rZ0U4NE5DTXBNZUF4OWpLOWNmNVc0RzhnY1o5eHV3SnZHMWU3d05rOEtDZ3QifSwibmFtZSI6IlRlYW13b3JrIEJhZGdlIiwibG9nb191cmkiOiJodHRwczovL3d3dy5pbXBpZXJjZS5jb20vZXh0ZXJuYWwvaW1waWVyY2UtbG9nby5wbmciLCJjcmVkZW50aWFsU3ViamVjdCI6eyJ0eXBlIjpbIkFjaGlldmVtZW50U3ViamVjdCJdLCJhY2hpZXZlbWVudCI6eyJpZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYWNoaWV2ZW1lbnRzLzIxc3QtY2VudHVyeS1za2lsbHMvdGVhbXdvcmsiLCJ0eXBlIjoiQWNoaWV2ZW1lbnQiLCJjcml0ZXJpYSI6eyJuYXJyYXRpdmUiOiJUZWFtIG1lbWJlcnMgYXJlIG5vbWluYXRlZCBmb3IgdGhpcyBiYWRnZSBieSB0aGVpciBwZWVycyBhbmQgcmVjb2duaXplZCB1cG9uIHJldmlldyBieSBFeGFtcGxlIENvcnAgbWFuYWdlbWVudC4ifSwiZGVzY3JpcHRpb24iOiJUaGlzIGJhZGdlIHJlY29nbml6ZXMgdGhlIGRldmVsb3BtZW50IG9mIHRoZSBjYXBhY2l0eSB0byBjb2xsYWJvcmF0ZSB3aXRoaW4gYSBncm91cCBlbnZpcm9ubWVudC4iLCJuYW1lIjoiVGVhbXdvcmsifSwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1YW5jZURhdGUiOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsInZhbGlkRnJvbSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoic3RhdHVzbGlzdCtqd3QiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfX0sInN0YXR1cyI6eyJzdGF0dXNfbGlzdCI6eyJpZHgiOjEyMywidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIn19fQ.Ok_SnmCAoY3AoKZjF1odM4_HnbTlYWD-Z5EMRqRwI-GjJKMrohDaZqJgXOsOvxtXfPHoJGUm1nUKhRX5seKnDw";
+    pub const JWT_VC_JSON_ELM_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7IkBjb250ZXh0IjpbImh0dHBzOi8vd3d3LnczLm9yZy8yMDE4L2NyZWRlbnRpYWxzL3YxIiwiaHR0cHM6Ly93d3cudzMub3JnL25zL2NyZWRlbnRpYWxzL3YyIix7ImxvZ29fdXJpIjp7IkBpZCI6Imh0dHBzOi8vd3d3LmlhbmEub3JnL2Fzc2lnbm1lbnRzL2p3dCNsb2dvX3VyaSIsIkB0eXBlIjoiQGlkIn19XSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIkV1cm9wZWFuRGlnaXRhbENyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJpc3N1ZXIiOnsibmFtZSI6IlVuaUNvcmUiLCJpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0In0sIm5hbWUiOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwiLCJsb2dvX3VyaSI6Imh0dHBzOi8vd3d3LmltcGllcmNlLmNvbS9leHRlcm5hbC9pbXBpZXJjZS1sb2dvLnBuZyIsImNyZWRlbnRpYWxQcm9maWxlcyI6e30sImRpc3BsYXlQYXJhbWV0ZXIiOnsidGl0bGUiOnsiZW4iOiJFdXJvcGVhbiBEaWdpdGFsIENyZWRlbnRpYWwifSwicHJpbWFyeUxhbmd1YWdlIjp7fSwibGFuZ3VhZ2UiOnt9LCJpbmRpdmlkdWFsRGlzcGxheSI6eyJsYW5ndWFnZSI6e30sImRpc3BsYXlEZXRhaWwiOnsicGFnZSI6MSwiaW1hZ2UiOnsiY29udGVudCI6IltQTEFDRUhPTERFUl0iLCJjb250ZW50RW5jb2RpbmciOnt9LCJjb250ZW50VHlwZSI6e319fX19LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9ldWRpdy5vcmcvY3JlZGVudGlhbHMvc2NoZW1hcy9FdXJvcGVhbkRpZ2l0YWxDcmVkZW50aWFsVjNfMy5qc29uIiwidHlwZSI6Ikpzb25TY2hlbWEifSwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJ2YWxpZEZyb20iOiIyMDEwLTAxLTAxVDAwOjAwOjAwWiIsImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6IkNyZWRlbnRpYWxTdGF0dXMiLCJpZCI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCIsImlkeCI6MTIzfSwiaXNzdWVkIjoiMjAxMC0wMS0wMVQwMDowMDowMFoifSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.9fTT-VqaKelZTmAt9EFBO86OMhdD2VSxtXdcR59kTvP9GpQFhSXZABgEhqxZh9dQPbd-5kKxTaGZHDBc11oLAw";
 
     lazy_static! {
         pub static ref JWT_VC_JSON_OBv3_CREDENTIAL_CONFIGURATION: CredentialConfigurationsSupportedObject =
@@ -1427,10 +1752,7 @@ pub mod test_utils {
                     .into()
                 }),
                 cryptographic_binding_methods_supported: vec!["did:jwk".to_string(), "did:key".to_string(),],
-                credential_signing_alg_values_supported: vec![
-                    AlgIdentifier::String("ES256".to_string()),
-                    AlgIdentifier::String("EdDSA".to_string())
-                ],
+                credential_signing_alg_values_supported: vec![AlgIdentifier::String("EdDSA".to_string())],
                 proof_types_supported: HashMap::from_iter(vec![(
                     ProofType::Jwt,
                     KeyProofMetadata {

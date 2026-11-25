@@ -3,6 +3,9 @@ name = "agent_holder"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
@@ -10,11 +13,11 @@ agent_shared = { path = "../agent_shared" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 shared-kernel.workspace = true
 
+identity-kit.workspace = true
+
 async-trait.workspace = true
 base64.workspace = true
 cqrs-es.workspace = true
-identity_core.workspace = true
-identity_credential.workspace = true
 indexmap.workspace = true
 jsonwebtoken.workspace = true
 oid4vci.workspace = true
@@ -29,6 +32,8 @@ utoipa.workspace = true
 uuid.workspace = true
 
 # `test_utils` dependencies
+# The HTTP client of `oid4vci`, without TLS, for issuers that tests run on 127.0.0.1 over plain `http`.
+reqwest_0_13 = { package = "reqwest", version = "0.13", default-features = false, optional = true }
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -45,8 +50,8 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
 
-async-std.workspace = true
 axum.workspace = true
+chrono.workspace = true
 lazy_static.workspace = true
 mime.workspace = true
 names = { version = "0.14", default-features = false }
@@ -59,4 +64,4 @@ tower.workspace = true
 tracing-test.workspace = true
 
 [features]
-test_utils = ["dep:rstest"]
+test_utils = ["agent_secret_manager/test_utils", "dep:reqwest_0_13", "dep:rstest"]

@@ -267,6 +267,8 @@ The format of the log output.
 - `json` _(default)_
 - `text`
 
+When traces are exported via OpenTelemetry, `json` log lines written within a span carry its `trace_id` and `span_id`.
+
 #### Example
 
 ```yaml
@@ -300,6 +302,102 @@ Only required when `type` is `postgres`.
 event_store:
   type: postgres
   connection_string: postgresql://user:password@database:5432/demo
+```
+
+### Maximum request body size
+
+The maximum size, in bytes, of an HTTP request body. A larger request is rejected with `413 Payload Too Large` ([problem details](../problem-details/request.md#payload-too-large)) before its body is read in full. The default of 2 MiB fits every request UniCore expects; raise it only if legitimate requests, such as large batches of credentials, exceed it.
+
+The limit applies to every request before authorization, so it is also the amount of memory any unauthenticated client can make UniCore use per request. Keep it as low as your requests allow. There is no value that turns the limit off.
+
+| Environment variable               | `config.yaml`            | Default   |
+| ---------------------------------- | ------------------------ | --------- |
+| `UNICORE__MAX_REQUEST_BODY_BYTES` | `max_request_body_bytes` | `2097152` |
+
+#### Example
+
+```yaml
+max_request_body_bytes: 8388608 # 8 MiB
+```
+
+### Feature flags
+
+Feature flags enable features that are still in development. All of them are disabled by default. A disabled feature is not built at all: its endpoints return `404` and it stores nothing. An empty value counts as disabled. The `feature` section only appears in the [current configuration](#inspecting-the-current-configuration) when at least one flag is enabled.
+
+| Environment variable    | `config.yaml` | Default |
+| ----------------------- | ------------- | ------- |
+| `UNICORE__FEATURE__KMS` | `feature.kms` | `false` |
+
+#### Key Management System (`kms`)
+
+Connects UniCore to external key providers, so that keys can be generated in, and sign inside, a provider instead of Stronghold. Available providers:
+
+- AWS KMS, using the AWS credentials and region of the environment UniCore runs in.
+- An in-memory provider, only available with the `development` [profile](./profiles.md).
+
+Progress:
+
+- [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
+- [ ] Generate keys in a provider
+- [ ] Sign credentials and presentations with provider keys
+- [ ] Use provider keys in DID documents
+- [ ] Replace Stronghold as the secret manager
+
+#### Example
+
+```yaml
+feature:
+  kms: true
+```
+
+### Credential refresh
+
+A credential configuration opts its credentials into credential refresh with `refreshService`:
+
+```json
+"refreshService": { "type": "VerifiableCredentialRefreshService2021" }
+```
+
+UniCore derives credential configurations from templates, and templates don't carry `refreshService`. The application
+that composes UniCore sets it, by updating the credential configuration (`ServerConfigCommand::UpdateCredentialConfiguration`)
+with `refreshService`; there is no configuration file key or HTTP route for it.
+
+Every credential issued with the configuration, as a first issue or as a reissuance replacement, then embeds
+`refreshService: { type, url, refreshToken }`. The `url` is the public `/v0/refresh-credential` endpoint, derived from
+the [Public URL](#public-url), and `refreshToken` is a random token of the credential's own. The token leaves UniCore
+only inside the credential delivered to the holder: published events and the management API show such a credential
+without `refreshService.refreshToken`, its signed credential as `null`, and the credential response of its offer as
+`null`. This holds whatever the token's `url`, so the tokens of credentials issued before a Public URL change are
+withheld too. Refresh capabilities are kept under the token's SHA-256. Configurations without `refreshService` issue
+credentials as before. A configuration that is derived from a
+template keeps its `refreshService` when the template changes.
+
+What a refreshed credential contains is decided by a refresh preparation hook that the application installs where it
+is composed. Without one, refresh answers `403` ([Credential Refresh
+Unavailable](../problem-details/issuance.md#credential-refresh-unavailable)), and startup logs a warning that names
+every configuration that advertises `refreshService`.
+
+### Event publishers
+
+The `events.types` of an HTTP target (`event_publishers.http`) or a NATS subject (`event_publishers.nats.subjects`)
+list the events it receives. Besides the events listed in the publishers' READMEs, the `reissuance` events can be
+listed:
+
+| Aggregate    | Events              |
+| ------------ | ------------------- |
+| `reissuance` | `ReissuanceCreated` |
+
+Refresh capability events are never published.
+
+#### Example
+
+```yaml
+event_publishers:
+  http:
+    - enabled: true
+      target_url: "https://my-domain.example.org/event-subscriber"
+      events:
+        types: [ReissuanceCreated]
 ```
 
 <!--

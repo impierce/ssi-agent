@@ -8,6 +8,7 @@
 //! - [`custom_queries`] — Reusable CQRS query types such as [`custom_queries::ListAllQuery`].
 //! - [`view_repository`] — Dyn-compatible view repository wrappers and factory trait.
 //! - [`service_registry`] — Type-keyed service registry and channel-based service handles.
+//! - [`streaming_event_store`] — Event store that applies events while reading them.
 
 pub mod application_service;
 pub mod authorization;
@@ -15,6 +16,7 @@ pub mod command_handler;
 pub mod custom_queries;
 pub mod event_bus;
 pub mod service_registry;
+pub mod streaming_event_store;
 pub mod view_repository;
 
 #[cfg(any(feature = "test-utils", test))]
@@ -27,7 +29,7 @@ pub use convert_case;
 pub use cqrs_es;
 pub use event_bus::{
     build_cloud_event, BusEventStream, CloudEvent, EventBus, EventBusError, EventBusHandle, EventFilter, EventSource,
-    EventSourceStream, Position, SourceEvent, SubscribePosition,
+    EventSourceStream, Extension, Position, SourceEvent, SubscribePosition,
 };
 pub use slug::slugify;
 pub use strum;

@@ -23,20 +23,39 @@ This created several operational and architectural challenges:
 
 We have established the following standards and path resolution rules for the codebase:
 
-### 1. Compile-Time Manifest Path Resolution (Short-Term Compatibility)
-Where test fixtures or configuration files must be referenced from source, paths must be resolved at compile-time using `concat!(env!("CARGO_MANIFEST_DIR"), ...)` rather than CWD-relative strings (`../...`). This guarantees that tests resolve identical file paths whether executed from `ssi-agent`, outer workspace roots, or any subcrate directory.
+Test categories are determined by their dependency footprint, not only by where their source file lives.
 
-### 2. Hermetic & In-Memory Unit Testing (Target Architecture)
-- **Unit tests** must operate strictly in memory using mock/fake adapters (e.g., `InMemoryStore`, `MockSubject`) and must not perform disk I/O or trigger global configuration loading.
-- Unit tests for builders and application services must test validation and logic branches directly without instantiating heavy infrastructure components.
+### 1. Hermetic Unit Tests
 
-### 3. Explicit Dependency Injection
-- Domain and application services should accept configuration explicitly rather than calling global static getters like `agent_shared::config::config()`.
+- Unit tests must operate in memory using mock or fake adapters and must not perform disk I/O, mutate global configuration, or depend on external services.
+- Logic that currently reads global configuration should expose a function that accepts the relevant configuration explicitly, leaving the global lookup in a thin production adapter.
+- Controlled local fakes such as an in-process HTTP mock are acceptable, but tests that exercise file-backed cryptography or mutable process-wide state are component tests.
+
+### 2. Isolated Component Tests
+
+Component tests may exercise existing global-configuration or file-backed infrastructure seams when replacing those seams would turn a coverage change into an unrelated production refactor. Such tests must:
+
+- run in an external test target when process isolation is needed;
+- resolve fixtures with `concat!(env!("CARGO_MANIFEST_DIR"), ...)` or use a unique temporary path, never a CWD-relative path;
+- initialize file-backed fixtures once per test process or give each test its own fixture;
+- serialize access to mutable process-wide state and restore the original state after every test; and
+- remain independent of test order and external network services.
+
+These allowances document containment of legacy seams, not approval to introduce new global state into production code.
+
+### 3. Container Integration Tests
+
+Tests that verify databases, message brokers, telemetry collectors, or other external infrastructure belong in feature-gated external test targets. Each test target runs in its own process and owns the containers and configuration it mutates.
+
+### 4. Explicit Dependency Injection
+
+- New domain and application services should accept configuration explicitly rather than calling global static getters like `agent_shared::config::config()`.
+- Existing global-configuration seams may be covered by isolated component tests until they are replaced as part of a dedicated architectural change.
 
 ---
 
 ## Rationale
 
 - **Robustness**: Prevents test suite failures caused by static `once_cell` poisoning and CWD changes across workspaces.
-- **Speed & Parallelism**: Eliminates disk contention, allowing tests to run in parallel without file locks or password collisions.
+- **Speed & Parallelism**: Keeps unit tests parallel while making the smaller number of stateful component tests explicit and safely isolated.
 - **Clean Layering**: Maintains a clear boundary between pure domain/application logic and infrastructure/I/O concerns.

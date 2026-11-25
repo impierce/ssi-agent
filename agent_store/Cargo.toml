@@ -3,16 +3,13 @@ name = "agent_store"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
-agent_authorization = { path = "../agent_authorization" }
-agent_holder = { path = "../agent_holder" }
-agent_identity = { path = "../agent_identity" }
-agent_issuance = { path = "../agent_issuance" }
-agent_library = { path = "../agent_library" }
 agent_shared = { path = "../agent_shared" }
-agent_verification = { path = "../agent_verification" }
 shared-kernel.workspace = true
 
 async-trait.workspace = true

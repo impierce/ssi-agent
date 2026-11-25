@@ -170,6 +170,30 @@ Issuers set up a template once and reuse it for every instance of that credentia
 
 **Related**: Credential, Issuer, Selective Disclosure, Credential Lifecycle
 
+### Template Origin
+
+Where a credential template was imported from: who published it, the template's identifier at that publisher, and a fingerprint of the template's public content at the time of import. Comparing the fingerprint with the source's current content tells whether the source has changed since; comparing it with the local template tells whether the copy has been edited. A template that was created locally, or copied from another local template, has no origin.
+
+**Related**: Credential Template, Issuer
+
+---
+
+## Terms to Avoid
+
+### Oid
+
+An abbreviation of OpenID that only exists because some names were already taken, such as the published crates `oid4vci` and `oid4vp`. Spell out OpenID everywhere else, in prose as in names: OpenID4VCI, OpenID4VP, OpenID Federation, `OpenId…` in type names. "Oid" appears only where someone else fixed the name, such as those crates and the types they export.
+
+OIDC, the established abbreviation of OpenID Connect, is not affected.
+
+**Instead**: OpenID
+
+### Real names in examples
+
+Examples, test data and documentation use made-up names: organisations such as "Example Federation" or "Example Member", and domains under `example.com`, `example.org` or `example.net` (reserved for this by RFC 2606). They never name real organisations, deployments, people or their URLs, even when a real case prompted the example.
+
+**Instead**: neutral, made-up names and reserved example domains
+
 ---
 
 ## See Also
@@ -179,4 +203,4 @@ Issuers set up a template once and reuse it for every instance of that credentia
 
 ---
 
-**Last updated**: 2026-06-17
+**Last updated**: 2026-10-28

@@ -8,7 +8,6 @@ use oid4vci::{
     authorization_details::AuthorizationDetailsObject, authorization_request::CodeChallengeMethod, InteractionType,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
 use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq)]
@@ -65,8 +64,6 @@ impl Aggregate for OAuth2AuthorizationRequest {
         use OAuth2AuthorizationRequestCommand::*;
         use OAuth2AuthorizationRequestError::*;
         use OAuth2AuthorizationRequestEvent::*;
-
-        info!("Handling command: {:?}", command);
 
         let events: Vec<Self::Event> = match command {
             CreateOAuth2AuthorizationRequest {
@@ -168,8 +165,6 @@ impl Aggregate for OAuth2AuthorizationRequest {
     fn apply(&mut self, event: Self::Event) {
         use OAuth2AuthorizationRequestEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             OAuth2AuthorizationRequestCreated {
                 oauth2_authorization_request_id,
@@ -235,6 +230,7 @@ pub mod oauth2_authorization_request_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_create_oauth2_authorization_request(
         oauth2_authorization_request_id: String,
         pushed_authorization_request: AuthorizationRequest,
@@ -242,12 +238,13 @@ pub mod oauth2_authorization_request_tests {
     ) {
         OAuth2AuthorizationRequestTestFramework::with(OAuth2AuthorizationRequestDomainServices::default())
             .given_no_previous_events()
-            .when(OAuth2AuthorizationRequestCommand::CreateOAuth2AuthorizationRequest {
+            .when_async(OAuth2AuthorizationRequestCommand::CreateOAuth2AuthorizationRequest {
                 oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
                 pushed_authorization_request: pushed_authorization_request.clone(),
                 expires_at,
                 interaction_type: None,
             })
+            .await
             .then_expect_events(vec![
                 OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated {
                     oauth2_authorization_request_id,
@@ -268,13 +265,15 @@ pub mod oauth2_authorization_request_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_grant_consent(
         oauth2_authorization_request_id: String,
         authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
     ) {
         OAuth2AuthorizationRequestTestFramework::with(OAuth2AuthorizationRequestDomainServices::default())
             .given(vec![authorization_request_pushed_event.clone()])
-            .when(OAuth2AuthorizationRequestCommand::GrantConsent)
+            .when_async(OAuth2AuthorizationRequestCommand::GrantConsent)
+            .await
             .then_expect_events(vec![OAuth2AuthorizationRequestEvent::ConsentGranted {
                 oauth2_authorization_request_id,
                 consent_status: ConsentStatus::Granted,
@@ -283,17 +282,116 @@ pub mod oauth2_authorization_request_tests {
 
     #[rstest]
     #[serial_test::serial]
+    #[tokio::test]
     async fn test_reject_consent(
         oauth2_authorization_request_id: String,
         authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
     ) {
         OAuth2AuthorizationRequestTestFramework::with(OAuth2AuthorizationRequestDomainServices::default())
             .given(vec![authorization_request_pushed_event.clone()])
-            .when(OAuth2AuthorizationRequestCommand::RejectConsent)
+            .when_async(OAuth2AuthorizationRequestCommand::RejectConsent)
+            .await
             .then_expect_events(vec![OAuth2AuthorizationRequestEvent::ConsentRejected {
                 oauth2_authorization_request_id,
                 consent_status: ConsentStatus::Rejected,
             }]);
+    }
+
+    fn expired(mut event: OAuth2AuthorizationRequestEvent) -> OAuth2AuthorizationRequestEvent {
+        if let OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestCreated { expires_at, .. } = &mut event {
+            *expires_at = chrono::Utc::now().timestamp() - 1;
+        }
+        event
+    }
+
+    fn verifying_services(verification: fn() -> anyhow::Result<()>) -> OAuth2AuthorizationRequestDomainServices {
+        let mut openid4vp_presentation_service = crate::services::MockOpenId4VpPresentationService::new();
+        openid4vp_presentation_service
+            .expect_verify_openid4vp_response()
+            .returning(move |_| verification());
+
+        OAuth2AuthorizationRequestDomainServices::new(Box::new(openid4vp_presentation_service))
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn consent_decisions_on_an_expired_request_expire_it(
+        oauth2_authorization_request_id: String,
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let expired_event = OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestExpired {
+            oauth2_authorization_request_id,
+            consent_status: ConsentStatus::Expired,
+        };
+
+        for command in [
+            OAuth2AuthorizationRequestCommand::GrantConsent,
+            OAuth2AuthorizationRequestCommand::RejectConsent,
+        ] {
+            OAuth2AuthorizationRequestTestFramework::with(OAuth2AuthorizationRequestDomainServices::default())
+                .given(vec![
+                    expired(authorization_request_pushed_event.clone()),
+                    expired_event.clone(),
+                ])
+                .when_async(command)
+                .await
+                .then_expect_events(vec![expired_event.clone()]);
+        }
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn a_verified_openid4vp_response_grants_consent_until_the_request_expires(
+        oauth2_authorization_request_id: String,
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let submit = || OAuth2AuthorizationRequestCommand::SubmitOpenId4VpResponse {
+            openid4vp_response: serde_json::json!({ "vp_token": "vp_token" }),
+        };
+
+        OAuth2AuthorizationRequestTestFramework::with(verifying_services(|| Ok(())))
+            .given(vec![authorization_request_pushed_event.clone()])
+            .when_async(submit())
+            .await
+            .then_expect_events(vec![OAuth2AuthorizationRequestEvent::ConsentGranted {
+                oauth2_authorization_request_id: oauth2_authorization_request_id.clone(),
+                consent_status: ConsentStatus::Granted,
+            }]);
+
+        OAuth2AuthorizationRequestTestFramework::with(verifying_services(|| Ok(())))
+            .given(vec![expired(authorization_request_pushed_event)])
+            .when_async(submit())
+            .await
+            .then_expect_events(vec![
+                OAuth2AuthorizationRequestEvent::OAuth2AuthorizationRequestExpired {
+                    oauth2_authorization_request_id,
+                    consent_status: ConsentStatus::Expired,
+                },
+            ]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn an_unverifiable_openid4vp_response_is_rejected(
+        authorization_request_pushed_event: OAuth2AuthorizationRequestEvent,
+    ) {
+        let result = OAuth2AuthorizationRequestTestFramework::with(verifying_services(|| {
+            Err(anyhow::anyhow!("invalid presentation"))
+        }))
+        .given(vec![authorization_request_pushed_event])
+        .when_async(OAuth2AuthorizationRequestCommand::SubmitOpenId4VpResponse {
+            openid4vp_response: serde_json::json!({ "vp_token": "vp_token" }),
+        })
+        .await
+        .inspect_result();
+
+        assert!(matches!(
+            result,
+            Err(OAuth2AuthorizationRequestError::OpenID4VpVerificationError(_))
+        ));
     }
 }
 

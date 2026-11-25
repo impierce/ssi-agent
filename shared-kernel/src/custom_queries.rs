@@ -1,43 +1,15 @@
 use async_trait::async_trait;
 use cqrs_es::{
-    persist::{GenericQuery, PersistenceError, ViewContext, ViewRepository},
+    persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, EventEnvelope, Query, View,
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tracing::debug;
 
-/// Create the standard pair of queries for an aggregate: a [`GenericQuery`] for the
-/// single-entity view and a [`ListAllQuery`] for the list view.
-///
-/// Returns a `Vec<Box<dyn Query<A>>>` containing exactly two queries:
-/// 1. A `GenericQuery` that projects individual aggregate events into the single view.
-/// 2. A `ListAllQuery` that accumulates all aggregate events into a shared list view
-///    identified by `list_key`.
-///
-/// This eliminates the repetitive query wiring that every bounded context builder
-/// would otherwise duplicate per aggregate.
-pub fn standard_queries<V, LV, R1, R2, A>(
-    single_view: &Arc<R1>,
-    list_view: &Arc<R2>,
-    list_key: &str,
-) -> Vec<Box<dyn Query<A>>>
-where
-    V: View<A> + 'static,
-    LV: View<A> + 'static,
-    R1: ViewRepository<V, A> + 'static,
-    R2: ViewRepository<LV, A> + 'static,
-    A: Aggregate + 'static,
-{
-    vec![
-        Box::new(GenericQuery::new(single_view.clone())),
-        Box::new(ListAllQuery::new(list_view.clone(), list_key)),
-    ]
-}
-
 /// Extension trait for queries that need mutable access to views.
 ///
-/// While [`GenericQuery`] handles the common "load-update-save" cycle automatically,
+/// While [`GenericQuery`](cqrs_es::persist::GenericQuery) handles the common "load-update-save" cycle automatically,
 /// some queries (like [`ListAllQuery`]) need custom load/update logic — for example,
 /// initialising a default view when none exists yet.
 #[async_trait]
@@ -56,7 +28,7 @@ where
 
 /// A query that accumulates all events for an aggregate type into a single shared view.
 ///
-/// Unlike [`GenericQuery`] which maintains one view per aggregate instance, `ListAllQuery`
+/// Unlike [`GenericQuery`](cqrs_es::persist::GenericQuery) which maintains one view per aggregate instance, `ListAllQuery`
 /// routes **all** events (regardless of aggregate ID) into one view identified by a fixed key.
 /// This makes it useful for "list all" / overview projections.
 pub struct ListAllQuery<R, V, A>

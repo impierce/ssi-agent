@@ -1,9 +1,10 @@
+use crate::credential::signed::{verify_sd_jwt_credential, SdJwtCredentialError, SignedCredential};
 use crate::offer::command::OfferCommand;
 use crate::offer::error::OfferError;
 use crate::offer::event::OfferEvent;
 use crate::services::HolderServices;
+use agent_shared::sensitive_logging::sensitive_debug;
 use cqrs_es::{event_sink::EventSink, Aggregate};
-use identity_credential::credential::Jwt;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject;
 use oid4vci::credential_offer::{CredentialOffer, CredentialOfferParameters, Grants};
 use oid4vci::credential_response::CredentialResponseType;
@@ -12,7 +13,7 @@ use oid4vci::token_response::TokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, utoipa::ToSchema)]
 pub enum Status {
@@ -26,8 +27,7 @@ pub enum Status {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct OfferCredential {
     pub holder_credential_id: String,
-    #[schema(value_type = String)]
-    pub credential: Jwt,
+    pub credential: SignedCredential,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
@@ -70,8 +70,6 @@ impl Aggregate for Offer {
         use OfferError::*;
         use OfferEvent::*;
 
-        info!("Handling command: {:?}", command);
-
         let events: Vec<Self::Event> = match command {
             ReceiveCredentialOffer {
                 received_offer_id,
@@ -89,7 +87,7 @@ impl Aggregate for Offer {
                 };
 
                 // The credential offer contains a credential issuer url.
-                let credential_issuer_url = credential_offer.credential_issuer.clone();
+                let credential_issuer_url = credential_offer.credential_issuer.url();
 
                 // Get the credential issuer metadata.
                 let credential_issuer_metadata = wallet
@@ -124,7 +122,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?;
 
-                let credential_issuer_url = credential_offer.credential_issuer.clone();
+                let credential_issuer_url = credential_offer.credential_issuer.url();
 
                 // Get the authorization server metadata.
                 let authorization_server_metadata = wallet
@@ -146,7 +144,11 @@ impl Aggregate for Offer {
                     _ => return Err(MissingPreAuthorizedCodeError),
                 };
 
-                info!("token_request: {:?}", token_request);
+                debug!(
+                    grant_type = "pre-authorized_code",
+                    token_request = sensitive_debug(&token_request),
+                    "Requesting access token"
+                );
 
                 // Get an access token.
                 let token_response = wallet
@@ -159,7 +161,7 @@ impl Aggregate for Offer {
                     .await
                     .map_err(|_| TokenResponseError)?;
 
-                info!("token_response: {:?}", token_response);
+                log_token_response(&token_response);
 
                 Ok(vec![
                     CredentialOfferAccepted {
@@ -181,7 +183,7 @@ impl Aggregate for Offer {
 
                 let credential_offer = self.credential_offer.as_ref().ok_or(MissingCredentialOfferError)?;
 
-                let credential_issuer_url = credential_offer.credential_issuer.clone();
+                let credential_issuer_url = credential_offer.credential_issuer.url();
 
                 // Get an access token.
                 let token_response = self.token_response.as_ref().ok_or(MissingTokenResponseError)?.clone();
@@ -215,7 +217,7 @@ impl Aggregate for Offer {
                             None
                         };
 
-                        info!("nonce: {nonce:?}");
+                        debug!(nonce = ?nonce, "Requested nonce");
 
                         // Determine if anonymous access is supported.
                         // See: https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0-15.html#section-8.2.1.1-2.2.2.2
@@ -242,9 +244,29 @@ impl Aggregate for Offer {
                             .await
                             .map_err(|_| CredentialResponseError)?;
 
+                        // Only credential JWTs and `vc+sd-jwt` credentials can be stored, and an SD-JWT only once its
+                        // issuer signature verifies, so anything else is refused here, before the offer is marked as
+                        // having received its credentials.
                         let credential = match credential_response.credential {
                             CredentialResponseType::Immediate { credentials, .. } => {
-                                Jwt::from(credentials[0].credential.clone())
+                                let credential = credentials
+                                    .first()
+                                    // OpenID4VCI requires at least one credential in an immediate response.
+                                    .ok_or(CredentialResponseError)?
+                                    .credential
+                                    .parse::<SignedCredential>()
+                                    .map_err(|_| UnsupportedCredentialFormatError)?;
+                                if let SignedCredential::SdJwt(sd_jwt) = &credential {
+                                    verify_sd_jwt_credential(sd_jwt, &*services.holder)
+                                        .await
+                                        .map_err(|error| match error {
+                                            SdJwtCredentialError::UnsupportedFormat(_) => {
+                                                UnsupportedCredentialFormatError
+                                            }
+                                            SdJwtCredentialError::Invalid(reason) => InvalidCredentialError(reason),
+                                        })?;
+                                }
+                                credential
                             }
                             CredentialResponseType::Deferred { .. } => {
                                 return Err(UnsupportedDeferredCredentialResponseError)
@@ -266,7 +288,12 @@ impl Aggregate for Offer {
                     }
                 };
 
-                info!("credentials: {credentials:?}");
+                debug!(
+                    count = credentials.len(),
+                    holder_credential_ids = ?credentials.iter().map(|credential| &credential.holder_credential_id).collect::<Vec<_>>(),
+                    credentials = sensitive_debug(&credentials),
+                    "Received credentials"
+                );
 
                 Ok(vec![CredentialResponseReceived {
                     received_offer_id,
@@ -303,8 +330,6 @@ impl Aggregate for Offer {
     fn apply(&mut self, event: Self::Event) {
         use OfferEvent::*;
 
-        debug!("Applying event: {:?}", event);
-
         match event {
             CredentialOfferReceived {
                 credential_offer,
@@ -333,16 +358,31 @@ impl Aggregate for Offer {
     }
 }
 
+/// Logs the token response; the access and refresh tokens, which are bearer credentials, only as sensitive values.
+fn log_token_response(token_response: &TokenResponse) {
+    debug!(
+        token_type = %token_response.token_type,
+        expires_in = ?token_response.expires_in,
+        refresh_token = token_response.refresh_token.is_some(),
+        response = sensitive_debug(token_response),
+        "Received token response"
+    );
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::test_utils::*;
     use super::*;
+    use crate::credential::signed::{issue_vc_sd_jwt, with_forged_signature};
     use agent_api_http::v0::{authorization, issuance};
     use agent_api_http::API_VERSION;
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::issuance_state;
     use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::SERVER_CONFIG_ID;
+    use agent_library::library_state;
     use agent_library::template::aggregate::{
         DataModel, Display, HolderType, Logo, Status as TemplateStatus, Visibility,
     };
@@ -352,7 +392,6 @@ pub mod tests {
     use agent_shared::generate_random_string;
     use agent_shared::handlers::public_command_handler as command_handler;
     use agent_store::in_memory::InMemory;
-    use agent_store::{authorization_state, issuance_state, library_state};
     use axum::{
         body::Body,
         http::{self, Request},
@@ -363,6 +402,7 @@ pub mod tests {
     use serde_json::json;
     use tokio::net::TcpListener;
     use tower::Service as _;
+    use OfferError::*;
 
     const TEMPLATE_ID: &str = "001";
 
@@ -381,19 +421,11 @@ pub mod tests {
         config_mut().credential_endpoint = application_url.join("openid4vci/credential").unwrap();
         config_mut().credential_offer_uri = application_url.join("openid4vci/credential-offer/").unwrap();
 
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
-        let library_state =
-            Arc::new(library_state(&InMemory, &Default::default(), Default::default(), Default::default()).await);
+        let library_state = Arc::new(library_state(&InMemory, &Default::default(), vec![]).await);
 
         // Create a template and register a credential configuration for it.
         // (The CredentialConfigurationProjection is not wired in tests, so we do this manually.)
@@ -422,6 +454,7 @@ pub mod tests {
                 schema: Box::new(None),
                 schema_properties_attributes: None,
                 holder_authorization: Authorization::default(),
+                origin: None,
             },
         )
         .await
@@ -462,7 +495,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,
@@ -669,6 +701,167 @@ pub mod tests {
             }]);
     }
 
+    /// Serves issuer metadata and answers every credential request with `credential_response`.
+    async fn bootstrap_fake_issuer(credential_response: serde_json::Value) -> reqwest::Url {
+        use axum::{routing::get, routing::post, Json};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let issuer_url: reqwest::Url = format!("http://{}", listener.local_addr().unwrap()).parse().unwrap();
+
+        let credential_issuer_metadata = json!({
+            "credential_issuer": issuer_url,
+            "credential_endpoint": issuer_url.join("credential").unwrap(),
+            "credential_configurations_supported": credential_configurations_supported(),
+        });
+        let authorization_server_metadata = json!({
+            "issuer": issuer_url,
+            "token_endpoint": issuer_url.join("token").unwrap(),
+        });
+
+        let router = axum::Router::new()
+            .route(
+                "/.well-known/openid-credential-issuer",
+                get(move || async move { Json(credential_issuer_metadata) }),
+            )
+            .route(
+                "/.well-known/oauth-authorization-server",
+                get(move || async move { Json(authorization_server_metadata) }),
+            )
+            .route("/credential", post(move || async move { Json(credential_response) }));
+
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        issuer_url
+    }
+
+    /// Sends the credential request of an accepted offer to a local issuer answering with `credential_response`.
+    async fn send_credential_request(
+        services: Arc<HolderServices>,
+        received_offer_id: String,
+        credential_configurations: HashMap<String, CredentialConfigurationsSupportedObject>,
+        credential_response: serde_json::Value,
+    ) -> Result<Vec<OfferEvent>, OfferError> {
+        let issuer_url = bootstrap_fake_issuer(credential_response).await;
+        let credential_offer: CredentialOfferParameters = serde_json::from_value(json!({
+            "credential_issuer": issuer_url,
+            "credential_configuration_ids": [TEMPLATE_ID],
+            "grants": {
+                "urn:ietf:params:oauth:grant-type:pre-authorized_code": { "pre-authorized_code": "code" }
+            }
+        }))
+        .unwrap();
+
+        OfferTestFramework::with(services)
+            .given(vec![
+                OfferEvent::CredentialOfferReceived {
+                    received_offer_id: received_offer_id.clone(),
+                    credential_offer: Box::new(credential_offer),
+                    credential_configurations,
+                },
+                OfferEvent::CredentialOfferAccepted {
+                    received_offer_id: received_offer_id.clone(),
+                    status: Status::Accepted,
+                },
+                OfferEvent::TokenResponseReceived {
+                    received_offer_id: received_offer_id.clone(),
+                    token_response: token_response(),
+                },
+            ])
+            .when_async(OfferCommand::SendCredentialRequest { received_offer_id })
+            .await
+            .inspect_result()
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn credential_response_without_credentials_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let error = send_credential_request(
+            HolderServices::default().await,
+            received_offer_id,
+            credential_configurations_supported,
+            json!({ "credentials": [] }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, CredentialResponseError), "{error:?}");
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn received_vc_sd_jwt_credential_is_kept(
+        received_offer_id: String,
+        holder_credential_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+
+        let events = send_credential_request(
+            services,
+            received_offer_id.clone(),
+            credential_configurations_supported,
+            json!({ "credentials": [{ "credential": sd_jwt.to_string() }] }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            events,
+            vec![OfferEvent::CredentialResponseReceived {
+                received_offer_id,
+                status: Status::CredentialsReceived,
+                credentials: vec![OfferCredential {
+                    holder_credential_id,
+                    credential: SignedCredential::SdJwt(sd_jwt),
+                }],
+            }]
+        );
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn received_sd_jwt_credential_that_does_not_verify_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let services = HolderServices::default().await;
+        let sd_jwt = issue_vc_sd_jwt(&services.holder, chrono::Utc::now() + chrono::Days::new(1)).await;
+
+        let error = send_credential_request(
+            services,
+            received_offer_id,
+            credential_configurations_supported,
+            json!({ "credentials": [{ "credential": with_forged_signature(&sd_jwt).to_string() }] }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, InvalidCredentialError(_)), "{error:?}");
+    }
+
+    /// An SD-JWT VC (`dc+sd-jwt`) is not kept.
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn received_dc_sd_jwt_credential_is_refused(
+        received_offer_id: String,
+        credential_configurations_supported: HashMap<String, CredentialConfigurationsSupportedObject>,
+    ) {
+        let error = send_credential_request(
+            HolderServices::default().await,
+            received_offer_id,
+            credential_configurations_supported,
+            json!({ "credentials": [{ "credential": crate::credential::signed::SD_JWT }] }),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, UnsupportedCredentialFormatError), "{error:?}");
+    }
+
     #[rstest]
     #[serial_test::serial]
     #[tokio::test]
@@ -703,13 +896,47 @@ pub mod tests {
             .await
             .then_expect_error_message(&OfferError::MissingCredentialOfferError.to_string());
     }
+
+    fn token_response() -> TokenResponse {
+        TokenResponse {
+            access_token: "secret-access-token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: Some(300),
+            refresh_token: Some("secret-refresh-token".to_string()),
+            scope: None,
+            authorization_details: None,
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_without_tokens() {
+        log_token_response(&token_response());
+
+        assert!(logs_contain("Received token response"));
+        assert!(logs_contain("Bearer"));
+        assert!(!logs_contain("secret-access-token"));
+        assert!(!logs_contain("secret-refresh-token"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    #[tracing_test::traced_test]
+    fn token_response_is_logged_in_full_when_sensitive_values_are_logged() {
+        let _enabled = agent_shared::sensitive_logging::SensitiveValuesLogged::enable();
+
+        log_token_response(&token_response());
+
+        assert!(logs_contain("secret-access-token"));
+        assert!(logs_contain("secret-refresh-token"));
+    }
 }
 
 #[cfg(feature = "test_utils")]
 pub mod test_utils {
     use super::*;
     use agent_shared::generate_random_string;
-    use identity_credential::credential::Jwt;
     use rstest::*;
 
     #[fixture]
@@ -724,6 +951,6 @@ pub mod test_utils {
 
     #[fixture]
     pub fn signed_credentials(holder_credential_id: String) -> Vec<OfferCredential> {
-        vec![OfferCredential { holder_credential_id, credential: Jwt::from("eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6RG5hZVJ3VDRnNkFaQ0h6eHZOTDdETGpxVGFUODhhbTRYUjZUVUdyS3I2RFhqNlR6IiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9LCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.6oVjfN06dzQmd2oCVBm9lgOkhL0mLIHn-I8vUB0OX3n7MbjhIWjjfA_6SSvcofGGLj-BFt1fMCDUy1VriCviAA".to_string())}]
+        vec![OfferCredential { holder_credential_id, credential: "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ekRuYWVSd1Q0ZzZBWkNIenh2Tkw3RExqcVRhVDg4YW00WFI2VFVHcktyNkRYajZUeiIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImlkIjoiZGlkOmtleTp6RG5hZVJ3VDRnNkFaQ0h6eHZOTDdETGpxVGFUODhhbTRYUjZUVUdyS3I2RFhqNlR6IiwiZGVncmVlIjp7InR5cGUiOiJNYXN0ZXJEZWdyZWUiLCJuYW1lIjoiTWFzdGVyIG9mIE9jZWFub2dyYXBoeSJ9LCJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sImlzc3VlciI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0IiwiaXNzdWFuY2VEYXRlIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7ImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidHlwZSI6InN0YXR1c2xpc3Qrand0IiwiaWR4IjoxMjMsInVyaSI6Imh0dHBzOi8vbXktZG9tYWluLmV4YW1wbGUub3JnL2lldGYtb2F1dGgtdG9rZW4tc3RhdHVzLWxpc3QvMCJ9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.6oVjfN06dzQmd2oCVBm9lgOkhL0mLIHn-I8vUB0OX3n7MbjhIWjjfA_6SSvcofGGLj-BFt1fMCDUy1VriCviAA".parse().unwrap()}]
     }
 }

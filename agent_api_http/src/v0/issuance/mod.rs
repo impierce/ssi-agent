@@ -1,12 +1,12 @@
 // Endpoint handlers
 pub mod credential_issuer;
-pub mod credential_refresh;
 pub mod credentials;
 pub mod ietf_oauth_sd_jwt_vc;
 pub mod nonce;
 pub mod offers;
 pub mod openapi;
 pub mod public_offers;
+pub mod refresh;
 pub mod reissuance;
 
 pub mod error;
@@ -21,8 +21,7 @@ use crate::v0::issuance::{
             oauth_authorization_server::oauth_authorization_server, openid_credential_issuer::openid_credential_issuer,
         },
     },
-    credential_refresh::credential_refresh,
-    credentials::{all_credentials, credentials, patch_credential},
+    credentials::{all_credentials, create_credentials_batch, credentials, patch_credential, verify_credentials_batch},
     nonce::nonce,
     offers::{
         all_offers, offer, offers,
@@ -32,6 +31,7 @@ use crate::v0::issuance::{
         all_public_offers, create_public_offer, delete_public_offer, take_public_offer_offline,
         take_public_offer_online,
     },
+    refresh::refresh_credential,
     reissuance::{all_credential_reissuances, credential_reissuance, credential_reissuances},
 };
 use crate::API_VERSION;
@@ -40,6 +40,7 @@ use agent_library::state::LibraryState;
 use axum::routing::get;
 use axum::{routing::post, Router};
 use std::sync::Arc;
+use tower_http::compression::CompressionLayer;
 
 pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryState>)) -> Router {
     Router::new()
@@ -47,14 +48,16 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
             API_VERSION,
             Router::new()
                 .route("/credentials", post(credentials).get(all_credentials))
+                .route("/verify-credentials-batch", post(verify_credentials_batch))
+                .route("/create-credentials-batch", post(create_credentials_batch))
                 .route(
                     "/credentials/{credential_id}",
                     get(credentials::credential).patch(patch_credential),
                 )
                 .route("/reissue-credential", post(credential_reissuances))
                 .route("/list-all-credential-reissuances", get(all_credential_reissuances))
-                .route("/refresh-credential", post(credential_refresh))
                 .route("/get-credential-reissuance/{id}", get(credential_reissuance))
+                .route("/refresh-credential", post(refresh_credential))
                 .route("/offers", post(offers).get(all_offers))
                 .route("/offers/{offer_id}", get(offer))
                 .route("/offers/send-offer-to-individual", post(individual_offer))
@@ -77,7 +80,10 @@ pub fn router((issuance_state, library_state): (Arc<IssuanceState>, Arc<LibraryS
         .route("/openid4vci/nonce", post(nonce))
         .route("/openid4vci/notification", post(notification))
         .route("/openid4vci/credential-offer/{offer_id}", get(credential_offer_uri))
-        .route("/ietf-oauth-token-status-list/{path}", get(token_status_list))
+        .route(
+            "/ietf-oauth-token-status-list/{path}",
+            get(token_status_list).layer(CompressionLayer::new()),
+        )
         // TODO: Move this route to `../library` once `agent_library` is properly implemented.
         .route(
             "/vct/{credential_configuration_id}/{version}",

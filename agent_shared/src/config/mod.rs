@@ -3,17 +3,14 @@ mod provisioned;
 
 use agent_macros::Config;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use identity_iota::{
-    iota_interaction::{IOTA_DEVNET_URL, IOTA_MAINNET_URL, IOTA_TESTNET_URL},
-    storage::KeyId,
-};
+use identity_kit::keys::KeyId;
 use jsonwebtoken::Algorithm;
 use oid4vc_core::SubjectSyntaxType;
 use oid4vci::credential_issuer::credential_configurations_supported::CredentialMetadata;
 use oid4vci::credential_offer::TxCodeConstraints;
 use oid4vp::authorization_request::AlgValues;
 use oid4vp::authorization_request::VcSdJwtParameters;
-use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, JwtVpJsonParameters, VpFormatsSupported};
+use oid4vp::authorization_request::{DcSdJwtParameters, JwtVcJsonParameters, VpFormatsSupported};
 use once_cell::sync::Lazy;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -83,12 +80,25 @@ pub fn config_mut() -> std::sync::RwLockWriteGuard<'static, ApplicationConfigura
     CONFIG.write().unwrap()
 }
 
+/// Whether `dev.log_sensitive_values` is enabled, which is only possible with the `development` profile. Reads without
+/// blocking, so that logging while the configuration is being written cannot deadlock; reports `false` meanwhile.
+pub fn log_sensitive_values() -> bool {
+    CONFIG
+        .try_read()
+        .map(|config| config.dev.log_sensitive_values)
+        .unwrap_or(false)
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Clone, Serialize, Config)]
 pub struct ApplicationConfiguration {
     #[config(default)]
     #[serde(default, skip_serializing_if = "DevConfig::is_empty")]
     pub dev: DevConfig,
+    /// Switches for features that are still under development and hidden unless explicitly enabled.
+    #[config(default)]
+    #[serde(default, skip_serializing_if = "FeatureFlags::all_disabled")]
+    pub feature: FeatureFlags,
     #[config(default)]
     pub log_format: LogFormat,
     #[config(development_default = "EventStoreConfig {
@@ -229,6 +239,14 @@ pub struct ApplicationConfiguration {
     pub did_methods: HashMap<SupportedDidMethod, ToggleOptions>,
     #[config(default = "1000")]
     pub external_server_response_timeout_ms: u64,
+    /// Maximum size, in bytes, of an HTTP request body. A request whose body exceeds this is
+    /// rejected with `413 Payload Too Large` before the body is read in full, so an
+    /// unauthenticated client cannot exhaust the process memory with a single oversized request.
+    /// Raise it for deployments that legitimately accept large requests, such as big
+    /// credential-issuance batches. The limit applies before authorization, to every request,
+    /// so keep it as low as those requests allow. There is deliberately no "unlimited" value.
+    #[config(default = "2097152")] // 2 MiB, matching axum's own default body limit.
+    pub max_request_body_bytes: usize,
     #[config(default)]
     pub credential_offer_by_value_enabled: bool,
     #[config(development_default = "SecretManagerConfig::development_default()")]
@@ -240,14 +258,14 @@ pub struct ApplicationConfiguration {
                     Algorithm::EdDSA,
                     ToggleOptions {
                         enabled: true,
-                        preferred: Some(true)
+                        preferred: None
                     }
                 ),
                 (
                     Algorithm::ES256,
                     ToggleOptions {
                         enabled: true,
-                        preferred: None
+                        preferred: Some(true)
                     }
                 )
             ]
@@ -275,9 +293,7 @@ pub struct ApplicationConfiguration {
         jwt_vc_json: Some(JwtVcJsonParameters {
             alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
         }),
-        jwt_vp_json: Some(JwtVpJsonParameters {
-            alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
-        }),
+        jwt_vp_json: None,
         dc_sd_jwt: Some(DcSdJwtParameters {
             sd_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap()),
             kb_jwt_alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256]).unwrap())
@@ -291,19 +307,6 @@ pub struct ApplicationConfiguration {
         mso_mdoc: None,
     }")]
     pub vp_formats_supported: VpFormatsSupported,
-    #[config(default)]
-    pub iota_address: Option<String>,
-    #[config(default)]
-    pub iota_node_url: Option<String>,
-    #[config(default)]
-    pub iota_node_username: Option<String>,
-    #[config(default)]
-    pub iota_node_password: Option<String>,
-    #[config(default)]
-    pub iota_sponsoring_service_url: Option<Url>,
-    #[config(default)]
-    #[serde(serialize_with = "redact")]
-    pub iota_sponsoring_service_auth: Option<String>,
     // WARNING: When this is enabled, the authorization flow will be interactive. However, in the current form this
     // means that the issuance flow will always include an OpenID4VP Presentation Request containing a hardcoded DCQL
     // Query.
@@ -320,21 +323,6 @@ impl ApplicationConfiguration {
 
     /// Validates whether the configuration is suitable for development (enforce restrictions).
     pub fn validate_development(&self) -> Result<(), SharedError> {
-        if self.event_store.type_ == EventStoreType::InMemory {
-            for did_method in &[SupportedDidMethod::Iota] {
-                if self
-                    .did_methods
-                    .get(did_method)
-                    .map(|options| options.enabled)
-                    .unwrap_or_default()
-                {
-                    return Err(SharedError::InvalidConfiguration(format!(
-                        "`{did_method}` cannot be enabled when using the `in_memory` event store"
-                    )));
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -434,17 +422,128 @@ impl ApplicationConfiguration {
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
         self.secret_manager = config;
     }
+
+    /// The serialized configuration with all secrets redacted, for logging. On top of the fields the
+    /// serialization already redacts, the HTTP event publishers' header values and target URL paths
+    /// (webhook services often put a token in the path), and the usernames, passwords and query
+    /// values in URLs are redacted.
+    pub fn redacted(&self) -> serde_json::Value {
+        let mut value = serde_json::to_value(self).unwrap_or_default();
+
+        if let Some(publishers) = value
+            .pointer_mut("/event_publishers/http")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for publisher in publishers.iter_mut() {
+                if let Some(headers) = publisher.get_mut("headers").and_then(serde_json::Value::as_object_mut) {
+                    headers.values_mut().for_each(|value| *value = json!(REDACTED));
+                }
+                if let Some(target_url) = publisher.get_mut("target_url") {
+                    redact_url_path(target_url);
+                }
+            }
+        }
+
+        redact_url_credentials(&mut value);
+        value
+    }
+}
+
+fn redact_url_path(value: &mut serde_json::Value) {
+    let Some(text) = value.as_str() else {
+        return;
+    };
+    let Ok(mut url) = Url::parse(text) else {
+        *value = json!(REDACTED);
+        return;
+    };
+    if url.path() != "/" && !url.path().is_empty() {
+        url.set_path("/REDACTED");
+        *value = json!(url.as_str());
+    }
+}
+
+/// Redacts the userinfo (e.g. `nats://token@host`) and the query values (e.g. `?api_key=...`) of
+/// every URL, keeping the query parameter names.
+fn redact_url_credentials(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(text) => {
+            let Ok(mut url) = Url::parse(text) else {
+                return;
+            };
+            let mut redacted = false;
+            if !url.username().is_empty() {
+                redacted |= url.set_username("REDACTED").is_ok();
+            }
+            if url.password().is_some() {
+                redacted |= url.set_password(Some("REDACTED")).is_ok();
+            }
+            if url.query().is_some() {
+                let names: Vec<String> = url.query_pairs().map(|(name, _)| name.into_owned()).collect();
+                url.query_pairs_mut()
+                    .clear()
+                    .extend_pairs(names.iter().map(|name| (name, "REDACTED")));
+                redacted = true;
+            }
+            if redacted {
+                *text = url.to_string();
+            }
+        }
+        serde_json::Value::Array(values) => values.iter_mut().for_each(redact_url_credentials),
+        serde_json::Value::Object(map) => map.values_mut().for_each(redact_url_credentials),
+        _ => {}
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct DevConfig {
     #[serde(serialize_with = "redact")]
     pub api_key: Option<String>,
+    /// Logs tokens, codes, credential offers and personal data at `debug` that are redacted otherwise. Like every
+    /// `dev` setting, ignored with the `production` profile.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub log_sensitive_values: bool,
 }
 
 impl DevConfig {
     fn is_empty(&self) -> bool {
-        self.api_key.is_none()
+        self.api_key.is_none() && !self.log_sensitive_values
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
+pub struct FeatureFlags {
+    /// Enables the Key Management System. Set through `UNICORE__FEATURE__KMS`; absent or empty means disabled.
+    #[serde(default, deserialize_with = "deserialize_feature_flag")]
+    pub kms: bool,
+}
+
+impl FeatureFlags {
+    fn all_disabled(&self) -> bool {
+        !self.kms
+    }
+}
+
+/// Reads a feature flag that is either a boolean or a string, so that an empty environment variable disables the
+/// feature instead of failing to load the configuration.
+fn deserialize_feature_flag<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Flag {
+        Bool(bool),
+        Text(String),
+    }
+
+    match Option::<Flag>::deserialize(deserializer)? {
+        None => Ok(false),
+        Some(Flag::Bool(enabled)) => Ok(enabled),
+        Some(Flag::Text(value)) => match value.trim().to_ascii_lowercase().as_str() {
+            "" | "false" | "0" | "off" | "no" => Ok(false),
+            "true" | "1" | "on" | "yes" => Ok(true),
+            other => Err(serde::de::Error::custom(format!(
+                "invalid feature flag value `{other}`, expected `true` or `false`"
+            ))),
+        },
     }
 }
 
@@ -543,11 +642,15 @@ pub struct CredentialConfiguration {
     pub credential_metadata: CredentialMetadata,
     #[serde(default)]
     pub authorization: Authorization,
-    #[serde(default, rename = "refreshService", skip_serializing_if = "Option::is_none")]
+    /// Opts the configuration's credentials into credential refresh. `None` (the default): no refresh.
+    #[serde(rename = "refreshService", default, skip_serializing_if = "Option::is_none")]
     pub refresh_service: Option<RefreshServiceConfiguration>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
+/// `refreshService` on a credential configuration: every credential issued with the configuration embeds a refresh
+/// service of this `type` (for example `VerifiableCredentialRefreshService2021`), whose `url` is the public
+/// `/v0/refresh-credential` endpoint, and a refresh token of its own.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, utoipa::ToSchema)]
 pub struct RefreshServiceConfiguration {
     #[serde(rename = "type")]
     pub type_: String,
@@ -621,198 +724,10 @@ pub struct NatsSubject {
 }
 
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Events {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub access_token: Vec<AccessTokenEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub authorization_code: Vec<AuthorizationCodeEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub client: Vec<ClientEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub oauth2_authorization_request: Vec<OAuth2AuthorizationRequestEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub connection: Vec<ConnectionEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub document: Vec<DocumentEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub profile: Vec<ProfileEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub service: Vec<ServiceEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub template: Vec<TemplateEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub server_config: Vec<ServerConfigEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub credential: Vec<CredentialEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reissuance: Vec<ReissuanceEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub refresh_capability: Vec<RefreshCapabilityEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub offer: Vec<OfferEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub nonce: Vec<NonceEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub status_list: Vec<StatusListEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub holder_credential: Vec<HolderCredentialEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub presentation: Vec<PresentationEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub received_offer: Vec<ReceivedOfferEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub authorization_request: Vec<AuthorizationRequestEvent>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AccessTokenEvent {
-    AccessTokenIssued,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AuthorizationCodeEvent {
-    AuthorizationCodeCreated,
-    AuthorizationCodeRedeemed,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ClientEvent {
-    ClientRegistered,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum OAuth2AuthorizationRequestEvent {
-    OAuth2AuthorizationRequestCreated,
-    OAuth2AuthorizationRequestExpired,
-    ConsentGranted,
-    ConsentRejected,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ConnectionEvent {
-    ConnectionAdded,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum DocumentEvent {
-    DocumentCreated,
-    PublicKeyUpdated,
-    DocumentStatusUpdated,
-    ServiceAdded,
-    ServiceRemoved,
-    DocumentDidWebOverwritten,
-    DocumentPublished,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ProfileEvent {
-    ProfileCreated,
-    DisplayNameUpdated,
-    DescriptionUpdated,
-    LogoUpdated,
-    CountryUpdated,
-    SourceUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ServiceEvent {
-    LinkedDomainsAdded,
-    LinkedDomainsRemoved,
-    LinkedDomainsCredentialsRenewed,
-    LinkedVerifiablePresentationsAdded,
-    LinkedVerifiablePresentationsRemoved,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum TemplateEvent {
-    TemplateCreated,
-    TitleUpdated,
-    DisplayUpdated,
-    TagsUpdated,
-    StatusUpdated,
-    VisibilityUpdated,
-    DescriptionUpdated,
-    TypeUpdated,
-    SchemaUpdated,
-    CredentialExpirationUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ServerConfigEvent {
-    ServerMetadataInitialized,
-    CredentialConfigurationUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum CredentialEvent {
-    UnsignedCredentialCreated,
-    SignedCredentialCreated,
-    CredentialSigned,
-    NotificationReceived,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ReissuanceEvent {
-    ReissuanceCreated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum RefreshCapabilityEvent {
-    RefreshCapabilityCreated,
-    RefreshCapabilityDisabled,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum OfferEvent {
-    CredentialOfferCreated,
-    CredentialsAdded,
-    FormUrlEncodedCredentialOfferCreated,
-    TokenResponseCreated,
-    CredentialRequestVerified,
-    CredentialResponseCreated,
-    TxCodeGenerated,
-    CredentialOfferEmailSent,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum StatusListEvent {
-    StatusListCreated,
-    IndexAdded,
-    IndexUpdated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum NonceEvent {
-    NonceGenerated,
-    NonceRedeemed,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum HolderCredentialEvent {
-    CredentialAdded,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum PresentationEvent {
-    PresentationCreated,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum ReceivedOfferEvent {
-    CredentialOfferReceived,
-    CredentialOfferAccepted,
-    TokenResponseReceived,
-    CredentialResponseReceived,
-    CredentialOfferRejected,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, strum::Display)]
-pub enum AuthorizationRequestEvent {
-    AuthorizationRequestCreated,
-    FormUrlEncodedAuthorizationRequestCreated,
-    AuthorizationRequestObjectSigned,
-    SIOPv2AuthorizationResponseVerified,
-    OID4VPAuthorizationResponseVerified,
+    #[serde(default)]
+    pub types: Vec<String>,
 }
 
 /// All DID methods supported by UniCore
@@ -840,26 +755,18 @@ pub enum AuthorizationRequestEvent {
     VariantArray,
     utoipa::ToSchema,
 )]
+/// Serialized as `did:jwk`, `did:key`, `did:web` (`Display`); `did_jwk` etc. are accepted as input too.
 #[schema(description = "DID methods supported by UniCore")]
 pub enum SupportedDidMethod {
-    #[serde(alias = "did_jwk", alias = "did:jwk", rename = "did_jwk")]
+    #[serde(rename = "did:jwk", alias = "did_jwk")]
     #[strum(serialize = "did:jwk")]
     Jwk,
-    #[serde(alias = "did_key", alias = "did:key", rename = "did_key")]
+    #[serde(rename = "did:key", alias = "did_key")]
     #[strum(serialize = "did:key")]
     Key,
-    #[serde(alias = "did_web", alias = "did:web", rename = "did_web")]
+    #[serde(rename = "did:web", alias = "did_web")]
     #[strum(serialize = "did:web")]
     Web,
-    #[serde(alias = "did_iota", alias = "did:iota", rename = "did_iota")]
-    #[strum(serialize = "did:iota")]
-    Iota,
-    #[serde(alias = "did_iota_dev", alias = "did:iota:dev", rename = "did_iota_dev")]
-    #[strum(serialize = "did:iota:dev")]
-    IotaDev,
-    #[serde(alias = "did_iota_test", alias = "did:iota:test", rename = "did_iota_test")]
-    #[strum(serialize = "did:iota:test")]
-    IotaTest,
 }
 
 /// (A subset of) DID method traits. The methods follow a naming convention that expresses boolean predicates as verb
@@ -868,67 +775,27 @@ pub enum SupportedDidMethod {
 impl SupportedDidMethod {
     pub fn supports_update(&self) -> bool {
         match self {
-            SupportedDidMethod::Web
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest => true,
+            SupportedDidMethod::Web => true,
             SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
         }
     }
 
     pub fn hosted_centrally(&self) -> bool {
         match self {
-            SupportedDidMethod::Jwk
-            | SupportedDidMethod::Key
-            | SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest => false,
+            SupportedDidMethod::Jwk | SupportedDidMethod::Key => false,
             SupportedDidMethod::Web => true,
         }
     }
-
-    pub fn hosted_decentrally(&self) -> bool {
-        match self {
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => false,
-            SupportedDidMethod::Iota | SupportedDidMethod::IotaDev | SupportedDidMethod::IotaTest => true,
-        }
-    }
 }
-
-const IOTA_NETWORK: &str = "iota";
-const IOTA_DEV_NETWORK: &str = "dev";
-const IOTA_TEST_NETWORK: &str = "test";
 
 // See specification: "Since did:jwk only contains a single key, the DID URL fragment identifier is always a fixed #0 value."
 const JWK_FRAGMENT: &str = "0";
 
 impl SupportedDidMethod {
-    pub fn api_endpoint(&self) -> Option<&str> {
-        match self {
-            SupportedDidMethod::Iota => Some(IOTA_MAINNET_URL),
-            SupportedDidMethod::IotaDev => Some(IOTA_DEVNET_URL),
-            SupportedDidMethod::IotaTest => Some(IOTA_TESTNET_URL),
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
-        }
-    }
-
-    pub fn network_name(&self) -> Option<&str> {
-        match self {
-            SupportedDidMethod::Iota => Some(IOTA_NETWORK),
-            SupportedDidMethod::IotaDev => Some(IOTA_DEV_NETWORK),
-            SupportedDidMethod::IotaTest => Some(IOTA_TEST_NETWORK),
-            SupportedDidMethod::Jwk | SupportedDidMethod::Key | SupportedDidMethod::Web => None,
-        }
-    }
-
     pub fn fragment(&self) -> Option<&str> {
         match self {
             SupportedDidMethod::Jwk => Some(JWK_FRAGMENT),
-            SupportedDidMethod::Iota
-            | SupportedDidMethod::IotaDev
-            | SupportedDidMethod::IotaTest
-            | SupportedDidMethod::Key
-            | SupportedDidMethod::Web => None,
+            SupportedDidMethod::Key | SupportedDidMethod::Web => None,
         }
     }
 }
@@ -1030,18 +897,20 @@ impl AlgorithmExt for jsonwebtoken::Algorithm {
             jsonwebtoken::Algorithm::PS384 => "PS384",
             jsonwebtoken::Algorithm::PS512 => "PS512",
             jsonwebtoken::Algorithm::EdDSA => "EdDSA",
+            // `Algorithm` is `non_exhaustive`; all variants of jsonwebtoken 11 are listed above.
+            _ => unreachable!("unknown algorithm {self:?}"),
         }
     }
 }
 
 /// Serializes the passed `String` into the value `"<REDACTED>"` to prevent leaking secrets.
+const REDACTED: &str = "<REDACTED>";
+
 pub(crate) fn redact<S, T>(_str: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    let redacted_value = "<REDACTED>";
-    let redacted_value = redacted_value.to_string();
-    redacted_value.serialize(serializer)
+    REDACTED.serialize(serializer)
 }
 
 #[cfg(test)]
@@ -1079,28 +948,6 @@ mod tests {
 
         let json = serde_json::to_value(&value).unwrap();
         assert_eq!(json, json!({"type": "in_memory"}));
-    }
-
-    #[test]
-    #[serial]
-    fn credential_configuration_accepts_refresh_service() {
-        let credential_configuration = serde_json::from_value::<CredentialConfiguration>(json!({
-            "credential_configuration_id": "employee-id",
-            "format": "vc+sd-jwt",
-            "type": ["VerifiableCredential"],
-            "refreshService": {
-                "type": "VerifiableCredentialRefreshService2021"
-            }
-        }))
-        .unwrap();
-
-        assert_eq!(
-            credential_configuration
-                .refresh_service
-                .expect("refresh service should parse")
-                .type_,
-            "VerifiableCredentialRefreshService2021"
-        );
     }
 
     #[test]
@@ -1150,6 +997,7 @@ mod tests {
                 }
               },
               "external_server_response_timeout_ms": 1000,
+              "max_request_body_bytes": 2097152,
               "credential_offer_by_value_enabled": false,
               "secret_manager": {
                 "stronghold_path": "./stronghold.dat",
@@ -1159,11 +1007,11 @@ mod tests {
               },
               "signing_algorithms_supported": {
                 "EdDSA": {
-                  "enabled": true,
-                  "preferred": true
+                  "enabled": true
                 },
                 "ES256": {
-                  "enabled": true
+                  "enabled": true,
+                  "preferred": true
                 }
               },
               "display": [
@@ -1179,9 +1027,6 @@ mod tests {
               "event_publishers": {},
               "vp_formats_supported": {
                 "jwt_vc_json": {
-                  "alg_values": ["ES256", "EdDSA"]
-                },
-                "jwt_vp_json": {
                   "alg_values": ["ES256", "EdDSA"]
                 },
                 "dc+sd-jwt": {
@@ -1210,6 +1055,70 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    #[serial]
+    fn redacted_configuration_contains_no_secrets() {
+        let provisioned_config = config::Config::builder()
+            .add_source(config::File::from_str(
+                r#"
+                    dev:
+                        api_key: "dev-api-key"
+                    event_store:
+                        type: "mongodb"
+                        connection_string: "mongodb://user:db-password@localhost:27017"
+                    secret_manager:
+                        stronghold_password: "stronghold-password"
+                    event_publishers:
+                        http:
+                            - enabled: true
+                              target_url: "https://webhook-user:webhook-password@webhook.example.org/services/webhook-path-token?api_key=webhook-api-key"
+                              headers:
+                                authorization: "Bearer webhook-token"
+                              events: {}
+                        nats:
+                            enabled: true
+                            nats_url: "nats://nats-token@localhost:4222"
+                "#,
+                config::FileFormat::Yaml,
+            ))
+            .build()
+            .unwrap();
+
+        let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
+        let redacted = config.redacted().to_string();
+
+        for secret in [
+            "dev-api-key",
+            "db-password",
+            "stronghold-password",
+            "webhook-user",
+            "webhook-password",
+            "webhook-api-key",
+            "webhook-path-token",
+            "webhook-token",
+            "nats-token",
+        ] {
+            assert!(!redacted.contains(secret), "`{secret}` in {redacted}");
+        }
+
+        let redacted = config.redacted();
+        assert_eq!(
+            redacted.pointer("/event_publishers/http/0/headers"),
+            Some(&json!({ "authorization": "<REDACTED>" }))
+        );
+        assert_eq!(
+            redacted.pointer("/event_publishers/http/0/target_url"),
+            Some(&json!(
+                "https://REDACTED:REDACTED@webhook.example.org/REDACTED?api_key=REDACTED"
+            ))
+        );
+        assert_eq!(
+            redacted.pointer("/event_publishers/nats/nats_url"),
+            Some(&json!("nats://REDACTED@localhost:4222"))
+        );
+        assert_eq!(redacted["public_url"], json!(config.public_url.as_str()));
     }
 
     #[test]
@@ -1275,6 +1184,44 @@ mod tests {
 
                 assert!(config.dev.api_key.is_none());
                 assert!(config.get_provisioned_config().get("dev").is_none());
+            },
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_log_sensitive_values_only_with_development_profile() {
+        temp_env::with_vars(
+            [
+                ("UNICORE__SECRET_MANAGER__STRONGHOLD_PASSWORD", Some("unsafe-password")),
+                ("UNICORE__DEV__LOG_SENSITIVE_VALUES", Some("true")),
+            ],
+            || {
+                let provisioned_config = || {
+                    config::Config::builder()
+                        .add_source(config::File::from_str(
+                            r#"
+                                application_url: "http://localhost"
+                                event_store:
+                                    type: "postgres"
+                                    connection_string: "postgresql://:test:"
+                                display:
+                                    - name: "UniCore"
+                            "#,
+                            config::FileFormat::Yaml,
+                        ))
+                        .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                        .build()
+                        .unwrap()
+                };
+
+                let development =
+                    ApplicationConfiguration::load(provisioned_config(), ApplicationProfile::Development).unwrap();
+                assert!(development.dev.log_sensitive_values);
+
+                let production =
+                    ApplicationConfiguration::load(provisioned_config(), ApplicationProfile::Production).unwrap();
+                assert!(!production.dev.log_sensitive_values);
             },
         );
     }
@@ -1735,5 +1682,82 @@ mod tests {
                 );
             },
         );
+    }
+
+    #[test]
+    fn a_credential_configuration_accepts_a_refresh_service() {
+        let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
+            "credential_configuration_id": "refreshable",
+            "format": "vc+sd-jwt",
+            "refreshService": {"type": "VerifiableCredentialRefreshService2021"}
+        }))
+        .unwrap();
+
+        assert_eq!(
+            credential_configuration.refresh_service,
+            Some(RefreshServiceConfiguration {
+                type_: "VerifiableCredentialRefreshService2021".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn test_events_rejects_unknown_fields() {
+        // Old beta config format: events: { credential: [...] }
+        let old_format = r#"{"credential": ["UnsignedCredentialCreated"]}"#;
+        let res: Result<Events, _> = serde_json::from_str(old_format);
+        assert!(res.is_err(), "Expected unknown field 'credential' to be rejected");
+
+        let unknown_format = r#"{"offer": ["TxCodeGenerated"]}"#;
+        let res: Result<Events, _> = serde_json::from_str(unknown_format);
+        assert!(res.is_err(), "Expected unknown field 'offer' to be rejected");
+
+        // Valid new format
+        let valid_format = r#"{"types": ["TxCodeGenerated", "CredentialSigned"]}"#;
+        let events: Events = serde_json::from_str(valid_format).unwrap();
+        assert_eq!(events.types, vec!["TxCodeGenerated", "CredentialSigned"]);
+
+        // Empty object defaults to empty types
+        let empty_format = r#"{}"#;
+        let events: Events = serde_json::from_str(empty_format).unwrap();
+        assert!(events.types.is_empty());
+    }
+    fn kms_feature_flag(value: Option<&str>) -> Result<bool, SharedError> {
+        temp_env::with_var("UNICORE__FEATURE__KMS", value, || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::File::from_str(
+                    r#"
+                        event_store:
+                            type: "in_memory"
+                    "#,
+                    config::FileFormat::Yaml,
+                ))
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development)
+                .map(|config| config.feature.kms)
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_disabled_when_its_variable_is_missing_or_empty() {
+        assert!(!kms_feature_flag(None).unwrap());
+        assert!(!kms_feature_flag(Some("")).unwrap());
+        assert!(!kms_feature_flag(Some("false")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_is_enabled_when_its_variable_is_true() {
+        assert!(kms_feature_flag(Some("true")).unwrap());
+    }
+
+    #[test]
+    #[serial]
+    fn kms_feature_flag_rejects_unrecognized_values() {
+        assert!(kms_feature_flag(Some("maybe")).is_err());
     }
 }

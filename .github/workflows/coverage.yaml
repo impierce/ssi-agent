@@ -2,14 +2,12 @@
 
 name: Coverage
 
+# Coverage is tracked as a general metric rather than a per-PR check, so it only runs nightly on the
+# default branch and on demand. The Codecov badge in the README keeps showing the last successful upload.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - next
-      - beta
-      - alpha
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

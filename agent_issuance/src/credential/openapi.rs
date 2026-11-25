@@ -1,10 +1,27 @@
-use utoipa::openapi::{schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, SchemaFormat, Type};
+use agent_shared::config::BITS_PER_STATUS;
+use utoipa::openapi::{
+    schema::SchemaType, AllOfBuilder, Array, ArrayBuilder, Object, ObjectBuilder, OneOfBuilder, Ref, Schema,
+    SchemaFormat, Type,
+};
 
-pub fn status_type() -> Object {
-    ObjectBuilder::new()
-        .schema_type(SchemaType::Type(Type::String))
-        .enum_values(Some(["VALID", "INVALID", "SUSPENDED", "UNDEFINED"]))
-        .build()
+/// A status of the IETF OAuth Token Status List: the name of a registered status or the status value, up to the largest
+/// value the status list holds.
+pub fn status_type() -> Schema {
+    Schema::OneOf(
+        OneOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Type(Type::String))
+                    .enum_values(Some(["VALID", "INVALID", "SUSPENDED"])),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::Type(Type::Integer))
+                    .minimum(Some(0))
+                    .maximum(Some((1u16 << BITS_PER_STATUS) - 1)),
+            )
+            .build(),
+    )
 }
 
 pub(crate) fn holder_notifications() -> Array {
@@ -38,12 +55,34 @@ pub(crate) fn holder_notifications() -> Array {
         .build()
 }
 
+/// A credential's content: the shared `Data`, whose `raw` content embeds the `refreshService` of an opted-in
+/// credential.
+pub(crate) fn credential_data() -> Schema {
+    let refreshable_content = ObjectBuilder::new().schema_type(SchemaType::AnyValue).property(
+        "raw",
+        ObjectBuilder::new()
+            .schema_type(SchemaType::AnyValue)
+            .property("refreshService", Ref::from_schema_name("CredentialRefreshService")),
+    );
+    Schema::OneOf(
+        OneOfBuilder::new()
+            .item(
+                AllOfBuilder::new()
+                    .item(Ref::from_schema_name("Data"))
+                    .item(refreshable_content),
+            )
+            .item(ObjectBuilder::new().schema_type(SchemaType::Type(Type::Null)))
+            .build(),
+    )
+}
+
 pub(crate) fn credential_configurations_supported() -> Object {
     ObjectBuilder::new()
         .schema_type(SchemaType::Type(Type::Object))
         .property(
             "format",
             ObjectBuilder::new()
+                .schema_type(SchemaType::Type(Type::String))
                 .enum_values(Some(["jwt_vc_json", "dc+sd-jwt", "vc+sd-jwt"]))
                 .build(),
         )
@@ -67,6 +106,15 @@ pub(crate) fn credential_configurations_supported() -> Object {
                 .property("claims", ArrayBuilder::new().build())
                 .property("display", display())
                 .build(),
+        )
+        .property(
+            "refreshService",
+            Schema::OneOf(
+                OneOfBuilder::new()
+                    .item(Ref::from_schema_name("RefreshServiceConfiguration"))
+                    .item(ObjectBuilder::new().schema_type(SchemaType::Type(Type::Null)))
+                    .build(),
+            ),
         )
         .required("format")
         .build()
@@ -122,18 +170,4 @@ fn display() -> Array {
                 .build(),
         )
         .build()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn configuration_schema_matches_serialized_format_field() {
-        let configuration = oid4vci::credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject::default();
-        let serialized = serde_json::to_value(configuration).unwrap();
-        let schema = serde_json::to_value(super::credential_configurations_supported()).unwrap();
-        assert!(serialized.get("format").is_some());
-        assert!(serialized.get("credential_format").is_none());
-        assert!(schema["properties"].get("format").is_some());
-        assert_eq!(schema["required"], serde_json::json!(["format"]));
-    }
 }

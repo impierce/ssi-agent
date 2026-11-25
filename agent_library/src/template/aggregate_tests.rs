@@ -26,12 +26,14 @@ fn template_created_event_with_status(template_id: &str, status: Status) -> Temp
         schema: Box::new(None),
         schema_properties_attributes: None,
         holder_authorization: Authorization::default(),
+        origin: None,
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template(
     template_id: String,
     title: String,
@@ -49,7 +51,7 @@ async fn test_create_template(
 ) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: title.clone(),
@@ -65,7 +67,9 @@ async fn test_create_template(
             schema: Box::new(schema.clone()),
             schema_properties_attributes: schema_properties_attributes.clone(),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -83,15 +87,17 @@ async fn test_create_template(
             schema: Box::new(schema),
             schema_properties_attributes,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_without_title(template_id: String) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: String::new(),
@@ -107,16 +113,19 @@ async fn test_create_template_without_title(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_error_message("A title is required when creating or updating a template")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_with_empty_title(template_id: String) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "".to_string(),
@@ -132,16 +141,19 @@ async fn test_create_template_with_empty_title(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_error_message("A title is required when creating or updating a template")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_rejects_archived_status_on_create(template_id: String) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -157,12 +169,15 @@ async fn test_create_template_rejects_archived_status_on_create(template_id: Str
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_error_message("Invalid status on create: only Draft or Published are allowed")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_title_with_empty_string(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![TemplateEvent::TemplateCreated {
@@ -182,16 +197,19 @@ async fn test_update_title_with_empty_string(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateTitle {
+        .when_async(TemplateCommand::UpdateTitle {
             template_id,
             title: "   ".to_string(),
         })
+        .await
         .then_expect_error_message("A title is required when creating or updating a template")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_display_keeps_empty_name_instead_of_materializing_the_title(template_id: String) {
     let logo = Logo {
         uri: "https://example.com/logo.png".to_string(),
@@ -216,14 +234,16 @@ async fn test_update_display_keeps_empty_name_instead_of_materializing_the_title
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateDisplay {
+        .when_async(TemplateCommand::UpdateDisplay {
             template_id: template_id.clone(),
             display: Display {
                 name: String::new(),
                 logo: Some(logo.clone()),
             },
         })
+        .await
         .then_expect_events(vec![TemplateEvent::DisplayUpdated {
             template_id,
             display: Display {
@@ -236,28 +256,32 @@ async fn test_update_display_keeps_empty_name_instead_of_materializing_the_title
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_title_on_archived_template_is_rejected(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Archived)])
-        .when(TemplateCommand::UpdateTitle {
+        .when_async(TemplateCommand::UpdateTitle {
             template_id,
             title: "Updated title".to_string(),
         })
+        .await
         .then_expect_error_message("Archived templates are immutable except for status changes")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_status_from_published_to_draft_is_rejected(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(
             &template_id,
             Status::Published,
         )])
-        .when(TemplateCommand::UpdateStatus {
+        .when_async(TemplateCommand::UpdateStatus {
             template_id,
             status: Status::Draft,
         })
+        .await
         .then_expect_error_message(
             "Invalid status transition: cannot transition template status from `published` to `draft`",
         )
@@ -265,13 +289,15 @@ async fn test_update_status_from_published_to_draft_is_rejected(template_id: Str
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_status_from_archived_to_published_is_allowed(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Archived)])
-        .when(TemplateCommand::UpdateStatus {
+        .when_async(TemplateCommand::UpdateStatus {
             template_id: template_id.clone(),
             status: Status::Published,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::StatusUpdated {
             template_id,
             status: Status::Published,
@@ -281,10 +307,11 @@ async fn test_update_status_from_archived_to_published_is_allowed(template_id: S
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_tags_normalizes_input(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
-        .when(TemplateCommand::UpdateTags {
+        .when_async(TemplateCommand::UpdateTags {
             template_id: template_id.clone(),
             tags: vec![
                 " alpha ".to_string(),
@@ -294,6 +321,7 @@ async fn test_update_tags_normalizes_input(template_id: String) {
                 "beta ".to_string(),
             ],
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TagsUpdated {
             template_id,
             tags: vec!["alpha".to_string(), "beta".to_string()],
@@ -303,13 +331,15 @@ async fn test_update_tags_normalizes_input(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_description_trims_whitespace(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
-        .when(TemplateCommand::UpdateDescription {
+        .when_async(TemplateCommand::UpdateDescription {
             template_id: template_id.clone(),
             description: "  trimmed description  ".to_string(),
         })
+        .await
         .then_expect_events(vec![TemplateEvent::DescriptionUpdated {
             template_id,
             description: "trimmed description".to_string(),
@@ -319,6 +349,7 @@ async fn test_update_description_trims_whitespace(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_type_normalizes_standard_input(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![TemplateEvent::TemplateCreated {
@@ -338,8 +369,9 @@ async fn test_update_type_normalizes_standard_input(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateType {
+        .when_async(TemplateCommand::UpdateType {
             template_id: template_id.clone(),
             r#type: vec![
                 "ExampleCredential".to_string(),
@@ -348,6 +380,7 @@ async fn test_update_type_normalizes_standard_input(template_id: String) {
                 "".to_string(),
             ],
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TypeUpdated {
             template_id,
             r#type: vec!["VerifiableCredential".to_string(), "ExampleCredential".to_string()],
@@ -357,6 +390,7 @@ async fn test_update_type_normalizes_standard_input(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![TemplateEvent::TemplateCreated {
@@ -393,8 +427,9 @@ async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: 
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateType {
+        .when_async(TemplateCommand::UpdateType {
             template_id,
             r#type: vec![
                 "VerifiableCredential".to_string(),
@@ -402,6 +437,7 @@ async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: 
                 "AchievementCredential".to_string(),
             ],
         })
+        .await
         .then_expect_error_message(
             "Invalid type: OpenBadges type cannot include both `OpenBadgeCredential` and `AchievementCredential`",
         )
@@ -409,13 +445,15 @@ async fn test_update_type_rejects_conflicting_open_badges_subtypes(template_id: 
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_credential_expiration_emits_event(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
-        .when(TemplateCommand::UpdateCredentialExpiration {
+        .when_async(TemplateCommand::UpdateCredentialExpiration {
             template_id: template_id.clone(),
             credential_expiration: Expiration::Duration("P30D".to_string()),
         })
+        .await
         .then_expect_events(vec![TemplateEvent::CredentialExpirationUpdated {
             template_id,
             credential_expiration: Expiration::Duration("P30D".to_string()),
@@ -425,22 +463,25 @@ async fn test_update_credential_expiration_emits_event(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_credential_expiration_rejects_invalid_iso8601(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Draft)])
-        .when(TemplateCommand::UpdateCredentialExpiration {
+        .when_async(TemplateCommand::UpdateCredentialExpiration {
             template_id,
             credential_expiration: Expiration::Duration("30 days".to_string()),
         })
+        .await
         .then_expect_error_message("Invalid expiration value: `30 days` is not a valid ISO 8601 duration")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_extra_types(template_id: String) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "OB with extra types".to_string(),
@@ -477,12 +518,15 @@ async fn test_create_open_badges_template_rejects_extra_types(template_id: Strin
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_error_message("Invalid type: OpenBadges type includes disallowed extra entries: [ExtraType]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_status_reject_invalid_archived_to_draft(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![TemplateEvent::TemplateCreated {
@@ -502,11 +546,13 @@ async fn test_update_status_reject_invalid_archived_to_draft(template_id: String
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateStatus {
+        .when_async(TemplateCommand::UpdateStatus {
             template_id,
             status: Status::Draft,
         })
+        .await
         .then_expect_error_message(
             "Invalid status transition: cannot transition template status from `archived` to `draft`",
         )
@@ -514,10 +560,11 @@ async fn test_update_status_reject_invalid_archived_to_draft(template_id: String
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_missing_required_achievement_properties(template_id: String) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "OB Missing Props".to_string(),
@@ -546,18 +593,25 @@ async fn test_create_open_badges_template_missing_required_achievement_propertie
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message(
             "Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [/achievement/criteria, /achievement/name]"
         )
 }
 
 #[rstest]
+#[case::array(serde_json::json!({ "type": "array" }))]
+#[case::array_in_type_list(serde_json::json!({ "type": ["array", "null"] }))]
 #[serial_test::serial]
-async fn test_create_open_badges_template_with_array_type_in_schema(template_id: String) {
+#[tokio::test]
+async fn test_create_open_badges_template_with_array_type_in_schema(
+    template_id: String,
+    #[case] tags: serde_json::Value,
+) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "OB with array type".to_string(),
@@ -585,7 +639,7 @@ async fn test_create_open_badges_template_with_array_type_in_schema(template_id:
                                 "type": "object",
                                 "properties": {
                                     "narrative": { "type": "string" },
-                                    "tags": { "type": "array" }
+                                    "tags": tags
                                 }
                             }
                         }
@@ -594,37 +648,43 @@ async fn test_create_open_badges_template_with_array_type_in_schema(template_id:
             }))),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message(
-            "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields."
+            "Invalid JSON Schema: Array types are not supported in Open Badges template schemas. Define only object and scalar fields."
         )
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_delete_template_from_published_requires_archive_first(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(
             &template_id,
             Status::Published,
         )])
-        .when(TemplateCommand::DeleteTemplate { template_id })
+        .when_async(TemplateCommand::DeleteTemplate { template_id })
+        .await
         .then_expect_error_message("Published templates must be archived before they can be deleted")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_delete_template_from_archived_is_allowed(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![template_created_event_with_status(&template_id, Status::Archived)])
-        .when(TemplateCommand::DeleteTemplate {
+        .when_async(TemplateCommand::DeleteTemplate {
             template_id: template_id.clone(),
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateDeleted { template_id }])
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_deleted_template_status_is_terminal(template_id: String) {
     TemplateTestFramework::with(())
         .given(vec![
@@ -633,15 +693,17 @@ async fn test_deleted_template_status_is_terminal(template_id: String) {
                 template_id: template_id.clone(),
             },
         ])
-        .when(TemplateCommand::UpdateStatus {
+        .when_async(TemplateCommand::UpdateStatus {
             template_id,
             status: Status::Published,
         })
+        .await
         .then_expect_error_message("Deleted templates are terminal and cannot be changed")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_with_invalid_schema(template_id: String) {
     let invalid_schema = serde_json::json!({
         "type": "not_a_valid_type"
@@ -649,7 +711,7 @@ async fn test_create_template_with_invalid_schema(template_id: String) {
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -665,16 +727,18 @@ async fn test_create_template_with_invalid_schema(template_id: String) {
             schema: Box::new(Some(invalid_schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_with_no_schema(template_id: String) {
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -690,7 +754,9 @@ async fn test_create_template_with_no_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -708,11 +774,13 @@ async fn test_create_template_with_no_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_with_invalid_schema(template_id: String) {
     let invalid_schema = serde_json::json!({
         "type": "not_a_valid_type"
@@ -736,16 +804,18 @@ async fn test_update_schema_with_invalid_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id,
             schema: invalid_schema,
-        })
+        }).await
         .then_expect_error_message("Invalid JSON Schema: \"not_a_valid_type\" is not valid under any of the schemas listed in the 'anyOf' keyword")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_with_valid_schema(template_id: String) {
     let valid_schema = serde_json::json!({
         "type": "object",
@@ -772,11 +842,13 @@ async fn test_update_schema_with_valid_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
             schema: valid_schema,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::SchemaUpdated {
             template_id,
             schema: serde_json::json!({
@@ -791,6 +863,7 @@ async fn test_update_schema_with_valid_schema(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_with_invalid_schema_properties_attributes(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -811,7 +884,7 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -827,12 +900,14 @@ async fn test_create_template_with_invalid_schema_properties_attributes(template
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [nonexistent]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_with_attributes_but_no_schema(template_id: String) {
     let mut attrs = HashMap::new();
     attrs.insert(
@@ -846,7 +921,7 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -862,12 +937,14 @@ async fn test_create_template_with_attributes_but_no_schema(template_id: String)
             schema: Box::new(None),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -888,7 +965,7 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -904,12 +981,15 @@ async fn test_create_template_rejects_schema_properties_attributes_for_vc_1_1(te
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_error_message("schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -946,16 +1026,18 @@ async fn test_update_field_attributes_with_invalid_keys(template_id: String) {
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+        .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
             schema_properties_attributes: attrs,
-        })
+        }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [nonexistent]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_field_attributes_with_no_schema(template_id: String) {
     let mut attrs = HashMap::new();
     attrs.insert(
@@ -985,16 +1067,18 @@ async fn test_update_field_attributes_with_no_schema(template_id: String) {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+        .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
             schema_properties_attributes: attrs,
-        })
+        }).await
         .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [name]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -1031,16 +1115,19 @@ async fn test_update_field_attributes_rejected_for_vc_1_1(template_id: String) {
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+        .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
             schema_properties_attributes: attrs,
         })
+        .await
         .then_expect_error_message("schemaPropertiesAttributes are not allowed for W3C VC 1.1 templates")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -1085,16 +1172,19 @@ async fn test_update_field_attributes_rejects_duplicate_trimmed_keys(template_id
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+        .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id,
             schema_properties_attributes: attrs,
         })
+        .await
         .then_expect_error_message("Duplicate schemaPropertiesAttributes key after trimming: `/name`")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_prunes_attributes(template_id: String) {
     let original_schema = serde_json::json!({
         "type": "object",
@@ -1157,11 +1247,13 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
             schema: new_schema.clone(),
         })
+        .await
         .then_expect_events(vec![
             TemplateEvent::SchemaUpdated {
                 template_id: template_id.clone(),
@@ -1181,6 +1273,7 @@ async fn test_update_schema_prunes_attributes(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_no_prune_needed(template_id: String) {
     let original_schema = serde_json::json!({
         "type": "object",
@@ -1225,11 +1318,13 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
             schema: new_schema,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::SchemaUpdated {
             template_id,
             schema: serde_json::json!({
@@ -1245,6 +1340,7 @@ async fn test_update_schema_no_prune_needed(template_id: String) {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_rejects_removal_of_immutable_property(template_id: String) {
     // Use a W3C VC template where a field has been manually marked non_removable=true
     // (e.g. by a previous system action). Verify that updating the schema to remove
@@ -1302,16 +1398,18 @@ async fn test_update_schema_rejects_removal_of_immutable_property(template_id: S
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id,
             schema: new_schema,
-        })
+        }).await
         .then_expect_error_message("Cannot remove immutable schema properties: The following non-removable properties cannot be removed from the schema: [/name]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_allows_removal_of_non_immutable_property(template_id: String) {
     // OB template with nested schema. Achievement has required fields (non_removable)
     // plus an optional "tag" field (non_removable: false). Removing "tag" must succeed.
@@ -1461,11 +1559,13 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id: template_id.clone(),
             schema: new_schema,
         })
+        .await
         .then_expect_events(vec![
             TemplateEvent::SchemaUpdated {
                 template_id: template_id.clone(),
@@ -1482,6 +1582,7 @@ async fn test_update_schema_allows_removal_of_non_immutable_property(template_id
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_errors_when_required_properties_missing(template_id: String) {
     // Nested OB schema that has only description — missing name and criteria/narrative.
     let schema = serde_json::json!({
@@ -1498,7 +1599,7 @@ async fn test_create_open_badges_template_errors_when_required_properties_missin
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -1514,12 +1615,14 @@ async fn test_create_open_badges_template_errors_when_required_properties_missin
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Missing required OpenBadges 3.0 schema properties: The following required fields must be present in the schema for OpenBadges 3.0 templates: [/achievement/criteria, /achievement/name]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_succeeds_with_required_properties(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -1590,7 +1693,7 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -1606,7 +1709,9 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -1624,11 +1729,13 @@ async fn test_create_open_badges_template_succeeds_with_required_properties(temp
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_allows_profile_object_on_subject_root(template_id: String) {
     // `AchievementSubject` declares `additionalProperties: true`, so UniCore permits a `profile`
     // object on the subject root carrying the recipient's OB 3.0 `Profile` fields. UniCore
@@ -1726,7 +1833,7 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -1742,7 +1849,9 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -1760,6 +1869,7 @@ async fn test_create_open_badges_template_allows_profile_object_on_subject_root(
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
@@ -1783,6 +1893,7 @@ fn valid_ob_achievement() -> serde_json::Value {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_unknown_profile_property(template_id: String) {
     // The `profile` object is constrained to the four supported fields; anything else is rejected.
     let schema = serde_json::json!({
@@ -1801,7 +1912,7 @@ async fn test_create_open_badges_template_rejects_unknown_profile_property(templ
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -1817,12 +1928,14 @@ async fn test_create_open_badges_template_rejects_unknown_profile_property(templ
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/profile`: [phoneNumber]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_profile_field_wrong_type(template_id: String) {
     // Profile fields must be strings; a non-string type is rejected.
     let schema = serde_json::json!({
@@ -1840,7 +1953,7 @@ async fn test_create_open_badges_template_rejects_profile_field_wrong_type(templ
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -1856,12 +1969,14 @@ async fn test_create_open_badges_template_rejects_profile_field_wrong_type(templ
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/givenName]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_profile_email_without_format(template_id: String) {
     // `email` must carry `format: "email"`; a plain string is rejected.
     let schema = serde_json::json!({
@@ -1879,7 +1994,7 @@ async fn test_create_open_badges_template_rejects_profile_email_without_format(t
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -1895,7 +2010,8 @@ async fn test_create_open_badges_template_rejects_profile_email_without_format(t
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/email]")
 }
 
@@ -1903,14 +2019,15 @@ async fn test_create_open_badges_template_rejects_profile_email_without_format(t
 #[case::declared_as_string(serde_json::json!({ "type": "string" }))]
 #[case::type_omitted(serde_json::json!({ "properties": { "givenName": { "type": "string" } } }))]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_non_object_profile(
     template_id: String,
     #[case] profile: serde_json::Value,
 ) {
     // `profile` itself must be an object. Without checking the node's own type, a non-object
     // `profile` would carry no children to validate and slip through untouched.
-    // (`"type": "array"` never reaches this check — arrays are rejected for every template
-    // schema, see `test_create_open_badges_template_rejects_array_profile`.)
+    // (`"type": "array"` never reaches this check — arrays are rejected for every Open Badges
+    // template schema, see `test_create_open_badges_template_rejects_array_profile`.)
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
@@ -1921,7 +2038,7 @@ async fn test_create_open_badges_template_rejects_non_object_profile(
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -1937,12 +2054,14 @@ async fn test_create_open_badges_template_rejects_non_object_profile(
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_array_profile(template_id: String) {
     // An array `profile` is rejected too, but by the schema-wide array rule that runs before
     // OpenBadges validation — hence the different error message.
@@ -1956,7 +2075,7 @@ async fn test_create_open_badges_template_rejects_array_profile(template_id: Str
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -1972,14 +2091,16 @@ async fn test_create_open_badges_template_rejects_array_profile(template_id: Str
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message(
-            "Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.",
+            "Invalid JSON Schema: Array types are not supported in Open Badges template schemas. Define only object and scalar fields.",
         )
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_unsanctioned_format_on_profile_name(template_id: String) {
     // The synthetic def is an exact pin: `givenName`/`familyName` are plain strings, so a
     // caller-supplied `format` on them is rejected even though the type is right. `email` keeps
@@ -2001,7 +2122,7 @@ async fn test_create_open_badges_template_rejects_unsanctioned_format_on_profile
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -2017,12 +2138,14 @@ async fn test_create_open_badges_template_rejects_unsanctioned_format_on_profile
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Invalid type or format for OpenBadges 3.0 schema properties: The following fields do not match the required type/format: [/profile/familyName, /profile/givenName]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_succeeds_with_const_required_properties(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -2093,7 +2216,7 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -2109,7 +2232,9 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -2127,11 +2252,13 @@ async fn test_create_open_badges_template_succeeds_with_const_required_propertie
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_attributes_cannot_change_immutable_flag(template_id: String) {
     let schema = serde_json::json!({
         "type": "object",
@@ -2189,11 +2316,13 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(existing_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchemaPropertiesAttributes {
+        .when_async(TemplateCommand::UpdateSchemaPropertiesAttributes {
             template_id: template_id.clone(),
             schema_properties_attributes: user_attrs,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::SchemaPropertiesAttributesUpdated {
             template_id,
             schema_properties_attributes: expected_attrs,
@@ -2203,6 +2332,7 @@ async fn test_update_attributes_cannot_change_immutable_flag(template_id: String
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_rejects_disallowed_properties(template_id: String) {
     // A property at the root level that is not in AchievementSubject def.
     let schema = serde_json::json!({
@@ -2227,7 +2357,7 @@ async fn test_create_open_badges_template_rejects_disallowed_properties(template
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id,
             source_template_id: None,
             title: "Test".to_string(),
@@ -2243,12 +2373,14 @@ async fn test_create_open_badges_template_rejects_disallowed_properties(template
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
-        })
+            origin: None,
+        }).await
         .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/`: [not_allowed_field]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_update_schema_rejects_disallowed_open_badges_properties(template_id: String) {
     let original_schema = serde_json::json!({
         "type": "object",
@@ -2340,16 +2472,18 @@ async fn test_update_schema_rejects_disallowed_open_badges_properties(template_i
             schema: Box::new(Some(original_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-        .when(TemplateCommand::UpdateSchema {
+        .when_async(TemplateCommand::UpdateSchema {
             template_id,
             schema: new_schema,
-        })
+        }).await
         .then_expect_error_message("Disallowed OpenBadges 3.0 schema properties: The following properties are not allowed for OpenBadges 3.0 templates at path `/`: [invalid_field]")
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_allows_valid_optional_properties(template_id: String) {
     // Nested OB schema with all required fields plus allowed optional fields.
     let schema = serde_json::json!({
@@ -2424,7 +2558,7 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -2440,7 +2574,9 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -2458,11 +2594,13 @@ async fn test_create_open_badges_template_allows_valid_optional_properties(templ
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_open_badges_template_preserves_dollar_schema_keyword(template_id: String) {
     // Callers may include the standard `$schema` meta-schema keyword so their tooling
     // (editors, validators) can validate credential data against the JSON Schema draft
@@ -2529,7 +2667,7 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -2545,7 +2683,9 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -2563,81 +2703,13 @@ async fn test_create_open_badges_template_preserves_dollar_schema_keyword(templa
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(expected_attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
 }
 
-// ── array-type rejection ─────────────────────────────────────────────────────
-
 #[rstest]
 #[serial_test::serial]
-async fn test_create_template_rejects_array_type(template_id: String) {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "tags": { "type": "array", "items": { "type": "string" } }
-        }
-    });
-
-    TemplateTestFramework::with(())
-        .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
-            template_id,
-            source_template_id: None,
-            title: "Test".to_string(),
-            display: Box::new(None),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            holder_type: HolderType::Individual,
-            tags: None,
-            status: Status::Draft,
-            visibility: Visibility::Private,
-            credential_expiration: None,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(Some(schema)),
-            schema_properties_attributes: None,
-            holder_authorization: Authorization::default(),
-        })
-        .then_expect_error_message("Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.")
-}
-
-#[rstest]
-#[serial_test::serial]
-async fn test_update_schema_rejects_array_type(template_id: String) {
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "items": { "type": "array", "items": { "type": "string" } }
-        }
-    });
-
-    TemplateTestFramework::with(())
-        .given(vec![TemplateEvent::TemplateCreated {
-            template_id: template_id.clone(),
-            source_template_id: None,
-            title: "Test".to_string(),
-            display: Box::new(None),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            holder_type: HolderType::Individual,
-            modified_at: test_utils::modified_at(),
-            tags: None,
-            status: Status::Draft,
-            visibility: Visibility::Private,
-            credential_expiration: Expiration::default(),
-            description: None,
-            r#type: vec![],
-            schema: Box::new(None),
-            schema_properties_attributes: None,
-            holder_authorization: Authorization::default(),
-        }])
-        .when(TemplateCommand::UpdateSchema {
-            template_id,
-            schema,
-        })
-        .then_expect_error_message("Invalid JSON Schema: Array types are not supported in template schemas. Define only object and scalar fields.")
-}
-
-#[rstest]
-#[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_id: String) {
     // A nested schema should be addressable with JSON Pointer attribute keys (leaf only).
     let schema = serde_json::json!({
@@ -2687,7 +2759,7 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -2703,7 +2775,9 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attrs.clone()),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -2721,55 +2795,8 @@ async fn test_create_template_with_nested_schema_and_jp_attribute_key(template_i
             schema: Box::new(Some(expected_schema)),
             schema_properties_attributes: Some(attrs),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
-}
-
-#[rstest]
-#[serial_test::serial]
-async fn test_create_template_rejects_attribute_key_pointing_to_object_node(template_id: String) {
-    // The intermediate `address` node is not a leaf and must not be addressed.
-    let schema = serde_json::json!({
-        "type": "object",
-        "properties": {
-            "address": {
-                "type": "object",
-                "properties": {
-                    "city": { "type": "string" }
-                }
-            }
-        }
-    });
-
-    let mut attrs = HashMap::new();
-    attrs.insert(
-        "/address".to_string(),
-        PropertyAttribute {
-            selectively_disclosable: true,
-            non_removable: false,
-            r#type: None,
-        },
-    );
-
-    TemplateTestFramework::with(())
-        .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
-            template_id,
-            source_template_id: None,
-            title: "Test".to_string(),
-            display: Box::new(None),
-            data_model: DataModel::W3CVcDataModelV2_0,
-            holder_type: HolderType::Individual,
-            tags: None,
-            status: Status::Draft,
-            visibility: Visibility::Private,
-            credential_expiration: None,
-            description: None,
-            r#type: vec![],
-            schema: Box::new(Some(schema)),
-            schema_properties_attributes: Some(attrs),
-            holder_authorization: Authorization::default(),
-        })
-        .then_expect_error_message("Invalid schema_properties_attributes key(s): The following keys do not match any field in schema.properties: [/address]")
 }
 
 #[rstest]
@@ -2806,6 +2833,7 @@ fn property_attribute_type_survives_serde_round_trip() {
 
 #[rstest]
 #[serial_test::serial]
+#[tokio::test]
 async fn test_create_template_preserves_property_attribute_type(template_id: String) {
     // The `country` field type is caller-supplied metadata the aggregate must carry through
     // untouched: it has to survive command handling and land in the emitted event, alongside the
@@ -2828,7 +2856,7 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
 
     TemplateTestFramework::with(())
         .given_no_previous_events()
-        .when(TemplateCommand::CreateNewTemplate {
+        .when_async(TemplateCommand::CreateNewTemplate {
             template_id: template_id.clone(),
             source_template_id: None,
             title: "Test".to_string(),
@@ -2844,7 +2872,9 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             schema: Box::new(Some(schema.clone())),
             schema_properties_attributes: Some(attributes.clone()),
             holder_authorization: Authorization::default(),
+            origin: None,
         })
+        .await
         .then_expect_events(vec![TemplateEvent::TemplateCreated {
             template_id,
             source_template_id: None,
@@ -2862,5 +2892,1207 @@ async fn test_create_template_preserves_property_attribute_type(template_id: Str
             schema: Box::new(Some(schema)),
             schema_properties_attributes: Some(attributes),
             holder_authorization: Authorization::default(),
+            origin: None,
         }])
+}
+
+fn origin(digest_byte: char) -> TemplateOrigin {
+    TemplateOrigin {
+        publisher_uri: "https://issuer.example".to_string(),
+        source_template_id: "0b7c".to_string(),
+        digest: format!("sha256-{}", digest_byte.to_string().repeat(64)),
+        check_for_updates: true,
+    }
+}
+
+fn create_command_with_origin(template_id: &str, origin: Option<TemplateOrigin>) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Test".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::W3CVcDataModelV1_1,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: None,
+        r#type: vec![],
+        schema: Box::new(None),
+        schema_properties_attributes: None,
+        holder_authorization: Authorization::default(),
+        origin: origin.map(Box::new),
+    }
+}
+
+fn template_created_event_with_origin(template_id: &str, origin: Option<TemplateOrigin>) -> TemplateEvent {
+    let TemplateEvent::TemplateCreated {
+        template_id,
+        source_template_id,
+        title,
+        display,
+        data_model,
+        holder_type,
+        modified_at,
+        tags,
+        status,
+        visibility,
+        credential_expiration,
+        description,
+        schema,
+        schema_properties_attributes,
+        holder_authorization,
+        ..
+    } = template_created_event_with_status(template_id, Status::Draft)
+    else {
+        unreachable!()
+    };
+
+    TemplateEvent::TemplateCreated {
+        template_id,
+        source_template_id,
+        title,
+        display,
+        data_model,
+        holder_type,
+        modified_at,
+        tags,
+        status,
+        visibility,
+        credential_expiration,
+        description,
+        r#type: vec!["VerifiableCredential".to_string()],
+        schema,
+        schema_properties_attributes,
+        holder_authorization,
+        origin: origin.map(Box::new),
+    }
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_template_with_origin(template_id: String) {
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when_async(create_command_with_origin(&template_id, Some(origin('a'))))
+        .await
+        .then_expect_events(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_template_with_invalid_origin_is_rejected(template_id: String) {
+    TemplateTestFramework::with(())
+        .given_no_previous_events()
+        .when_async(create_command_with_origin(
+            &template_id,
+            Some(TemplateOrigin {
+                digest: "sha256-A".to_string(),
+                ..origin('a')
+            }),
+        ))
+        .await
+        .then_expect_error_message(
+            "Invalid origin: `digest` must be `sha256-` followed by 64 lowercase hexadecimal digits",
+        )
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_replaces_origin(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('b')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('b')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_turns_update_checks_off_and_on(template_id: String) {
+    let opted_out = TemplateOrigin {
+        check_for_updates: false,
+        ..origin('a')
+    };
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(opted_out.clone()),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id: template_id.clone(),
+            origin: Some(opted_out.clone()),
+            modified_at: test_utils::modified_at(),
+        }]);
+
+    TemplateTestFramework::with(())
+        .given(vec![
+            template_created_event_with_origin(&template_id, Some(origin('a'))),
+            TemplateEvent::OriginUpdated {
+                template_id: template_id.clone(),
+                origin: Some(opted_out),
+                modified_at: test_utils::modified_at(),
+            },
+        ])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('a')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+/// Whether the importer checks for updates is about the copy, not its content, so it never changes the digest.
+#[test]
+fn update_checks_never_change_the_digest() {
+    let mut template = Template {
+        origin: Some(origin('a')),
+        ..Template::default()
+    };
+    let digest = template.public_content().digest();
+
+    template.origin = Some(TemplateOrigin {
+        check_for_updates: false,
+        ..origin('a')
+    });
+
+    assert_eq!(template.public_content().digest(), digest);
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_sets_origin_on_template_without_one(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(&template_id, None)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: Some(origin('a')),
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_with_none_removes_origin(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(
+            &template_id,
+            Some(origin('a')),
+        )])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id: template_id.clone(),
+            origin: None,
+        })
+        .await
+        .then_expect_events(vec![TemplateEvent::OriginUpdated {
+            template_id,
+            origin: None,
+            modified_at: test_utils::modified_at(),
+        }])
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_with_invalid_origin_is_rejected(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_origin(&template_id, None)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id,
+            origin: Some(TemplateOrigin {
+                publisher_uri: "issuer.example".to_string(),
+                ..origin('a')
+            }),
+        })
+        .await
+        .then_expect_error_message("Invalid origin: `publisherUri` must be an absolute URI")
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_origin_on_archived_template_is_rejected(template_id: String) {
+    TemplateTestFramework::with(())
+        .given(vec![template_created_event_with_status(&template_id, Status::Archived)])
+        .when_async(TemplateCommand::UpdateOrigin {
+            template_id,
+            origin: Some(origin('a')),
+        })
+        .await
+        .then_expect_error_message("Archived templates are immutable except for status changes")
+}
+
+#[rstest]
+fn origin_events_apply_to_aggregate_and_view(template_id: String) {
+    use crate::template::views::TemplateView;
+    use cqrs_es::{EventEnvelope, View};
+
+    let events = [
+        template_created_event_with_origin(&template_id, Some(origin('a'))),
+        TemplateEvent::OriginUpdated {
+            template_id: template_id.clone(),
+            origin: Some(origin('b')),
+            modified_at: "2024-02-01T00:00:00Z".to_string(),
+        },
+    ];
+
+    let mut aggregate = Template::default();
+    let mut view = TemplateView::default();
+    for (sequence, event) in (1..).zip(events) {
+        view.update(&EventEnvelope {
+            aggregate_id: template_id.clone(),
+            sequence,
+            payload: event.clone(),
+            metadata: HashMap::new(),
+        });
+        aggregate.apply(event);
+    }
+
+    assert_eq!(aggregate.origin, Some(origin('b')));
+    assert_eq!(view.origin, Some(origin('b')));
+    assert_eq!(view.modified_at.as_deref(), Some("2024-02-01T00:00:00Z"));
+
+    aggregate.apply(TemplateEvent::OriginUpdated {
+        template_id,
+        origin: None,
+        modified_at: "2024-03-01T00:00:00Z".to_string(),
+    });
+
+    assert_eq!(aggregate.origin, None);
+}
+
+#[rstest]
+fn template_created_event_without_origin_keeps_its_stored_form(template_id: String) {
+    let event = template_created_event_with_origin(&template_id, None);
+    let mut stored = serde_json::to_value(&event).unwrap();
+
+    assert!(stored["TemplateCreated"].get("origin").is_none(), "{stored}");
+    assert_eq!(serde_json::from_value::<TemplateEvent>(stored.clone()).unwrap(), event);
+
+    stored["TemplateCreated"]["origin"] = serde_json::to_value(origin('a')).unwrap();
+    assert_eq!(
+        serde_json::from_value::<TemplateEvent>(stored).unwrap(),
+        template_created_event_with_origin(&template_id, Some(origin('a')))
+    );
+}
+
+#[test]
+fn template_view_stored_without_origin_deserializes() {
+    let view: Template = serde_json::from_value(serde_json::json!({
+        "id": "template_id",
+        "title": "Test",
+        "data_model": "w3c_vc_data_model_v2-0",
+        "holder_type": "individual",
+        "status": "draft",
+        "visibility": "private",
+        "credential_expiration": { "type": "never" },
+        "type": ["VerifiableCredential"],
+        "schema": null,
+        "holder_authorization": { "pre_authorized": true },
+    }))
+    .unwrap();
+
+    assert_eq!(view.origin, None);
+}
+
+#[test]
+fn delete_template_command_does_not_deserialize_as_update_origin() {
+    let command: TemplateCommand = serde_json::from_value(serde_json::json!({ "template_id": "template_id" })).unwrap();
+
+    assert!(matches!(command, TemplateCommand::DeleteTemplate { .. }), "{command:?}");
+
+    let command: TemplateCommand =
+        serde_json::from_value(serde_json::json!({ "template_id": "template_id", "origin": null })).unwrap();
+
+    assert!(
+        matches!(command, TemplateCommand::UpdateOrigin { origin: None, .. }),
+        "{command:?}"
+    );
+}
+
+/// A Draft W3C VCDM 2.0 template with one `name` claim, created with `description` and `schema_properties_attributes`.
+fn create_command(
+    template_id: &str,
+    description: Option<&str>,
+    schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Test".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::W3CVcDataModelV2_0,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: description.map(ToString::to_string),
+        r#type: vec![],
+        schema: Box::new(Some(serde_json::json!({
+            "type": "object",
+            "properties": { "name": { "type": "string" } }
+        }))),
+        schema_properties_attributes,
+        holder_authorization: Authorization::default(),
+        origin: None,
+    }
+}
+
+fn disclosable() -> PropertyAttribute {
+    PropertyAttribute {
+        selectively_disclosable: true,
+        non_removable: false,
+        r#type: None,
+    }
+}
+
+/// The template after `commands`, each handled against the events the ones before it emitted.
+async fn template_after(commands: Vec<TemplateCommand>) -> Template {
+    let mut events = Vec::new();
+    for command in commands {
+        let emitted = TemplateTestFramework::with(())
+            .given(events.clone())
+            .when_async(command)
+            .await
+            .inspect_result()
+            .unwrap();
+        events.extend(emitted);
+    }
+
+    let mut template = Template::default();
+    for event in events {
+        template.apply(event);
+    }
+    template
+}
+
+/// A copy created with a description, and one whose description is updated to the same input, store and digest the
+/// same, so an imported copy updated by a re-import digests like its source.
+#[rstest]
+#[case::padded("  padded description  ", Some("padded description"))]
+#[case::empty("", None)]
+#[case::blank("   ", None)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_and_update_store_a_description_alike(
+    template_id: String,
+    #[case] description: &str,
+    #[case] expected: Option<&str>,
+) {
+    let created = template_after(vec![create_command(&template_id, Some(description), None)]).await;
+    let updated = template_after(vec![
+        create_command(&template_id, None, None),
+        TemplateCommand::UpdateDescription {
+            template_id: template_id.clone(),
+            description: description.to_string(),
+        },
+    ])
+    .await;
+
+    assert_eq!(created.description.as_deref(), expected);
+    assert_eq!(updated.description.as_deref(), expected);
+    assert_eq!(created.public_content().digest(), updated.public_content().digest());
+}
+
+/// Attribute keys are trimmed on create as on update, and no attributes are stored as `None` either way.
+#[rstest]
+#[case::padded_key(HashMap::from([(" /name ".to_string(), disclosable())]), Some(HashMap::from([("/name".to_string(), disclosable())])))]
+#[case::empty(HashMap::new(), None)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_and_update_store_schema_properties_attributes_alike(
+    template_id: String,
+    #[case] attributes: HashMap<String, PropertyAttribute>,
+    #[case] expected: Option<HashMap<String, PropertyAttribute>>,
+) {
+    let created = template_after(vec![create_command(&template_id, None, Some(attributes.clone()))]).await;
+    let updated = template_after(vec![
+        create_command(&template_id, None, None),
+        TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes: attributes,
+        },
+    ])
+    .await;
+
+    assert_eq!(created.schema_properties_attributes, expected);
+    assert_eq!(updated.schema_properties_attributes, expected);
+    assert_eq!(created.public_content().digest(), updated.public_content().digest());
+}
+
+/// The events `commands` emit, each handled against the events the ones before it emitted.
+async fn events_after(commands: Vec<TemplateCommand>) -> Vec<TemplateEvent> {
+    let mut events = Vec::new();
+    for command in commands {
+        let emitted = TemplateTestFramework::with(())
+            .given(events.clone())
+            .when_async(command)
+            .await
+            .inspect_result()
+            .unwrap();
+        events.extend(emitted);
+    }
+    events
+}
+
+/// What `command` emits against a template that has had `given`.
+async fn replaced(given: Vec<TemplateEvent>, command: TemplateCommand) -> Result<Vec<TemplateEvent>, TemplateError> {
+    TemplateTestFramework::with(())
+        .given(given)
+        .when_async(command)
+        .await
+        .inspect_result()
+}
+
+fn applied(events: Vec<TemplateEvent>) -> Template {
+    let mut template = Template::default();
+    for event in events {
+        template.apply(event);
+    }
+    template
+}
+
+fn replace_content(template_id: &str, content: PublicTemplateContent) -> TemplateCommand {
+    TemplateCommand::ReplaceContent {
+        template_id: template_id.to_string(),
+        content: Box::new(content),
+        origin: Some(origin('a')),
+    }
+}
+
+/// A source template with every public field set, unlike the plain copy `create_command(template_id, None, None)`.
+fn source_command(template_id: &str) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Source".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::W3CVcDataModelV2_0,
+        holder_type: HolderType::Individual,
+        tags: Some(vec!["badge".to_string(), "course".to_string()]),
+        status: Status::Published,
+        visibility: Visibility::Public,
+        credential_expiration: Some(Expiration::Duration("P30D".to_string())),
+        description: Some("  The source  ".to_string()),
+        r#type: vec![],
+        schema: Box::new(Some(serde_json::json!({
+            "type": "object",
+            "properties": { "name": { "type": "string" }, "score": { "type": "number" } }
+        }))),
+        schema_properties_attributes: Some(HashMap::from([("/score".to_string(), disclosable())])),
+        holder_authorization: Authorization::default(),
+        origin: None,
+    }
+}
+
+fn event_names(events: &[TemplateEvent]) -> Vec<String> {
+    events
+        .iter()
+        .map(|event| format!("{event:?}").split([' ', '{', '(']).next().unwrap().to_string())
+        .collect()
+}
+
+/// A copy replaced with a source's content digests like the source, as one re-import must leave it.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_digests_like_its_source(template_id: String) {
+    let source = applied(events_after(vec![source_command("source")]).await);
+    let copy = events_after(vec![create_command(&template_id, None, None)]).await;
+
+    let events = replaced(copy.clone(), replace_content(&template_id, source.public_content()))
+        .await
+        .unwrap();
+    let replaced = applied(copy.into_iter().chain(events).collect());
+
+    assert_eq!(replaced.public_content().digest(), source.public_content().digest());
+    assert_eq!(replaced.origin, Some(origin('a')));
+}
+
+/// An Open Badges template, whose required properties the library marks as non-removable.
+fn open_badges_command(template_id: &str) -> TemplateCommand {
+    TemplateCommand::CreateNewTemplate {
+        template_id: template_id.to_string(),
+        source_template_id: None,
+        title: "Badge".to_string(),
+        display: Box::new(None),
+        data_model: DataModel::OpenBadges3_0,
+        holder_type: HolderType::Individual,
+        tags: None,
+        status: Status::Draft,
+        visibility: Visibility::Private,
+        credential_expiration: None,
+        description: None,
+        r#type: vec![],
+        schema: Box::new(Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "achievement": {
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string" },
+                        "description": { "type": "string" },
+                        "criteria": { "type": "object", "properties": { "narrative": { "type": "string" } } }
+                    }
+                }
+            }
+        }))),
+        schema_properties_attributes: None,
+        holder_authorization: Authorization::default(),
+        origin: None,
+    }
+}
+
+/// A copy whose attributes were dropped locally gets the non-removable flags back with its source's content, so it
+/// digests like the source again.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_restores_open_badges_non_removable_flags(template_id: String) {
+    let source = applied(events_after(vec![open_badges_command("source")]).await);
+    let copy = events_after(vec![
+        open_badges_command(&template_id),
+        TemplateCommand::UpdateSchemaPropertiesAttributes {
+            template_id: template_id.clone(),
+            schema_properties_attributes: HashMap::new(),
+        },
+    ])
+    .await;
+
+    let events = replaced(copy.clone(), replace_content(&template_id, source.public_content()))
+        .await
+        .unwrap();
+    let replaced = applied(copy.into_iter().chain(events).collect());
+
+    let attributes = replaced.schema_properties_attributes.clone().unwrap();
+    assert!(attributes["/achievement/name"].non_removable);
+    assert_eq!(replaced.public_content().digest(), source.public_content().digest());
+}
+
+/// Only the fields that change emit an event, and the origin is always set, last.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_emits_only_changed_fields_and_the_origin_last(template_id: String) {
+    let copy = events_after(vec![create_command(&template_id, Some("Old"), None)]).await;
+    let mut content = applied(copy.clone()).public_content();
+    content.tags = Some(vec!["new".to_string()]);
+    content.description = Some("New description".to_string());
+
+    let events = replaced(copy.clone(), replace_content(&template_id, content))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        event_names(&events),
+        vec!["TagsUpdated", "DescriptionUpdated", "OriginUpdated"]
+    );
+
+    let unchanged = applied(copy.clone()).public_content();
+    let events = replaced(copy, replace_content(&template_id, unchanged)).await.unwrap();
+    assert_eq!(event_names(&events), vec!["OriginUpdated"]);
+}
+
+/// One invalid field refuses the whole replacement: nothing is emitted, so the template stays as it was.
+#[rstest]
+#[case::invalid_expiration(|content: &mut PublicTemplateContent| {
+    content.credential_expiration = Expiration::Duration("PXD".to_string());
+})]
+#[case::blank_title(|content: &mut PublicTemplateContent| content.title = "  ".to_string())]
+#[case::invalid_schema(|content: &mut PublicTemplateContent| {
+    content.schema = Some(serde_json::json!({ "type": "object", "properties": { "tags": { "type": "list" } } }));
+})]
+#[case::attribute_of_no_field(|content: &mut PublicTemplateContent| {
+    content.schema_properties_attributes = Some(HashMap::from([("/missing".to_string(), disclosable())]));
+})]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_is_all_or_nothing(
+    template_id: String,
+    #[case] break_content: fn(&mut PublicTemplateContent),
+) {
+    let copy = events_after(vec![create_command(&template_id, Some("Old"), None)]).await;
+    let mut content = applied(copy.clone()).public_content();
+    // Valid changes before and after the invalid one must not be emitted either.
+    content.title = "New title".to_string();
+    content.description = Some("New description".to_string());
+    break_content(&mut content);
+
+    assert!(replaced(copy, replace_content(&template_id, content)).await.is_err());
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_refuses_an_invalid_origin(template_id: String) {
+    let copy = events_after(vec![create_command(&template_id, Some("Old"), None)]).await;
+    let mut content = applied(copy.clone()).public_content();
+    content.title = "New title".to_string();
+
+    let result = replaced(
+        copy,
+        TemplateCommand::ReplaceContent {
+            template_id: template_id.clone(),
+            content: Box::new(content),
+            origin: Some(TemplateOrigin {
+                digest: "sha256-A".to_string(),
+                ..origin('a')
+            }),
+        },
+    )
+    .await;
+
+    assert!(matches!(result, Err(TemplateError::InvalidOrigin(_))), "{result:?}");
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_refuses_an_archived_template(template_id: String) {
+    let given = vec![template_created_event_with_status(&template_id, Status::Archived)];
+    let content = applied(given.clone()).public_content();
+
+    let result = replaced(given, replace_content(&template_id, content)).await;
+
+    assert!(
+        matches!(result, Err(TemplateError::ArchivedTemplateImmutable)),
+        "{result:?}"
+    );
+}
+
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_replace_content_refuses_another_data_model_or_holder_type(template_id: String) {
+    let copy = events_after(vec![create_command(&template_id, None, None)]).await;
+    let content = applied(copy.clone()).public_content();
+
+    let result = replaced(
+        copy.clone(),
+        replace_content(
+            &template_id,
+            PublicTemplateContent {
+                data_model: DataModel::OpenBadges3_0,
+                ..content.clone()
+            },
+        ),
+    )
+    .await;
+    assert!(matches!(result, Err(TemplateError::DataModelImmutable)), "{result:?}");
+
+    let result = replaced(
+        copy,
+        replace_content(
+            &template_id,
+            PublicTemplateContent {
+                holder_type: HolderType::Organization,
+                ..content
+            },
+        ),
+    )
+    .await;
+    assert!(matches!(result, Err(TemplateError::HolderTypeImmutable)), "{result:?}");
+}
+
+/// The command enum is untagged: a replacement must not be read as `UpdateOrigin`, nor an origin update as a
+/// replacement.
+#[tokio::test]
+async fn replace_content_and_update_origin_deserialize_apart() {
+    let content = applied(events_after(vec![create_command("copy", None, None)]).await).public_content();
+
+    let command: TemplateCommand = serde_json::from_value(serde_json::json!({
+        "template_id": "copy",
+        "content": content,
+        "origin": origin('a'),
+    }))
+    .unwrap();
+    assert!(matches!(command, TemplateCommand::ReplaceContent { .. }), "{command:?}");
+
+    let command: TemplateCommand =
+        serde_json::from_value(serde_json::json!({ "template_id": "copy", "origin": origin('a') })).unwrap();
+    assert!(matches!(command, TemplateCommand::UpdateOrigin { .. }), "{command:?}");
+}
+
+/// A schema that refers to another document is refused, when a template is created and when its schema is updated.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_schema_referring_to_another_document_is_refused(template_id: String) {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": { "name": { "$ref": "https://schemas.example.org/name.json" } }
+    });
+    let assert_refused = |error: TemplateError| {
+        let message = error.to_string();
+        assert!(message.starts_with("Invalid JSON Schema: "), "{message}");
+        assert!(
+            message.ends_with("a template schema cannot refer to another document"),
+            "{message}"
+        );
+    };
+
+    let mut create = create_command(&template_id, None, None);
+    if let TemplateCommand::CreateNewTemplate { schema: created, .. } = &mut create {
+        **created = Some(schema.clone());
+    }
+    assert_refused(replaced(vec![], create).await.unwrap_err());
+
+    let created = events_after(vec![create_command(&template_id, None, None)]).await;
+    let update = TemplateCommand::UpdateSchema {
+        template_id: template_id.clone(),
+        schema,
+    };
+    assert_refused(replaced(created, update).await.unwrap_err());
+}
+
+// ── structured schemas: nested objects, lists and tables ────────────────────
+
+/// `create_command` for a template of `data_model` with `schema`.
+fn create_command_with_schema(
+    template_id: &str,
+    data_model: DataModel,
+    schema: serde_json::Value,
+    schema_properties_attributes: Option<HashMap<String, PropertyAttribute>>,
+) -> TemplateCommand {
+    let mut command = create_command(template_id, None, schema_properties_attributes);
+    if let TemplateCommand::CreateNewTemplate {
+        data_model: created_data_model,
+        schema: created_schema,
+        ..
+    } = &mut command
+    {
+        *created_data_model = data_model;
+        **created_schema = Some(schema);
+    }
+    command
+}
+
+fn update_schema(template_id: &str, schema: serde_json::Value) -> TemplateCommand {
+    TemplateCommand::UpdateSchema {
+        template_id: template_id.to_string(),
+        schema,
+    }
+}
+
+/// The structured schema without its property `key`.
+fn structured_schema_without(key: &str) -> serde_json::Value {
+    let mut schema = structured_schema();
+    schema["properties"].as_object_mut().unwrap().remove(key);
+    schema["required"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|required| required != key);
+    schema
+}
+
+/// A template keeps nested objects, lists and tables as they were written, with the attributes of its top-level
+/// properties: an object or an array carries one for the whole of it.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_create_template_with_nested_objects_lists_and_tables(template_id: String) {
+    let attributes = structured_schema_properties_attributes();
+    assert!(attributes.contains_key("/Address") && attributes.contains_key("/Completed classes"));
+
+    let template = applied(
+        events_after(vec![create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            structured_schema(),
+            Some(attributes.clone()),
+        )])
+        .await,
+    );
+
+    assert_eq!(*template.schema, Some(structured_schema()));
+    assert_eq!(template.schema_properties_attributes, Some(attributes));
+}
+
+/// Every data model but Open Badges takes arrays, on create and on a later schema update.
+#[rstest]
+#[case::w3c_vc_1_1(DataModel::W3CVcDataModelV1_1)]
+#[case::w3c_vc_2_0(DataModel::W3CVcDataModelV2_0)]
+#[case::european_learning_model(DataModel::EuropeanLearningModelV3_3)]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_arrays_are_accepted_outside_open_badges(template_id: String, #[case] data_model: DataModel) {
+    let created = events_after(vec![create_command_with_schema(
+        &template_id,
+        data_model.clone(),
+        structured_schema(),
+        None,
+    )])
+    .await;
+    assert_eq!(*applied(created).schema, Some(structured_schema()));
+
+    let flat = serde_json::json!({ "type": "object", "properties": { "name": { "type": "string" } } });
+    let updated = events_after(vec![
+        create_command_with_schema(&template_id, data_model, flat, None),
+        update_schema(&template_id, structured_schema()),
+    ])
+    .await;
+    assert_eq!(event_names(&updated), vec!["TemplateCreated", "SchemaUpdated"]);
+    assert_eq!(*applied(updated).schema, Some(structured_schema()));
+}
+
+/// An attribute addresses a property: a leaf, or an object or an array as a whole.
+#[rstest]
+#[case::leaf("/Full name")]
+#[case::object("/Address")]
+#[case::leaf_in_object("/Address/Street")]
+#[case::object_in_object("/Address/Coordinates")]
+#[case::leaf_in_nested_object("/Address/Coordinates/Latitude")]
+#[case::list("/Skills")]
+#[case::list_of_objects("/Work experience")]
+#[case::table("/Completed classes")]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_attribute_key_addresses_a_property(template_id: String, #[case] key: &str) {
+    let attributes = HashMap::from([(key.to_string(), disclosable())]);
+
+    let template = applied(
+        events_after(vec![create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            structured_schema(),
+            Some(attributes.clone()),
+        )])
+        .await,
+    );
+
+    assert_eq!(template.schema_properties_attributes, Some(attributes));
+}
+
+/// What is inside an array is not addressable: a key never leads into `items`.
+#[rstest]
+#[case::property_of_list_item("/Work experience/Employer")]
+#[case::indexed_property_of_list_item("/Work experience/0/Employer")]
+#[case::column_of_table("/Completed classes/Code")]
+#[case::list_item("/Skills/0")]
+#[case::items_keyword("/Skills/items")]
+#[case::missing_property_of_object("/Address/Postcode")]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_attribute_key_must_address_a_property(template_id: String, #[case] key: &str) {
+    let command = create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        Some(HashMap::from([(key.to_string(), disclosable())])),
+    );
+
+    let error = replaced(vec![], command).await.unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "Invalid schema_properties_attributes key(s): The following keys do not match any field in \
+             schema.properties: [{key}]"
+        )
+    );
+}
+
+/// A schema update drops the attribute of an object that is gone, and keeps the one of an object whose inside
+/// changed.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_schema_prunes_attribute_of_removed_object(template_id: String) {
+    let attributes = structured_schema_properties_attributes();
+    let created = events_after(vec![create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        Some(attributes.clone()),
+    )])
+    .await;
+
+    let mut changed_inside = structured_schema();
+    changed_inside["properties"]["Address"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("Coordinates");
+    let events = replaced(created.clone(), update_schema(&template_id, changed_inside))
+        .await
+        .unwrap();
+    assert_eq!(event_names(&events), vec!["SchemaUpdated"]);
+
+    let mut events = created;
+    events.extend(
+        replaced(
+            events.clone(),
+            update_schema(&template_id, structured_schema_without("Address")),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(
+        event_names(&events),
+        vec!["TemplateCreated", "SchemaUpdated", "SchemaPropertiesAttributesUpdated"]
+    );
+    let mut expected = attributes;
+    expected.remove("/Address");
+    assert_eq!(applied(events).schema_properties_attributes, Some(expected));
+}
+
+/// A non-removable object or array has to stay in the schema, like a non-removable leaf.
+#[rstest]
+#[case::object("Address")]
+#[case::table("Completed classes")]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_schema_keeps_non_removable_object_and_array(template_id: String, #[case] key: &str) {
+    let mut created = events_after(vec![create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        Some(structured_schema_properties_attributes()),
+    )])
+    .await;
+    // Only the system sets the flag, so it is set on the event.
+    let TemplateEvent::TemplateCreated {
+        schema_properties_attributes: Some(attributes),
+        ..
+    } = &mut created[0]
+    else {
+        panic!("the template was not created with attributes");
+    };
+    attributes.get_mut(&format!("/{key}")).unwrap().non_removable = true;
+
+    let error = replaced(created, update_schema(&template_id, structured_schema_without(key)))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "Cannot remove immutable schema properties: The following non-removable properties cannot be removed from the \
+             schema: [/{key}]"
+        )
+    );
+}
+
+/// The schema of a template describes the claims, an object: an array is refused at its root, on create and on a
+/// schema update. An Open Badges template refuses it too, on create for the properties it lacks.
+#[rstest]
+#[case::array(serde_json::json!({ "type": "array", "items": { "type": "string" } }))]
+#[case::array_in_type_list(serde_json::json!({ "type": ["array", "null"], "items": { "type": "string" } }))]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_schema_root_cannot_be_an_array(
+    template_id: String,
+    #[case] schema: serde_json::Value,
+    #[values(
+        DataModel::W3CVcDataModelV1_1,
+        DataModel::W3CVcDataModelV2_0,
+        DataModel::EuropeanLearningModelV3_3
+    )]
+    data_model: DataModel,
+) {
+    let message = "Invalid JSON Schema: The schema of a template describes an object and cannot be an array. Define \
+                   arrays as properties of the schema.";
+
+    let create = create_command_with_schema(&template_id, data_model, schema.clone(), None);
+    assert_eq!(replaced(vec![], create).await.unwrap_err().to_string(), message);
+
+    let created = events_after(vec![create_command(&template_id, None, None)]).await;
+    let error = replaced(created, update_schema(&template_id, schema))
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), message);
+}
+
+/// `properties` say nothing about an array, so a key can't lead through them either.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_array_with_properties_is_addressed_as_a_whole(template_id: String) {
+    let schema =
+        |skills: serde_json::Value| serde_json::json!({ "type": "object", "properties": { "Skills": skills } });
+    let object = schema(serde_json::json!({
+        "type": "object",
+        "properties": { "Label": { "type": "string" } }
+    }));
+    let array = schema(serde_json::json!({
+        "type": "array",
+        "items": { "type": "string" },
+        "properties": { "Label": { "type": "string" } }
+    }));
+    let attributes = |key: &str| Some(HashMap::from([(key.to_string(), disclosable())]));
+    let create = |schema: &serde_json::Value, key: &str| {
+        create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            schema.clone(),
+            attributes(key),
+        )
+    };
+
+    assert!(replaced(vec![], create(&array, "/Skills")).await.is_ok());
+    assert!(replaced(vec![], create(&array, "/Skills/Label")).await.is_err());
+
+    // An object that becomes such an array loses the attributes of what was inside it.
+    let mut events = events_after(vec![create(&object, "/Skills/Label")]).await;
+    events.extend(
+        replaced(events.clone(), update_schema(&template_id, array))
+            .await
+            .unwrap(),
+    );
+    assert_eq!(
+        event_names(&events),
+        vec!["TemplateCreated", "SchemaUpdated", "SchemaPropertiesAttributesUpdated"]
+    );
+    assert_eq!(applied(events).schema_properties_attributes, None);
+}
+
+/// Attributes are replaced under the same rule as on create: an object or an array as a whole, nothing inside an
+/// array.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_update_attributes_addresses_objects_and_arrays_as_a_whole(template_id: String) {
+    let created = events_after(vec![create_command_with_schema(
+        &template_id,
+        DataModel::W3CVcDataModelV2_0,
+        structured_schema(),
+        None,
+    )])
+    .await;
+    let update = |keys: &[&str]| TemplateCommand::UpdateSchemaPropertiesAttributes {
+        template_id: template_id.clone(),
+        schema_properties_attributes: keys.iter().map(|key| (key.to_string(), disclosable())).collect(),
+    };
+
+    let keys = ["/Address", "/Address/Coordinates", "/Skills", "/Completed classes"];
+    let mut events = created.clone();
+    events.extend(replaced(created.clone(), update(&keys)).await.unwrap());
+    assert_eq!(
+        event_names(&events),
+        vec!["TemplateCreated", "SchemaPropertiesAttributesUpdated"]
+    );
+    let mut stored: Vec<String> = applied(events)
+        .schema_properties_attributes
+        .unwrap()
+        .into_keys()
+        .collect();
+    stored.sort();
+    assert_eq!(
+        stored,
+        vec!["/Address", "/Address/Coordinates", "/Completed classes", "/Skills"]
+    );
+
+    let error = replaced(created, update(&["/Address", "/Completed classes/Code"]))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "Invalid schema_properties_attributes key(s): The following keys do not match any field in \
+         schema.properties: [/Completed classes/Code]"
+    );
+}
+
+/// An Open Badges template takes an attribute for an object as a whole next to the ones it gets for its leaves, and
+/// its required leaves stay non-removable.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_open_badges_template_takes_attribute_for_whole_object(template_id: String) {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "achievement": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "criteria": {
+                        "type": "object",
+                        "properties": { "narrative": { "type": "string" } }
+                    }
+                }
+            }
+        }
+    });
+
+    let attributes = applied(
+        events_after(vec![create_command_with_schema(
+            &template_id,
+            DataModel::OpenBadges3_0,
+            schema,
+            Some(HashMap::from([("/achievement".to_string(), disclosable())])),
+        )])
+        .await,
+    )
+    .schema_properties_attributes
+    .unwrap();
+
+    assert_eq!(attributes.get("/achievement"), Some(&disclosable()));
+    for required in [
+        "/achievement/name",
+        "/achievement/description",
+        "/achievement/criteria/narrative",
+    ] {
+        assert!(attributes[required].non_removable, "{required}");
+    }
+}
+
+/// A property that names no type is read by its `properties`, as an object is, whatever else its schema holds.
+#[rstest]
+#[serial_test::serial]
+#[tokio::test]
+async fn test_untyped_property_with_properties_is_addressed_as_an_object(template_id: String) {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "Mixed": {
+                "properties": { "Label": { "type": "string" } },
+                "items": { "type": "string" }
+            }
+        }
+    });
+
+    for key in ["/Mixed", "/Mixed/Label"] {
+        let command = create_command_with_schema(
+            &template_id,
+            DataModel::W3CVcDataModelV2_0,
+            schema.clone(),
+            Some(HashMap::from([(key.to_string(), disclosable())])),
+        );
+        assert!(replaced(vec![], command).await.is_ok(), "{key}");
+    }
 }

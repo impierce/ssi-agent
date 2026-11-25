@@ -4,19 +4,20 @@ use super::event::ConnectionEvent;
 use crate::connection::aggregate::{Connection, ConnectionDisplayProperties, PendingChanges, Validation};
 use chrono::{DateTime, Utc};
 use cqrs_es::{EventEnvelope, View};
-use identity_did::DIDUrl;
+use identity_kit::did::Did;
 use serde::{Deserialize, Serialize};
+use shared_kernel::view_repository::SoftDeletable;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 #[schema(as = Connection)]
 pub struct ConnectionView {
     #[serde(rename = "id")]
     pub connection_id: String,
-    // `identity_core::common::url::Url` doesn't implement a `Default`, which is why we use `String`.
+    // `url::Url` doesn't implement a `Default`, which is why we use `String`.
     #[schema(value_type = url::Url)]
     pub url: String,
     #[schema(value_type = Vec<String>)]
-    pub dids: Vec<DIDUrl>,
+    pub dids: Vec<Did>,
     pub validations: Vec<Validation>,
     pub display: Option<ConnectionDisplayProperties>,
     pub pending_changes: Option<PendingChanges>,
@@ -77,5 +78,11 @@ impl View<Connection> for ConnectionView {
                 self.deleted = true;
             }
         }
+    }
+}
+
+impl SoftDeletable for ConnectionView {
+    fn is_deleted(&self) -> bool {
+        self.deleted
     }
 }

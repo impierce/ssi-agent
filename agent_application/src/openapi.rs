@@ -71,7 +71,7 @@ pub fn router(enabled: bool) -> Router {
     operation_id = "openapi_yaml",
     tags = ["OpenAPI"],
     responses(
-        (status = 200, description = "OpenAPI document", body = String, content_type = "application/yaml"),
+        (status = 200, description = "OpenAPI document", body = serde_json::Value, content_type = "application/yaml"),
     )
 )]
 async fn openapi_yaml() -> Result<impl IntoResponse, StatusCode> {
@@ -169,17 +169,14 @@ mod tests {
         assert!(api_http_operations.is_subset(&published_operations));
         assert_eq!(published_operations.len(), api_http_operations.len() + 6);
 
-        let sponsoring_configuration = api_http
+        let public_templates = api_http
             .paths
-            .get_path_operation("/public/sponsoring-configuration", HttpMethod::Get)
-            .expect("sponsoring configuration operation should be registered");
-        assert_eq!(
-            sponsoring_configuration.operation_id.as_deref(),
-            Some("sponsoring_configuration")
-        );
+            .get_path_operation("/public/templates", HttpMethod::Get)
+            .expect("public templates operation should be registered");
+        assert_eq!(public_templates.operation_id.as_deref(), Some("get_public_templates"));
 
         let api_http_schemas = schema_names(&api_http);
-        assert!(api_http_schemas.contains("SponsoringConfiguration"));
+        assert!(api_http_schemas.contains("PublicTemplate"));
 
         let published_schemas = schema_names(&published);
         let operational_schemas: BTreeSet<_> = published_schemas.difference(&api_http_schemas).cloned().collect();
@@ -279,6 +276,29 @@ mod tests {
         .into_iter()
         .map(|(method, path, operation_id)| (method.to_string(), path.to_string(), operation_id.to_string()))
         .collect()
+    }
+
+    #[test]
+    fn both_documents_publish_the_cloud_event_webhook() {
+        use agent_api_http::v0::events::openapi::CLOUD_EVENT_WEBHOOK;
+
+        for (name, document) in [("published", published_openapi()), ("full", full_openapi())] {
+            let webhooks = serde_json::to_value(&document).unwrap()["webhooks"].clone();
+            assert_eq!(
+                webhooks
+                    .as_object()
+                    .map(|webhooks| webhooks.keys().cloned().collect::<Vec<_>>()),
+                Some(vec![CLOUD_EVENT_WEBHOOK.to_string()]),
+                "the {name} document should publish exactly the CloudEvent webhook"
+            );
+
+            let content = &webhooks[CLOUD_EVENT_WEBHOOK]["post"]["requestBody"]["content"];
+            assert_eq!(
+                content["application/cloudevents+json"]["schema"]["$ref"],
+                "#/components/schemas/CloudEvent"
+            );
+            assert!(schema_names(&document).contains("CloudEvent"));
+        }
     }
 
     #[test]

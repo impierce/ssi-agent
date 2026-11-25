@@ -9,26 +9,11 @@ use axum::{
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
+use identity_kit::domain_linkage::DomainLinkageConfiguration;
 use std::sync::Arc;
 
 use crate::handlers::public_query_handler;
 use crate::v0::openapi::PROTOCOL_TAG;
-
-// OpenAPI representation of `identity_credential::domain_linkage::DomainLinkageConfiguration`.
-/// A DID Configuration resource that links a domain to DIDs.
-///
-/// See the [DID Configuration Resource](https://identity.foundation/.well-known/resources/did-configuration/#did-configuration-resource).
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-#[schema(as = DomainLinkageConfiguration)]
-pub(crate) struct DomainLinkageConfigurationSchema {
-    #[serde(rename = "@context")]
-    #[schema(example = "https://identity.foundation/.well-known/did-configuration/v1")]
-    context: String,
-    /// Domain Linkage Credentials in the JSON Web Token Proof Format.
-    #[schema(min_items = 1)]
-    linked_dids: Vec<String>,
-}
 
 /// Get the DID Configuration resource
 ///
@@ -40,7 +25,7 @@ pub(crate) struct DomainLinkageConfigurationSchema {
     operation_id = "well_known_did_configuration_json",
     tags = ["DID", PROTOCOL_TAG],
     responses(
-        (status = 200, description = "DID Configuration resource", body = DomainLinkageConfigurationSchema),
+        (status = 200, description = "DID Configuration resource", body = DomainLinkageConfiguration),
         (status = 404, description = "No domain is linked"),
     )
 )]

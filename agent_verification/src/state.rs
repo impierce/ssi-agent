@@ -1,5 +1,6 @@
-use agent_shared::application_state::CommandHandler;
-use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
+use agent_shared::application_state::{CommandHandler, CqrsComponentBuilder};
+use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, QueryOperation};
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
@@ -50,5 +51,33 @@ impl Clone for Queries {
             authorization_request: self.authorization_request.clone(),
             all_authorization_requests: self.all_authorization_requests.clone(),
         }
+    }
+}
+
+/// Constructs the CQRS components and initializes the state for the Verification bounded context.
+///
+/// Registers command handlers and view repositories for authorization requests
+/// using the provided [`CqrsComponentBuilder`].
+pub async fn verification_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    services: Arc<crate::services::VerificationServices>,
+    event_bus: &EventBusHandle,
+) -> VerificationState {
+    let (authorization_request_command_handler, authorization_request, all_authorization_requests) = builder
+        .commands_and_queries::<AuthorizationRequest, AuthorizationRequest, AllAuthorizationRequestsView>(
+            services.clone(),
+            vec![event_bus.query()],
+        )
+        .await;
+
+    VerificationState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        command: CommandHandlers {
+            authorization_request: authorization_request_command_handler,
+        },
+        query: ViewRepositories {
+            authorization_request,
+            all_authorization_requests,
+        },
     }
 }

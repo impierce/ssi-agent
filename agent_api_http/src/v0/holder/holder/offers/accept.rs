@@ -1,4 +1,5 @@
 use crate::error::IntoApiErrorExt;
+use crate::extractors::PathParams;
 use crate::extractors::RequestActor;
 use crate::handlers::{command_handler, internal_command_handler, internal_query_handler, query_handler};
 use agent_holder::{
@@ -12,7 +13,7 @@ use agent_holder::{
     state::HolderState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -27,6 +28,7 @@ use std::sync::Arc;
     post,
     path = "/holder/offers/{offer_id}/accept",
     operation_id = "accept_credential_offer",
+    params(("offer_id" = String, Path, description = "Received offer ID")),
     tags = ["Identity", "Holder"],
     responses(
         (status = 201, description = "Credential offer accepted successfully", body = Offer),
@@ -34,15 +36,15 @@ use std::sync::Arc;
         (status = 404, description = "Credential offer not found"),
         (status = 409, description = "The credential offer is not in a state that allows accepting it"),
         (status = 422, description = "The credential offer cannot be processed, e.g. it carries no pre-authorized code"),
-        (status = 501, description = "The credential issuer requires a flow UniCore does not support yet"),
-        (status = 502, description = "The credential issuer or its authorization server could not be reached"),
+        (status = 501, description = "The credential issuer requires a flow UniCore does not support yet, or sent a credential format other than a credential JWT or `vc+sd-jwt`"),
+        (status = 502, description = "The credential issuer or its authorization server could not be reached, or the `vc+sd-jwt` credential it sent does not verify"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn accept(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(received_offer_id): Path<String>,
+    PathParams(received_offer_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     // TODO: General note that also applies to other endpoints: currently we are using Application Layer logic in the
     // REST API. This is not ideal and should be changed. The REST API should only be responsible for handling HTTP

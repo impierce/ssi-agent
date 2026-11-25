@@ -1,8 +1,11 @@
-use agent_shared::application_state::CommandHandler;
-use shared_kernel::authorization::{AuthorizationChecker, QueryOperation};
+use agent_shared::application_state::{CommandHandler, CqrsComponentBuilder};
+use cqrs_es::Query;
+use shared_kernel::authorization::{AllowAllAuthorizationChecker, AuthorizationChecker, QueryOperation};
+use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
+use crate::catalog::services::{CatalogServiceImpl, CatalogServices};
 use crate::template::{
     aggregate::Template,
     views::{all_templates::AllTemplatesView, TemplateView},
@@ -74,5 +77,45 @@ impl Clone for Queries {
             catalog: self.catalog.clone(),
             all_catalogs: self.all_catalogs.clone(),
         }
+    }
+}
+
+/// Constructs the CQRS components and initializes the state for the Library bounded context.
+///
+/// Registers command handlers and view repositories for credential templates and catalogs
+/// using the provided [`CqrsComponentBuilder`]. Custom template queries can be supplied
+/// via `template_queries` to be executed alongside standard query projections.
+pub async fn library_state<CCB: CqrsComponentBuilder>(
+    builder: &CCB,
+    event_bus: &EventBusHandle,
+    template_queries: Vec<Box<dyn Query<Template>>>,
+) -> LibraryState {
+    let mut queries: Vec<Box<dyn Query<Template>>> = vec![event_bus.query()];
+    queries.extend(template_queries);
+
+    let (template_command_handler, template, all_templates) = builder
+        .commands_and_queries::<Template, Template, AllTemplatesView>((), queries)
+        .await;
+
+    let catalog_services: Arc<dyn CatalogServices> = Arc::new(CatalogServiceImpl {
+        template_view_repo: template.clone(),
+    });
+
+    let (catalog_command_handler, catalog, all_catalogs) = builder
+        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![event_bus.query()])
+        .await;
+
+    LibraryState {
+        authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        command: CommandHandlers {
+            template: template_command_handler,
+            catalog: catalog_command_handler,
+        },
+        query: ViewRepositories {
+            template,
+            all_templates,
+            catalog,
+            all_catalogs,
+        },
     }
 }

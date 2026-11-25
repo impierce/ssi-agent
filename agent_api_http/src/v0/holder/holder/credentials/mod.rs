@@ -1,17 +1,16 @@
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
-    credential::{aggregate::Credential, command::CredentialCommand},
+    credential::{aggregate::Credential, command::CredentialCommand, signed::SignedCredential},
     state::HolderState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
 use http_api_problem::ApiError;
 use hyper::StatusCode;
-use identity_credential::credential::Jwt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -49,14 +48,16 @@ pub(crate) async fn credentials(
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HolderCredentialsEndpointRequest {
-    /// Compact JWT-encoded verifiable credential to add to the holder.
-    #[schema(value_type = String)]
-    pub credential: Jwt,
+    /// The credential to add to the holder: a credential JWT, or a VCDM 2.0 credential secured with SD-JWT
+    /// (`vc+sd-jwt`) with the disclosures to keep.
+    pub credential: SignedCredential,
 }
 
 /// Store a credential in the organisation's wallet
 ///
-/// Imports a compact JWT-encoded verifiable credential into the organisation's holder wallet.
+/// Imports a credential into the organisation's holder wallet: a credential JWT, or a VCDM 2.0 credential secured
+/// with SD-JWT (`vc+sd-jwt`). The issuer signature and validity period of a `vc+sd-jwt` credential are verified
+/// first; a credential JWT is stored without them being verified. The status of either is checked.
 #[utoipa::path(
     post,
     path = "/holder/credentials",
@@ -66,14 +67,14 @@ pub struct HolderCredentialsEndpointRequest {
     responses(
         (status = 201, description = "Credential stored successfully", body = Credential),
         (status = 400, description = "Malformed JSON request body"),
-        (status = 422, description = "Request body does not match the expected schema, or the credential could not be decoded"),
+        (status = 422, description = "Request body does not match the expected schema, the credential could not be decoded, the issuer signature or validity period of a `vc+sd-jwt` credential does not hold, or the credential's status is not valid"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_credentials(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Json(HolderCredentialsEndpointRequest { credential }): Json<HolderCredentialsEndpointRequest>,
+    JsonBody(HolderCredentialsEndpointRequest { credential }): JsonBody<HolderCredentialsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let holder_credential_id = uuid::Uuid::new_v4().to_string();
 
@@ -111,6 +112,7 @@ pub(crate) async fn post_credentials(
     get,
     path = "/holder/credentials/{credential_id}",
     operation_id = "get_holder_credential_by_id",
+    params(("credential_id" = String, Path, description = "Holder credential ID")),
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Credential retrieved successfully", body = Credential),
@@ -122,7 +124,7 @@ pub(crate) async fn post_credentials(
 pub(crate) async fn credential(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(holder_credential_id): Path<String>,
+    PathParams(holder_credential_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),

@@ -1,11 +1,9 @@
-use oid4vci::{
-    credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
-    notification_request::NotificationRequest, proofs::Proofs,
-};
+use crate::{refresh::token::RefreshToken, server_config::supported_configuration::SupportedCredentialConfiguration};
+use oid4vci::{notification_request::NotificationRequest, proofs::Proofs};
 use serde::Deserialize;
 use shared_kernel::authorization::CommandOperation;
 
-use crate::credential::aggregate::{CredentialRefreshService, CredentialStatus};
+use crate::credential::aggregate::CredentialStatus;
 
 use super::{aggregate::CredentialExpiry, entity::Data};
 
@@ -15,9 +13,12 @@ pub enum CredentialCommand {
     CreateUnsignedCredential {
         credential_id: String,
         data: Data,
-        credential_configuration: Box<CredentialConfigurationsSupportedObject>,
-        refresh_service: Option<CredentialRefreshService>,
+        credential_configuration: Box<SupportedCredentialConfiguration>,
         expires_at: CredentialExpiry,
+        /// Embedded with the configuration's refresh service. Required when the configuration opts into refresh,
+        /// and ignored otherwise.
+        #[serde(default)]
+        refresh_token: Option<RefreshToken>,
     },
     CreateSignedCredential {
         credential_id: String,

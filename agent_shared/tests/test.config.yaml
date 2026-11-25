@@ -38,8 +38,7 @@ event_publishers:
       headers:
         Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l
       events:
-        credential: [UnsignedCredentialCreated, CredentialSigned]
-        server_config: []
+        types: [UnsignedCredentialCreated, CredentialSigned]
 
 display:
   - name: UniCore

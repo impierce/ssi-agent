@@ -3,6 +3,9 @@ name = "agent_application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
 publish.workspace = true
 
 [dependencies]
@@ -13,27 +16,29 @@ agent_event_publisher_nats = { path = "../agent_event_publisher_nats" }
 agent_holder = { path = "../agent_holder" }
 agent_identity = { path = "../agent_identity" }
 agent_issuance = { path = "../agent_issuance" }
+agent_kms = { path = "../agent_kms" }
 agent_library = { path = "../agent_library" }
 agent_secret_manager = { path = "../agent_secret_manager" }
 agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
+kms-aws = { path = "../infrastructure/adapters/kms-aws" }
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 anyhow.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 chrono.workspace = true
-did_manager = { git = "https://github.com/impierce/did-manager", tag = "v1.0.0-beta.9" }
-identity_credential.workspace = true
+identity-kit.workspace = true
 opentelemetry.workspace = true
-opentelemetry-appender-tracing = "0.31"
-opentelemetry-otlp = { version = "0.31", features = [
+opentelemetry-appender-tracing = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", features = [
     "grpc-tonic",
     "http-proto",
     "reqwest-blocking-client",
 ] }
-opentelemetry_sdk = "0.31"
+opentelemetry_sdk = "0.33.1"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde.workspace = true
 serde_json.workspace = true
 serde_with.workspace = true
@@ -41,10 +46,37 @@ shared-kernel.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
-tracing-opentelemetry = "0.32"
+tracing-opentelemetry = "0.34.0"
 tracing-subscriber.workspace = true
 utoipa.workspace = true
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.7"
+
 [dev-dependencies]
+agent_secret_manager = { path = "../agent_secret_manager", features = [
+    "test_utils",
+] }
+agent_shared = { path = "../agent_shared", features = ["test_utils"] }
+
+reqwest.workspace = true
 serde_norway.workspace = true
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
 tower.workspace = true
+tracing-test = { workspace = true, features = ["no-env-filter"] }
+
+[features]
+# Enables the integration tests that start their dependencies (databases, collectors) in Docker containers.
+docker-tests = []
+
+[[test]]
+name = "postgres"
+required-features = ["docker-tests"]
+
+[[test]]
+name = "mongodb"
+required-features = ["docker-tests"]
+
+[[test]]
+name = "telemetry"
+required-features = ["docker-tests"]

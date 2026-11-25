@@ -39,6 +39,8 @@ This error is raised when the system cannot find a credential configuration. The
 
 This error is raised when UniCore encounters a credential configuration that specifies a format it cannot process. This
 typically occurs when the credential configuration’s `format` does not match any of the supported formats.
+For manual reissuance, this also returns 400 when the configuration is not `dc+sd-jwt`
+or `vc+sd-jwt`; normal issuance may support additional formats.
 
 ### Resolution
 
@@ -108,7 +110,7 @@ credential does not expire.
 
 ## Missing Credential Offer
 
-This error occurs when UniCore cannot locate a Credential Offer for the provided `offerId`. It typically indicates that an operation is being attempted on a Credential Offer that has not been created or is otherwise unavailable.
+This error occurs when UniCore cannot locate a Credential Offer for the provided `offerId`. It typically indicates that an operation is being attempted on a Credential Offer that has not been created or is otherwise unavailable. Returned with status `404 Not Found`.
 
 ### Resolution
 
@@ -231,6 +233,10 @@ This error occurs when a template contains a `schema` value that is not itself a
 
 ## Credential Schema Validation Failed
 
+Schema failures also include a `violations` array with each violation's JSON-pointer
+`path` and `message`. Credential creation, batch issuance, and reissuance use the same
+validation and error shape.
+
 This error occurs when the credential data in the request does not satisfy the template's JSON Schema. UniCore validates unsigned credential payloads against the template schema before creating the credential and returns the list of schema violations in the error detail.
 
 ### Resolution
@@ -238,6 +244,33 @@ This error occurs when the credential data in the request does not satisfy the t
 - Inspect the reported validation violations.
 - Update the credential payload so it satisfies the template schema.
 - When using a schema for credential-subject fields, ensure the request data under `credential.credentialSubject` matches that schema.
+
+## Empty Batch
+
+This error occurs when a batch credential request contains no rows. A batch must contain at least one row.
+
+### Resolution
+
+Provide at least one row in the `credentials` array.
+
+## Batch Too Large
+
+This error occurs when a batch credential request contains more rows than UniCore processes in one request. The limit is included in the error detail.
+
+### Resolution
+
+Split the rows over several batch requests that each stay within the limit.
+
+## Batch Failed
+
+This error occurs when none of the rows of a `create-credentials-batch` request could be created. A batch is best-effort: each row is validated and created on its own, and a failing row does not hold back the others. When at least one row succeeds the response is `201` (or `207 Multi-Status` if others failed) rather than this error. In every case the response lists the outcome of each row by its 0-based `index` in the request: its `status`, the `credentialId` and `offerId` once they exist (also for a row that failed afterwards), the `credentialOffer` string a wallet consumes, whether an email was requested, and on failure an `error` with the `title`, `type`, `detail` and, for schema failures, the `violations` of the problem that row would have produced on its own.
+
+Problems with the template (`issuance#template-not-found`, `issuance#template-not-published`, `issuance#no-credential-configuration-found`) or with the caller (`authorization#unauthorized`, `authorization#forbidden`) are not row errors; they fail the request with their own status before anything is created. The same checks run on `verify-credentials-batch`, which creates nothing and always answers `200` with the per-row outcome.
+
+### Resolution
+
+- Inspect the `error` of each entry in `results` and fix the row at that `index`.
+- Resubmit only the rows that failed; the ones that succeeded already exist. A failed row that reports a `credentialId` created a credential that was never offered; revoke it or offer it by hand.
 
 ## Template Not Eligible For Public Offer
 
@@ -248,23 +281,65 @@ This error occurs when a template is used for a public offer but its schema cont
 - Restrict the template schema to constant leaf values only.
 - If the credential content must remain dynamic, use a regular offer flow instead of a public offer.
 
-## Credential Reissuance Errors
 
-Credential reissuance can return:
+## Original Credential Not Found
 
-- `issuance#original-credential-not-found` with `404 Not Found` when the original credential does not exist.
-- `issuance#credential-configuration-not-found` with `404 Not Found` when the requested credential configuration does not exist.
-- `issuance#reissuance-not-allowed` with `403 Forbidden` when the reissuance policy rejects the request.
-- `issuance#credential-reissuance-failed` with `500 Internal Server Error` when creating or recording the reissuance fails.
-- `issuance#query-credential-offer-failed`, `issuance#query-credential-reissuances-failed`, or `issuance#query-credential-reissuance-failed` with `500 Internal Server Error` when reading prepared reissuance data fails.
-- A status-only `404 Not Found` when a credential reissuance relation does not exist.
+The original credential referenced by a reissuance request does not exist (404).
+Check `originalCredentialId` against the issuer's stored credentials.
 
-## Credential Refresh Errors
+## Original Credential Not Issued
 
-Credential refresh can return:
+The original credential is still Pending (400). Complete its initial issuance before
+requesting a replacement. Preparing an unsigned credential alone does not issue it.
 
-- `issuance#create-refresh-capability-failed` with `500 Internal Server Error` when creating a refresh capability for a credential fails.
-- `issuance#refresh-reference-not-found` with `404 Not Found` when the refresh reference does not exist or has been disabled.
-- `issuance#credential-refresh-unavailable` with `403 Forbidden` when refresh is known but cannot proceed.
-- `issuance#credential-refresh-preparation-failed` with `500 Internal Server Error` when refresh preparation fails.
-- `issuance#credential-refresh-failed` with `500 Internal Server Error` for other refresh failures.
+## Credential Configuration Mismatch
+
+The requested configuration has a different credential format or type from the original
+credential (400). Select the configuration used for the original credential. Changes to
+presentation metadata, such as display labels, do not prevent reissuance.
+
+## Reissuance Not Allowed
+
+The configured reissuance policy denied the request (403). Check the policy's conditions
+and the request's trigger metadata before retrying.
+
+## Reissuance Already Exists
+
+A reissuance relation with the supplied identifier already exists (409). Application
+callers must use a new identifier for a distinct relation; the HTTP endpoint generates it.
+
+## Credential Reissuance Failed
+
+The server could not construct the reissuance relation (500). Inspect server logs.
+Persistence and authorization failures use their existing problem types and status codes.
+
+## Invalid Template Expiration
+
+The template's expiration datetime or duration could not be parsed (500). Correct its
+expiration configuration before retrying issuance or reissuance.
+
+## Refresh Reference Not Found
+
+The refresh token is unknown, or its credential was already replaced and the holder accepted the replacement (404).
+The two cannot be told apart. A wallet should stop refreshing with this token; the holder can ask the issuer for a
+new credential.
+
+## Credential Refresh Unavailable
+
+The credential cannot be refreshed now (403): the refresh preparation hook or the reissuance policy refused it. The
+default hook refuses every refresh, so an operator who advertises `refreshService` has to install a hook.
+
+## Credential Refresh Preparation Failed
+
+The refresh preparation hook failed to prepare the replacement credential (500). The token stays usable, so the
+wallet can retry later. Operators find the cause in the server logs.
+
+## Credential Refresh Failed
+
+The credential refresh failed for another reason (500). Nothing was handed out, and a retry starts clean. Check the
+server logs.
+
+## Create Refresh Capability Failed
+
+The credential's configuration opts into refresh, but its refresh capability could not be created, so the
+credential was not issued (500). Check the server logs and retry the issuance.

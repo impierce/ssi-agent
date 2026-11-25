@@ -7,14 +7,10 @@ use crate::dns::CnameCheck;
 use crate::{
     document::command::DocumentCommand,
     services::{document_can_link, linked_dids_by_origin},
-    state::{
-        publish_decentrally_hosted_documents, query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID,
-        LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
-    },
+    state::{query_all_documents, IdentityState, LINKED_DOMAINS_SERVICE_ID, LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID},
 };
 use agent_shared::handlers::{public_command_handler, public_query_handler, CommandHandlerError};
-use identity_did::DID as _;
-use identity_iota::credential::Jwt;
+use identity_kit::{did::Service as DocumentService, vc::Jwt};
 use serde::Serialize;
 use shared_kernel::authorization::{
     Actor, AuthorizationError, AuthorizationOperation, AuthorizationRequest, Caller, CommandOperation,
@@ -59,7 +55,7 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
     let linkable_documents = || {
         documents
             .values()
-            .filter(|document| document_can_link(document, state.services.iota_sponsoring_enabled))
+            .filter(|document| document_can_link(document))
             .filter_map(|document| document.document.as_ref())
     };
     match &mut command {
@@ -72,7 +68,8 @@ async fn execute_locked(state: &IdentityState, mut command: ServiceCommand) -> R
             verification_methods, ..
         } => {
             *verification_methods = linkable_documents()
-                .flat_map(|document| document.methods(None).into_iter().cloned())
+                .flat_map(|document| document.methods(None))
+                .cloned()
                 .collect();
         }
         ServiceCommand::AddLinkedVerifiablePresentations {
@@ -109,35 +106,33 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
     let documents = query_all_documents(state, |_| true).await?;
     for service in services.services.values() {
         for document in documents.values() {
-            let Some(core_document) = &document.document else {
+            let Some(did_document) = &document.document else {
                 continue;
             };
             if !document.did_method.is_some_and(|method| method.supports_update()) {
                 continue;
             }
-            let current = core_document.resolve_service(service.service_id.as_str());
-            let desired = if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
+            let service_url = did_document.id.join(&format!("#{}", service.service_id))?;
+            let current = did_document.service(&service_url);
+            let desired: Option<DocumentService> = if service.service_id == LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID {
                 let presentations = service
                     .presentations
                     .iter()
-                    .filter(|presentation| presentation.holder == core_document.id().as_str())
+                    .filter(|presentation| presentation.holder == did_document.id.as_str())
                     .cloned()
                     .collect::<Vec<_>>();
-                if service.is_active()
-                    && document_can_link(document, state.services.iota_sponsoring_enabled)
-                    && !presentations.is_empty()
-                {
+                if service.is_active() && document_can_link(document) && !presentations.is_empty() {
                     Some(linked_verifiable_presentation_service(
                         &service.service_id,
-                        core_document.id().as_str(),
+                        did_document.id.as_str(),
                         &presentations,
                     )?)
                 } else {
                     None
                 }
-            } else if service.is_active() && document_can_link(document, state.services.iota_sponsoring_enabled) {
+            } else if service.is_active() && document_can_link(document) {
                 let mut entry = service.service.clone().expect("active service has an entry");
-                entry.set_id(core_document.id().to_url().join(format!("#{}", service.service_id))?)?;
+                entry.id = service_url;
                 Some(entry)
             } else if service.is_active() {
                 continue;
@@ -157,7 +152,7 @@ async fn synchronize_services(state: &IdentityState) -> anyhow::Result<()> {
             public_command_handler(&document.document_id, &state.command.document, command).await?;
         }
     }
-    publish_decentrally_hosted_documents(state).await
+    Ok(())
 }
 
 /// The signed presentation behind a published Linked Verifiable Presentation. Presentations that
@@ -280,7 +275,7 @@ pub async fn verify(
                 Ok(actual) => {
                     let problems: Vec<String> = expected_dids
                         .iter()
-                        .filter_map(|did| match actual.iter().find(|linked| linked.did.did() == did.did()) {
+                        .filter_map(|did| match actual.iter().find(|linked| linked.did == *did) {
                             Some(linked) if linked.domain_linkage_valid => None,
                             Some(linked) => Some(format!(
                                 "{did}: {}",
@@ -350,10 +345,7 @@ pub async fn maintain_services(state: &IdentityState) -> anyhow::Result<()> {
         .await?
         .is_some_and(|service| service.needs_renewal((state.services.linkage_clock)()))
     {
-        let eligible_documents = query_all_documents(state, |(_, document)| {
-            document_can_link(document, state.services.iota_sponsoring_enabled)
-        })
-        .await?;
+        let eligible_documents = query_all_documents(state, |(_, document)| document_can_link(document)).await?;
         if eligible_documents.is_empty() {
             warn!("Linked domains need renewal, but no eligible signing DID is enabled");
         } else {

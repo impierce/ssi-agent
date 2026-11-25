@@ -65,16 +65,18 @@ pub mod tests {
             offers::tests::offers,
         },
     };
+    use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
     use agent_authorization::state::UNIME_CLIENT_ID;
     use agent_authorization::{
         domain::oauth2_authorization_request::aggregate::test_utils::code_verifier, state::UNIME_REDIRECT_URI,
     };
+    use agent_issuance::issuance_state;
     use agent_issuance::public_offer::command::PublicOfferCommand;
     use agent_issuance::services::IssuanceServices;
     use agent_secret_manager::service::Service;
     use agent_shared::handlers::public_command_handler as command_handler;
-    use agent_store::{authorization_state, in_memory::InMemory, issuance_state};
+    use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},
@@ -174,15 +176,8 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_token_endpoint(#[case] is_pre_authorized: bool) {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -200,7 +195,6 @@ pub mod tests {
                 AuthorizationServices::default().await,
                 &Default::default(),
                 Default::default(),
-                Default::default(),
             )
             .await,
         );
@@ -217,15 +211,8 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pre_authorized_token_redemption_fails_when_public_offer_is_offline() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -265,7 +252,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,
@@ -312,15 +298,8 @@ pub mod tests {
     #[serial_test::serial]
     #[tokio::test]
     async fn test_pre_authorized_token_redemption_fails_when_public_offer_is_deleted() {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
 
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
@@ -360,7 +339,6 @@ pub mod tests {
                 &InMemory,
                 AuthorizationServices::default().await,
                 &Default::default(),
-                Default::default(),
                 Default::default(),
             )
             .await,

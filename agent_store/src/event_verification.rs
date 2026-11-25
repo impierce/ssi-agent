@@ -1,22 +1,3 @@
-use agent_authorization::domain::{
-    access_token::aggregate::AccessToken, authorization_code::aggregate::AuthorizationCode, client::aggregate::Client,
-    oauth2_authorization_request::aggregate::OAuth2AuthorizationRequest,
-};
-use agent_holder::{
-    credential::aggregate::Credential as HolderCredential, offer::aggregate::Offer as ReceivedOffer,
-    presentation::aggregate::Presentation,
-};
-use agent_identity::{
-    connection::aggregate::Connection, document::aggregate::Document, profile::aggregate::Profile,
-    service::aggregate::Service,
-};
-use agent_issuance::{
-    credential::aggregate::Credential as IssuanceCredential, nonce::aggregate::Nonce,
-    offer::aggregate::Offer as IssuanceOffer, public_offer::aggregate::PublicOffer,
-    server_config::aggregate::ServerConfig, status_list::aggregate::StatusListAggregate,
-};
-use agent_library::{catalog::aggregate::Catalog, template::aggregate::Template};
-use agent_verification::authorization_request::aggregate::AuthorizationRequest;
 use cqrs_es::{Aggregate, DomainEvent};
 use serde::de::DeserializeOwned;
 
@@ -97,32 +78,33 @@ impl EventVerifier {
     }
 }
 
-pub fn verify_events(events: impl IntoIterator<Item = RawStoredEvent>) -> EventVerificationReport {
-    verify_events_with(events, core_event_verifiers())
-}
-
 pub fn verify_events_with(
     events: impl IntoIterator<Item = RawStoredEvent>,
     verifiers: &[EventVerifier],
 ) -> EventVerificationReport {
     let mut report = EventVerificationReport::default();
-
     for event in events {
-        report.checked += 1;
+        report.verify(event, verifiers);
+    }
+    report
+}
+
+impl EventVerificationReport {
+    /// Verifies one event and records the result, so stores can verify events as they read them
+    /// instead of holding all of them in memory.
+    pub fn verify(&mut self, event: RawStoredEvent, verifiers: &[EventVerifier]) {
+        self.checked += 1;
 
         let Some(verifier) = event_verifier_for(verifiers, &event.aggregate_type) else {
-            report
-                .incompatible
+            self.incompatible
                 .push(incompatible_event(event, "unknown aggregate type"));
-            continue;
+            return;
         };
 
         if let Err(reason) = verifier.verify(&event) {
-            report.incompatible.push(incompatible_event(event, reason));
+            self.incompatible.push(incompatible_event(event, reason));
         }
     }
-
-    report
 }
 
 fn event_verifier_for<'a>(verifiers: &'a [EventVerifier], aggregate_type: &str) -> Option<&'a EventVerifier> {
@@ -165,42 +147,6 @@ where
     }
 
     Ok(())
-}
-
-macro_rules! event_verifier {
-    ($aggregate:ty) => {
-        EventVerifier::new(
-            <$aggregate as Aggregate>::TYPE,
-            verify_aggregate_event::<<$aggregate as Aggregate>::Event>,
-        )
-    };
-}
-
-static CORE_EVENT_VERIFIERS: &[EventVerifier] = &[
-    event_verifier!(AccessToken),
-    event_verifier!(AuthorizationCode),
-    event_verifier!(Client),
-    event_verifier!(OAuth2AuthorizationRequest),
-    event_verifier!(Connection),
-    event_verifier!(Document),
-    event_verifier!(Profile),
-    event_verifier!(Service),
-    event_verifier!(Template),
-    event_verifier!(Catalog),
-    event_verifier!(ServerConfig),
-    event_verifier!(IssuanceCredential),
-    event_verifier!(IssuanceOffer),
-    event_verifier!(PublicOffer),
-    event_verifier!(Nonce),
-    event_verifier!(StatusListAggregate),
-    event_verifier!(HolderCredential),
-    event_verifier!(Presentation),
-    event_verifier!(ReceivedOffer),
-    event_verifier!(AuthorizationRequest),
-];
-
-pub fn core_event_verifiers() -> &'static [EventVerifier] {
-    CORE_EVENT_VERIFIERS
 }
 
 #[cfg(test)]
@@ -273,8 +219,11 @@ mod tests {
     }
 
     #[test]
-    fn core_verification_reports_unknown_external_aggregate() {
-        let report = verify_events([raw_event("test", serde_json::json!({ "Created": { "id": "id" } }))]);
+    fn verification_reports_unknown_external_aggregate() {
+        let report = verify_events_with(
+            [raw_event("test", serde_json::json!({ "Created": { "id": "id" } }))],
+            &[],
+        );
 
         assert_eq!(report.checked, 1);
         assert_eq!(report.incompatible.len(), 1);

@@ -1,18 +1,21 @@
-use crate::v0::issuance::credential_refresh::__path_credential_refresh;
 use crate::v0::issuance::credentials::{
-    __path_all_credentials, __path_credential, __path_credentials, __path_patch_credential,
+    __path_all_credentials, __path_create_credentials_batch, __path_credential, __path_credentials,
+    __path_patch_credential, __path_verify_credentials_batch,
 };
 use crate::v0::issuance::offers::{
     __path_all_offers, __path_offer, __path_offers,
     send::{__path_individual_offer, __path_organization_offer},
 };
-use crate::v0::issuance::public_offers::{
-    __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer, __path_take_public_offer_offline,
-    __path_take_public_offer_online,
+use crate::v0::issuance::{
+    public_offers::{
+        __path_all_public_offers, __path_create_public_offer, __path_delete_public_offer,
+        __path_take_public_offer_offline, __path_take_public_offer_online,
+    },
+    refresh::__path_refresh_credential,
+    reissuance::{__path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances},
 };
-use crate::v0::issuance::reissuance::{
-    __path_all_credential_reissuances, __path_credential_reissuance, __path_credential_reissuances,
-};
+use agent_issuance::refresh::token::CredentialRefreshService;
+use agent_shared::config::RefreshServiceConfiguration;
 use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
     Modify, OpenApi,
@@ -22,24 +25,28 @@ use utoipa::{
 #[openapi(
     paths(
         all_credentials,
+        create_credentials_batch,
         credential,
         credentials,
         patch_credential,
+        verify_credentials_batch,
         all_offers,
         offer,
         offers,
         individual_offer,
         organization_offer,
+        credential_reissuances,
+        all_credential_reissuances,
+        credential_reissuance,
+        refresh_credential,
         all_public_offers,
         create_public_offer,
         take_public_offer_offline,
         take_public_offer_online,
-        delete_public_offer,
-        credential_reissuances,
-        all_credential_reissuances,
-        credential_reissuance,
-        credential_refresh
+        delete_public_offer
     ),
+    // Referenced by the credential schemas, which are built by hand.
+    components(schemas(CredentialRefreshService, RefreshServiceConfiguration)),
     tags(
         (name = "Credentials", description = "Create and revoke verifiable credentials."),
         (name = "Issuance", description = "Issue credentials to individuals and organizations, manage credential offers and track their status."),

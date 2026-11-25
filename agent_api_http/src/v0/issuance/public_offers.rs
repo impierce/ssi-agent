@@ -1,12 +1,14 @@
 use crate::error::IntoApiErrorExt;
-use crate::extractors::RequestActor;
-use crate::handlers::{command_handler, public_query_handler, query_handler};
+use crate::extractors::{JsonBody, RequestActor};
+use crate::handlers::{caller, command_handler, public_query_handler, query_handler};
+use crate::v0::issuance::error::PublicError;
 use agent_issuance::public_offer::aggregate::PublicOffer;
 use agent_issuance::public_offer::command::PublicOfferCommand;
 use agent_issuance::public_offer::error::PublicOfferError;
 use agent_issuance::state::IssuanceState;
+use agent_library::queries;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::Status;
+use agent_library::template::aggregate::is_array_schema;
 use axum::Extension;
 use axum::{
     extract::State,
@@ -56,8 +58,13 @@ fn validate_leaf_is_const(prop: &Value) -> Result<(), PublicOfferError> {
 
     let obj = prop.as_object().unwrap();
 
-    // If this has nested properties, it's a container—recurse into children.
-    if let Some(nested_props) = obj.get("properties").and_then(|p| p.as_object()) {
+    // If this has nested properties, it's a container—recurse into children. An array is no container: `properties`
+    // say nothing about it, so it is fixed only by a `const` of its own.
+    if let Some(nested_props) = obj
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .filter(|_| !is_array_schema(prop))
+    {
         for (_key, nested) in nested_props {
             validate_leaf_is_const(nested)?;
         }
@@ -184,6 +191,7 @@ pub(crate) async fn all_public_offers(
         (status = 201, description = "Public offer created successfully"),
         (status = 404, description = "Template or offer not found"),
         (status = 400, description = "Template schema invalid for public offers"),
+        (status = 409, description = "A public offer with this ID already exists"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -192,7 +200,7 @@ pub(crate) async fn create_public_offer(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
     Extension(library_state): Extension<Arc<LibraryState>>,
-    Json(CreatePublicOfferRequest { offer_id, template_id }): Json<CreatePublicOfferRequest>,
+    JsonBody(CreatePublicOfferRequest { offer_id, template_id }): JsonBody<CreatePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     if query_handler(
         issuance_state.authorization_checker.clone(),
@@ -207,21 +215,10 @@ pub(crate) async fn create_public_offer(
         return Err(ApiError::new(StatusCode::NOT_FOUND));
     }
 
-    let template = query_handler(
-        library_state.authorization_checker.clone(),
-        actor.clone(),
-        &template_id,
-        Some(&template_id),
-        &library_state.query.template,
-    )
-    .await
-    .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
-    .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
-
-    // Only non-deleted templates can be offered publicly
-    if template.status == Status::Deleted {
-        return Err(PublicOfferError::TemplateNotFound.into_api_error());
-    }
+    let template = queries::get_template(&library_state, caller(actor.clone()), &template_id)
+        .await
+        .map_err(|_| PublicOfferError::TemplateNotFound.into_api_error())?
+        .ok_or_else(|| PublicOfferError::TemplateNotFound.into_api_error())?;
 
     // Validate that the template schema only contains const-only leaf fields
     validate_schema_has_only_consts(&template.schema).map_err(|e| e.into_api_error())?;
@@ -261,7 +258,7 @@ pub(crate) async fn create_public_offer(
 pub(crate) async fn take_public_offer_offline(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(TakePublicOfferOfflineRequest { offer_id }): Json<TakePublicOfferOfflineRequest>,
+    JsonBody(TakePublicOfferOfflineRequest { offer_id }): JsonBody<TakePublicOfferOfflineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOffline {
         offer_id: offer_id.clone(),
@@ -297,7 +294,7 @@ pub(crate) async fn take_public_offer_offline(
 pub(crate) async fn take_public_offer_online(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(TakePublicOfferOnlineRequest { offer_id }): Json<TakePublicOfferOnlineRequest>,
+    JsonBody(TakePublicOfferOnlineRequest { offer_id }): JsonBody<TakePublicOfferOnlineRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::TakeOnline {
         offer_id: offer_id.clone(),
@@ -333,7 +330,7 @@ pub(crate) async fn take_public_offer_online(
 pub(crate) async fn delete_public_offer(
     State(issuance_state): State<Arc<IssuanceState>>,
     RequestActor(actor): RequestActor,
-    Json(DeletePublicOfferRequest { offer_id }): Json<DeletePublicOfferRequest>,
+    JsonBody(DeletePublicOfferRequest { offer_id }): JsonBody<DeletePublicOfferRequest>,
 ) -> Result<Response, ApiError> {
     let command = PublicOfferCommand::Delete {
         offer_id: offer_id.clone(),
@@ -352,10 +349,20 @@ pub(crate) async fn delete_public_offer(
     Ok((StatusCode::NO_CONTENT).into_response())
 }
 
+/// Whether `offer_id` is a Public Offer, also a deleted or inactive one: an offer redeemable by any number of wallets.
+pub(crate) async fn is_public_offer(state: &IssuanceState, offer_id: &str) -> Result<bool, PublicError> {
+    let aggregate_id = public_offer_aggregate_id(offer_id);
+
+    Ok(public_query_handler(&aggregate_id, &state.query.public_offer)
+        .await?
+        .is_some())
+}
+
 /// Check if a public offer can be resolved (is active and not deleted)
 pub(crate) async fn can_resolve_public_offer(state: &Arc<IssuanceState>, offer_id: &str) -> Result<bool, ApiError> {
     let aggregate_id = public_offer_aggregate_id(offer_id);
 
+    // Deleted offers must stay visible here: without a record, the offer would count as a normal offer.
     match public_query_handler(&aggregate_id, &state.query.public_offer).await? {
         Some(offer) => Ok(offer.active && !offer.deleted),
         // If there is no public-offer record, treat it as a normal offer.
@@ -370,13 +377,13 @@ mod tests {
     use crate::v0::issuance::credentials::tests::{create_test_template_with_auth, credentials, setup_library_state};
     use crate::v0::issuance::router;
     use crate::API_VERSION;
+    use agent_issuance::issuance_state;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::initialize;
     use agent_library::state::LibraryState;
     use agent_library::template::command::TemplateCommand;
     use agent_secret_manager::service::Service;
     use agent_store::in_memory::InMemory;
-    use agent_store::issuance_state;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
@@ -410,15 +417,8 @@ mod tests {
     }
 
     async fn setup_app() -> (Router, Arc<LibraryState>) {
-        let issuance_state = Arc::new(
-            issuance_state(
-                &InMemory,
-                IssuanceServices::default().await,
-                &Default::default(),
-                Default::default(),
-            )
-            .await,
-        );
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
         initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -440,6 +440,46 @@ mod tests {
         public_command_handler(template_id, &library_state.command.template, command)
             .await
             .unwrap();
+    }
+
+    /// A list or a table is fixed by a `const` of its own; what its items say does not fix it.
+    #[test]
+    fn a_list_is_fixed_by_its_own_const() {
+        let schema = |skills: Value| {
+            Some(serde_json::json!({
+                "type": "object",
+                "properties": { "name": { "const": "Alice" }, "skills": skills }
+            }))
+        };
+
+        let fixed = schema(serde_json::json!({
+            "type": "array",
+            "items": { "type": "string" },
+            "const": ["Rust"]
+        }));
+        assert!(super::validate_schema_has_only_consts(&fixed).is_ok());
+
+        let open = schema(serde_json::json!({ "type": "array", "items": { "type": "string" } }));
+        assert!(super::validate_schema_has_only_consts(&open).is_err());
+
+        let fixed_items_only = schema(serde_json::json!({
+            "type": "array",
+            "items": { "type": "object", "properties": { "name": { "const": "Rust" } } }
+        }));
+        assert!(super::validate_schema_has_only_consts(&fixed_items_only).is_err());
+
+        // `properties` say nothing about an array, so they don't make it a container of fixed values.
+        for properties in [
+            serde_json::json!({}),
+            serde_json::json!({ "label": { "const": "Rust" } }),
+        ] {
+            let open_with_properties = schema(serde_json::json!({
+                "type": "array",
+                "items": { "type": "string" },
+                "properties": properties
+            }));
+            assert!(super::validate_schema_has_only_consts(&open_with_properties).is_err());
+        }
     }
 
     fn const_only_schema() -> Value {
@@ -719,5 +759,75 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn test_credential_offer_uri_resolves_only_active_offers() {
+        let (mut app, library_state) = setup_app().await;
+        update_template_schema(&library_state, TEMPLATE_ID, Some(const_only_schema())).await;
+
+        async fn post(app: &mut Router, command: &str) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::POST)
+                        .uri(format!("{API_VERSION}/{command}"))
+                        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                        .body(Body::from(
+                            serde_json::to_vec(&serde_json::json!({ "offerId": crate::tests::OFFER_ID })).unwrap(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        }
+        async fn resolve(app: &mut Router, offer_id: &str) -> (StatusCode, Value) {
+            let response = app
+                .call(
+                    Request::builder()
+                        .method(http::Method::GET)
+                        .uri(format!("/openid4vci/credential-offer/{offer_id}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+        }
+
+        assert_eq!(resolve(&mut app, "unknown").await.0, StatusCode::NOT_FOUND);
+
+        // An offer without a public-offer record resolves like any other offer.
+        credentials(&mut app).await;
+        let (status, credential_offer) = resolve(&mut app, crate::tests::OFFER_ID).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            credential_offer["credential_configuration_ids"],
+            serde_json::json!([TEMPLATE_ID])
+        );
+
+        let response = app
+            .call(create_public_offer_request(crate::tests::OFFER_ID, TEMPLATE_ID).await)
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(
+            resolve(&mut app, crate::tests::OFFER_ID).await,
+            (status, credential_offer.clone())
+        );
+
+        post(&mut app, "take-public-offer-offline").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::NOT_FOUND);
+
+        post(&mut app, "take-public-offer-online").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::OK);
+
+        post(&mut app, "delete-public-offer").await;
+        assert_eq!(resolve(&mut app, crate::tests::OFFER_ID).await.0, StatusCode::NOT_FOUND);
     }
 }

@@ -1,15 +1,17 @@
 use agent_issuance::application::credential_configuration_projection::CredentialConfigurationProjection;
+use agent_issuance::issuance_state;
+use agent_issuance::server_config::command::ServerConfigCommand;
 use agent_issuance::services::IssuanceServices;
 use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
+use agent_library::library_state;
 use agent_library::state::LibraryState;
-use agent_library::template::aggregate::{DataModel, Display, PropertyAttribute, Status, Visibility};
+use agent_library::template::aggregate::{DataModel, Display, FormFieldType, PropertyAttribute, Status, Visibility};
 use agent_library::template::command::TemplateCommand;
 use agent_library::template::event::{Expiration, HolderType, TemplateEvent};
 use agent_secret_manager::service::Service;
 use agent_shared::config::Authorization;
 use agent_shared::handlers::{public_command_handler as command_handler, public_query_handler as query_handler};
 use agent_store::in_memory::InMemory;
-use agent_store::{issuance_state, library_state};
 use cqrs_es::{EventEnvelope, Query};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -42,6 +44,7 @@ fn create_test_event_template_created(
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
         metadata: HashMap::new(),
     }
@@ -49,13 +52,12 @@ fn create_test_event_template_created(
 
 async fn setup() -> (Arc<IssuanceState>, Arc<LibraryState>, CredentialConfigurationProjection) {
     let bus = shared_kernel::event_bus::EventBusHandle::default();
-    let issuance =
-        Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus, Default::default()).await);
+    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus).await);
     let (projection, template_view_handle) = CredentialConfigurationProjection::new(issuance.clone());
     // Build the library state WITHOUT the projection (the projection dispatches commands to issuance_state,
     // not to this library state). Then wire the real view repo into the projection's OnceLock handle so
     // that partial-update re-queries use the same MemRepository that the CQRS framework updates.
-    let lib_state = Arc::new(library_state(&InMemory, &bus, Default::default(), vec![]).await);
+    let lib_state = Arc::new(library_state(&InMemory, &bus, vec![]).await);
     assert!(
         template_view_handle.set(lib_state.query.template.clone()).is_ok(),
         "template view already initialized"
@@ -87,6 +89,185 @@ async fn test_template_created_registers_credential_configuration() {
 }
 
 #[tokio::test]
+async fn test_template_created_with_an_origin_registers_credential_configuration() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "imported-template";
+    let mut event = create_test_event_template_created(
+        template_id,
+        vec!["VerifiableCredential".to_string()],
+        DataModel::W3CVcDataModelV2_0,
+        "Imported Credential".to_string(),
+        None,
+        Status::Published,
+    );
+    let TemplateEvent::TemplateCreated { origin, .. } = &mut event.payload else {
+        unreachable!()
+    };
+    *origin = Some(Box::new(agent_library::template::origin::TemplateOrigin {
+        publisher_uri: "https://issuer.example".to_string(),
+        source_template_id: "0b7c".to_string(),
+        digest: format!("sha256-{}", "a".repeat(64)),
+        check_for_updates: true,
+    }));
+
+    projection.dispatch(template_id, &[event]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_unchanged_credential_configuration_repairs_a_server_config_view_that_lacks_it() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "my-template";
+    let event = || {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    projection.dispatch(template_id, &[event()]).await;
+
+    // A view write that lost against a concurrent one, while the aggregate holds the configuration.
+    let (mut view, context) = issuance
+        .query
+        .server_config
+        .load_with_context(SERVER_CONFIG_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    view.credential_configurations.remove(template_id);
+    issuance.query.server_config.update_view(view, context).await.unwrap();
+
+    projection.dispatch(template_id, &[event()]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
+async fn test_unchanged_credential_configuration_repairs_metadata_replaced_by_a_late_initialization() {
+    let (issuance, _library, projection) = setup().await;
+
+    let template_id = "my-template";
+    let event = || {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    projection.dispatch(template_id, &[event()]).await;
+
+    // A second instance starting on the same fresh event store initializes after the publish: the
+    // metadata no longer advertises the configuration, while the configurations still hold it.
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut credential_issuer_metadata = server_config.credential_issuer_metadata.clone();
+    credential_issuer_metadata.credential_configurations_supported.clear();
+    command_handler(
+        SERVER_CONFIG_ID,
+        &issuance.command.server_config,
+        ServerConfigCommand::InitializeServerMetadata {
+            authorization_server_metadata: Box::new(server_config.authorization_server_metadata.clone()),
+            credential_issuer_metadata: Box::new(credential_issuer_metadata),
+            cryptographic_binding_methods_supported: server_config.cryptographic_binding_methods_supported.clone(),
+            signing_algorithms_supported: server_config.signing_algorithms_supported.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key(template_id));
+    assert!(!server_config.advertises_credential_configurations());
+
+    projection.dispatch(template_id, &[event()]).await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config
+        .credential_issuer_metadata
+        .credential_configurations_supported
+        .contains_key(template_id));
+    assert!(server_config.advertises_credential_configurations());
+}
+
+#[tokio::test]
+async fn test_archiving_removes_a_credential_configuration_that_the_server_config_view_lacks() {
+    let (issuance, _library, projection) = setup().await;
+
+    let published = |template_id: &str| {
+        create_test_event_template_created(
+            template_id,
+            vec!["VerifiableCredential".to_string()],
+            DataModel::W3CVcDataModelV2_0,
+            "My Credential".to_string(),
+            None,
+            Status::Published,
+        )
+    };
+    let template_id = "archived-right-after-publish";
+    projection.dispatch(template_id, &[published(template_id)]).await;
+
+    // The view write of the publish has not landed yet when the archive is handled.
+    let (mut view, context) = issuance
+        .query
+        .server_config
+        .load_with_context(SERVER_CONFIG_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    view.credential_configurations.remove(template_id);
+    issuance.query.server_config.update_view(view, context).await.unwrap();
+
+    let archive_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+        aggregate_id: template_id.to_string(),
+        sequence: 2,
+        payload: TemplateEvent::StatusUpdated {
+            template_id: template_id.to_string(),
+            status: Status::Archived,
+            modified_at: "2024-01-01T00:01:00Z".to_string(),
+        },
+        metadata: HashMap::new(),
+    };
+    projection.dispatch(template_id, &[archive_event]).await;
+
+    // Every server config event carries all credential configurations of the aggregate.
+    projection
+        .dispatch("other-template", &[published("other-template")])
+        .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(server_config.credential_configurations.contains_key("other-template"));
+    assert!(!server_config.credential_configurations.contains_key(template_id));
+}
+
+#[tokio::test]
 async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
     let (issuance, _library, projection) = setup().await;
 
@@ -106,9 +287,9 @@ async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     assert!(matches!(
-        &config_obj.credential_format,
+        &config_obj.metadata.credential_format,
         oid4vci::credential_format_profiles::CredentialFormats::VcSdJwt(_)
     ));
 }
@@ -215,6 +396,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -269,8 +451,9 @@ async fn test_display_updated_reflects_in_credential_configuration() {
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display_name = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -310,6 +493,7 @@ async fn test_title_updated_while_in_draft_skips_sync() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -362,6 +546,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -407,8 +592,9 @@ async fn test_title_updated_refreshes_credential_configuration() {
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display_name = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -489,6 +675,7 @@ async fn test_status_updated_to_published_creates_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -575,6 +762,7 @@ async fn test_status_updated_to_deleted_removes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -641,6 +829,7 @@ async fn test_status_updated_to_archived_removes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -723,6 +912,7 @@ async fn test_schema_updated_refreshes_credential_configuration() {
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -765,8 +955,9 @@ async fn test_schema_updated_refreshes_credential_configuration() {
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let claim_count = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .and_then(|metadata| metadata.claims.as_ref())
@@ -775,6 +966,8 @@ async fn test_schema_updated_refreshes_credential_configuration() {
     assert_eq!(claim_count, 1);
 }
 
+/// A `country` attribute gives a claim the `country` format, so setting or removing one refreshes the credential
+/// configuration.
 #[tokio::test]
 async fn test_schema_properties_attributes_updated_refreshes_credential_configuration() {
     let (issuance, lib_state, projection) = setup().await;
@@ -806,6 +999,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             schema: Box::new(Some(schema.clone())),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -831,49 +1025,146 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
             schema: Box::new(Some(schema)),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
         metadata: HashMap::new(),
     };
     projection.dispatch(template_id, &[create_event]).await;
-
-    let mut attrs = HashMap::new();
-    attrs.insert("/name".to_string(), PropertyAttribute::new(true, false));
-
-    command_handler(
-        template_id,
-        &lib_state.command.template,
-        TemplateCommand::UpdateSchemaPropertiesAttributes {
-            template_id: template_id.to_string(),
-            schema_properties_attributes: attrs.clone(),
-        },
-    )
-    .await
-    .unwrap();
-
-    let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
-        aggregate_id: template_id.to_string(),
-        sequence: 2,
-        payload: TemplateEvent::SchemaPropertiesAttributesUpdated {
-            template_id: template_id.to_string(),
-            schema_properties_attributes: attrs,
-            modified_at: "2024-01-01T00:01:00Z".to_string(),
-        },
-        metadata: HashMap::new(),
-    };
-    projection.dispatch(template_id, &[update_event]).await;
-
-    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+    let before = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
-    let claim = config_obj
+    assert!(before.credential_configurations.contains_key(template_id));
+
+    let name_display = |attrs: HashMap<String, PropertyAttribute>, sequence: usize| {
+        let lib_state = lib_state.clone();
+        let issuance = issuance.clone();
+        let projection = &projection;
+        async move {
+            command_handler(
+                template_id,
+                &lib_state.command.template,
+                TemplateCommand::UpdateSchemaPropertiesAttributes {
+                    template_id: template_id.to_string(),
+                    schema_properties_attributes: attrs.clone(),
+                },
+            )
+            .await
+            .unwrap();
+            let update_event: EventEnvelope<agent_library::template::aggregate::Template> = EventEnvelope {
+                aggregate_id: template_id.to_string(),
+                sequence,
+                payload: TemplateEvent::SchemaPropertiesAttributesUpdated {
+                    template_id: template_id.to_string(),
+                    schema_properties_attributes: attrs,
+                    modified_at: "2024-01-01T00:01:00Z".to_string(),
+                },
+                metadata: HashMap::new(),
+            };
+            projection.dispatch(template_id, &[update_event]).await;
+
+            let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+                .await
+                .unwrap()
+                .unwrap();
+            let claims = server_config.credential_configurations[template_id]
+                .1
+                .metadata
+                .credential_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.claims.clone())
+                .unwrap();
+            serde_json::json!(claims[0].display)
+        }
+    };
+
+    let country = PropertyAttribute {
+        r#type: Some(FormFieldType::Country),
+        ..PropertyAttribute::new(true, false)
+    };
+    assert_eq!(
+        name_display(HashMap::from([("/name".to_string(), country)]), 2).await,
+        serde_json::json!([{ "format": "country" }])
+    );
+    assert_eq!(
+        name_display(
+            HashMap::from([("/name".to_string(), PropertyAttribute::new(true, false))]),
+            3
+        )
+        .await,
+        serde_json::json!([])
+    );
+}
+
+/// At startup the configuration of every published template is derived again: one that is missing or was derived
+/// differently is replaced, a draft gets none, and a second run changes nothing.
+#[tokio::test]
+async fn test_resync_derives_configurations_of_published_templates() {
+    use agent_issuance::application::credential_configuration_projection::resync_credential_configurations;
+
+    let (issuance, lib_state, _) = setup().await;
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": { "name": { "type": "string" } },
+        "required": ["name"]
+    });
+    // The projection is not wired to this library state, so creating a template derives nothing by itself.
+    for (template_id, status) in [
+        ("published-template", Status::Published),
+        ("draft-template", Status::Draft),
+    ] {
+        command_handler(
+            template_id,
+            &lib_state.command.template,
+            TemplateCommand::CreateNewTemplate {
+                template_id: template_id.to_string(),
+                source_template_id: None,
+                title: "Resync Test".to_string(),
+                display: Box::new(None),
+                data_model: DataModel::W3CVcDataModelV2_0,
+                holder_type: HolderType::Individual,
+                tags: None,
+                status,
+                visibility: Visibility::Private,
+                credential_expiration: None,
+                description: None,
+                r#type: vec!["VerifiableCredential".to_string()],
+                schema: Box::new(Some(schema.clone())),
+                schema_properties_attributes: None,
+                holder_authorization: Authorization::default(),
+                origin: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let configurations = || async {
+        query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+            .await
+            .unwrap()
+            .map(|server_config| server_config.credential_configurations)
+            .unwrap_or_default()
+    };
+    assert!(!configurations().await.contains_key("published-template"));
+
+    resync_credential_configurations(issuance.clone(), &lib_state).await;
+
+    let derived = configurations().await;
+    let (_, published, _) = derived
+        .get("published-template")
+        .expect("published template is advertised");
+    let claim = published
+        .metadata
         .credential_metadata
         .as_ref()
         .and_then(|metadata| metadata.claims.as_ref())
         .and_then(|claims| claims.first())
-        .expect("claim should be present after schema attribute update");
-    assert!(!claim.mandatory);
+        .expect("claim should be present");
+    assert!(claim.mandatory);
+    assert!(!derived.contains_key("draft-template"));
+
+    resync_credential_configurations(issuance.clone(), &lib_state).await;
+    assert_eq!(configurations().await, derived);
 }
 
 #[tokio::test]
@@ -909,6 +1200,7 @@ async fn test_logo_first_draft_then_title_then_publish_uses_title_as_display_nam
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -984,8 +1276,9 @@ async fn test_logo_first_draft_then_title_then_publish_uses_title_as_display_nam
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -1034,6 +1327,7 @@ async fn test_display_update_with_empty_name_then_title_update_uses_new_title() 
             schema: Box::new(None),
             schema_properties_attributes: None,
             holder_authorization: Authorization::default(),
+            origin: None,
         },
     )
     .await
@@ -1112,8 +1406,9 @@ async fn test_display_update_with_empty_name_then_title_update_uses_new_title() 
         .await
         .unwrap()
         .unwrap();
-    let (_, config_obj, _, _) = server_config.credential_configurations.get(template_id).unwrap();
+    let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -1127,5 +1422,85 @@ async fn test_display_update_with_empty_name_then_title_update_uses_new_title() 
     assert_eq!(
         display.logo.as_ref().map(|logo| logo.uri.to_string()),
         Some("https://example.com/logo.png".to_string())
+    );
+}
+
+#[tokio::test]
+async fn a_template_update_keeps_the_refresh_opt_in_of_its_configuration() {
+    let bus = shared_kernel::event_bus::EventBusHandle::default();
+    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus).await);
+    let library = library_state(&InMemory, &bus, vec![]).await;
+    let template_id = "refreshable-template";
+    command_handler(
+        template_id,
+        &library.command.template,
+        TemplateCommand::CreateNewTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Refreshable".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+            origin: None,
+        },
+    )
+    .await
+    .unwrap();
+    command_handler(
+        SERVER_CONFIG_ID,
+        &issuance.command.server_config,
+        ServerConfigCommand::UpdateCredentialConfiguration {
+            credential_configuration: serde_json::from_value(serde_json::json!({
+                "credential_configuration_id": template_id,
+                "format": "vc+sd-jwt",
+                "type": ["VerifiableCredential"],
+                "refreshService": {"type": "VerifiableCredentialRefreshService2021"}
+            }))
+            .unwrap(),
+            provisioned: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    agent_issuance::application::credential_configuration_projection::resync_credential_configurations(
+        issuance.clone(),
+        &library,
+    )
+    .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let configuration = &server_config.credential_configurations[template_id].1;
+    let display_name = configuration
+        .metadata
+        .credential_metadata
+        .as_ref()
+        .unwrap()
+        .display
+        .as_ref()
+        .unwrap()[0]
+        .name
+        .clone();
+    assert_eq!(
+        (
+            display_name.as_str(),
+            configuration
+                .refresh_service
+                .as_ref()
+                .map(|refresh_service| refresh_service.type_.as_str())
+        ),
+        ("Refreshable", Some("VerifiableCredentialRefreshService2021"))
     );
 }

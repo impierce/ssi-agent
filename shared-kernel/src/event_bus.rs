@@ -18,6 +18,26 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[allow(clippy::doc_markdown)]
+/// CNCF CloudEvents extension attributes.
+///
+/// Field names strictly follow the CloudEvents v1.0.2 specification:
+/// lowercase alphanumeric characters (`[a-z0-9]`) only without separators.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
+pub struct Extension {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callerid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callertype: Option<String>,
+}
+
+impl Extension {
+    #[must_use]
+    pub fn new(callerid: Option<String>, callertype: Option<String>) -> Self {
+        Self { callerid, callertype }
+    }
+}
+
+#[allow(clippy::doc_markdown)]
 /// A CNCF CloudEvent envelope (v1.0 spec).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CloudEvent {
@@ -37,6 +57,9 @@ pub struct CloudEvent {
     pub time: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
+    #[serde(flatten)]
+    #[schema(inline)]
+    pub extension: Extension,
 }
 
 impl CloudEvent {
@@ -51,6 +74,7 @@ impl CloudEvent {
             subject: None,
             time: Some(Utc::now()),
             data: None,
+            extension: Extension::default(),
         }
     }
 
@@ -65,6 +89,19 @@ impl CloudEvent {
         self.subject = Some(subject.into());
         self
     }
+
+    #[must_use]
+    pub fn with_caller(mut self, id: Option<String>, caller_type: Option<String>) -> Self {
+        self.extension.callerid = id;
+        self.extension.callertype = caller_type;
+        self
+    }
+
+    #[must_use]
+    pub fn with_extension(mut self, extension: Extension) -> Self {
+        self.extension = extension;
+        self
+    }
 }
 
 /// Helper function to construct a reverse-DNS standard CNCF `CloudEvent` v1.0.
@@ -77,7 +114,7 @@ pub fn build_cloud_event(
     payload: serde_json::Value,
     occurred_at: Option<DateTime<Utc>>,
 ) -> CloudEvent {
-    let cloud_type = format!("com.impierce.unicore.{}", event_type.to_case(Case::Kebab));
+    let cloud_type = format!("com.impierce.unicore.{}", cloud_event_type_suffix(event_type));
     let source = format!("/services/{}", aggregate_type.to_lowercase());
     let id = format!("{aggregate_type}:{aggregate_id}:{sequence}");
 
@@ -94,6 +131,15 @@ pub fn build_cloud_event(
         subject: Some(aggregate_id.to_string()),
         time: occurred_at.or_else(|| Some(Utc::now())),
         data: Some(data),
+        extension: Extension::default(),
+    }
+}
+
+fn cloud_event_type_suffix(event_type: &str) -> String {
+    if event_type.eq_ignore_ascii_case("OID4VPAuthorizationResponseVerified") {
+        "oid4vp-authorization-response-verified".to_string()
+    } else {
+        event_type.to_case(Case::Kebab)
     }
 }
 
@@ -119,7 +165,7 @@ impl EventFilter {
                     .event_type
                     .strip_prefix("com.impierce.unicore.")
                     .unwrap_or(&event.event_type);
-                let pattern_kebab = pattern.to_case(Case::Kebab);
+                let pattern_kebab = cloud_event_type_suffix(pattern);
                 event_suffix.eq_ignore_ascii_case(pattern) || event_suffix.eq_ignore_ascii_case(&pattern_kebab)
             })
         {
@@ -221,6 +267,15 @@ pub trait EventHistoryReader: Send + Sync + 'static {
     ) -> Result<HistoryAscendingResult, EventBusError>;
 }
 
+/// SPI deciding what an event may show once it leaves the event store.
+///
+/// The bus runs it on every published event before subscribers and the in-memory history get it, and on every
+/// event read back through the [`EventHistoryReader`]. It removes or replaces data that must stay in the store.
+pub trait EventDisclosure: Send + Sync + 'static {
+    /// Changes `event` in place to what it may show.
+    fn disclose(&self, event: &mut CloudEvent);
+}
+
 use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
@@ -228,7 +283,7 @@ use std::time::{Duration, Instant};
 ///
 /// A duration rather than an event count because the gap it has to span is one: the change
 /// stream's delivery lag behind in-process dispatch, which stretches to the reconnect backoff.
-const DEDUP_WINDOW_TTL: Duration = Duration::from_secs(600);
+const DEDUP_WINDOW_TTL: Duration = Duration::from_mins(10);
 
 /// Caps memory when [`DEDUP_WINDOW_TTL`] would retain more than this under sustained throughput.
 const DEDUP_WINDOW_MAX_ENTRIES: usize = 50_000;
@@ -286,6 +341,7 @@ pub struct EventBusHandle {
     history_capacity: usize,
     history_reader: Arc<std::sync::RwLock<Option<Arc<dyn EventHistoryReader>>>>,
     dedup: Arc<std::sync::RwLock<DedupWindow>>,
+    disclosure: Arc<std::sync::RwLock<Option<Arc<dyn EventDisclosure>>>>,
 }
 
 impl EventBusHandle {
@@ -302,16 +358,52 @@ impl EventBusHandle {
             history_capacity: 500,
             history_reader: Arc::new(std::sync::RwLock::new(None)),
             dedup: Arc::new(std::sync::RwLock::new(DedupWindow::new())),
+            disclosure: Arc::new(std::sync::RwLock::new(None)),
         }
     }
 
-    /// Sets the persistent history reader SPI implementation.
-    pub fn set_history_reader(&self, reader: Arc<dyn EventHistoryReader>) {
-        let mut lock = match self.history_reader.write() {
+    /// Sets the [`EventDisclosure`] SPI implementation, replacing any set before.
+    ///
+    /// The bus has one disclosure: a second domain that needs one composes its rule into the installed
+    /// implementation. Without one, events leave the bus unchanged.
+    pub fn set_disclosure(&self, disclosure: Arc<dyn EventDisclosure>) {
+        let mut lock = match self.disclosure.write() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        *lock = Some(reader);
+        *lock = Some(disclosure);
+    }
+
+    fn disclosed(&self, mut event: CloudEvent) -> CloudEvent {
+        let lock = match self.disclosure.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(disclosure) = lock.as_ref() {
+            disclosure.disclose(&mut event);
+        }
+        event
+    }
+
+    /// Sets the persistent history reader SPI implementation.
+    ///
+    /// History is then served from persistent storage only, so the in-memory ring buffer is
+    /// cleared and no longer filled: it would otherwise keep up to 500 full event payloads that are
+    /// never read.
+    pub fn set_history_reader(&self, reader: Arc<dyn EventHistoryReader>) {
+        {
+            let mut lock = match self.history_reader.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            *lock = Some(reader);
+        }
+
+        let mut history = match self.history.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *history = VecDeque::new();
     }
 }
 
@@ -350,6 +442,7 @@ impl EventBusHandle {
     /// [`Query::dispatch`] and from the change stream — so the second copy is dropped if it falls
     /// inside the [`DedupWindow`].
     pub fn publish(&self, event: CloudEvent) {
+        let event = self.disclosed(event);
         {
             let mut dedup = match self.dedup.write() {
                 Ok(guard) => guard,
@@ -361,14 +454,21 @@ impl EventBusHandle {
         }
 
         {
-            let mut lock = match self.history.write() {
+            // Held while appending, so that `set_history_reader` cannot clear the history in between.
+            let history_reader = match self.history_reader.read() {
                 Ok(guard) => guard,
                 Err(poisoned) => poisoned.into_inner(),
             };
-            if lock.len() >= self.history_capacity {
-                lock.pop_front();
+            if history_reader.is_none() {
+                let mut lock = match self.history.write() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                if lock.len() >= self.history_capacity {
+                    lock.pop_front();
+                }
+                lock.push_back(event.clone());
             }
-            lock.push_back(event.clone());
         }
 
         let _ = self.sender.send(Arc::new(event));
@@ -418,7 +518,9 @@ impl EventBusHandle {
         // Storage errors are propagated immediately (fail-closed) to ensure clients are not
         // silently served an incomplete catch-up stream that masks database issues.
         if let Some(reader) = reader {
-            return reader.history_ascending(filter, last_event_id, limit).await;
+            let mut history = reader.history_ascending(filter, last_event_id, limit).await?;
+            history.events = history.events.into_iter().map(|event| self.disclosed(event)).collect();
+            return Ok(history);
         }
 
         // 2. Fall back to the bounded in-memory ring buffer (e.g. in test or standalone environments).
@@ -617,6 +719,9 @@ where
                 .map(|datetime| datetime.with_timezone(&chrono::Utc))
                 .or_else(|| Some(chrono::Utc::now()));
 
+            let callerid = envelope.metadata.get("callerid").filter(|s| !s.is_empty()).cloned();
+            let callertype = envelope.metadata.get("callertype").filter(|s| !s.is_empty()).cloned();
+
             let cloud_event = build_cloud_event(
                 A::TYPE,
                 aggregate_id,
@@ -624,7 +729,8 @@ where
                 &envelope.payload.event_type(),
                 payload,
                 occurred_at,
-            );
+            )
+            .with_caller(callerid, callertype);
 
             self.publish(cloud_event);
         }
@@ -648,6 +754,37 @@ mod tests {
         assert_eq!(event.id, "offer:123:4");
         assert_eq!(event.source, "/services/offer");
         assert_eq!(event.event_type, "com.impierce.unicore.offer-created");
+    }
+
+    #[test]
+    fn oid4vp_authorization_response_event_uses_canonical_type() {
+        let event = build_cloud_event(
+            "authorization_request",
+            "ar-1",
+            3,
+            "OID4VPAuthorizationResponseVerified",
+            serde_json::json!({"OID4VPAuthorizationResponseVerified": {"state": "state-1"}}),
+            None,
+        );
+
+        assert_eq!(
+            event.event_type,
+            "com.impierce.unicore.oid4vp-authorization-response-verified"
+        );
+        assert_eq!(event.data, Some(serde_json::json!({"state": "state-1"})));
+
+        for pattern in [
+            "OID4VPAuthorizationResponseVerified",
+            "oid4vpauthorizationresponseverified",
+            "oid4vp-authorization-response-verified",
+            "com.impierce.unicore.oid4vp-authorization-response-verified",
+        ] {
+            let filter = EventFilter {
+                event_types: vec![pattern.to_string()],
+                ..Default::default()
+            };
+            assert!(filter.matches(&event), "Event filter must match `{pattern}`");
+        }
     }
 
     #[test]
@@ -862,6 +999,112 @@ mod tests {
         assert!(matches!(result, Err(EventBusError::Source(msg)) if msg == "connection timeout"));
     }
 
+    struct Redacting;
+
+    impl EventDisclosure for Redacting {
+        fn disclose(&self, event: &mut CloudEvent) {
+            event.data = Some(serde_json::json!("redacted"));
+        }
+    }
+
+    #[tokio::test]
+    async fn published_events_go_through_the_disclosure() {
+        let handle = EventBusHandle::new(16);
+        handle.set_disclosure(Arc::new(Redacting));
+
+        handle.publish(build_cloud_event(
+            "offer",
+            "abc",
+            1,
+            "OfferCreated",
+            serde_json::json!({"secret": 1}),
+            None,
+        ));
+
+        let data: Vec<_> = handle
+            .history(&EventFilter::default(), 10)
+            .into_iter()
+            .map(|event| event.data)
+            .collect();
+        assert_eq!(data, vec![Some(serde_json::json!("redacted"))]);
+    }
+
+    #[tokio::test]
+    async fn events_read_back_from_storage_go_through_the_disclosure() {
+        struct StoredReader;
+
+        #[async_trait]
+        impl EventHistoryReader for StoredReader {
+            async fn history_ascending(
+                &self,
+                _filter: &EventFilter,
+                _last_event_id: Option<&str>,
+                _limit: Option<usize>,
+            ) -> Result<HistoryAscendingResult, EventBusError> {
+                Ok(HistoryAscendingResult {
+                    events: vec![build_cloud_event(
+                        "offer",
+                        "abc",
+                        1,
+                        "OfferCreated",
+                        serde_json::json!({"secret": 1}),
+                        None,
+                    )],
+                    ..Default::default()
+                })
+            }
+        }
+        let handle = EventBusHandle::new(16);
+        handle.set_disclosure(Arc::new(Redacting));
+        handle.set_history_reader(Arc::new(StoredReader));
+
+        let history = handle
+            .history_ascending(&EventFilter::default(), None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(history.events[0].data, Some(serde_json::json!("redacted")));
+    }
+
+    #[tokio::test]
+    async fn in_memory_history_is_dropped_once_a_history_reader_is_set() {
+        struct EmptyReader;
+
+        #[async_trait]
+        impl EventHistoryReader for EmptyReader {
+            async fn history_ascending(
+                &self,
+                _filter: &EventFilter,
+                _last_event_id: Option<&str>,
+                _limit: Option<usize>,
+            ) -> Result<HistoryAscendingResult, EventBusError> {
+                Ok(HistoryAscendingResult::default())
+            }
+        }
+
+        let event = |sequence| {
+            build_cloud_event(
+                "offer",
+                "abc",
+                sequence,
+                "OfferCreated",
+                serde_json::json!({"id": "abc"}),
+                None,
+            )
+        };
+        let handle = EventBusHandle::new(16);
+        handle.publish(event(1));
+        assert_eq!(handle.history(&EventFilter::default(), 10).len(), 1);
+
+        handle.set_history_reader(Arc::new(EmptyReader));
+        assert!(handle.history(&EventFilter::default(), 10).is_empty());
+
+        let mut stream = handle.subscribe(EventFilter::default());
+        handle.publish(event(2));
+        assert!(handle.history(&EventFilter::default(), 10).is_empty());
+        assert_eq!(stream.next().await.unwrap().unwrap().id, event(2).id);
+    }
+
     #[tokio::test]
     async fn test_attach_source_resumes_from_last_position() {
         struct MockEventSource {
@@ -1032,6 +1275,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_query_dispatch_preserves_metadata_caller() {
+        let handle = EventBusHandle::new(16);
+        let mut subscriber = handle.subscribe(EventFilter::default());
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("timestamp".to_string(), "2026-01-15T10:30:00Z".to_string());
+        metadata.insert("callerid".to_string(), "user-123".to_string());
+        metadata.insert("callertype".to_string(), "user".to_string());
+
+        let envelope = cqrs_es::EventEnvelope {
+            aggregate_id: "agg-1".to_string(),
+            sequence: 1,
+            payload: MockEvent::Created,
+            metadata,
+        };
+
+        Query::<MockAggregate>::dispatch(&handle, "agg-1", &[envelope]).await;
+
+        let received = subscriber.next().await.unwrap().unwrap();
+        assert_eq!(received.extension.callerid.as_deref(), Some("user-123"));
+        assert_eq!(received.extension.callertype.as_deref(), Some("user"));
+    }
+
+    #[test]
+    fn test_cloud_event_extension_flattening() {
+        let event = CloudEvent::new("com.impierce.unicore.test", "/services/test")
+            .with_caller(Some("user-123".into()), Some("user".into()));
+
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json.get("callerid"), Some(&serde_json::json!("user-123")));
+        assert_eq!(json.get("callertype"), Some(&serde_json::json!("user")));
+        assert!(json.get("extension").is_none());
+
+        let deserialized: CloudEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.extension.callerid.as_deref(), Some("user-123"));
+        assert_eq!(deserialized.extension.callertype.as_deref(), Some("user"));
+    }
+
+    #[test]
+    fn test_cloud_event_deserialization_without_extension() {
+        let json = serde_json::json!({
+            "id": "event-1",
+            "source": "/services/test",
+            "specversion": "1.0",
+            "type": "com.impierce.unicore.test",
+        });
+
+        let deserialized: CloudEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.extension.callerid, None);
+        assert_eq!(deserialized.extension.callertype, None);
+    }
+
+    #[tokio::test]
     async fn history_ascending_reports_truncation_when_resume_hits_the_limit() {
         let handle = EventBusHandle::new(16);
         for sequence in 1..=5 {
@@ -1108,7 +1404,7 @@ mod tests {
 
     #[test]
     fn dedup_window_evicts_by_count() {
-        let mut window = DedupWindow::with_limits(Duration::from_secs(600), 3);
+        let mut window = DedupWindow::with_limits(Duration::from_mins(10), 3);
 
         assert!(window.insert("a"));
         assert!(window.insert("b"));

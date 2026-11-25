@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::authorization::{
     AuthorizationCheckerFor, AuthorizationConfigurationError, AuthorizationError, AuthorizationOperation,
@@ -33,7 +33,12 @@ pub trait ApplicationContext: Send + Sync + 'static {
     /// Execute a write-side command against the aggregate identified by `aggregate_id`.
     ///
     /// Returns the (possibly newly-created) aggregate ID on success.
-    async fn handle_command(&self, aggregate_id: &str, command: Self::Command) -> Result<String, Self::CommandError>;
+    async fn handle_command(
+        &self,
+        aggregate_id: &str,
+        command: Self::Command,
+        caller: &Caller,
+    ) -> Result<String, Self::CommandError>;
 
     /// Execute a read-side query, returning the projected view.
     async fn handle_query(&self, query: Self::Query) -> Result<Self::View, Self::QueryError>;
@@ -212,13 +217,14 @@ async fn process_command<AC: ApplicationContext>(
     }
 
     let result = context
-        .handle_command(&msg.aggregate_id, msg.command)
+        .handle_command(&msg.aggregate_id, msg.command, &msg.caller)
         .await
         .map_err(ApplicationServiceError::Context);
 
+    // Failures are returned to the caller, which tells client errors from server errors.
     match &result {
-        Ok(id) => info!(aggregate_id = %id, "Command executed successfully"),
-        Err(e) => error!(aggregate_id = %msg.aggregate_id, error = %e, "Command execution failed"),
+        Ok(id) => debug!(aggregate_id = %id, "Command executed successfully"),
+        Err(e) => debug!(aggregate_id = %msg.aggregate_id, error = %e, "Command execution failed"),
     }
 
     if msg.reply.send(result).is_err() {
@@ -254,9 +260,10 @@ async fn process_query<AC: ApplicationContext>(
         .await
         .map_err(ApplicationServiceError::Context);
 
+    // Failures are returned to the caller, which tells client errors from server errors.
     match &result {
         Ok(_) => debug!("Query executed successfully"),
-        Err(e) => error!(error = %e, "Query execution failed"),
+        Err(e) => debug!(error = %e, "Query execution failed"),
     }
 
     if msg.reply.send(result).is_err() {
@@ -313,6 +320,7 @@ mod tests {
             &self,
             aggregate_id: &str,
             _command: Self::Command,
+            _caller: &Caller,
         ) -> Result<String, Self::CommandError> {
             Ok(aggregate_id.to_string())
         }
@@ -354,6 +362,7 @@ mod tests {
             &self,
             _aggregate_id: &str,
             _command: Self::Command,
+            _caller: &Caller,
         ) -> Result<String, Self::CommandError> {
             Err(TestCommandError("command failed".into()))
         }
@@ -624,9 +633,7 @@ mod tests {
             }),
         );
 
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
         let result = service_handle
             .dispatch_command(Caller::Actor(actor.clone()), "aggregate-id".into(), "create".into())
             .await;
@@ -655,9 +662,7 @@ mod tests {
             }),
         );
 
-        let actor = Actor {
-            subject: "user@example.test".to_string(),
-        };
+        let actor = Actor::user("user@example.test");
         let result = service_handle
             .dispatch_query(Caller::Actor(actor.clone()), "my-query".into())
             .await;

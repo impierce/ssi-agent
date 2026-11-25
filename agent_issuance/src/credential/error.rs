@@ -22,4 +22,6 @@ pub enum CredentialError {
     InvalidIssuerDidError,
     #[error("Failed to get a key identifier for signing the credential")]
     KeyIdError,
+    #[error("The `notification_id` does not belong to this credential")]
+    InvalidNotificationIdError,
 }

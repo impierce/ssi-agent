@@ -11,7 +11,15 @@ impl IntoApiErrorExt for CredentialError {
             CredentialError::CredentialDecodingError => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
                 .title("Credential Decoding Failed")
                 .type_url(type_url("holder#credential-decoding-failed"))
-                .message("The supplied credential could not be decoded as a JWT verifiable credential.")
+                .message(
+                    "The supplied credential could not be decoded as a credential JWT or a `vc+sd-jwt` credential.",
+                )
+                .source(self)
+                .finish(),
+            CredentialError::InvalidCredential(_) => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Invalid Credential")
+                .type_url(type_url("holder#invalid-credential"))
+                .message("The credential's issuer signature or validity period does not hold.")
                 .source(self)
                 .finish(),
             CredentialError::InvalidCredentialStatus => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
@@ -118,16 +126,30 @@ impl IntoApiErrorExt for OfferError {
                 .type_url(type_url("holder#unsupported-credential-format"))
                 .source(self)
                 .finish(),
+
+            // The issuer sent a credential that does not verify.
+            OfferError::InvalidCredentialError(_) => ApiError::builder(StatusCode::BAD_GATEWAY)
+                .title("Invalid Credential")
+                .type_url(type_url("holder#invalid-credential"))
+                .message("The credential the issuer sent does not verify: its issuer signature or validity period does not hold.")
+                .source(self)
+                .finish(),
         }
     }
 }
 
-/// Every variant signals a broken or misconfigured agent rather than a bad request — the holder's own
-/// signing key, DID or presentation encoding — so these stay `500`, but carry a problem type that says
-/// which step failed.
+/// Every variant but `MixedCredentialFormatsError` signals a broken or misconfigured agent rather than a bad
+/// request — the holder's own signing key, DID or presentation encoding — so these stay `500`, but carry a problem
+/// type that says which step failed.
 impl IntoApiErrorExt for PresentationError {
     fn into_api_error(self) -> ApiError {
         match self {
+            PresentationError::MixedCredentialFormatsError => ApiError::builder(StatusCode::UNPROCESSABLE_ENTITY)
+                .title("Mixed Credential Formats")
+                .type_url(type_url("holder#mixed-credential-formats"))
+                .message("A presentation holds either credential JWTs or `vc+sd-jwt` credentials, not both.")
+                .source(self)
+                .finish(),
             PresentationError::MissingIdentifierError(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
                 .title("Missing Holder Identifier")
                 .type_url(type_url("holder#missing-holder-identifier"))
@@ -165,7 +187,7 @@ impl IntoApiErrorExt for PresentationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::tests::into_json_value;
+    use crate::error::tests::{assert_problems, into_json_value};
     use serde_json::json;
 
     macro_rules! assert_problem_details {
@@ -185,7 +207,7 @@ mod tests {
                 "type": type_url("holder#credential-decoding-failed"),
                 "title": "Credential Decoding Failed",
                 "status": 422,
-                "detail": "The supplied credential could not be decoded as a JWT verifiable credential."
+                "detail": "The supplied credential could not be decoded as a credential JWT or a `vc+sd-jwt` credential."
             })
         );
 
@@ -264,5 +286,132 @@ mod tests {
                 "detail": "Failed to sign presentation: no key"
             })
         );
+    }
+
+    #[test]
+    fn every_offer_error_maps_to_a_problem_type() {
+        use OfferError::*;
+
+        assert_problems([
+            (
+                MissingCredentialOfferError,
+                StatusCode::NOT_FOUND,
+                Some("holder#credential-offer-not-found"),
+            ),
+            (
+                CredentialOfferStatusNotPendingError,
+                StatusCode::CONFLICT,
+                Some("holder#credential-offer-not-pending"),
+            ),
+            (
+                CredentialOfferStatusNotAcceptedError,
+                StatusCode::CONFLICT,
+                Some("holder#credential-offer-not-accepted"),
+            ),
+            (
+                MissingTokenResponseError,
+                StatusCode::CONFLICT,
+                Some("holder#missing-token-response"),
+            ),
+            (
+                MissingPreAuthorizedCodeError,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("holder#missing-pre-authorized-code"),
+            ),
+            (
+                MissingCredentialConfigurationsError,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("holder#missing-credential-configurations"),
+            ),
+            (
+                MissingCredentialConfigurationError,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some("holder#missing-credential-configuration"),
+            ),
+            (
+                CredentialOfferByReferenceRetrievalError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#credential-offer-retrieval-failed"),
+            ),
+            (
+                CredentialIssuerMetadataRetrievalError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#credential-issuer-metadata-retrieval-failed"),
+            ),
+            (
+                AuthorizationServerMetadataRetrievalError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#authorization-server-metadata-retrieval-failed"),
+            ),
+            (
+                MissingTokenEndpointError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#missing-token-endpoint"),
+            ),
+            (
+                TokenResponseError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#token-request-failed"),
+            ),
+            (
+                CredentialResponseError,
+                StatusCode::BAD_GATEWAY,
+                Some("holder#credential-request-failed"),
+            ),
+            (
+                UnsupportedDeferredCredentialResponseError,
+                StatusCode::NOT_IMPLEMENTED,
+                Some("holder#unsupported-deferred-credential-response"),
+            ),
+            (
+                BatchCredentialRequestError,
+                StatusCode::NOT_IMPLEMENTED,
+                Some("holder#unsupported-batch-credential-request"),
+            ),
+            (
+                UnsupportedCredentialFormatError,
+                StatusCode::NOT_IMPLEMENTED,
+                Some("holder#unsupported-credential-format"),
+            ),
+            (
+                InvalidCredentialError("error".to_string()),
+                StatusCode::BAD_GATEWAY,
+                Some("holder#invalid-credential"),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn every_presentation_error_maps_to_a_problem_type() {
+        use PresentationError::*;
+
+        assert_problems(
+            [
+                (
+                    MissingIdentifierError("error".to_string()),
+                    "holder#missing-holder-identifier",
+                ),
+                (
+                    InvalidUrlError("error".to_string()),
+                    "holder#invalid-holder-identifier-url",
+                ),
+                (
+                    PresentationBuilderError("error".to_string()),
+                    "holder#presentation-build-failed",
+                ),
+                (
+                    SerializationError("error".to_string()),
+                    "holder#presentation-serialization-failed",
+                ),
+                (KeyIdError, "holder#missing-signing-key-identifier"),
+                (SigningError("error".to_string()), "holder#presentation-signing-failed"),
+            ]
+            .map(|(error, problem_type)| (error, StatusCode::INTERNAL_SERVER_ERROR, Some(problem_type))),
+        );
+        assert_problems([(
+            MixedCredentialFormatsError,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Some("holder#mixed-credential-formats"),
+        )]);
     }
 }

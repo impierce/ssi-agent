@@ -1,6 +1,6 @@
 pub mod presentation_signed;
 
-use crate::extractors::RequestActor;
+use crate::extractors::{JsonBody, PathParams, RequestActor};
 use crate::handlers::{command_handler, internal_query_handler, query_handler};
 use agent_holder::{
     credential::queries::HolderCredentialView,
@@ -8,7 +8,7 @@ use agent_holder::{
     state::HolderState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
     Json,
 };
@@ -55,6 +55,7 @@ pub(crate) async fn get_presentations(
     get,
     path = "/holder/presentations/{presentation_id}",
     operation_id = "get_holder_presentation_by_id",
+    params(("presentation_id" = String, Path, description = "Presentation ID")),
     tags = ["Identity", "Holder"],
     responses(
         (status = 200, description = "Presentation retrieved successfully", body = Presentation),
@@ -66,7 +67,7 @@ pub(crate) async fn get_presentations(
 pub(crate) async fn presentation(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(presentation_id): Path<String>,
+    PathParams(presentation_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     query_handler(
         state.authorization_checker.clone(),
@@ -88,7 +89,9 @@ pub struct PresentationsEndpointRequest {
 
 /// Create a new credential presentation
 ///
-/// Creates and signs a new credential presentation containing the given credentials held by your organisation.
+/// Creates and signs a new credential presentation containing the given credentials held by your organisation:
+/// credential JWTs in a VCDM 1.1 presentation, `vc+sd-jwt` credentials in a VCDM 2.0 presentation (`vp+jwt`),
+/// each with every disclosure it carries.
 #[utoipa::path(
     post,
     path = "/holder/presentations",
@@ -99,14 +102,14 @@ pub struct PresentationsEndpointRequest {
         (status = 201, description = "Presentation created successfully", body = Presentation),
         (status = 400, description = "Malformed JSON request body"),
         (status = 404, description = "Credential not found"),
-        (status = 422, description = "Request body does not match the expected schema"),
+        (status = 422, description = "Request body does not match the expected schema, or the credentials mix credential JWTs and `vc+sd-jwt` credentials"),
     )
 )]
 #[axum_macros::debug_handler]
 pub(crate) async fn post_presentations(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Json(PresentationsEndpointRequest { credential_ids }): Json<PresentationsEndpointRequest>,
+    JsonBody(PresentationsEndpointRequest { credential_ids }): JsonBody<PresentationsEndpointRequest>,
 ) -> Result<Response, ApiError> {
     let mut credentials = vec![];
 

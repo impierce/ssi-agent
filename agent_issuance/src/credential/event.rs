@@ -1,12 +1,10 @@
-use crate::credential::aggregate::{CredentialRefreshService, CredentialStatus};
+use crate::credential::aggregate::CredentialStatus;
 
 use super::{aggregate::Status, entity::Data};
+use crate::server_config::supported_configuration::SupportedCredentialConfiguration;
 use chrono::{DateTime, Utc};
 use cqrs_es::DomainEvent;
-use oid4vci::{
-    credential_issuer::credential_configurations_supported::CredentialConfigurationsSupportedObject,
-    notification_request::NotificationRequest,
-};
+use oid4vci::notification_request::NotificationRequest;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
@@ -17,8 +15,7 @@ pub enum CredentialEvent {
         credential_id: String,
         data: Data,
         notification_id: Option<String>,
-        credential_configuration: Box<CredentialConfigurationsSupportedObject>,
-        refresh_service: Option<CredentialRefreshService>,
+        credential_configuration: Box<SupportedCredentialConfiguration>,
         created_at: Option<DateTime<Utc>>,
         expires_at: Option<DateTime<Utc>>,
     },

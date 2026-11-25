@@ -1,12 +1,13 @@
 use agent_holder::{presentation::aggregate::Presentation, state::HolderState};
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{IntoResponse, Response},
 };
 use http_api_problem::ApiError;
 use hyper::{header, StatusCode};
 use std::sync::Arc;
 
+use crate::extractors::PathParams;
 use crate::{extractors::RequestActor, handlers::query_handler};
 
 /// Get a signed credential presentation
@@ -32,7 +33,7 @@ use crate::{extractors::RequestActor, handlers::query_handler};
 pub(crate) async fn presentation_signed(
     State(state): State<Arc<HolderState>>,
     RequestActor(actor): RequestActor,
-    Path(presentation_id): Path<String>,
+    PathParams(presentation_id): PathParams<String>,
 ) -> Result<Response, ApiError> {
     match query_handler(
         state.authorization_checker.clone(),
@@ -83,11 +84,10 @@ mod tests {
     #[tokio::test]
     async fn signed_presentation_is_subject_to_authorization() {
         let authorization = Arc::new(DenyingAuthorization::default());
-        let mut state = agent_store::holder_state(
+        let mut state = agent_holder::holder_state(
             &agent_store::in_memory::InMemory,
             Arc::new(HolderServices::new(Arc::new(Subject::test_subject().await))),
             &shared_kernel::EventBusHandle::default(),
-            vec![],
         )
         .await;
         state.authorization_checker = authorization.clone();

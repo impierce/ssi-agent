@@ -1,8 +1,8 @@
-use crate::event_verification::{self, EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
+use crate::event_verification::{EventVerificationError, EventVerificationReport, EventVerifier, RawStoredEvent};
 use crate::{AggregateHandler, CqrsComponentBuilder};
 use agent_shared::{application_state::Command, config::config};
 use async_trait::async_trait;
-use cqrs_es::{persist::PersistedEventStore, CqrsFramework};
+use cqrs_es::CqrsFramework;
 use cqrs_es::{Aggregate, Query, View};
 use mongo_es::{default_mongo_client, Client, MongoEventRepository, MongoViewRepository};
 use mongodb::bson::{self, doc, Document};
@@ -11,17 +11,20 @@ use shared_kernel::event_bus::{
     build_cloud_event, CloudEvent, EventBusError, EventFilter, EventHistoryReader, EventSource, EventSourceStream,
     HistoryAscendingResult, Position, SourceEvent, SubscribePosition,
 };
+use shared_kernel::streaming_event_store::{StreamingEventStore, REPLAY_BUFFER_EVENTS};
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
-impl<A> AggregateHandler<A, PersistedEventStore<MongoEventRepository, A>>
+impl<A> AggregateHandler<A, StreamingEventStore<MongoEventRepository, A>>
 where
     A: Aggregate,
 {
     async fn new(client: Client, services: A::Services) -> Self {
-        let repo = new_event_repository(client).await;
-        let store = PersistedEventStore::new_event_store(repo);
+        let replay = new_event_repository(client.clone())
+            .await
+            .with_streaming_channel_size(REPLAY_BUFFER_EVENTS);
+        let store = StreamingEventStore::new(new_event_repository(client).await, replay);
         Self {
             cqrs: CqrsFramework::new(store, vec![], services),
         }
@@ -70,22 +73,12 @@ impl MongoDB {
     }
     // TODO: Run [Client::shutdown] during graceful shutdown to close all open connections.
 
-    pub async fn verify_events(&self) -> Result<EventVerificationReport, EventVerificationError> {
-        self.verify_events_with(event_verification::core_event_verifiers())
-            .await
-    }
-
+    /// Verifies all persisted events, one at a time as they are read: the event store can be far
+    /// larger than the memory available to the agent.
     pub async fn verify_events_with(
         &self,
         verifiers: &[EventVerifier],
     ) -> Result<EventVerificationReport, EventVerificationError> {
-        Ok(event_verification::verify_events_with(
-            self.load_raw_events().await?,
-            verifiers,
-        ))
-    }
-
-    async fn load_raw_events(&self) -> Result<Vec<RawStoredEvent>, EventVerificationError> {
         #[derive(serde::Deserialize)]
         struct RawStoredEventDocument {
             aggregate_type: String,
@@ -119,15 +112,15 @@ impl MongoDB {
             .build();
 
         let mut cursor = collection.find(doc! {}).with_options(options).await?;
-        let mut events = Vec::new();
+        let mut report = EventVerificationReport::default();
 
         while cursor.advance().await? {
             let document = cursor.deserialize_current()?;
             let event: RawStoredEventDocument = bson::from_document(document)?;
-            events.push(event.into());
+            report.verify(event.into(), verifiers);
         }
 
-        Ok(events)
+        Ok(report)
     }
 }
 
@@ -135,7 +128,7 @@ impl CqrsComponentBuilder for MongoDB {
     async fn commands_and_queries<V: View<A> + 'static, A: Aggregate + 'static, AV: View<A> + 'static>(
         &self,
         services: A::Services,
-        event_publishers: Vec<Box<dyn Query<A>>>,
+        queries: Vec<Box<dyn Query<A>>>,
     ) -> (
         Arc<dyn Command<A> + Send + Sync>,
         Arc<dyn DynViewRepository<V, A>>,
@@ -156,12 +149,7 @@ impl CqrsComponentBuilder for MongoDB {
             Arc::new(
                 AggregateHandler::new(self.client.clone(), services)
                     .await
-                    .with_parameters(
-                        aggregate.clone(),
-                        all_aggregates.clone(),
-                        event_publishers,
-                        &all_aggregates_name,
-                    ),
+                    .with_parameters(aggregate.clone(), all_aggregates.clone(), queries, &all_aggregates_name),
             ),
             aggregate,
             all_aggregates,
@@ -185,14 +173,37 @@ pub fn document_to_cloud_event(document: &bson::Document) -> Option<CloudEvent> 
         .and_then(|timestamp_str| chrono::DateTime::parse_from_rfc3339(timestamp_str).ok())
         .map(|parsed_datetime| parsed_datetime.with_timezone(&chrono::Utc));
 
-    Some(build_cloud_event(
-        aggregate_type,
-        aggregate_id,
-        sequence,
-        event_type,
-        payload,
-        occurred_at,
-    ))
+    let caller_type = metadata_doc
+        .as_ref()
+        .and_then(|metadata| metadata.get_str("callertype").ok())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+    let caller_id = metadata_doc
+        .as_ref()
+        .and_then(|metadata| metadata.get_str("callerid").ok())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+
+    let event = build_cloud_event(aggregate_type, aggregate_id, sequence, event_type, payload, occurred_at)
+        .with_caller(caller_id, caller_type);
+
+    Some(event)
+}
+
+/// The `aggregate_type` condition of a query: one of `sources` when it names any, and never one of `withheld`.
+fn aggregate_type_condition(sources: &[String], withheld: &[String]) -> Option<bson::Document> {
+    let mut condition = doc! {};
+    if !sources.is_empty() {
+        let aggregate_types: Vec<String> = sources
+            .iter()
+            .map(|source| source.trim_start_matches("/services/").trim_matches('/').to_lowercase())
+            .collect();
+        condition.insert("$in", aggregate_types);
+    }
+    if !withheld.is_empty() {
+        condition.insert("$nin", withheld);
+    }
+    (!condition.is_empty()).then_some(condition)
 }
 
 /// An [`EventSource`] implementation for MongoDB using change streams.
@@ -200,13 +211,16 @@ pub fn document_to_cloud_event(document: &bson::Document) -> Option<CloudEvent> 
 pub struct MongoEventSource {
     client: Client,
     initialized: Arc<tokio::sync::OnceCell<()>>,
+    withheld_aggregate_types: Vec<String>,
 }
 
 impl MongoEventSource {
-    pub fn new(client: Client) -> Self {
+    /// A source of every stored event, except those of `withheld_aggregate_types`, which are never published.
+    pub fn new(client: Client, withheld_aggregate_types: &[&str]) -> Self {
         Self {
             client,
             initialized: Arc::new(tokio::sync::OnceCell::new()),
+            withheld_aggregate_types: withheld_aggregate_types.iter().map(ToString::to_string).collect(),
         }
     }
 
@@ -268,8 +282,13 @@ impl EventSource for MongoEventSource {
             options.resume_after = Some(resume_token);
         }
 
+        let withheld = match aggregate_type_condition(&[], &self.withheld_aggregate_types) {
+            Some(condition) => vec![doc! { "$match": { "fullDocument.aggregate_type": condition } }],
+            None => vec![],
+        };
         let change_stream = collection
             .watch()
+            .pipeline(withheld)
             .with_options(options)
             .await
             .map_err(|error| EventBusError::Source(error.to_string()))?;
@@ -326,17 +345,8 @@ impl EventHistoryReader for MongoEventSource {
         let mut target_object_id: Option<mongodb::bson::oid::ObjectId> = None;
 
         let mut base_query = doc! {};
-        if !filter.sources.is_empty() {
-            let aggregate_types: Vec<String> = filter
-                .sources
-                .iter()
-                .map(|source| source.trim_start_matches("/services/").trim_matches('/').to_lowercase())
-                .collect();
-            if aggregate_types.len() == 1 {
-                base_query.insert("aggregate_type", &aggregate_types[0]);
-            } else if let Ok(bson_array) = bson::to_bson(&aggregate_types) {
-                base_query.insert("aggregate_type", doc! { "$in": bson_array });
-            }
+        if let Some(condition) = aggregate_type_condition(&filter.sources, &self.withheld_aggregate_types) {
+            base_query.insert("aggregate_type", condition);
         }
 
         if let Some(ref target_subject) = filter.subject {
@@ -551,6 +561,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn withheld_aggregate_types_are_left_out_of_every_query() {
+        let condition = aggregate_type_condition(&["/services/offer".to_owned()], &["refresh_capability".to_owned()]);
+
+        assert_eq!(
+            condition,
+            Some(doc! { "$in": ["offer"], "$nin": ["refresh_capability"] })
+        );
+    }
+
+    #[test]
     fn test_document_to_cloud_event_with_timestamp() {
         let doc = doc! {
             "aggregate_type": "client",
@@ -575,6 +595,28 @@ mod tests {
             cloud_event.time.unwrap().to_rfc3339(),
             "2026-09-21T07:50:45.686998501+00:00"
         );
+    }
+
+    #[test]
+    fn test_document_to_cloud_event_with_caller() {
+        let doc = doc! {
+            "aggregate_type": "template",
+            "aggregate_id": "tpl-123",
+            "sequence": 1i64,
+            "event_type": "TemplateCreated",
+            "payload": {
+                "TemplateCreated": {}
+            },
+            "metadata": {
+                "timestamp": "2026-09-21T07:50:45.686998501Z",
+                "callerid": "alice@example.test",
+                "callertype": "user"
+            }
+        };
+
+        let cloud_event = document_to_cloud_event(&doc).expect("Should convert to CloudEvent");
+        assert_eq!(cloud_event.extension.callerid.as_deref(), Some("alice@example.test"));
+        assert_eq!(cloud_event.extension.callertype.as_deref(), Some("user"));
     }
 
     #[test]

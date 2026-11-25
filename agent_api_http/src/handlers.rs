@@ -1,12 +1,18 @@
 use crate::error::ErrorWrapper;
 use cqrs_es::{Aggregate, View};
 use shared_kernel::authorization::{
-    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, Caller, CommandOperation, QueryOperation,
+    Actor, AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation,
+    QueryOperation,
 };
 use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 
 static ALLOW_ALL_AUTHORIZATION_CHECKER: std::sync::OnceLock<Arc<dyn AuthorizationChecker>> = std::sync::OnceLock::new();
+
+/// The caller on whose behalf an HTTP request is handled.
+pub fn caller(actor: Option<Actor>) -> Caller {
+    actor.map_or(Caller::Anonymous, Caller::Actor)
+}
 
 /// Wrapping the `command_handler` function from the `agent_shared` crate to handle errors.
 pub async fn command_handler<A>(
@@ -20,11 +26,19 @@ where
     A: Aggregate,
     <A as Aggregate>::Command: Send + Sync + std::fmt::Debug + CommandOperation,
 {
-    let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
-
-    agent_shared::handlers::command_handler(authorization_checker, caller, aggregate_id, state, command)
+    agent_shared::handlers::command_handler(authorization_checker, caller(actor), aggregate_id, state, command)
         .await
         .map_err(ErrorWrapper::CommandHandlerError)
+}
+
+/// Checks whether the actor may execute `command` on `aggregate_id`, without executing it.
+pub async fn authorize_command<C: CommandOperation>(
+    authorization_checker: &dyn AuthorizationChecker,
+    actor: Option<Actor>,
+    aggregate_id: &str,
+    command: &C,
+) -> Result<(), AuthorizationError> {
+    agent_shared::handlers::authorize_command(authorization_checker, caller(actor), aggregate_id, command).await
 }
 
 /// Executes a command that is a fixed, trusted continuation of an already-authorized operation.
@@ -94,9 +108,7 @@ where
     A: Aggregate,
     V: View<A> + QueryOperation,
 {
-    let caller = actor.map_or(Caller::Anonymous, Caller::Actor);
-
-    agent_shared::handlers::query_handler(authorization_checker, caller, view_id, resource_id, state)
+    agent_shared::handlers::query_handler(authorization_checker, caller(actor), view_id, resource_id, state)
         .await
         .map_err(ErrorWrapper::QueryHandlerError)
 }
