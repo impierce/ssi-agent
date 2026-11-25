@@ -12,6 +12,7 @@ pub mod status_list;
 pub mod utils;
 
 pub mod application;
+pub mod ports;
 pub mod services;
 pub mod state;
 

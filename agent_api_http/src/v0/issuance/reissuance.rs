@@ -4,7 +4,7 @@ use crate::handlers::{caller, query_handler};
 use agent_issuance::{
     credential::aggregate::CredentialExpiry,
     reissuance::{
-        service::{CreateReissuanceRequest, ReissuanceService},
+        service::{reissue_credential, PreparedReissuance, ReissuanceTrigger, Replacement},
         views::ReissuanceView,
     },
     state::IssuanceState,
@@ -75,35 +75,38 @@ pub(crate) async fn credential_reissuances(
         triggered_by,
     }): JsonBody<CreateCredentialReissuanceRequest>,
 ) -> Result<Response, ApiError> {
-    let service = ReissuanceService::default();
-
-    let request = CreateReissuanceRequest {
-        reissuance_id: uuid::Uuid::new_v4().to_string(),
-        original_credential_id,
-        new_credential_id: uuid::Uuid::new_v4().to_string(),
-        offer_id: uuid::Uuid::new_v4().to_string(),
+    let replacement = Replacement {
         credential_configuration_id,
         credential,
         expires_at,
-        reason,
-        trigger_type,
-        triggered_by,
+        trigger: ReissuanceTrigger {
+            reason,
+            trigger_type,
+            triggered_by,
+        },
     };
-
-    let response = service
-        .create(&state, &library_state, caller(actor), request)
-        .await
-        .map_err(IntoApiErrorExt::into_api_error)?;
+    let PreparedReissuance {
+        relation,
+        credential_offer,
+    } = reissue_credential(
+        &state,
+        &library_state,
+        caller(actor),
+        &original_credential_id,
+        replacement,
+    )
+    .await
+    .map_err(IntoApiErrorExt::into_api_error)?;
 
     Ok((
         StatusCode::CREATED,
         Json(CreateCredentialReissuanceResponse {
-            id: response.reissuance_id,
-            original_credential_id: response.original_credential_id,
-            new_credential_id: response.new_credential_id,
-            offer_id: response.offer_id,
-            credential_configuration_id: response.credential_configuration_id,
-            credential_offer: response.credential_offer,
+            id: relation.reissuance_id,
+            original_credential_id: relation.original_credential_id,
+            new_credential_id: relation.new_credential_id,
+            offer_id: relation.offer_id,
+            credential_configuration_id: relation.credential_configuration_id,
+            credential_offer,
         }),
     )
         .into_response())
@@ -357,7 +360,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_credential_reissuance_endpoint_prepares_offer_and_relation() {
+    async fn reissue_credential_prepares_an_offer_and_relation() {
         let state = test_state().await;
         create_original_credential(&state).await;
 
@@ -397,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     #[serial]
-    async fn test_reissued_credential_can_be_issued_through_oid4vci() {
+    async fn a_reissued_credential_can_be_issued_through_oid4vci() {
         let state = test_state().await;
         create_original_credential(&state).await;
 
@@ -488,7 +491,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_all_credential_reissuances_endpoint_returns_relations() {
+    async fn list_all_credential_reissuances_returns_relations() {
         let state = test_state().await;
         create_original_credential(&state).await;
         let (status, created_body) = post_reissuance(state.clone()).await;
@@ -519,7 +522,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_credential_reissuance_endpoint_returns_relation_by_id() {
+    async fn get_credential_reissuance_returns_the_relation() {
         let state = test_state().await;
         create_original_credential(&state).await;
         let (status, created_body) = post_reissuance(state.clone()).await;
@@ -548,7 +551,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_credential_reissuance_endpoint_returns_not_found_for_unknown_id() {
+    async fn get_credential_reissuance_answers_not_found_for_an_unknown_id() {
         let state = test_state().await;
         let app = router((state, test_library_state().await));
 
@@ -567,7 +570,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_reissuance_endpoints_reject_unauthorized_actor() {
+    async fn reissuance_routes_reject_an_unauthorized_actor() {
         use shared_kernel::authorization::{
             Actor, AuthorizationChecker, AuthorizationError, AuthorizationRequest, Caller,
         };
@@ -626,7 +629,7 @@ mod tests {
             .is_none());
     }
     #[test]
-    fn reissuance_request_rejects_unsupported_status_action() {
+    fn reissue_credential_rejects_an_unsupported_status_action() {
         let error = serde_json::from_value::<CreateCredentialReissuanceRequest>(json!({
             "originalCredentialId": "original", "credentialConfigurationId": "SD-JWT VC", "credential": {}, "expiresAt": "never", "statusAction": "revoked"
         })).unwrap_err();
@@ -634,35 +637,96 @@ mod tests {
     }
 
     #[test]
-    fn reissuance_errors_preserve_existing_api_statuses() {
-        use agent_issuance::reissuance::{error::ReissuanceError, service::ReissuanceServiceError};
-        use agent_shared::handlers::{CommandHandlerError, QueryHandlerError};
-        use cqrs_es::{persist::PersistenceError, AggregateError};
-        assert_eq!(
-            ReissuanceServiceError::Credential(CommandHandlerError::Aggregate(AggregateError::UserError(
-                agent_issuance::credential::error::CredentialError::InvalidCredentialPayloadError(
-                    agent_library::json_schema_validation::JsonSchemaError::InvalidJsonData("invalid".to_owned())
+    fn reissuance_errors_keep_their_problem_types_and_statuses() {
+        use agent_issuance::{
+            application::template_issuance::TemplateIssuanceError,
+            credential::error::CredentialError,
+            reissuance::{error::ReissuanceError, policy::ReissuancePolicyError},
+        };
+        use cqrs_es::persist::PersistenceError;
+        use shared_kernel::authorization::AuthorizationError;
+
+        let cases = [
+            (
+                ReissuanceError::OriginalCredentialNotFound("original".to_owned()),
+                404,
+                "issuance#original-credential-not-found",
+            ),
+            (
+                ReissuanceError::OriginalCredentialNotIssued,
+                400,
+                "issuance#original-credential-not-issued",
+            ),
+            (
+                ReissuanceError::CredentialConfigurationNotFound("configuration".to_owned()),
+                404,
+                "issuance#no-credential-configuration-found",
+            ),
+            (
+                ReissuanceError::CredentialConfigurationMismatch,
+                400,
+                "issuance#credential-configuration-mismatch",
+            ),
+            (
+                ReissuanceError::UnsupportedCredentialFormat(json!("jwt_vc_json")),
+                400,
+                "issuance#unsupported-credential-format",
+            ),
+            (
+                ReissuanceError::InvalidCredentialPayload,
+                400,
+                "issuance#invalid-credential-type",
+            ),
+            (
+                ReissuanceError::Template(TemplateIssuanceError::TemplateNotPublished),
+                422,
+                "issuance#template-not-published",
+            ),
+            (
+                ReissuanceError::NotAllowed(ReissuancePolicyError::NotAllowed),
+                403,
+                "issuance#reissuance-not-allowed",
+            ),
+            (
+                ReissuanceError::ReplacementRejected(CredentialError::InvalidCredentialPayloadError(
+                    agent_library::json_schema_validation::JsonSchemaError::InvalidJsonData("invalid".to_owned()),
+                )),
+                400,
+                "issuance#invalid-credential-payload",
+            ),
+            (
+                ReissuanceError::AlreadyExists,
+                409,
+                "issuance#reissuance-already-exists",
+            ),
+            (
+                ReissuanceError::Authorization(AuthorizationError::Forbidden),
+                403,
+                "authorization#forbidden",
+            ),
+            (
+                ReissuanceError::Persistence(PersistenceError::OptimisticLockError),
+                503,
+                "persistence#aggregate-conflict",
+            ),
+            (
+                ReissuanceError::Failed("offer refused".to_owned()),
+                500,
+                "issuance#credential-reissuance-failed",
+            ),
+        ];
+
+        let (actual, expected): (Vec<_>, Vec<_>) = cases
+            .into_iter()
+            .map(|(error, status, anchor)| {
+                let problem = error.into_api_error();
+                (
+                    (problem.status().as_u16(), problem.type_url().map(str::to_owned)),
+                    (status, Some(crate::error::type_url(anchor))),
                 )
-            )))
-            .into_api_error()
-            .status(),
-            StatusCode::BAD_REQUEST
-        );
-        assert_eq!(
-            ReissuanceServiceError::Reissuance(CommandHandlerError::Aggregate(AggregateError::AggregateConflict))
-                .into_api_error()
-                .status(),
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        assert_eq!(
-            ReissuanceServiceError::Query(QueryHandlerError::Persistence(PersistenceError::OptimisticLockError))
-                .into_api_error()
-                .status(),
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        assert_eq!(
-            ReissuanceError::AlreadyExists.into_api_error().status(),
-            StatusCode::CONFLICT
-        );
+            })
+            .unzip();
+
+        assert_eq!(actual, expected);
     }
 }

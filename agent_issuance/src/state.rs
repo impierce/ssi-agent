@@ -19,6 +19,7 @@ use crate::nonce::views::NonceView;
 use crate::offer::aggregate::Offer;
 use crate::offer::views::all_offers::AllOffersView;
 use crate::offer::views::OfferView;
+use crate::ports::IssuancePorts;
 use crate::public_offer::aggregate::PublicOffer;
 use crate::public_offer::views::{AllPublicOffersView, PublicOfferView};
 use crate::reissuance::aggregate::Reissuance;
@@ -82,6 +83,9 @@ impl QueryOperation for AllPublicOffersView {
 #[derive(Clone)]
 pub struct IssuanceState {
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
+    /// The decisions left to the application. [`issuance_state`] installs the defaults; the application replaces
+    /// them once, where it is composed.
+    pub ports: IssuancePorts,
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
@@ -414,6 +418,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
 
     IssuanceState {
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        ports: IssuancePorts::default(),
         command: CommandHandlers {
             credential: credential_command_handler,
             reissuance: reissuance_command_handler,

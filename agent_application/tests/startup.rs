@@ -1,7 +1,7 @@
 //! Smoke tests: the complete application state and router start up against the in-memory event store and serve
 //! requests on every surface (probes, metadata, configuration, API and protocol endpoints).
 
-use agent_application::{core_event_verifiers, router, state, ApplicationState};
+use agent_application::{core_event_verifiers, router, state, ApplicationState, IssuancePorts};
 use agent_secret_manager::subject::Subject;
 use axum::{body::Body, extract::Request, http::StatusCode, Router};
 use serde_json::Value;
@@ -20,7 +20,9 @@ fn use_in_memory_event_store() {
 
 async fn application_state() -> ApplicationState {
     use_in_memory_event_store();
-    state(Arc::new(Subject::test_subject().await)).await.unwrap()
+    state(Arc::new(Subject::test_subject().await), IssuancePorts::default())
+        .await
+        .unwrap()
 }
 
 async fn get(app: &Router, uri: &str) -> (StatusCode, Value) {

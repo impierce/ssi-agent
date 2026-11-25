@@ -1,6 +1,6 @@
 //! Shared flow for the event store integration tests.
 
-use agent_application::{router, state, ApplicationState};
+use agent_application::{router, state, ApplicationState, IssuancePorts};
 use agent_secret_manager::subject::Subject;
 use agent_shared::config::{config_mut, EventStoreConfig, EventStoreType};
 use axum::{body::Body, extract::Request, http::StatusCode, Router};
@@ -17,7 +17,9 @@ async fn send(app: &Router, request: Request<Body>) -> (StatusCode, Value) {
 }
 
 async fn application_state() -> ApplicationState {
-    state(Arc::new(Subject::test_subject().await)).await.unwrap()
+    state(Arc::new(Subject::test_subject().await), IssuancePorts::default())
+        .await
+        .unwrap()
 }
 
 /// Starts the application against the given event store, writes through the API, then starts it again on the same

@@ -45,6 +45,7 @@ use verification_authorization::VerificationAuthorizationAdapter;
 pub use agent_authorization::state::AuthorizationState;
 pub use agent_holder::state::HolderState;
 pub use agent_identity::state::IdentityState;
+pub use agent_issuance::ports::IssuancePorts;
 pub use agent_issuance::state::{IssuanceState, SERVER_CONFIG_ID};
 pub use agent_library::state::LibraryState;
 pub use agent_verification::state::VerificationState;
@@ -125,13 +126,15 @@ pub async fn run() -> io::Result<()> {
     info!("Configuration loaded successfully");
 
     let subject = Arc::new(Subject::new().await);
-    let state = state(subject).await?;
+    let state = state(subject, IssuancePorts::default()).await?;
     state.verify_persisted_events().await;
 
     serve(router(state)).await
 }
 
-pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
+/// Composes the application state. `issuance_ports` are the decisions issuance leaves to the application, such as
+/// the reissuance policy; they are installed here, once.
+pub async fn state(subject: Arc<Subject>, issuance_ports: IssuancePorts) -> io::Result<ApplicationState> {
     agent_shared::config::warn_deprecated_settings();
     let identity_services = |holder_state: &Arc<HolderState>| {
         Arc::new(IdentityServices {
@@ -167,7 +170,10 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             EventStoreType::Postgres => {
                 let builder = Postgres::new().await;
 
-                let issuance_state = Arc::new(issuance_state(&builder, issuance_services, &event_bus).await);
+                let issuance_state = Arc::new(IssuanceState {
+                    ports: issuance_ports,
+                    ..issuance_state(&builder, issuance_services, &event_bus).await
+                });
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
@@ -222,7 +228,10 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 // 2. Register MongoDB as the persistent history reader for complete historical catch-up queries.
                 event_bus.set_history_reader(Arc::new(mongo_source));
 
-                let issuance_state = Arc::new(issuance_state(&builder, issuance_services, &event_bus).await);
+                let issuance_state = Arc::new(IssuanceState {
+                    ports: issuance_ports,
+                    ..issuance_state(&builder, issuance_services, &event_bus).await
+                });
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
@@ -270,7 +279,10 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                 states
             }
             EventStoreType::InMemory => {
-                let issuance_state = Arc::new(issuance_state(&InMemory, issuance_services, &event_bus).await);
+                let issuance_state = Arc::new(IssuanceState {
+                    ports: issuance_ports,
+                    ..issuance_state(&InMemory, issuance_services, &event_bus).await
+                });
 
                 let (credential_configuration_projection, template_view_handle) =
                     CredentialConfigurationProjection::new(issuance_state.clone());
