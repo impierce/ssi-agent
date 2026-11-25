@@ -56,7 +56,7 @@ pub(crate) async fn type_metadata(
             server_config_view
                 .credential_configurations
                 .get(&credential_configuration_id)
-                .map(|(_, credential_configuration, _authorization)| credential_configuration)
+                .map(|(_, credential_configuration, _authorization)| &credential_configuration.metadata)
                 .cloned()
         })
         .ok_or(PublicError::NotFoundError)?;

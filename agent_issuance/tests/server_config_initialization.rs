@@ -144,7 +144,10 @@ fn advertised_credential_signing_algorithms(server_config: &ServerConfigView) ->
         .credential_configurations
         .values()
         .map(|(_provisioned, credential_configuration, _authorization)| {
-            credential_configuration.credential_signing_alg_values_supported.clone()
+            credential_configuration
+                .metadata
+                .credential_signing_alg_values_supported
+                .clone()
         })
         .collect();
     advertised.extend(

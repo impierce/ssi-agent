@@ -6,9 +6,11 @@ use crate::handlers::{
 use crate::API_VERSION;
 pub use agent_issuance::application::template_issuance::SchemaViolation;
 use agent_issuance::application::{
+    credential_creation::create_credential,
     credential_offer::create_credential_offer_command,
     template_issuance::{published_template, template_credential_expiry, validate_credential_against_template},
 };
+use agent_issuance::refresh::disclosure::disclosed_credential;
 use agent_issuance::status_list::command::StatusListCommand;
 use agent_issuance::{
     credential::{
@@ -20,6 +22,7 @@ use agent_issuance::{
         aggregate::{DeliveryMethod, DeliveryOptions},
         command::OfferCommand,
     },
+    server_config::supported_configuration::SupportedCredentialConfiguration,
     state::{IssuanceState, SERVER_CONFIG_ID},
 };
 use agent_library::state::LibraryState;
@@ -73,7 +76,7 @@ pub(crate) async fn credential(
         &state.query.credential,
     )
     .await?
-    .map(|credential_view| (StatusCode::OK, Json(credential_view)).into_response())
+    .map(|credential_view| (StatusCode::OK, Json(disclosed_credential(credential_view))).into_response())
     .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 
@@ -225,7 +228,7 @@ pub struct BatchFailedProblem {
 /// A published template together with the credential configuration derived from it.
 struct ResolvedTemplate {
     template: Template,
-    credential_configuration: CredentialConfigurationsSupportedObject,
+    credential_configuration: SupportedCredentialConfiguration,
     authorization: Authorization,
 }
 
@@ -269,7 +272,7 @@ impl ResolvedTemplate {
     /// W3C-based formats under `credentialSubject`.
     fn credential_from_claims(&self, claims: Value) -> Value {
         if matches!(
-            self.credential_configuration.credential_format,
+            self.credential_configuration.metadata.credential_format,
             CredentialFormats::DcSdJwt(_)
         ) {
             claims
@@ -304,6 +307,7 @@ impl ResolvedTemplate {
             },
             credential_configuration: Box::new(self.credential_configuration.clone()),
             expires_at,
+            refresh_token: None,
         })
     }
 
@@ -321,7 +325,10 @@ impl ResolvedTemplate {
                 .finish());
         };
 
-        validate_signed_credential_format_matches_configuration(signed_credential, &self.credential_configuration)?;
+        validate_signed_credential_format_matches_configuration(
+            signed_credential,
+            &self.credential_configuration.metadata,
+        )?;
 
         Ok(CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.to_owned(),
@@ -350,6 +357,7 @@ impl ResolvedTemplate {
 /// A validated credential and the commands that create and offer it.
 struct ValidatedCredential {
     credential_id: String,
+    credential_configuration_id: String,
     offer_id: String,
     create_credential: CredentialCommand,
     create_offer: OfferCommand,
@@ -379,8 +387,9 @@ async fn execute(
 ) -> Result<Issued, (ApiError, Issued)> {
     let ValidatedCredential {
         credential_id,
+        credential_configuration_id,
         offer_id,
-        create_credential,
+        create_credential: create_credential_command,
         create_offer,
         add_to_offer,
         send_offer,
@@ -396,16 +405,15 @@ async fn execute(
         };
     }
 
-    attempt!(
-        command_handler(
-            state.authorization_checker.clone(),
-            actor.clone(),
-            &credential_id,
-            &state.command.credential,
-            create_credential,
-        )
-        .await
-    );
+    attempt!(create_credential(
+        state,
+        caller(actor.clone()),
+        &credential_id,
+        &credential_configuration_id,
+        create_credential_command,
+    )
+    .await
+    .map_err(IntoApiErrorExt::into_api_error));
     issued.credential_id = Some(credential_id.clone());
 
     let offer_exists = reuse_existing_offer
@@ -513,6 +521,7 @@ pub(crate) async fn credentials(
 
     let item = ValidatedCredential {
         credential_id: credential_id.clone(),
+        credential_configuration_id: resolved.template.template_id.clone(),
         offer_id: request.offer_id.clone(),
         create_credential,
         create_offer: resolved.create_offer_command(&request.offer_id, None),
@@ -530,6 +539,7 @@ pub(crate) async fn credentials(
         &state.query.credential,
     )
     .await?
+    .map(disclosed_credential)
     .and_then(|credential_view| {
         if is_signed {
             credential_view.signed
@@ -726,6 +736,7 @@ fn validate_row(
     });
 
     Ok(ValidatedCredential {
+        credential_configuration_id: resolved.template.template_id.clone(),
         create_offer: resolved.create_offer_command(&offer_id, delivery_options),
         add_to_offer: resolved.add_to_offer_command(&offer_id, &credential_id),
         credential_id,
@@ -840,7 +851,11 @@ pub(crate) async fn all_credentials(
         &state.query.all_credentials,
     )
     .await?
-    .map(|all_credentials_view| crate::utils::newest_first(all_credentials_view.credentials).collect::<Vec<_>>())
+    .map(|all_credentials_view| {
+        crate::utils::newest_first(all_credentials_view.credentials)
+            .map(disclosed_credential)
+            .collect::<Vec<_>>()
+    })
     .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_credentials)).into_response())

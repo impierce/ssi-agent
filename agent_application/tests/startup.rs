@@ -90,3 +90,51 @@ async fn readiness_can_be_granted_explicitly_or_by_custom_event_verifiers() {
     let (status, _) = get(&router(state), "/readyz").await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn a_consumer_hook_and_policy_replace_the_defaults_at_composition() {
+    use agent_issuance::{
+        credential::aggregate::Credential,
+        refresh::preparation::{RefreshPreparation, RefreshPreparationError},
+        reissuance::{
+            policy::{ReissuancePolicy, ReissuancePolicyError},
+            service::Replacement,
+        },
+    };
+
+    struct ConsumerHook;
+
+    #[async_trait::async_trait]
+    impl RefreshPreparation for ConsumerHook {
+        async fn prepare(&self, _: &Credential, _: &str) -> Result<Replacement, RefreshPreparationError> {
+            Err(RefreshPreparationError::Refused)
+        }
+    }
+
+    struct ConsumerPolicy;
+
+    #[async_trait::async_trait]
+    impl ReissuancePolicy for ConsumerPolicy {
+        async fn check(&self, _: &Credential, _: &Replacement) -> Result<(), ReissuancePolicyError> {
+            Ok(())
+        }
+    }
+
+    use_in_memory_event_store();
+    let refresh_preparation: Arc<dyn RefreshPreparation> = Arc::new(ConsumerHook);
+    let reissuance_policy: Arc<dyn ReissuancePolicy> = Arc::new(ConsumerPolicy);
+
+    let state = state(
+        Arc::new(Subject::test_subject().await),
+        IssuancePorts {
+            reissuance_policy: reissuance_policy.clone(),
+            refresh_preparation: refresh_preparation.clone(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let ports = &state.api.issuance_state.as_ref().unwrap().ports;
+    assert!(Arc::ptr_eq(&ports.refresh_preparation, &refresh_preparation));
+    assert!(Arc::ptr_eq(&ports.reissuance_policy, &reissuance_policy));
+}

@@ -6,6 +6,8 @@ use super::ReissuanceView;
 use cqrs_es::{EventEnvelope, View};
 use serde::{Deserialize, Serialize};
 
+/// Every recorded reissuance relation. This includes relations of credential refreshes that failed halfway or lost
+/// to a concurrent refresh with the same token: their replacements are never handed out, but the relation is listed.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AllReissuancesView {
     #[serde(flatten)]

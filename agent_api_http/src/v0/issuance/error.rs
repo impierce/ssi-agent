@@ -4,9 +4,10 @@ use crate::{
 };
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError,
-    application::template_issuance::TemplateIssuanceError, credential::error::CredentialError,
-    offer::error::OfferError, public_offer::error::PublicOfferError, reissuance::error::ReissuanceError,
-    server_config::error::ServerConfigError, status_list::error::StatusListError,
+    application::credential_creation::CreateCredentialError, application::template_issuance::TemplateIssuanceError,
+    credential::error::CredentialError, offer::error::OfferError, public_offer::error::PublicOfferError,
+    refresh::service::RefreshError, reissuance::error::ReissuanceError, server_config::error::ServerConfigError,
+    status_list::error::StatusListError,
 };
 use axum::Json;
 use http_api_problem::ApiError;
@@ -206,12 +207,72 @@ impl IntoApiErrorExt for ReissuanceError {
                 .source(self)
                 .message("Unable to create the reissuance relation.")
                 .finish(),
+            ReissuanceError::RefreshCapabilityFailed => create_refresh_capability_failed(self),
             ReissuanceError::Template(error) => error.into_api_error(),
             ReissuanceError::ReplacementRejected(error) => error.into_api_error(),
             ReissuanceError::Authorization(error) => error.into_api_error(),
             ReissuanceError::Persistence(error) => error.into_api_error(),
         }
     }
+}
+
+impl IntoApiErrorExt for RefreshError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            RefreshError::NotFound => issuance_problem(
+                StatusCode::NOT_FOUND,
+                "Refresh Reference Not Found",
+                "refresh-reference-not-found",
+                "The refresh token is unknown or no longer refreshes a credential.",
+            ),
+            RefreshError::Unavailable => issuance_problem(
+                StatusCode::FORBIDDEN,
+                "Credential Refresh Unavailable",
+                "credential-refresh-unavailable",
+                "The credential cannot be refreshed.",
+            ),
+            RefreshError::PreparationFailed => issuance_problem(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Credential Refresh Preparation Failed",
+                "credential-refresh-preparation-failed",
+                "Preparing the replacement credential failed.",
+            ),
+            RefreshError::Failed => issuance_problem(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Credential Refresh Failed",
+                "credential-refresh-failed",
+                "The credential refresh failed.",
+            ),
+        }
+    }
+}
+
+/// A problem documented under `anchor` in the issuance problem details.
+fn issuance_problem(status: StatusCode, title: &str, anchor: &str, message: &str) -> ApiError {
+    ApiError::builder(status)
+        .title(title)
+        .type_url(type_url(&format!("issuance#{anchor}")))
+        .message(message)
+        .finish()
+}
+
+impl IntoApiErrorExt for CreateCredentialError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            Self::RefreshCapability => create_refresh_capability_failed(self),
+            Self::Credential(error) => error.into_api_error(),
+        }
+    }
+}
+
+/// An opted-in credential is never issued without its refresh capability.
+fn create_refresh_capability_failed(error: impl std::error::Error + Send + Sync + 'static) -> ApiError {
+    ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+        .title("Create Refresh Capability Failed")
+        .type_url(type_url("issuance#create-refresh-capability-failed"))
+        .message("The credential's refresh capability could not be created, so the credential was not issued.")
+        .source(error)
+        .finish()
 }
 
 impl IntoApiErrorExt for TemplateIssuanceError {

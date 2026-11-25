@@ -1,6 +1,7 @@
 use agent_shared::config::BITS_PER_STATUS;
 use utoipa::openapi::{
-    schema::SchemaType, Array, ArrayBuilder, Object, ObjectBuilder, OneOfBuilder, Schema, SchemaFormat, Type,
+    schema::SchemaType, AllOfBuilder, Array, ArrayBuilder, Object, ObjectBuilder, OneOfBuilder, Ref, Schema,
+    SchemaFormat, Type,
 };
 
 /// A status of the IETF OAuth Token Status List: the name of a registered status or the status value, up to the largest
@@ -54,6 +55,27 @@ pub(crate) fn holder_notifications() -> Array {
         .build()
 }
 
+/// A credential's content: the shared `Data`, whose `raw` content embeds the `refreshService` of an opted-in
+/// credential.
+pub(crate) fn credential_data() -> Schema {
+    let refreshable_content = ObjectBuilder::new().schema_type(SchemaType::AnyValue).property(
+        "raw",
+        ObjectBuilder::new()
+            .schema_type(SchemaType::AnyValue)
+            .property("refreshService", Ref::from_schema_name("CredentialRefreshService")),
+    );
+    Schema::OneOf(
+        OneOfBuilder::new()
+            .item(
+                AllOfBuilder::new()
+                    .item(Ref::from_schema_name("Data"))
+                    .item(refreshable_content),
+            )
+            .item(ObjectBuilder::new().schema_type(SchemaType::Type(Type::Null)))
+            .build(),
+    )
+}
+
 pub(crate) fn credential_configurations_supported() -> Object {
     ObjectBuilder::new()
         .schema_type(SchemaType::Type(Type::Object))
@@ -84,6 +106,15 @@ pub(crate) fn credential_configurations_supported() -> Object {
                 .property("claims", ArrayBuilder::new().build())
                 .property("display", display())
                 .build(),
+        )
+        .property(
+            "refreshService",
+            Schema::OneOf(
+                OneOfBuilder::new()
+                    .item(Ref::from_schema_name("RefreshServiceConfiguration"))
+                    .item(ObjectBuilder::new().schema_type(SchemaType::Type(Type::Null)))
+                    .build(),
+            ),
         )
         .required("format")
         .build()

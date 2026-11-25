@@ -149,6 +149,14 @@ CredentialSigned
 NotificationReceived
 ```
 
+#### `reissuance`
+
+```
+ReissuanceCreated
+```
+
+Refresh capabilities (`refresh_capability`) publish no events.
+
 #### `offer`
 
 ```

@@ -1,5 +1,6 @@
 pub mod access_token_validation_service;
 pub mod credential_configuration_projection;
+pub mod credential_creation;
 pub mod credential_offer;
 pub mod nonce_validation_service;
 pub mod template_issuance;

@@ -54,6 +54,16 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     )
     .await
     .unwrap();
+    agent_shared::handlers::public_command_handler(
+        "persisted-capability",
+        &issuance.command.refresh_capability,
+        agent_issuance::refresh::command::RefreshCapabilityCommand::CreateRefreshCapability {
+            credential_id: "refreshable".to_owned(),
+            credential_configuration_id: "configuration".to_owned(),
+        },
+    )
+    .await
+    .unwrap();
     let app = router(state);
     assert_reissuance_views(&app).await;
 
@@ -92,6 +102,7 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     assert!(report.checked > 0, "no persisted events were verified");
 
     state.verify_persisted_events().await;
+    assert_refresh_capabilities_survive(&state).await;
     let app = router(state);
     assert_reissuance_views(&app).await;
 
@@ -122,6 +133,17 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         providers,
         json!([{ "providerType": "aws_kms_ambient", "name": "Persisted keys" }])
     );
+}
+
+/// `refresh_capabilities_survive_a_restart`: the capability recorded before the restart is read back by its token hash.
+async fn assert_refresh_capabilities_survive(state: &ApplicationState) {
+    let issuance = state.api.issuance_state.as_ref().expect("issuance is enabled");
+    let capability =
+        agent_shared::handlers::public_query_handler("persisted-capability", &issuance.query.refresh_capability)
+            .await
+            .unwrap()
+            .expect("the refresh capability survives the restart");
+    assert_eq!(capability.credential_id, "refreshable");
 }
 
 async fn assert_reissuance_views(app: &Router) {

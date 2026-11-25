@@ -267,6 +267,15 @@ pub trait EventHistoryReader: Send + Sync + 'static {
     ) -> Result<HistoryAscendingResult, EventBusError>;
 }
 
+/// SPI deciding what an event may show once it leaves the event store.
+///
+/// The bus runs it on every published event before subscribers and the in-memory history get it, and on every
+/// event read back through the [`EventHistoryReader`]. It removes or replaces data that must stay in the store.
+pub trait EventDisclosure: Send + Sync + 'static {
+    /// Changes `event` in place to what it may show.
+    fn disclose(&self, event: &mut CloudEvent);
+}
+
 use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
@@ -332,6 +341,7 @@ pub struct EventBusHandle {
     history_capacity: usize,
     history_reader: Arc<std::sync::RwLock<Option<Arc<dyn EventHistoryReader>>>>,
     dedup: Arc<std::sync::RwLock<DedupWindow>>,
+    disclosure: Arc<std::sync::RwLock<Option<Arc<dyn EventDisclosure>>>>,
 }
 
 impl EventBusHandle {
@@ -348,7 +358,31 @@ impl EventBusHandle {
             history_capacity: 500,
             history_reader: Arc::new(std::sync::RwLock::new(None)),
             dedup: Arc::new(std::sync::RwLock::new(DedupWindow::new())),
+            disclosure: Arc::new(std::sync::RwLock::new(None)),
         }
+    }
+
+    /// Sets the [`EventDisclosure`] SPI implementation, replacing any set before.
+    ///
+    /// The bus has one disclosure: a second domain that needs one composes its rule into the installed
+    /// implementation. Without one, events leave the bus unchanged.
+    pub fn set_disclosure(&self, disclosure: Arc<dyn EventDisclosure>) {
+        let mut lock = match self.disclosure.write() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        *lock = Some(disclosure);
+    }
+
+    fn disclosed(&self, mut event: CloudEvent) -> CloudEvent {
+        let lock = match self.disclosure.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if let Some(disclosure) = lock.as_ref() {
+            disclosure.disclose(&mut event);
+        }
+        event
     }
 
     /// Sets the persistent history reader SPI implementation.
@@ -408,6 +442,7 @@ impl EventBusHandle {
     /// [`Query::dispatch`] and from the change stream — so the second copy is dropped if it falls
     /// inside the [`DedupWindow`].
     pub fn publish(&self, event: CloudEvent) {
+        let event = self.disclosed(event);
         {
             let mut dedup = match self.dedup.write() {
                 Ok(guard) => guard,
@@ -483,7 +518,9 @@ impl EventBusHandle {
         // Storage errors are propagated immediately (fail-closed) to ensure clients are not
         // silently served an incomplete catch-up stream that masks database issues.
         if let Some(reader) = reader {
-            return reader.history_ascending(filter, last_event_id, limit).await;
+            let mut history = reader.history_ascending(filter, last_event_id, limit).await?;
+            history.events = history.events.into_iter().map(|event| self.disclosed(event)).collect();
+            return Ok(history);
         }
 
         // 2. Fall back to the bounded in-memory ring buffer (e.g. in test or standalone environments).
@@ -960,6 +997,73 @@ mod tests {
         let filter = EventFilter::default();
         let result = handle.history_ascending(&filter, None, None).await;
         assert!(matches!(result, Err(EventBusError::Source(msg)) if msg == "connection timeout"));
+    }
+
+    struct Redacting;
+
+    impl EventDisclosure for Redacting {
+        fn disclose(&self, event: &mut CloudEvent) {
+            event.data = Some(serde_json::json!("redacted"));
+        }
+    }
+
+    #[tokio::test]
+    async fn published_events_go_through_the_disclosure() {
+        let handle = EventBusHandle::new(16);
+        handle.set_disclosure(Arc::new(Redacting));
+
+        handle.publish(build_cloud_event(
+            "offer",
+            "abc",
+            1,
+            "OfferCreated",
+            serde_json::json!({"secret": 1}),
+            None,
+        ));
+
+        let data: Vec<_> = handle
+            .history(&EventFilter::default(), 10)
+            .into_iter()
+            .map(|event| event.data)
+            .collect();
+        assert_eq!(data, vec![Some(serde_json::json!("redacted"))]);
+    }
+
+    #[tokio::test]
+    async fn events_read_back_from_storage_go_through_the_disclosure() {
+        struct StoredReader;
+
+        #[async_trait]
+        impl EventHistoryReader for StoredReader {
+            async fn history_ascending(
+                &self,
+                _filter: &EventFilter,
+                _last_event_id: Option<&str>,
+                _limit: Option<usize>,
+            ) -> Result<HistoryAscendingResult, EventBusError> {
+                Ok(HistoryAscendingResult {
+                    events: vec![build_cloud_event(
+                        "offer",
+                        "abc",
+                        1,
+                        "OfferCreated",
+                        serde_json::json!({"secret": 1}),
+                        None,
+                    )],
+                    ..Default::default()
+                })
+            }
+        }
+        let handle = EventBusHandle::new(16);
+        handle.set_disclosure(Arc::new(Redacting));
+        handle.set_history_reader(Arc::new(StoredReader));
+
+        let history = handle
+            .history_ascending(&EventFilter::default(), None, None)
+            .await
+            .unwrap();
+
+        assert_eq!(history.events[0].data, Some(serde_json::json!("redacted")));
     }
 
     #[tokio::test]

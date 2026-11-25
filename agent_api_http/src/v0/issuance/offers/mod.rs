@@ -5,6 +5,7 @@ use crate::{
     error::{type_url, IntoApiErrorExt},
     handlers::{caller, command_handler, query_handler},
 };
+use agent_issuance::refresh::disclosure::disclosed_offer;
 use agent_issuance::{
     offer::{aggregate::DeliveryOptions, command::OfferCommand, views::OfferView},
     state::IssuanceState,
@@ -215,7 +216,11 @@ pub(crate) async fn all_offers(
         &state.query.all_offers,
     )
     .await?
-    .map(|all_offers_view| crate::utils::newest_first(all_offers_view.offers).collect::<Vec<_>>())
+    .map(|all_offers_view| {
+        crate::utils::newest_first(all_offers_view.offers)
+            .map(disclosed_offer)
+            .collect::<Vec<_>>()
+    })
     .unwrap_or_default();
 
     Ok((StatusCode::OK, Json(all_offers)).into_response())
@@ -250,7 +255,7 @@ pub(crate) async fn offer(
         &state.query.offer,
     )
     .await?
-    .map(|offer_view| (StatusCode::OK, Json(offer_view)).into_response())
+    .map(|offer_view| (StatusCode::OK, Json(disclosed_offer(offer_view))).into_response())
     .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND))
 }
 

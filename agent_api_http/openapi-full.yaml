@@ -2244,6 +2244,38 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/refresh-credential:
+    post:
+      tags:
+      - Issuance
+      operationId: refresh_credential
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialRefreshRequest'
+        required: true
+      responses:
+        '200':
+          description: Credential refresh continuation prepared successfully
+          content:
+            application/x-www-form-urlencoded:
+              schema:
+                type: string
+        '400':
+          description: Malformed JSON request body
+        '403':
+          description: Credential refresh cannot proceed
+        '404':
+          description: Refresh reference not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+        '500':
+          description: Credential refresh failed
   /v0/reissue-credential:
     post:
       tags:
@@ -3712,13 +3744,23 @@ components:
               - vc+sd-jwt
             proof_types_supported:
               type: object
+            refreshService:
+              oneOf:
+              - $ref: '#/components/schemas/RefreshServiceConfiguration'
+              - type: 'null'
             scope:
               type: object
         credential_status:
           $ref: '#/components/schemas/CredentialStatus'
         data:
           oneOf:
-          - $ref: '#/components/schemas/Data'
+          - allOf:
+            - $ref: '#/components/schemas/Data'
+            - properties:
+                raw:
+                  properties:
+                    refreshService:
+                      $ref: '#/components/schemas/CredentialRefreshService'
           - type: 'null'
         expires_at:
           type:
@@ -4015,6 +4057,30 @@ components:
           oneOf:
           - $ref: '#/components/schemas/Grants'
           - type: 'null'
+    CredentialRefreshRequest:
+      type: object
+      required:
+      - refreshToken
+      properties:
+        refreshToken:
+          type: string
+    CredentialRefreshService:
+      type: object
+      description: |-
+        The `refreshService` an opted-in credential embeds at the root of its content: where and with what a holder
+        asks for a fresh credential. `type` is the configuration's refresh service type and `url` the public
+        `/v0/refresh-credential` endpoint.
+      required:
+      - type
+      - url
+      - refreshToken
+      properties:
+        refreshToken:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
     CredentialRequest:
       allOf:
       - $ref: '#/components/schemas/CredentialIdentifierOrCredentialConfigurationId'
@@ -5702,6 +5768,17 @@ components:
           type: integer
           format: int64
         request_uri:
+          type: string
+    RefreshServiceConfiguration:
+      type: object
+      description: |-
+        `refreshService` on a credential configuration: every credential issued with the configuration embeds a refresh
+        service of this `type` (for example `VerifiableCredentialRefreshService2021`), whose `url` is the public
+        `/v0/refresh-credential` endpoint, and a refresh token of its own.
+      required:
+      - type
+      properties:
+        type:
           type: string
     Reissuance:
       type: object

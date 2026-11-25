@@ -350,6 +350,56 @@ feature:
   kms: true
 ```
 
+### Credential refresh
+
+A credential configuration opts its credentials into credential refresh with `refreshService`:
+
+```json
+"refreshService": { "type": "VerifiableCredentialRefreshService2021" }
+```
+
+UniCore derives credential configurations from templates, and templates don't carry `refreshService`. The application
+that composes UniCore sets it, by updating the credential configuration (`ServerConfigCommand::UpdateCredentialConfiguration`)
+with `refreshService`; there is no configuration file key or HTTP route for it.
+
+Every credential issued with the configuration, as a first issue or as a reissuance replacement, then embeds
+`refreshService: { type, url, refreshToken }`. The `url` is the public `/v0/refresh-credential` endpoint, derived from
+the [Public URL](#public-url), and `refreshToken` is a random token of the credential's own. The token leaves UniCore
+only inside the credential delivered to the holder: published events and the management API show such a credential
+without `refreshService.refreshToken`, its signed credential as `null`, and the credential response of its offer as
+`null`. This holds whatever the token's `url`, so the tokens of credentials issued before a Public URL change are
+withheld too. Refresh capabilities are kept under the token's SHA-256. Configurations without `refreshService` issue
+credentials as before. A configuration that is derived from a
+template keeps its `refreshService` when the template changes.
+
+What a refreshed credential contains is decided by a refresh preparation hook that the application installs where it
+is composed. Without one, refresh answers `403` ([Credential Refresh
+Unavailable](../problem-details/issuance.md#credential-refresh-unavailable)), and startup logs a warning that names
+every configuration that advertises `refreshService`.
+
+### Event publishers
+
+The `events.types` of an HTTP target (`event_publishers.http`) or a NATS subject (`event_publishers.nats.subjects`)
+list the events it receives. Besides the events listed in the publishers' READMEs, the `reissuance` events can be
+listed:
+
+| Aggregate    | Events              |
+| ------------ | ------------------- |
+| `reissuance` | `ReissuanceCreated` |
+
+Refresh capability events are never published.
+
+#### Example
+
+```yaml
+event_publishers:
+  http:
+    - enabled: true
+      target_url: "https://my-domain.example.org/event-subscriber"
+      events:
+        types: [ReissuanceCreated]
+```
+
 <!--
 ## More configuration options
 

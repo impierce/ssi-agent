@@ -276,6 +276,7 @@ mod tests {
                 },
                 credential_configuration: Box::new(credential_configuration),
                 expires_at: CredentialExpiry::Never,
+                refresh_token: None,
             },
         )
         .await

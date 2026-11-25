@@ -2,7 +2,11 @@ use super::entity::Data;
 use crate::credential::command::CredentialCommand;
 use crate::credential::error::CredentialError::{self, *};
 use crate::credential::event::CredentialEvent;
-use crate::credential::openapi::{credential_configurations_supported, holder_notifications, status_type};
+use crate::credential::openapi::{
+    credential_configurations_supported, credential_data, holder_notifications, status_type,
+};
+use crate::refresh::token::CredentialRefreshService;
+use crate::server_config::supported_configuration::SupportedCredentialConfiguration;
 use crate::services::IssuanceServices;
 use agent_library::json_schema_validation::{CredentialType, JsonSchemaError};
 use agent_secret_manager::signer::SubjectSigner;
@@ -91,9 +95,10 @@ pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
     pub notification_id: Option<String>,
+    #[schema(schema_with = credential_data)]
     pub data: Option<Data>,
     #[schema(schema_with = credential_configurations_supported)]
-    pub credential_configuration: CredentialConfigurationsSupportedObject,
+    pub credential_configuration: SupportedCredentialConfiguration,
     pub signed: Option<serde_json::Value>,
     #[schema(inline)]
     pub status: Status,
@@ -130,6 +135,7 @@ impl Aggregate for Credential {
                 data,
                 credential_configuration,
                 expires_at,
+                refresh_token,
             } => {
                 #[cfg(feature = "test_utils")]
                 let notification_id = test_utils::notification_id();
@@ -152,7 +158,7 @@ impl Aggregate for Credential {
 
                 let mut credential_data = data.raw.clone();
 
-                let credential_data = match &credential_configuration.credential_format {
+                let credential_data = match &credential_configuration.metadata.credential_format {
                     CredentialFormats::JwtVcJson(Parameters::<JwtVcJson> {
                         parameters:
                             JwtVcJsonParameters {
@@ -170,7 +176,7 @@ impl Aggregate for Credential {
                         build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
-                            &credential_configuration,
+                            &credential_configuration.metadata,
                             &credential_id,
                             expires_at,
                         )?
@@ -199,16 +205,37 @@ impl Aggregate for Credential {
                         build_unsigned_w3c_credential_data(
                             type_,
                             &mut credential_data,
-                            &credential_configuration,
+                            &credential_configuration.metadata,
                             &credential_id,
                             expires_at,
                         )?
                     }
                     _ => {
                         return Err(UnsupportedCredentialFormat(serde_json::json!(
-                            credential_configuration.credential_format
+                            credential_configuration.metadata.credential_format
                         )))
                     }
+                };
+
+                // An opted-in credential carries its refresh service at the root of its content, in every format.
+                let credential_data = match (&credential_configuration.refresh_service, refresh_token) {
+                    (Some(refresh_service), Some(refresh_token)) => {
+                        let refresh_service =
+                            CredentialRefreshService::new(refresh_service.type_.clone(), &refresh_token);
+                        let mut credential_data = credential_data;
+                        credential_data
+                            .insert_at_path(&["refreshService"], json!(refresh_service))
+                            .ok_or(BuildCredentialError(
+                                "Failed to enter the refresh service into the credential".to_string(),
+                            ))?;
+                        credential_data
+                    }
+                    (Some(_), None) => {
+                        return Err(BuildCredentialError(
+                            "A credential configuration with a refresh service needs a refresh token".to_string(),
+                        ))
+                    }
+                    (None, _) => credential_data,
                 };
 
                 Ok(vec![UnsignedCredentialCreated {
@@ -283,7 +310,7 @@ impl Aggregate for Credential {
                 // `urn:uuid:` identifier that W3C credentials receive during unsigned credential creation.
                 let jti: Url = match self.data.as_ref().and_then(|data| data.raw.get("id")) {
                     Some(id) => id.as_str().and_then(|id| Url::parse(id).ok()),
-                    None => match &self.credential_configuration.credential_format {
+                    None => match &self.credential_configuration.metadata.credential_format {
                         CredentialFormats::DcSdJwt(_) => uuid::Uuid::parse_str(&credential_id)
                             .ok()
                             .and_then(|id| Url::parse(&format!("urn:uuid:{id}")).ok()),
@@ -304,7 +331,7 @@ impl Aggregate for Credential {
                 });
 
                 // Set the jwt claims through the specific builder and build the JWT which will be signed at the bottom of each match arm
-                let signed_credential = match &self.credential_configuration.credential_format {
+                let signed_credential = match &self.credential_configuration.metadata.credential_format {
                     CredentialFormats::JwtVcJson(_) => {
                         let credential_data = build_signed_w3c_credential_data(
                             credential_data,
@@ -429,7 +456,7 @@ impl Aggregate for Credential {
                     }
                     _ => {
                         return Err(UnsupportedCredentialFormat(serde_json::json!(
-                            self.credential_configuration.credential_format
+                            self.credential_configuration.metadata.credential_format
                         )));
                     }
                 };
@@ -1026,6 +1053,67 @@ pub mod credential_tests {
 
     type CredentialTestFramework = TestFramework<Credential>;
 
+    async fn create_dc_sd_jwt(
+        refresh_service: Option<agent_shared::config::RefreshServiceConfiguration>,
+        refresh_token: Option<crate::refresh::token::RefreshToken>,
+    ) -> serde_json::Value {
+        let sink = EventSink::default();
+        Credential::default()
+            .handle(
+                CredentialCommand::CreateUnsignedCredential {
+                    credential_id: credential_id(),
+                    data: Data {
+                        raw: json!({"first_name": "Ferris"}),
+                    },
+                    credential_configuration: Box::new(SupportedCredentialConfiguration {
+                        metadata: DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+                        refresh_service,
+                    }),
+                    expires_at: CredentialExpiry::Never,
+                    refresh_token,
+                },
+                &IssuanceServices::default().await,
+                &sink,
+            )
+            .await
+            .unwrap();
+        match sink.collect().await.remove(0) {
+            CredentialEvent::UnsignedCredentialCreated { data, .. } => data.raw,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_opted_in_credential_embeds_its_refresh_service() {
+        let content = create_dc_sd_jwt(
+            Some(agent_shared::config::RefreshServiceConfiguration {
+                type_: "VerifiableCredentialRefreshService2021".to_owned(),
+            }),
+            Some(crate::refresh::token::RefreshToken::from("refresh-token".to_owned())),
+        )
+        .await;
+
+        assert_eq!(
+            content["refreshService"],
+            json!({
+                "type": "VerifiableCredentialRefreshService2021",
+                "url": "https://my-domain.example.org/v0/refresh-credential",
+                "refreshToken": "refresh-token"
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn a_credential_without_refresh_configuration_embeds_none() {
+        let content = create_dc_sd_jwt(
+            None,
+            Some(crate::refresh::token::RefreshToken::from("refresh-token".to_owned())),
+        )
+        .await;
+
+        assert_eq!(content.get("refreshService"), None);
+    }
+
     fn signed_credential_created() -> CredentialEvent {
         CredentialEvent::SignedCredentialCreated {
             credential_id: credential_id(),
@@ -1152,8 +1240,9 @@ pub mod credential_tests {
                 data: Data {
                     raw: credential_subject,
                 },
-                credential_configuration: Box::new(credential_configuration.clone()),
+                credential_configuration: Box::new(credential_configuration.clone().into()),
                 expires_at: CredentialExpiry::Never,
+                refresh_token: None,
             })
             .await
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
@@ -1162,7 +1251,7 @@ pub mod credential_tests {
                     raw: unsigned_credential,
                 },
                 notification_id: Some(notification_id.clone()),
-                credential_configuration: Box::new(credential_configuration),
+                credential_configuration: Box::new(credential_configuration.into()),
                 created_at: Some(created_at),
                 expires_at: None,
             }])
@@ -1210,7 +1299,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential,
                 },
-                credential_configuration: Box::new(credential_configuration),
+                credential_configuration: Box::new(credential_configuration.into()),
                 notification_id: None,
                 created_at: Some(created_at),
                 expires_at: None,
@@ -1263,7 +1352,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential.clone(),
                 },
-                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone().into()),
                 notification_id: None,
                 created_at: Some(created_at),
                 expires_at: None,
@@ -1342,7 +1431,7 @@ pub mod credential_tests {
                 data: Data {
                     raw: unsigned_credential.clone(),
                 },
-                credential_configuration: Box::new(credential_configuration),
+                credential_configuration: Box::new(credential_configuration.into()),
                 notification_id: None,
                 created_at: Some(created_at),
                 expires_at: None,
@@ -1445,7 +1534,7 @@ pub mod credential_tests {
             CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
                 data: Data { raw },
-                credential_configuration: Box::new(credential_configuration),
+                credential_configuration: Box::new(credential_configuration.into()),
                 notification_id: None,
                 created_at: Some(created_at()),
                 expires_at: None,

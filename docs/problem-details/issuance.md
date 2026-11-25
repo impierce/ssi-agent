@@ -317,3 +317,29 @@ Persistence and authorization failures use their existing problem types and stat
 
 The template's expiration datetime or duration could not be parsed (500). Correct its
 expiration configuration before retrying issuance or reissuance.
+
+## Refresh Reference Not Found
+
+The refresh token is unknown, or its credential was already replaced and the holder accepted the replacement (404).
+The two cannot be told apart. A wallet should stop refreshing with this token; the holder can ask the issuer for a
+new credential.
+
+## Credential Refresh Unavailable
+
+The credential cannot be refreshed now (403): the refresh preparation hook or the reissuance policy refused it. The
+default hook refuses every refresh, so an operator who advertises `refreshService` has to install a hook.
+
+## Credential Refresh Preparation Failed
+
+The refresh preparation hook failed to prepare the replacement credential (500). The token stays usable, so the
+wallet can retry later. Operators find the cause in the server logs.
+
+## Credential Refresh Failed
+
+The credential refresh failed for another reason (500). Nothing was handed out, and a retry starts clean. Check the
+server logs.
+
+## Create Refresh Capability Failed
+
+The credential's configuration opts into refresh, but its refresh capability could not be created, so the
+credential was not issued (500). Check the server logs and retry the issuance.

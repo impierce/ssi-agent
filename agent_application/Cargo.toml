@@ -63,6 +63,7 @@ reqwest.workspace = true
 serde_norway.workspace = true
 testcontainers-modules = { version = "0.15", features = ["postgres"] }
 tower.workspace = true
+tracing-test = { workspace = true, features = ["no-env-filter"] }
 
 [features]
 # Enables the integration tests that start their dependencies (databases, collectors) in Docker containers.

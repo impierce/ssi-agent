@@ -1,10 +1,9 @@
+use crate::server_config::supported_configuration::SupportedCredentialConfiguration;
 use agent_shared::config::Authorization;
 use cqrs_es::DomainEvent;
 use jsonwebtoken::Algorithm;
 use oid4vci::credential_issuer::{
-    authorization_server_metadata::AuthorizationServerMetadata,
-    credential_configurations_supported::CredentialConfigurationsSupportedObject,
-    credential_issuer_metadata::CredentialIssuerMetadata,
+    authorization_server_metadata::AuthorizationServerMetadata, credential_issuer_metadata::CredentialIssuerMetadata,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -28,22 +27,22 @@ pub enum ServerConfigEvent {
     CryptographicBindingMethodsUpdated {
         cryptographic_binding_methods_supported: Vec<String>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
     },
     SigningAlgorithmsUpdated {
         signing_algorithms_supported: Vec<Algorithm>,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
     },
     CredentialConfigurationUpdated {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
     },
     CredentialConfigurationRemoved {
         credential_configuration_id: String,
         credential_issuer_metadata: Box<CredentialIssuerMetadata>,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
     },
 }
 

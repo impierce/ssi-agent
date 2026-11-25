@@ -19,16 +19,20 @@ use std::sync::Arc;
 use crate::server_config::command::ServerConfigCommand;
 use crate::server_config::error::ServerConfigError;
 use crate::server_config::event::ServerConfigEvent;
+use crate::server_config::supported_configuration::SupportedCredentialConfiguration;
 use crate::services::IssuanceServices;
 
 fn into_credential_configurations_supported(
-    credential_configurations: &HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+    credential_configurations: &HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
 ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
     credential_configurations
         .iter()
         .map(
             |(credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant))| {
-                (credential_configuration_id.clone(), credential_configuration.clone())
+                (
+                    credential_configuration_id.clone(),
+                    credential_configuration.metadata.clone(),
+                )
             },
         )
         .collect()
@@ -66,7 +70,7 @@ fn into_proof_types_supported(signing_algorithms_supported: &[Algorithm]) -> Has
 pub struct ServerConfig {
     pub authorization_server_metadata: AuthorizationServerMetadata,
     pub credential_issuer_metadata: CredentialIssuerMetadata,
-    pub credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+    pub credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
     pub cryptographic_binding_methods_supported: Vec<String>,
     pub signing_algorithms_supported: Vec<Algorithm>,
 }
@@ -122,8 +126,7 @@ impl ServerConfig {
         &self,
         credential_configuration: CredentialConfiguration,
         provisioned: bool,
-    ) -> Result<HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>, ServerConfigError>
-    {
+    ) -> Result<HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>, ServerConfigError> {
         let credential_format = match credential_configuration.format.as_str() {
             "jwt_vc_json" => CredentialFormats::JwtVcJson(Parameters {
                 parameters: (jwt_vc_json::CredentialDefinition {
@@ -160,13 +163,16 @@ impl ServerConfig {
 
         let proof_types_supported = into_proof_types_supported(&self.signing_algorithms_supported);
 
-        let credential_configuration_object = CredentialConfigurationsSupportedObject {
-            credential_format,
-            cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
-            credential_signing_alg_values_supported: credential_signing_alg_values_supported(),
-            proof_types_supported,
-            credential_metadata: Some(credential_configuration.credential_metadata),
-            ..Default::default()
+        let credential_configuration_object = SupportedCredentialConfiguration {
+            metadata: CredentialConfigurationsSupportedObject {
+                credential_format,
+                cryptographic_binding_methods_supported: self.cryptographic_binding_methods_supported.clone(),
+                credential_signing_alg_values_supported: credential_signing_alg_values_supported(),
+                proof_types_supported,
+                credential_metadata: Some(credential_configuration.credential_metadata),
+                ..Default::default()
+            },
+            refresh_service: credential_configuration.refresh_service,
         };
 
         let mut credential_configurations = self.credential_configurations.clone();
@@ -249,8 +255,9 @@ impl Aggregate for ServerConfig {
                 for (_credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant)) in
                     credential_configurations.iter_mut()
                 {
-                    credential_configuration.cryptographic_binding_methods_supported =
-                        cryptographic_binding_methods_supported.clone();
+                    credential_configuration
+                        .metadata
+                        .cryptographic_binding_methods_supported = cryptographic_binding_methods_supported.clone();
                 }
 
                 let mut credential_issuer_metadata = Box::new(self.credential_issuer_metadata.clone());
@@ -271,9 +278,10 @@ impl Aggregate for ServerConfig {
                 for (_credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant)) in
                     credential_configurations.iter_mut()
                 {
-                    credential_configuration.credential_signing_alg_values_supported =
-                        credential_signing_alg_values_supported();
-                    credential_configuration.proof_types_supported =
+                    credential_configuration
+                        .metadata
+                        .credential_signing_alg_values_supported = credential_signing_alg_values_supported();
+                    credential_configuration.metadata.proof_types_supported =
                         into_proof_types_supported(&signing_algorithms_supported);
                 }
 
@@ -411,6 +419,7 @@ pub mod server_config_tests {
     use super::*;
     use crate::server_config::aggregate::ServerConfig;
     use crate::server_config::event::ServerConfigEvent;
+    use crate::server_config::supported_configuration::SupportedCredentialConfiguration;
     use agent_secret_manager::service::Service;
     use agent_shared::config::{Authorization, CredentialConfiguration};
     use cqrs_es::test::TestFramework;
@@ -455,7 +464,7 @@ pub mod server_config_tests {
         cryptographic_binding_methods_supported: Vec<String>,
         signing_algorithms_supported: Vec<Algorithm>,
         credential_configuration_id: String,
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
         credential_issuer_metadata_with_credential_configuration: Box<CredentialIssuerMetadata>,
     ) {
         ServerConfigTestFramework::with(IssuanceServices::default().await)
@@ -489,6 +498,7 @@ pub mod server_config_tests {
                         pre_authorized: true,
                         tx_code_constraints: None,
                     },
+                    refresh_service: None,
                 },
                 provisioned: false,
             })
@@ -557,6 +567,7 @@ pub mod server_config_tests {
                 claims: None,
             },
             authorization: Authorization::default(),
+            refresh_service: None,
         }
     }
 
@@ -726,18 +737,22 @@ pub mod server_config_tests {
             server_config
                 .credential_issuer_metadata
                 .credential_configurations_supported[&credential_configuration_id()],
-            *credential_configuration
+            credential_configuration.metadata
         );
         assert_eq!(
-            credential_configuration.cryptographic_binding_methods_supported,
+            credential_configuration
+                .metadata
+                .cryptographic_binding_methods_supported,
             vec!["did:web"]
         );
         assert_eq!(
-            credential_configuration.credential_signing_alg_values_supported,
+            credential_configuration
+                .metadata
+                .credential_signing_alg_values_supported,
             vec![AlgIdentifier::String("EdDSA".to_string())]
         );
         assert_eq!(
-            credential_configuration.proof_types_supported[&ProofType::Jwt].proof_signing_alg_values_supported,
+            credential_configuration.metadata.proof_types_supported[&ProofType::Jwt].proof_signing_alg_values_supported,
             vec![AlgIdentifier::String("EdDSA".to_string())]
         );
     }
@@ -913,12 +928,12 @@ pub mod test_utils {
     #[fixture]
     pub fn credential_configurations(
         credential_configuration_id: String,
-    ) -> HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)> {
+    ) -> HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)> {
         HashMap::from_iter(vec![(
             credential_configuration_id,
             (
                 false,
-                JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+                JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone().into(),
                 Authorization {
                     pre_authorized: true,
                     tx_code_constraints: None,
@@ -929,13 +944,13 @@ pub mod test_utils {
 
     #[fixture]
     pub fn credential_configurations_supported(
-        credential_configurations: HashMap<String, (bool, CredentialConfigurationsSupportedObject, Authorization)>,
+        credential_configurations: HashMap<String, (bool, SupportedCredentialConfiguration, Authorization)>,
     ) -> HashMap<String, CredentialConfigurationsSupportedObject> {
         credential_configurations
             .into_iter()
             .map(
                 |(credential_configuration_id, (_provisioned, credential_configuration, _authorization_grant))| {
-                    (credential_configuration_id, credential_configuration)
+                    (credential_configuration_id, credential_configuration.metadata)
                 },
             )
             .collect()

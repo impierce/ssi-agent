@@ -642,6 +642,18 @@ pub struct CredentialConfiguration {
     pub credential_metadata: CredentialMetadata,
     #[serde(default)]
     pub authorization: Authorization,
+    /// Opts the configuration's credentials into credential refresh. `None` (the default): no refresh.
+    #[serde(rename = "refreshService", default, skip_serializing_if = "Option::is_none")]
+    pub refresh_service: Option<RefreshServiceConfiguration>,
+}
+
+/// `refreshService` on a credential configuration: every credential issued with the configuration embeds a refresh
+/// service of this `type` (for example `VerifiableCredentialRefreshService2021`), whose `url` is the public
+/// `/v0/refresh-credential` endpoint, and a refresh token of its own.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, utoipa::ToSchema)]
+pub struct RefreshServiceConfiguration {
+    #[serde(rename = "type")]
+    pub type_: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, utoipa::ToSchema)]
@@ -1669,6 +1681,23 @@ mod tests {
                     Url::parse("https://my-domain.example.org/my/redirect/uri").unwrap()
                 );
             },
+        );
+    }
+
+    #[test]
+    fn a_credential_configuration_accepts_a_refresh_service() {
+        let credential_configuration: CredentialConfiguration = serde_json::from_value(json!({
+            "credential_configuration_id": "refreshable",
+            "format": "vc+sd-jwt",
+            "refreshService": {"type": "VerifiableCredentialRefreshService2021"}
+        }))
+        .unwrap();
+
+        assert_eq!(
+            credential_configuration.refresh_service,
+            Some(RefreshServiceConfiguration {
+                type_: "VerifiableCredentialRefreshService2021".to_owned()
+            })
         );
     }
 

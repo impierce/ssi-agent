@@ -190,18 +190,37 @@ pub fn document_to_cloud_event(document: &bson::Document) -> Option<CloudEvent> 
     Some(event)
 }
 
+/// The `aggregate_type` condition of a query: one of `sources` when it names any, and never one of `withheld`.
+fn aggregate_type_condition(sources: &[String], withheld: &[String]) -> Option<bson::Document> {
+    let mut condition = doc! {};
+    if !sources.is_empty() {
+        let aggregate_types: Vec<String> = sources
+            .iter()
+            .map(|source| source.trim_start_matches("/services/").trim_matches('/').to_lowercase())
+            .collect();
+        condition.insert("$in", aggregate_types);
+    }
+    if !withheld.is_empty() {
+        condition.insert("$nin", withheld);
+    }
+    (!condition.is_empty()).then_some(condition)
+}
+
 /// An [`EventSource`] implementation for MongoDB using change streams.
 #[derive(Clone)]
 pub struct MongoEventSource {
     client: Client,
     initialized: Arc<tokio::sync::OnceCell<()>>,
+    withheld_aggregate_types: Vec<String>,
 }
 
 impl MongoEventSource {
-    pub fn new(client: Client) -> Self {
+    /// A source of every stored event, except those of `withheld_aggregate_types`, which are never published.
+    pub fn new(client: Client, withheld_aggregate_types: &[&str]) -> Self {
         Self {
             client,
             initialized: Arc::new(tokio::sync::OnceCell::new()),
+            withheld_aggregate_types: withheld_aggregate_types.iter().map(ToString::to_string).collect(),
         }
     }
 
@@ -263,8 +282,13 @@ impl EventSource for MongoEventSource {
             options.resume_after = Some(resume_token);
         }
 
+        let withheld = match aggregate_type_condition(&[], &self.withheld_aggregate_types) {
+            Some(condition) => vec![doc! { "$match": { "fullDocument.aggregate_type": condition } }],
+            None => vec![],
+        };
         let change_stream = collection
             .watch()
+            .pipeline(withheld)
             .with_options(options)
             .await
             .map_err(|error| EventBusError::Source(error.to_string()))?;
@@ -321,17 +345,8 @@ impl EventHistoryReader for MongoEventSource {
         let mut target_object_id: Option<mongodb::bson::oid::ObjectId> = None;
 
         let mut base_query = doc! {};
-        if !filter.sources.is_empty() {
-            let aggregate_types: Vec<String> = filter
-                .sources
-                .iter()
-                .map(|source| source.trim_start_matches("/services/").trim_matches('/').to_lowercase())
-                .collect();
-            if aggregate_types.len() == 1 {
-                base_query.insert("aggregate_type", &aggregate_types[0]);
-            } else if let Ok(bson_array) = bson::to_bson(&aggregate_types) {
-                base_query.insert("aggregate_type", doc! { "$in": bson_array });
-            }
+        if let Some(condition) = aggregate_type_condition(&filter.sources, &self.withheld_aggregate_types) {
+            base_query.insert("aggregate_type", condition);
         }
 
         if let Some(ref target_subject) = filter.subject {
@@ -544,6 +559,16 @@ impl EventHistoryReader for MongoEventSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn withheld_aggregate_types_are_left_out_of_every_query() {
+        let condition = aggregate_type_condition(&["/services/offer".to_owned()], &["refresh_capability".to_owned()]);
+
+        assert_eq!(
+            condition,
+            Some(doc! { "$in": ["offer"], "$nin": ["refresh_capability"] })
+        );
+    }
 
     #[test]
     fn test_document_to_cloud_event_with_timestamp() {

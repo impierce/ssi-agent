@@ -8,7 +8,7 @@ use thiserror::Error;
 
 /// Why a reissuance was not prepared. Shared by the reissuance relation aggregate, which only ever refuses with
 /// [`ReissuanceError::AlreadyExists`], and by [`reissue_credential`](crate::reissuance::service::reissue_credential).
-#[derive(Error, Debug)]
+#[derive(Error, Debug, strum::IntoStaticStr)]
 pub enum ReissuanceError {
     /// The original credential does not exist.
     #[error("Original credential `{0}` was not found")]
@@ -37,6 +37,10 @@ pub enum ReissuanceError {
     /// The credential aggregate refused the replacement's content.
     #[error(transparent)]
     ReplacementRejected(CredentialError),
+    /// The replacement's configuration opts into refresh and its refresh capability could not be created, so the
+    /// replacement was not created.
+    #[error("Failed to create the refresh capability of the replacement")]
+    RefreshCapabilityFailed,
     /// A relation with this identifier was already recorded.
     #[error("Reissuance relation already exists")]
     AlreadyExists,

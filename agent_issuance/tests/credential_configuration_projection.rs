@@ -289,7 +289,7 @@ async fn test_template_created_with_v2_data_model_uses_vc_sd_jwt_format() {
         .unwrap();
     let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     assert!(matches!(
-        &config_obj.credential_format,
+        &config_obj.metadata.credential_format,
         oid4vci::credential_format_profiles::CredentialFormats::VcSdJwt(_)
     ));
 }
@@ -453,6 +453,7 @@ async fn test_display_updated_reflects_in_credential_configuration() {
         .unwrap();
     let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display_name = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -593,6 +594,7 @@ async fn test_title_updated_refreshes_credential_configuration() {
         .unwrap();
     let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display_name = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -955,6 +957,7 @@ async fn test_schema_updated_refreshes_credential_configuration() {
         .unwrap();
     let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let claim_count = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .and_then(|metadata| metadata.claims.as_ref())
@@ -1066,6 +1069,7 @@ async fn test_schema_properties_attributes_updated_refreshes_credential_configur
                 .unwrap();
             let claims = server_config.credential_configurations[template_id]
                 .1
+                .metadata
                 .credential_metadata
                 .as_ref()
                 .and_then(|metadata| metadata.claims.clone())
@@ -1150,6 +1154,7 @@ async fn test_resync_derives_configurations_of_published_templates() {
         .get("published-template")
         .expect("published template is advertised");
     let claim = published
+        .metadata
         .credential_metadata
         .as_ref()
         .and_then(|metadata| metadata.claims.as_ref())
@@ -1273,6 +1278,7 @@ async fn test_logo_first_draft_then_title_then_publish_uses_title_as_display_nam
         .unwrap();
     let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -1402,6 +1408,7 @@ async fn test_display_update_with_empty_name_then_title_update_uses_new_title() 
         .unwrap();
     let (_, config_obj, _) = server_config.credential_configurations.get(template_id).unwrap();
     let display = config_obj
+        .metadata
         .credential_metadata
         .as_ref()
         .unwrap()
@@ -1415,5 +1422,85 @@ async fn test_display_update_with_empty_name_then_title_update_uses_new_title() 
     assert_eq!(
         display.logo.as_ref().map(|logo| logo.uri.to_string()),
         Some("https://example.com/logo.png".to_string())
+    );
+}
+
+#[tokio::test]
+async fn a_template_update_keeps_the_refresh_opt_in_of_its_configuration() {
+    let bus = shared_kernel::event_bus::EventBusHandle::default();
+    let issuance = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &bus).await);
+    let library = library_state(&InMemory, &bus, vec![]).await;
+    let template_id = "refreshable-template";
+    command_handler(
+        template_id,
+        &library.command.template,
+        TemplateCommand::CreateNewTemplate {
+            template_id: template_id.to_string(),
+            source_template_id: None,
+            title: "Refreshable".to_string(),
+            display: Box::new(None),
+            data_model: DataModel::W3CVcDataModelV2_0,
+            holder_type: HolderType::Individual,
+            tags: None,
+            status: Status::Published,
+            visibility: Visibility::Private,
+            credential_expiration: None,
+            description: None,
+            r#type: vec!["VerifiableCredential".to_string()],
+            schema: Box::new(None),
+            schema_properties_attributes: None,
+            holder_authorization: Authorization::default(),
+            origin: None,
+        },
+    )
+    .await
+    .unwrap();
+    command_handler(
+        SERVER_CONFIG_ID,
+        &issuance.command.server_config,
+        ServerConfigCommand::UpdateCredentialConfiguration {
+            credential_configuration: serde_json::from_value(serde_json::json!({
+                "credential_configuration_id": template_id,
+                "format": "vc+sd-jwt",
+                "type": ["VerifiableCredential"],
+                "refreshService": {"type": "VerifiableCredentialRefreshService2021"}
+            }))
+            .unwrap(),
+            provisioned: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    agent_issuance::application::credential_configuration_projection::resync_credential_configurations(
+        issuance.clone(),
+        &library,
+    )
+    .await;
+
+    let server_config = query_handler(SERVER_CONFIG_ID, &issuance.query.server_config)
+        .await
+        .unwrap()
+        .unwrap();
+    let configuration = &server_config.credential_configurations[template_id].1;
+    let display_name = configuration
+        .metadata
+        .credential_metadata
+        .as_ref()
+        .unwrap()
+        .display
+        .as_ref()
+        .unwrap()[0]
+        .name
+        .clone();
+    assert_eq!(
+        (
+            display_name.as_str(),
+            configuration
+                .refresh_service
+                .as_ref()
+                .map(|refresh_service| refresh_service.type_.as_str())
+        ),
+        ("Refreshable", Some("VerifiableCredentialRefreshService2021"))
     );
 }

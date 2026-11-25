@@ -126,7 +126,11 @@ pub async fn run() -> io::Result<()> {
     info!("Configuration loaded successfully");
 
     let subject = Arc::new(Subject::new().await);
+    // Stock UniCore installs the default ports, whose `RefuseEveryRefresh` refuses every refresh.
     let state = state(subject, IssuancePorts::default()).await?;
+    if let Some(issuance_state) = &state.api.issuance_state {
+        agent_issuance::state::warn_about_refreshable_configurations(issuance_state).await;
+    }
     state.verify_persisted_events().await;
 
     serve(router(state)).await
@@ -148,6 +152,8 @@ pub async fn state(subject: Arc<Subject>, issuance_ports: IssuancePorts) -> io::
     let verification_services = Arc::new(VerificationServices::new(subject.clone()));
 
     let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+    // Published credential and offer events keep no refresh token.
+    event_bus.set_disclosure(Arc::new(agent_issuance::refresh::disclosure::RefreshTokenDisclosure));
 
     if let Some(publisher) = HttpEventPublisher::from_config(&event_bus) {
         publisher.spawn();
@@ -222,7 +228,10 @@ pub async fn state(subject: Arc<Subject>, issuance_ports: IssuancePorts) -> io::
             }
             EventStoreType::MongoDb => {
                 let builder = MongoDB::new().await;
-                let mongo_source = agent_store::MongoEventSource::new(builder.client.clone());
+                let mongo_source = agent_store::MongoEventSource::new(
+                    builder.client.clone(),
+                    &agent_issuance::state::UNPUBLISHED_AGGREGATE_TYPES,
+                );
                 // 1. Stream live database writes from MongoDB Change Stream into the local EventBus.
                 event_bus.attach_source(mongo_source.clone());
                 // 2. Register MongoDB as the persistent history reader for complete historical catch-up queries.
@@ -506,6 +515,38 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 mod tests {
     use super::*;
     use agent_shared::config::set_config;
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn startup_warns_about_refreshable_configurations_while_the_hook_refuses() {
+        use agent_issuance::{server_config::command::ServerConfigCommand, services::IssuanceServices};
+        let issuance_state = issuance_state(
+            &InMemory,
+            Arc::new(IssuanceServices::new(Arc::new(Subject::test_subject().await))),
+            &Default::default(),
+        )
+        .await;
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+        agent_shared::handlers::public_command_handler(
+            SERVER_CONFIG_ID,
+            &issuance_state.command.server_config,
+            ServerConfigCommand::UpdateCredentialConfiguration {
+                credential_configuration: serde_json::from_value(serde_json::json!({
+                    "credential_configuration_id": "refreshable",
+                    "format": "dc+sd-jwt",
+                    "refreshService": {"type": "VerifiableCredentialRefreshService2021"}
+                }))
+                .unwrap(),
+                provisioned: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        agent_issuance::state::warn_about_refreshable_configurations(&issuance_state).await;
+
+        assert!(logs_contain("configurations=\"refreshable\""));
+    }
 
     #[tokio::test]
     async fn builds_the_kms_only_when_its_feature_flag_is_enabled() {

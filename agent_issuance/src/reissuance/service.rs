@@ -1,5 +1,6 @@
 use crate::{
     application::{
+        credential_creation::{create_credential, CreateCredentialError},
         credential_offer::create_credential_offer_command,
         template_issuance::{published_template, template_credential_expiry, validate_credential_against_template},
     },
@@ -49,9 +50,11 @@ pub struct PreparedReissuance {
 /// the original to the replacement. The original and its status are left as they are. Identifiers are generated.
 ///
 /// Every check and the configured [`ReissuancePolicy`](crate::reissuance::policy::ReissuancePolicy) run before
-/// anything is written. Then the relation is written first, the credential second and the offer last, so a failed
-/// relation never leaves an issuable replacement. The writes are not transactional: a failure after the relation
-/// leaves a relation without a usable offer.
+/// anything is written. Then the relation is written first, the credential second (preceded by its refresh
+/// capability when the configuration opts into refresh, see
+/// [`create_credential`](crate::application::credential_creation::create_credential)) and the offer last, so a
+/// failed relation never leaves an issuable replacement. The writes are not transactional: a failure after the
+/// relation leaves a relation without a usable offer.
 pub async fn reissue_credential(
     state: &IssuanceState,
     library_state: &LibraryState,
@@ -86,11 +89,11 @@ pub async fn reissue_credential(
     .ok_or_else(|| ReissuanceError::CredentialConfigurationNotFound(configuration_id.clone()))?;
 
     if !matches!(
-        credential_configuration.credential_format,
+        credential_configuration.metadata.credential_format,
         CredentialFormats::DcSdJwt(_) | CredentialFormats::VcSdJwt(_)
     ) {
         return Err(ReissuanceError::UnsupportedCredentialFormat(serde_json::json!(
-            credential_configuration.credential_format
+            credential_configuration.metadata.credential_format
         )));
     }
     if !replacement.credential.is_object() {
@@ -99,7 +102,9 @@ pub async fn reissue_credential(
     if original.status != Status::Issued {
         return Err(ReissuanceError::OriginalCredentialNotIssued);
     }
-    if original.credential_configuration.credential_format != credential_configuration.credential_format {
+    if original.credential_configuration.metadata.credential_format
+        != credential_configuration.metadata.credential_format
+    {
         return Err(ReissuanceError::CredentialConfigurationMismatch);
     }
 
@@ -150,20 +155,24 @@ pub async fn reissue_credential(
     .await
     .map_err(|error| command_failed(error, |error| error))?;
 
-    command_handler(
-        authorization_checker.clone(),
+    create_credential(
+        state,
         caller.clone(),
         &new_credential_id,
-        &state.command.credential,
+        &credential_configuration_id,
         CredentialCommand::CreateUnsignedCredential {
             credential_id: new_credential_id.clone(),
             data: Data { raw: credential },
             credential_configuration: Box::new(credential_configuration),
             expires_at,
+            refresh_token: None,
         },
     )
     .await
-    .map_err(|error| command_failed(error, ReissuanceError::ReplacementRejected))?;
+    .map_err(|error| match error {
+        CreateCredentialError::RefreshCapability => ReissuanceError::RefreshCapabilityFailed,
+        CreateCredentialError::Credential(error) => command_failed(error, ReissuanceError::ReplacementRejected),
+    })?;
 
     for command in [
         create_credential_offer_command(&offer_id, &credential_configuration_id, &authorization, None),
@@ -353,6 +362,7 @@ mod tests {
                 data: Data { raw },
                 credential_configuration: Box::new(credential_configuration),
                 expires_at: CredentialExpiry::Never,
+                refresh_token: None,
             },
         )
         .await

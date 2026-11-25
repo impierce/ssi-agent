@@ -82,12 +82,18 @@ impl CredentialConfigurationProjection {
 
     /// Adds or replaces the credential configuration of a template, unless the server config already
     /// holds and advertises exactly this configuration.
+    ///
+    /// Templates don't define refresh, so a configuration keeps the `refreshService` it was given.
     async fn update_credential_configuration(
         &self,
         template_id: &str,
-        credential_configuration: CredentialConfiguration,
+        mut credential_configuration: CredentialConfiguration,
     ) {
         if let Some(server_config) = self.server_config_view().await {
+            credential_configuration.refresh_service = server_config
+                .credential_configurations
+                .get(template_id)
+                .and_then(|(_, supported, _)| supported.refresh_service.clone());
             let unchanged = server_config.advertises_credential_configurations()
                 && server_config
                     .with_credential_configuration(credential_configuration.clone(), false)
@@ -257,6 +263,7 @@ fn credential_configuration_from_template(template: &Template) -> CredentialConf
         type_,
         credential_metadata: CredentialMetadata { display, claims },
         authorization: template.holder_authorization.clone(),
+        refresh_service: None,
     }
 }
 
