@@ -357,6 +357,25 @@ Progress:
 - [x] Use provider keys in DID documents, for `did:web`
 - [ ] Replace Stronghold as the secret manager
 
+##### AWS KMS
+
+| Environment variable        | `config.yaml`      | Default |
+| --------------------------- | ------------------ | ------- |
+| `UNICORE__DEPLOYMENT_ALIAS` | `deployment_alias` | none    |
+
+The deployment alias names the deployment the instance belongs to, such as `eridani`. Keys created with it are tagged `unitrust-alias = <alias>`, and a key created with a label is named `alias/<alias>/<label>` instead of `alias/<label>`. An IAM policy can then limit each deployment to its own keys and aliases. It may only contain letters, digits, `_` and `-`, and can't be `aws`.
+
+The IAM role or user UniCore runs as needs these actions:
+
+| Used for                                          | Actions                                                                            |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Testing the connection, listing and adopting keys | `kms:ListKeys`, `kms:DescribeKey`                                                  |
+| Creating keys                                     | `kms:CreateKey`, `kms:TagResource`, `kms:CreateAlias`                              |
+| Signing                                           | `kms:GetPublicKey`, `kms:Sign`                                                     |
+| Deleting keys                                     | `kms:DescribeKey`, `kms:ScheduleKeyDeletion`, `kms:ListAliases`, `kms:DeleteAlias` |
+
+`kms:CreateAlias` is checked on both the key and the alias, so it needs `alias/<alias>/*` as a resource too. A key that could not be named after it was created is scheduled for deletion again, which also needs `kms:ScheduleKeyDeletion`. Keys the role may not describe are left out of key listings.
+
 #### Example
 
 ```yaml
