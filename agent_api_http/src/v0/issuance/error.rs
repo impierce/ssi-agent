@@ -111,6 +111,7 @@ impl IntoApiErrorExt for OfferError {
             MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            HolderMismatchError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -401,6 +402,9 @@ impl IntoPublicError for OfferError {
             UnsupportedCredentialIdentifierError => {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
             }
+            HolderMismatchError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::CredentialRequestDenied))
+            }
             // Internal errors that shouldn't reach the public API
             SendCredentialOfferError(_) => PublicError::InternalServerError,
             UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
@@ -592,6 +596,7 @@ pub mod tests {
                 OfferError::MissingCredentialConfigurationIdsError,
                 OfferError::UnknownCredentialConfiguration("id".to_string()),
                 OfferError::UnsupportedCredentialIdentifierError,
+                OfferError::HolderMismatchError,
             ]
             .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None)),
         );
@@ -692,6 +697,11 @@ pub mod tests {
                 OfferError::UnsupportedCredentialIdentifierError,
                 StatusCode::BAD_REQUEST,
                 Some("unknown_credential_identifier"),
+            ),
+            (
+                OfferError::HolderMismatchError,
+                StatusCode::BAD_REQUEST,
+                Some("credential_request_denied"),
             ),
             (
                 OfferError::UnsupportedTokenRequestGrantTypeError,

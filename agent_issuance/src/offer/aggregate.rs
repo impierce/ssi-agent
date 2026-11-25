@@ -2,7 +2,7 @@ use agent_shared::config::config;
 use agent_shared::sensitive_logging::sensitive;
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use oid4vc_core::Validator;
-use oid4vci::credential_issuer::CredentialIssuer;
+use oid4vci::credential_issuer::{CredentialIssuer, ProofKey};
 use oid4vci::credential_offer::{
     AuthorizationCode, CredentialOffer, CredentialOfferParameters, GrantType, Grants, PreAuthorizedCode,
 };
@@ -130,7 +130,7 @@ impl Aggregate for Offer {
                 let tx_code = tx_code_constraints.as_ref().map(generate_tx_code);
 
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
-                    credential_issuer: credential_issuer.clone(),
+                    credential_issuer: credential_issuer.clone().into(),
                     credential_configuration_ids: CredentialConfigurationIds::try_new(template_ids)
                         .map_err(|_| OfferError::MissingCredentialConfigurationIdsError)?,
                     grants: Some(grants),
@@ -297,6 +297,7 @@ impl Aggregate for Offer {
                 credential_issuer_metadata,
                 authorization_server_metadata,
                 credential_request,
+                is_public_offer,
             } => {
                 let credential_offer = self
                     .credential_offer
@@ -330,20 +331,41 @@ impl Aggregate for Offer {
                 };
 
                 let validated_proofs = credential_issuer
-                    .validate_proofs(
+                    .validate_proofs_for_configuration(
                         credential_request.proofs.ok_or(MissingProofError)?,
                         Validator::Subject(services.issuer.clone()),
+                        &request_configuration_id,
                     )
                     .await
                     .map_err(|e| InvalidProofError(e.to_string()))?;
 
-                let subject_did = validated_proofs
-                    .first()
-                    .and_then(|proof| proof.rfc7519_claims.iss().as_ref().cloned());
+                // The holder is the DID of the key the proof was verified with, not a claim of the proof such as `iss`:
+                // anyone can sign any claim with their own key.
+                let subject_id = match validated_proofs.first().map(|proof| &proof.key) {
+                    Some(ProofKey::Kid(kid)) => did(kid).to_string(),
+                    // Only accepted for Credential Configurations that bind to `jwk`; UniCore's bind to DIDs.
+                    Some(ProofKey::Jwk(_)) => {
+                        return Err(InvalidProofError(
+                            "A key proof has to name its key by `kid`".to_string(),
+                        ))
+                    }
+                    None => return Err(MissingProofError),
+                };
+
+                // A Credential Offer is not shared between holders: it belongs to the holder of its first verified
+                // Credential Request.
+                if !is_public_offer
+                    && self
+                        .subject_id
+                        .as_deref()
+                        .is_some_and(|holder| did(holder) != subject_id)
+                {
+                    return Err(HolderMismatchError);
+                }
 
                 Ok(vec![CredentialRequestVerified {
                     offer_id,
-                    subject_id: subject_did,
+                    subject_id: Some(subject_id),
                 }])
             }
             CreateCredentialResponse {
@@ -444,6 +466,11 @@ impl Aggregate for Offer {
     }
 }
 
+/// The DID of a DID URL: what precedes its path, query and fragment.
+fn did(did_url: &str) -> &str {
+    did_url.split(['/', '?', '#']).next().unwrap_or(did_url)
+}
+
 #[cfg(test)]
 #[allow(unused_imports)]
 pub mod tests {
@@ -468,7 +495,7 @@ pub mod tests {
 
     type OfferTestFramework = TestFramework<Offer>;
 
-    // The test `test_verify_credential_response` requires a larger stack size (32 MiB).
+    // The test `test_verify_credential_request` requires a larger stack size (32 MiB).
     // TODO: refactor test
     fn run_with_large_stack<F>(test: F)
     where
@@ -633,13 +660,38 @@ pub mod tests {
         assert_eq!(offer.credential_ids, vec!["credential-1", "credential-2"]);
     }
 
+    /// A DID other than the test holder's.
+    const OTHER_DID: &str = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
+
+    #[derive(Clone, Copy, Debug)]
+    enum Did {
+        Holder,
+        Other,
+    }
+
     // Note: This test cannot use #[future(awt)] fixtures because rstest evaluates those fixtures
     // outside the test function body, before entering run_with_large_stack. This would cause a stack
     // overflow before the large stack is available. Instead, all fixture setup is done manually inside
     // the large-stack wrapper using the test helper functions directly.
+    /// A Credential Request for an offer of `UniversityDegree`, its proof always signed with the test holder's key
+    /// and claiming `iss` as its `iss`, while the offer may already belong to `offer_holder`. The holder the request
+    /// is verified for is `verified_holder`; `None` if it is refused.
     #[rstest]
+    #[case::iss_of_own_did(Some(Did::Holder), None, false, Some(Did::Holder))]
+    #[case::iss_of_another_did_is_not_the_holder(Some(Did::Other), None, false, Some(Did::Holder))]
+    #[case::no_iss(None, None, false, Some(Did::Holder))]
+    #[case::same_holder_again(Some(Did::Holder), Some(Did::Holder), false, Some(Did::Holder))]
+    #[case::same_holder_again_without_iss(None, Some(Did::Holder), false, Some(Did::Holder))]
+    #[case::other_holder_is_refused(Some(Did::Holder), Some(Did::Other), false, None)]
+    #[case::other_holder_claiming_iss_of_offer_holder_is_refused(Some(Did::Other), Some(Did::Other), false, None)]
+    #[case::public_offer_takes_any_holder(Some(Did::Holder), Some(Did::Other), true, Some(Did::Holder))]
     #[serial_test::serial]
-    fn test_verify_credential_response() {
+    fn test_verify_credential_request(
+        #[case] iss: Option<Did>,
+        #[case] offer_holder: Option<Did>,
+        #[case] is_public_offer: bool,
+        #[case] verified_holder: Option<Did>,
+    ) {
         run_with_large_stack(move || {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -651,7 +703,7 @@ pub mod tests {
                 let static_issuer_url = static_issuer_url();
                 let pre_authorized_code = pre_authorized_code().await;
                 let credential_offer = CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
-                    credential_issuer: static_issuer_url.clone(),
+                    credential_issuer: static_issuer_url.clone().into(),
                     credential_configuration_ids: CredentialConfigurationIds::try_new(vec![
                         "UniversityDegree".to_string()
                     ])
@@ -670,28 +722,23 @@ pub mod tests {
                         "openid-credential-offer://?credential_offer=%7B%22credential_issuer%22%3A%22https%3A%2F%2Fmy-domain.example.org%2F%22%2C%22credential_configuration_ids%22%3A%5B%22UniversityDegree%22%5D%2C%22grants%22%3A%7B%22urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Apre-authorized_code%22%3A%7B%22pre-authorized_code%22%3A%22{pre_authorized_code}%22%7D%7D%7D"
                     );
                 let holder = holder().await;
-                let generated_proof = oid4vci::Proof::builder()
+                let holder_did = holder.identifier("did:key", Algorithm::EdDSA).await.unwrap();
+                let did = |did: Did| match did {
+                    Did::Holder => holder_did.clone(),
+                    Did::Other => OTHER_DID.to_string(),
+                };
+
+                let mut proof_builder = oid4vci::Proof::builder()
                     .proof_type(oid4vci::proof::ProofType::Jwt)
                     .algorithm(Algorithm::EdDSA)
                     .signer(holder.clone())
-                    .iss(
-                        holder
-                            .identifier("did:key", Algorithm::EdDSA)
-                            .await
-                            .expect("Failed to get holder identifier"),
-                    )
                     .aud(static_issuer_url.to_string())
                     .iat(1571324800)
-                    .subject_syntax_type("did:key")
-                    .build()
-                    .await
-                    .expect("Failed to build proof");
-                let proof = match generated_proof {
-                    oid4vci::Proof::Jwt { jwt } => {
-                        assert!(!jwt.is_empty(), "Generated JWT should not be empty");
-                        jwt
-                    }
-                };
+                    .subject_syntax_type("did:key");
+                if let Some(iss) = iss {
+                    proof_builder = proof_builder.iss(did(iss));
+                }
+                let oid4vci::Proof::Jwt { jwt: proof } = proof_builder.build().await.expect("Failed to build proof");
                 let university_degree_credential_request = CredentialRequest {
                         credential_identifier_or_credential_configuration_id:
                             oid4vci::credential_request::CredentialIdentifierOrCredentialConfigurationId::CredentialConfigurationId(
@@ -699,46 +746,72 @@ pub mod tests {
                             ),
                         proofs: Some(oid4vci::proofs::Proofs { jwt: vec![proof] }),
                     };
-                let credential_issuer_metadata = credential_issuer_metadata(static_issuer_url.clone());
+                let mut credential_issuer_metadata = credential_issuer_metadata(static_issuer_url.clone());
+                credential_issuer_metadata.credential_configurations_supported.insert(
+                    "UniversityDegree".to_string(),
+                    crate::credential::aggregate::test_utils::JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone(),
+                );
                 let authorization_server_metadata = authorization_server_metadata(static_issuer_url);
-                let subject_id = holder.identifier("did:key", Algorithm::EdDSA).await.unwrap();
 
-                OfferTestFramework::with(IssuanceServices::default().await)
-                    .given(vec![
-                        OfferEvent::CredentialOfferCreated {
-                            offer_id: offer_id.clone(),
-                            grant_types,
-                            credential_offer: credential_offer.clone(),
-                            credential_offer_uri,
-                            pre_authorized_code,
-                            status: Status::Created,
-                            tx_code: None,
-                            delivery_options: None,
-                        },
-                        OfferEvent::CredentialsAdded {
-                            offer_id: offer_id.clone(),
-                            credential_ids: vec!["credential-id".to_string()],
-                            credential_offer: credential_offer.clone(),
-                        },
-                        OfferEvent::FormUrlEncodedCredentialOfferCreated {
-                            offer_id: offer_id.clone(),
-                            form_url_encoded_credential_offer,
-                            status: Status::Pending,
-                        },
-                    ])
+                let mut events = vec![
+                    OfferEvent::CredentialOfferCreated {
+                        offer_id: offer_id.clone(),
+                        grant_types,
+                        credential_offer: credential_offer.clone(),
+                        credential_offer_uri,
+                        pre_authorized_code,
+                        status: Status::Created,
+                        tx_code: None,
+                        delivery_options: None,
+                    },
+                    OfferEvent::CredentialsAdded {
+                        offer_id: offer_id.clone(),
+                        credential_ids: vec!["credential-id".to_string()],
+                        credential_offer: credential_offer.clone(),
+                    },
+                    OfferEvent::FormUrlEncodedCredentialOfferCreated {
+                        offer_id: offer_id.clone(),
+                        form_url_encoded_credential_offer,
+                        status: Status::Pending,
+                    },
+                ];
+                if let Some(offer_holder) = offer_holder {
+                    events.push(OfferEvent::CredentialRequestVerified {
+                        offer_id: offer_id.clone(),
+                        subject_id: Some(did(offer_holder)),
+                    });
+                }
+
+                let result = OfferTestFramework::with(IssuanceServices::default().await)
+                    .given(events)
                     .when_async(OfferCommand::VerifyCredentialRequest {
                         offer_id: offer_id.clone(),
                         credential_issuer_metadata,
                         authorization_server_metadata,
                         credential_request: university_degree_credential_request,
+                        is_public_offer,
                     })
-                    .await
-                    .then_expect_events(vec![OfferEvent::CredentialRequestVerified {
+                    .await;
+
+                match verified_holder {
+                    Some(verified_holder) => result.then_expect_events(vec![OfferEvent::CredentialRequestVerified {
                         offer_id,
-                        subject_id: Some(subject_id),
-                    }]);
+                        subject_id: Some(did(verified_holder)),
+                    }]),
+                    None => result.then_expect_error_message(&HolderMismatchError.to_string()),
+                }
             });
         });
+    }
+
+    #[test]
+    fn did_of_did_url() {
+        assert_eq!(did("did:key:z6Mk#z6Mk"), "did:key:z6Mk");
+        assert_eq!(
+            did("did:web:example.com:user/path?query#key-1"),
+            "did:web:example.com:user"
+        );
+        assert_eq!(did("did:key:z6Mk"), "did:key:z6Mk");
     }
 
     #[rstest]
@@ -895,7 +968,7 @@ pub mod test_utils {
         static_issuer_url: Url,
     ) -> CredentialOffer {
         CredentialOffer::CredentialOffer(Box::new(CredentialOfferParameters {
-            credential_issuer: static_issuer_url,
+            credential_issuer: static_issuer_url.into(),
             credential_configuration_ids: CredentialConfigurationIds::try_new(vec!["UniversityDegree".to_string()])
                 .expect("Credential_configuration_ids should not be empty when creating a credential offer"),
             grants: Some(Grants {
@@ -916,6 +989,7 @@ pub mod test_utils {
         CredentialOffer::CredentialOfferUri(
             credential_issuer_metadata
                 .credential_issuer
+                .url()
                 .join("openid4vci/")
                 .and_then(|url| url.join("credential-offer/").and_then(|url| url.join(&offer_id)))
                 .expect("Failed to parse URL in test"),

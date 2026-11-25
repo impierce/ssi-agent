@@ -489,6 +489,37 @@ mod tests {
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
     pub const TEMPLATE_ID: &str = "001";
 
+    /// A key proof for a Credential Request to UniCore, signed with the test holder's EdDSA key of `did_method`, so
+    /// that `did:key` and `did:jwk` act as two different holders. It claims `iss` as its `iss`, if any.
+    pub async fn key_proof(did_method: &str, iss: Option<String>, nonce: &str) -> String {
+        let holder = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
+        let mut proof_builder = oid4vci::Proof::builder()
+            .proof_type(oid4vci::proof::ProofType::Jwt)
+            .algorithm(jsonwebtoken::Algorithm::EdDSA)
+            .signer(holder)
+            .aud(config().public_url.to_string())
+            .iat(chrono::Utc::now().timestamp())
+            .nonce(nonce.to_string())
+            .subject_syntax_type(did_method);
+        if let Some(iss) = iss {
+            proof_builder = proof_builder.iss(iss);
+        }
+
+        let oid4vci::Proof::Jwt { jwt } = proof_builder.build().await.unwrap();
+        jwt
+    }
+
+    /// The DID of the test holder's EdDSA key of `did_method`.
+    pub async fn holder_did(did_method: &str) -> String {
+        use oid4vc_core::Subject as _;
+
+        agent_secret_manager::subject::Subject::test_subject()
+            .await
+            .identifier(did_method, jsonwebtoken::Algorithm::EdDSA)
+            .await
+            .unwrap()
+    }
+
     #[test]
     fn null_bytes_are_detected_in_every_spelling() {
         let uri = |raw: &str| raw.parse::<http::Uri>().unwrap();
@@ -627,7 +658,7 @@ mod tests {
             .into_iter()
             .collect();
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
-            credential_issuer: config().public_url.clone(),
+            credential_issuer: config().public_url.clone().into(),
             credential_endpoint: config().public_url.join("openid4vci/credential").unwrap(),
             nonce_endpoint: Some(config().public_url.join("openid4vci/nonce").unwrap()),
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),

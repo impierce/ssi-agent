@@ -12,6 +12,7 @@ pub struct HolderServices {
     pub wallet: Wallet,
 }
 
+#[async_trait::async_trait]
 impl Service for HolderServices {
     fn new(holder: Arc<Subject>) -> Self {
         let signing_algorithms_supported = get_all_enabled_signing_algorithms_supported();
@@ -40,5 +41,16 @@ impl Service for HolderServices {
         .expect("Failed to create wallet");
 
         Self { holder, wallet }
+    }
+
+    /// Holder services whose wallet reaches the issuers of tests, which run on 127.0.0.1 over plain `http`: the
+    /// default client of the wallet refuses both.
+    #[cfg(feature = "test_utils")]
+    async fn default() -> Arc<Self> {
+        let Self { holder, wallet } = Self::new(Arc::new(Subject::test_subject().await));
+        Arc::new(Self {
+            holder,
+            wallet: wallet.with_http_client(reqwest_0_13::Client::new()),
+        })
     }
 }
