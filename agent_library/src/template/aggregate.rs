@@ -5,10 +5,10 @@ use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
     ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
 };
+pub use super::open_badges::{is_open_badges_standard_property, open_badges_required_leaf_paths};
 use super::{
     command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin,
     public_content::PublicTemplateContent,

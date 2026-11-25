@@ -112,6 +112,7 @@ pub(crate) async fn service(
 }
 
 #[cfg(test)]
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 mod tests {
     use agent_identity::{
         dns::CnameResolver,

@@ -75,7 +75,8 @@ Terms with a fixed meaning in this codebase. Pick these words; avoid the alterna
 
 **Credential Offer**:
 The unit a wallet redeems: one holder, one pre-authorized code, one issued credential. Offers are
-not shared between holders.
+not shared between holders: an offer belongs to the holder of its first verified Credential Request,
+identified by the DID of the key its proof is signed with.
 _Avoid_: invitation, link
 
 **Public Offer**:
