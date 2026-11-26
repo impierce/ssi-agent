@@ -3,7 +3,7 @@
 use crate::key_provider::aggregate::KeyProviderType;
 use async_trait::async_trait;
 pub use identity_kit::keys::InMemoryKeyStore;
-use identity_kit::keys::KeyStore;
+use identity_kit::keys::{KeyId, KeySpec, KeyStore, KeyStoreError};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -11,6 +11,17 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub struct ConnectionError(pub String);
+
+/// Why a provider refuses a key it could otherwise create or adopt. Providers tell this before anything is created.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum KeyRefusal {
+    /// The provider can't name a key by this label. The message says why.
+    #[error("{0}")]
+    InvalidLabel(String),
+    /// The provider signs with this algorithm, but not in a way credentials can rely on. The message says why.
+    #[error("{0}")]
+    AlgorithmRefused(String),
+}
 
 /// A key that exists in a key provider, as reported by the provider.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
@@ -57,6 +68,29 @@ pub trait KeyProviderAdapter: KeyStore {
     /// Lists the keys that exist in the provider, that the configured credentials can see and that the provider can
     /// sign with.
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError>;
+
+    /// Refuses a key the provider would create or hold, but that the KMS must not use, such as a label the provider
+    /// can't name a key by. Nothing is asked of the provider, so this is checked before a key is created or adopted.
+    ///
+    /// # Errors
+    ///
+    /// The refusal, when the provider refuses the key.
+    fn check_spec(&self, spec: &KeySpec) -> Result<(), KeyRefusal>;
+
+    /// Creates a key as `spec` describes, and returns the id that names it for good, unlike a label that can later
+    /// name another key. The key is created, and named by its label, even when the returned future is dropped.
+    ///
+    /// # Errors
+    ///
+    /// As [`KeyStore::generate`].
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError>;
+
+    /// The id that names for good the key `label` names now, or `None` when no usable key has that label.
+    ///
+    /// # Errors
+    ///
+    /// Only when the provider can't answer.
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError>;
 }
 
 /// The adapter for each provider type this instance can use.
@@ -73,15 +107,33 @@ impl KeyProviderAdapter for InMemoryKeyStore {
     async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
         Ok(ProviderKeys::default())
     }
+
+    fn check_spec(&self, _spec: &KeySpec) -> Result<(), KeyRefusal> {
+        Ok(())
+    }
+
+    /// A key's id is its label, or its thumbprint without one, and never names another key.
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        self.generate(spec).await
+    }
+
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+        let key = KeyId::new(label);
+        if self.exists(&key).await? {
+            Ok(Some(key))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(any(test, feature = "test_utils"))]
 pub mod test_utils {
-    use super::{ConnectionError, KeyProviderAdapter, ProviderKeys};
+    use super::{ConnectionError, KeyProviderAdapter, KeyRefusal, ProviderKeys};
     use async_trait::async_trait;
     use identity_kit::{
         jose::{Jwk, JwsAlgorithm},
-        keys::{KeyId, KeyStore, KeyStoreCapabilities, KeyStoreError},
+        keys::{KeyId, KeySpec, KeyStore, KeyStoreCapabilities, KeyStoreError},
     };
 
     /// A provider that can't be reached: every request fails with "connection refused".
@@ -111,7 +163,7 @@ pub mod test_utils {
             Err(KeyStoreError::backend(refused()))
         }
 
-        async fn generate(&self, _spec: identity_kit::keys::KeySpec) -> Result<KeyId, KeyStoreError> {
+        async fn generate(&self, _spec: KeySpec) -> Result<KeyId, KeyStoreError> {
             Err(KeyStoreError::backend(refused()))
         }
     }
@@ -124,6 +176,18 @@ pub mod test_utils {
 
         async fn list_keys(&self) -> Result<ProviderKeys, ConnectionError> {
             Err(refused())
+        }
+
+        fn check_spec(&self, _spec: &KeySpec) -> Result<(), KeyRefusal> {
+            Ok(())
+        }
+
+        async fn create_key(&self, _spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+            Err(KeyStoreError::backend(refused()))
+        }
+
+        async fn find_key(&self, _label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+            Err(KeyStoreError::backend(refused()))
         }
     }
 }

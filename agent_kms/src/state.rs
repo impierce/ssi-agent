@@ -1,16 +1,24 @@
 use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
+use crate::key::{
+    aggregate::Key,
+    views::{AllKeysView, KeyView},
+};
 use crate::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
-    command::{ListKeyProviderKeys, TestKeyProviderConnection},
+    command::{KeyProviderCommand, ListKeyProviderKeys, TestKeyProviderConnection},
+    error::KeyProviderError,
     services::KeyProviderServices,
     views::KeyProvidersView,
 };
 use agent_shared::{
     application_state::{CommandHandler, CqrsComponentBuilder},
-    handlers::{authorize_command, query_handler, QueryHandlerError},
+    handlers::{
+        authorize_command, command_handler, public_query_handler, query_handler, CommandHandlerError, QueryHandlerError,
+    },
 };
+use cqrs_es::persist::PersistenceError;
 use shared_kernel::authorization::{
-    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, CommandOperation, QueryOperation,
+    AllowAllAuthorizationChecker, AuthorizationChecker, AuthorizationError, Caller, QueryOperation,
 };
 use shared_kernel::event_bus::EventBusHandle;
 use shared_kernel::view_repository::DynViewRepository;
@@ -34,11 +42,14 @@ pub struct KmsState {
 #[derive(Clone)]
 pub struct CommandHandlers {
     pub key_providers: CommandHandler<KeyProviders>,
+    pub keys: CommandHandler<Key>,
 }
 
 #[derive(Clone)]
 pub struct Queries {
     pub key_providers: Arc<dyn DynViewRepository<KeyProvidersView, KeyProviders>>,
+    pub key: Arc<dyn DynViewRepository<KeyView, Key>>,
+    pub all_keys: Arc<dyn DynViewRepository<AllKeysView, Key>>,
 }
 
 /// Constructs the CQRS components of the KMS bounded context.
@@ -57,13 +68,21 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
     let (key_providers_command_handler, key_providers, _) = builder
         .commands_and_queries::<KeyProvidersView, KeyProviders, KeyProvidersView>(services, vec![event_bus.query()])
         .await;
+    let (keys_command_handler, key, all_keys) = builder
+        .commands_and_queries::<KeyView, Key, AllKeysView>((), vec![event_bus.query()])
+        .await;
 
     KmsState {
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: CommandHandlers {
             key_providers: key_providers_command_handler,
+            keys: keys_command_handler,
         },
-        query: Queries { key_providers },
+        query: Queries {
+            key_providers,
+            key,
+            all_keys,
+        },
         adapters: Arc::new(adapters),
         development_providers_allowed,
     }
@@ -92,8 +111,9 @@ pub async fn get_key_providers(state: &KmsState, caller: Caller) -> Result<KeyPr
     Ok(view)
 }
 
+/// Why an added key provider could not be used.
 #[derive(Debug, Error)]
-pub enum TestConnectionError {
+pub enum KeyProviderAccessError {
     #[error(transparent)]
     Authorization(AuthorizationError),
     #[error(transparent)]
@@ -131,8 +151,17 @@ pub async fn test_key_provider_connection(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Result<(), ConnectionError>, TestConnectionError> {
-    let adapter = added_provider_adapter(state, caller, provider_type, &TestKeyProviderConnection).await?;
+) -> Result<Result<(), ConnectionError>, KeyProviderAccessError> {
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        &provider_type.to_string(),
+        &TestKeyProviderConnection,
+    )
+    .await
+    .map_err(KeyProviderAccessError::Authorization)?;
+
+    let adapter = added_provider_adapter(state, caller, provider_type).await?;
     Ok(adapter.test_connection().await)
 }
 
@@ -147,40 +176,106 @@ pub async fn list_key_provider_keys(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Result<ProviderKeys, ConnectionError>, TestConnectionError> {
-    let adapter = added_provider_adapter(state, caller, provider_type, &ListKeyProviderKeys).await?;
+) -> Result<Result<ProviderKeys, ConnectionError>, KeyProviderAccessError> {
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        &provider_type.to_string(),
+        &ListKeyProviderKeys,
+    )
+    .await
+    .map_err(KeyProviderAccessError::Authorization)?;
+
+    let adapter = added_provider_adapter(state, caller, provider_type).await?;
     Ok(adapter.list_keys().await)
 }
 
-/// The adapter of an added provider, after checking that the caller may perform `operation` on it.
-async fn added_provider_adapter<C: CommandOperation>(
+/// The adapter of an added provider. Whether the caller may use it for an operation is checked by the caller.
+///
+/// # Errors
+///
+/// Fails when the providers can't be loaded, the provider hasn't been added, or this instance has no adapter for it.
+pub(crate) async fn added_provider_adapter(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-    operation: &C,
-) -> Result<Arc<dyn KeyProviderAdapter>, TestConnectionError> {
-    let id = provider_type.to_string();
-    authorize_command(state.authorization_checker.as_ref(), caller.clone(), &id, operation)
-        .await
-        .map_err(TestConnectionError::Authorization)?;
-
+) -> Result<Arc<dyn KeyProviderAdapter>, KeyProviderAccessError> {
     get_key_provider(state, caller, provider_type)
         .await?
-        .ok_or(TestConnectionError::NotFound(provider_type))?;
+        .ok_or(KeyProviderAccessError::NotFound(provider_type))?;
 
     state
         .adapters
         .get(&provider_type)
         .cloned()
-        .ok_or(TestConnectionError::Unsupported(provider_type))
+        .ok_or(KeyProviderAccessError::Unsupported(provider_type))
+}
+
+/// Every key that is recorded and not deleted. Read for the rules of the KMS itself, so it isn't authorized.
+pub(crate) async fn all_keys(state: &KmsState) -> Result<AllKeysView, PersistenceError> {
+    Ok(public_query_handler(AllKeysView::ID, &state.query.all_keys)
+        .await?
+        .unwrap_or_default())
+}
+
+#[derive(Debug, Error)]
+pub enum RemoveKeyProviderError {
+    #[error(transparent)]
+    Authorization(AuthorizationError),
+    #[error(transparent)]
+    Persistence(#[from] PersistenceError),
+    #[error("The `{0}` key provider still has keys; delete them first")]
+    HasKeys(KeyProviderType),
+    #[error(transparent)]
+    Command(#[from] CommandHandlerError<KeyProviderError>),
+}
+
+/// Disconnects this instance from a key provider. A provider that still has keys is kept, so that no recorded key
+/// loses the provider that holds it.
+///
+/// # Errors
+///
+/// Fails when the caller isn't authorized, the provider still has keys, or the provider can't be removed.
+pub async fn remove_key_provider(
+    state: &KmsState,
+    caller: Caller,
+    provider_type: KeyProviderType,
+) -> Result<(), RemoveKeyProviderError> {
+    let command = KeyProviderCommand::RemoveKeyProvider { provider_type };
+    authorize_command(
+        state.authorization_checker.as_ref(),
+        caller.clone(),
+        KeyProviders::ID,
+        &command,
+    )
+    .await
+    .map_err(RemoveKeyProviderError::Authorization)?;
+
+    if all_keys(state)
+        .await?
+        .keys
+        .values()
+        .any(|reference| reference.provider_type == provider_type)
+    {
+        return Err(RemoveKeyProviderError::HasKeys(provider_type));
+    }
+
+    command_handler(
+        state.authorization_checker.clone(),
+        caller,
+        KeyProviders::ID,
+        &state.command.key_providers,
+        command,
+    )
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::adapter::test_utils::UnreachableKeyProvider;
-    use crate::key_provider::command::KeyProviderCommand;
-    use agent_shared::handlers::command_handler;
+    use crate::key::{aggregate::tests::reference, command::KeyCommand};
     use agent_store::in_memory::InMemory;
 
     /// Only AWS has an adapter, so an added in-memory provider is unsupported.
@@ -250,7 +345,29 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TestConnectionError::NotFound(KeyProviderType::AwsKmsAmbient))
+            Err(KeyProviderAccessError::NotFound(KeyProviderType::AwsKmsAmbient))
+        ));
+    }
+
+    #[tokio::test]
+    async fn refuses_to_remove_a_provider_that_has_keys() {
+        let state = state().await;
+        add(&state, KeyProviderType::InMemory).await;
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            "key-id",
+            &state.command.keys,
+            KeyCommand::CreateKey { reference: reference() },
+        )
+        .await
+        .unwrap();
+
+        let result = remove_key_provider(&state, Caller::Internal, KeyProviderType::InMemory).await;
+
+        assert!(matches!(
+            result,
+            Err(RemoveKeyProviderError::HasKeys(KeyProviderType::InMemory))
         ));
     }
 
@@ -263,7 +380,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TestConnectionError::Unsupported(KeyProviderType::InMemory))
+            Err(KeyProviderAccessError::Unsupported(KeyProviderType::InMemory))
         ));
     }
 }

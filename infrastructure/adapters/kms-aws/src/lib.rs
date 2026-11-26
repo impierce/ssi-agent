@@ -3,18 +3,24 @@
 //! Credentials and region are resolved through the standard AWS chain: environment variables, shared config files,
 //! container or instance roles. Nothing about the AWS account is stored in `UniCore`.
 
-use agent_kms::adapter::{ConnectionError, KeyProviderAdapter, ProviderKey, ProviderKeyState, ProviderKeys};
+use agent_kms::adapter::{
+    ConnectionError, KeyProviderAdapter, KeyRefusal, ProviderKey, ProviderKeyState, ProviderKeys,
+};
 use async_trait::async_trait;
 use aws_config::{timeout::TimeoutConfig, BehaviorVersion};
 use aws_sdk_kms::{
     config::{retry::RetryConfig, Builder as KmsConfigBuilder},
     error::{ProvideErrorMetadata, SdkError},
-    types::KeyState,
+    types::{KeyState, Tag},
     Client,
 };
 use futures::{stream, StreamExt as _, TryStreamExt as _};
-use identity_kit::jose::JwsAlgorithm;
+use identity_kit::{
+    jose::JwsAlgorithm,
+    keys::{KeyId, KeySpec, KeyStoreError},
+};
 use std::{collections::HashMap, sync::RwLock, time::Duration};
+use thiserror::Error;
 use tokio::sync::OnceCell;
 use tracing::debug;
 
@@ -28,9 +34,14 @@ const LIST_PAGE_SIZE: i32 = 1000;
 /// How many keys are described at the same time when listing keys.
 const DESCRIBE_CONCURRENCY: usize = 8;
 
+/// The tag that names the deployment a key belongs to.
+const DEPLOYMENT_ALIAS_TAG: &str = "unitrust-alias";
+/// AWS KMS's limit on the length of an alias name, `alias/` included.
+const MAX_ALIAS_NAME: usize = 256;
+
 mod key_store;
-use key_store::signing_algorithm;
 pub use key_store::AwsKmsError;
+use key_store::{arn, aws_key_spec, create_named_key, signing_algorithm, Label, MAX_RAW_MESSAGE};
 
 #[cfg(test)]
 mod fake_kms;
@@ -41,8 +52,16 @@ pub struct AwsKmsAmbientKeyProvider {
     /// The algorithm of every key looked up so far by key ID or key ARN, which always name the same key. A key's spec
     /// never changes in AWS KMS.
     algorithms: RwLock<HashMap<String, JwsAlgorithm>>,
-    /// Tags given to every key this provider generates, for example to scope IAM policies to a tenant.
-    key_tags: Vec<(String, String)>,
+    /// The deployment this instance belongs to, which names and tags its keys, if any.
+    deployment_alias: Option<String>,
+}
+
+/// Why a deployment alias can't scope the keys of a deployment in AWS KMS.
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("`{alias}` can't be a deployment alias for AWS KMS: {reason}")]
+pub struct InvalidDeploymentAlias {
+    alias: String,
+    reason: &'static str,
 }
 
 impl AwsKmsAmbientKeyProvider {
@@ -58,7 +77,7 @@ impl AwsKmsAmbientKeyProvider {
             client,
             deadline: REQUEST_DEADLINE,
             algorithms: RwLock::default(),
-            key_tags: Vec::new(),
+            deployment_alias: None,
         }
     }
 
@@ -68,13 +87,36 @@ impl AwsKmsAmbientKeyProvider {
         Self::with_cell(OnceCell::new_with(Some(client)))
     }
 
-    /// Tags every key this provider generates with `tags`, as key and value.
-    #[must_use]
-    pub fn with_key_tags(self, tags: impl IntoIterator<Item = (String, String)>) -> Self {
-        Self {
-            key_tags: tags.into_iter().collect(),
-            ..self
-        }
+    /// Scopes the keys this provider creates to the deployment `alias` (e.g. `eridani`): each is tagged
+    /// `unitrust-alias = <alias>`, and a label names it as `alias/<alias>/<label>` instead of `alias/<label>`. IAM
+    /// policies can then limit a deployment to its own keys and aliases.
+    ///
+    /// # Errors
+    ///
+    /// When AWS KMS can't name keys under `alias`: it has characters other than letters, digits, `_` and `-` (a `/`
+    /// would let two deployments name a key alike), it is `aws`, which AWS reserves, or it leaves no room for a label
+    /// in an alias name.
+    pub fn with_deployment_alias(self, alias: &str) -> Result<Self, InvalidDeploymentAlias> {
+        let reason = if alias.is_empty()
+            || !alias
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+        {
+            "use letters, digits, `_` and `-`"
+        } else if alias == "aws" {
+            "AWS reserves `alias/aws/`"
+        } else if format!("alias/{alias}/").len() >= MAX_ALIAS_NAME {
+            "it leaves no room for a label in an alias name of at most 256 characters"
+        } else {
+            return Ok(Self {
+                deployment_alias: Some(alias.to_string()),
+                ..self
+            });
+        };
+        Err(InvalidDeploymentAlias {
+            alias: alias.to_string(),
+            reason,
+        })
     }
 
     /// Replaces the upper bound for one whole request.
@@ -179,6 +221,77 @@ impl KeyProviderAdapter for AwsKmsAmbientKeyProvider {
             "Listed AWS KMS keys"
         );
         Ok(listing)
+    }
+
+    /// Refuses Ed25519 keys: AWS KMS must be given the whole message to sign with one and takes at most 4096 bytes,
+    /// which credentials such as Open Badges with embedded images exceed. Refuses labels that can't name an alias.
+    fn check_spec(&self, spec: &KeySpec) -> Result<(), KeyRefusal> {
+        if spec.alg == JwsAlgorithm::EdDSA {
+            return Err(KeyRefusal::AlgorithmRefused(format!(
+                "AWS KMS signs at most {MAX_RAW_MESSAGE} bytes with an Ed25519 key, too little for credentials such as \
+                 Open Badges with embedded images; create an ES256 key instead"
+            )));
+        }
+        if let Some(label) = &spec.label {
+            self.alias(label)?;
+        }
+        Ok(())
+    }
+
+    /// Returns the key's ARN, since a label's alias can later be pointed at another key. Under a deployment alias, the
+    /// key is tagged with it.
+    ///
+    /// When AWS KMS fails to name the new key by its label, the key is kept if the label names it anyway (the
+    /// response was lost) and deleted again if the label names no key or another key. When AWS KMS can't tell, the
+    /// key is kept and the error names it.
+    async fn create_key(&self, spec: KeySpec) -> Result<KeyId, KeyStoreError> {
+        let key_spec = aws_key_spec(&spec)?;
+        let label = match spec.label {
+            Some(label) => Some(Label {
+                alias: self.alias(&label).map_err(KeyStoreError::backend)?,
+                name: label,
+            }),
+            None => None,
+        };
+        let tags = self
+            .deployment_alias
+            .iter()
+            .map(|alias| Tag::builder().tag_key(DEPLOYMENT_ALIAS_TAG).tag_value(alias).build())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(KeyStoreError::backend)?;
+
+        let client = self
+            .bounded(async {
+                if let Some(label) = &label {
+                    if self.metadata(&KeyId::new(label.alias.as_str())).await?.is_some() {
+                        return Err(KeyStoreError::AlreadyExists(KeyId::new(label.name.as_str())));
+                    }
+                }
+                // Resolves the AWS configuration, which the SDK's own timeouts don't cover.
+                Ok(self.client().await.clone())
+            })
+            .await?;
+
+        // Creating the key and naming it are neither cut off by the deadline nor by the caller giving up, either of
+        // which could leave the key behind unnamed. The SDK's own timeouts bound each request.
+        let key = tokio::spawn(create_named_key(client, key_spec, tags, label))
+            .await
+            .unwrap_or_else(|error| std::panic::resume_unwind(error.into_panic()))?;
+
+        self.algorithms
+            .write()
+            .expect("lock poisoned")
+            .insert(key.as_str().to_string(), spec.alg);
+        Ok(key)
+    }
+
+    async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError> {
+        // A label that can't be an alias names no key.
+        let Ok(alias) = self.alias(label) else {
+            return Ok(None);
+        };
+        self.bounded(async { Ok(self.metadata(&KeyId::new(alias)).await?.as_ref().map(arn)) })
+            .await
     }
 }
 
@@ -322,6 +435,42 @@ mod tests {
             .mount(&server)
             .await;
         server
+    }
+
+    fn deployment_alias_error(alias: &str) -> Option<String> {
+        AwsKmsAmbientKeyProvider::new()
+            .with_deployment_alias(alias)
+            .err()
+            .map(|error| error.to_string())
+    }
+
+    #[test]
+    fn accepts_a_deployment_alias_of_letters_digits_underscores_and_hyphens() {
+        assert_eq!(deployment_alias_error("Eridani_2-eu"), None);
+    }
+
+    #[test]
+    fn refuses_a_deployment_alias_with_a_slash() {
+        assert_eq!(
+            deployment_alias_error("eridani/eu"),
+            Some("`eridani/eu` can't be a deployment alias for AWS KMS: use letters, digits, `_` and `-`".to_string())
+        );
+    }
+
+    #[test]
+    fn refuses_the_deployment_alias_aws_reserves() {
+        assert_eq!(
+            deployment_alias_error("aws"),
+            Some("`aws` can't be a deployment alias for AWS KMS: AWS reserves `alias/aws/`".to_string())
+        );
+    }
+
+    #[test]
+    fn refuses_a_deployment_alias_too_long_to_name_a_key_under() {
+        // `alias/` and `/` around 249 characters make 256, leaving no room for a label.
+        let alias = "a".repeat(249);
+
+        assert!(deployment_alias_error(&alias).is_some());
     }
 
     #[tokio::test]

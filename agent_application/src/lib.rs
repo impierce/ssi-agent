@@ -210,7 +210,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
-                kms_state = kms_state_if_enabled(&builder, &event_bus).await;
+                kms_state = kms_state_if_enabled(&builder, &event_bus).await?;
                 event_verification = EventVerification::Postgres(builder);
                 states
             }
@@ -265,7 +265,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
-                kms_state = kms_state_if_enabled(&builder, &event_bus).await;
+                kms_state = kms_state_if_enabled(&builder, &event_bus).await?;
                 event_verification = EventVerification::MongoDb(builder);
                 states
             }
@@ -313,7 +313,7 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
-                kms_state = kms_state_if_enabled(&InMemory, &event_bus).await;
+                kms_state = kms_state_if_enabled(&InMemory, &event_bus).await?;
                 event_verification = EventVerification::InMemory;
                 states
             }
@@ -352,32 +352,39 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
 }
 
 /// Builds the Key Management System, which stays hidden unless the `kms` feature flag is enabled.
+///
+/// Fails when the deployment alias can't scope keys in AWS KMS, so that keys are never created outside it.
 async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_bus: &shared_kernel::event_bus::EventBusHandle,
-) -> Option<Arc<KmsState>> {
+) -> io::Result<Option<Arc<KmsState>>> {
     if !config().feature.kms {
-        return None;
+        return Ok(None);
     }
 
     info!("Key Management System enabled");
+
+    let deployment_alias = config().deployment_alias.clone();
+    let aws_kms = match deployment_alias {
+        Some(alias) => AwsKmsAmbientKeyProvider::new()
+            .with_deployment_alias(&alias)
+            .map_err(io::Error::other)?,
+        None => AwsKmsAmbientKeyProvider::new(),
+    };
 
     let adapters: KeyProviderAdapters = [
         (
             KeyProviderType::InMemory,
             Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
         ),
-        (
-            KeyProviderType::AwsKmsAmbient,
-            Arc::new(AwsKmsAmbientKeyProvider::new()),
-        ),
+        (KeyProviderType::AwsKmsAmbient, Arc::new(aws_kms)),
     ]
     .into();
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
 
-    Some(Arc::new(
+    Ok(Some(Arc::new(
         kms_state(builder, event_bus, development_providers_allowed, adapters).await,
-    ))
+    )))
 }
 
 /// Builds the full core SSI agent Router (app + metadata + probes).
@@ -494,17 +501,33 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 mod tests {
     use super::*;
     use agent_shared::config::set_config;
+    use serial_test::serial;
 
     #[tokio::test]
+    #[serial]
     async fn builds_the_kms_only_when_its_feature_flag_is_enabled() {
         let event_bus = shared_kernel::event_bus::EventBusHandle::default();
 
         set_config().feature.kms = false;
-        assert!(kms_state_if_enabled(&InMemory, &event_bus).await.is_none());
+        assert!(kms_state_if_enabled(&InMemory, &event_bus).await.unwrap().is_none());
 
         set_config().feature.kms = true;
-        let enabled = kms_state_if_enabled(&InMemory, &event_bus).await;
+        let enabled = kms_state_if_enabled(&InMemory, &event_bus).await.unwrap();
         set_config().feature.kms = false;
         assert!(enabled.is_some());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn refuses_to_build_the_kms_under_a_deployment_alias_aws_kms_cannot_scope_keys_to() {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        set_config().feature.kms = true;
+        set_config().deployment_alias = Some("eridani/eu".to_string());
+
+        let result = kms_state_if_enabled(&InMemory, &event_bus).await;
+        set_config().feature.kms = false;
+        set_config().deployment_alias = None;
+
+        assert!(result.is_err());
     }
 }

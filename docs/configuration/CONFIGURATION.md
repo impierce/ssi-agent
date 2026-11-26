@@ -332,16 +332,38 @@ Feature flags enable features that are still in development. All of them are dis
 
 Connects UniCore to external key providers, so that keys can be generated in, and sign inside, a provider instead of Stronghold. Available providers:
 
-- AWS KMS, using the AWS credentials and region of the environment UniCore runs in.
+- AWS KMS, using the AWS credentials and region of the environment UniCore runs in. Its keys are ES256 keys: AWS KMS signs at most 4096 bytes with an Ed25519 (`EdDSA`) key, too little for credentials such as Open Badges with embedded images, so such keys are refused (see [problem details](../problem-details/kms.md#key-algorithm-refused-by-provider)).
 - An in-memory provider, only available with the `development` [profile](./profiles.md).
+
+With PostgreSQL, the KMS's tables are only created with a new database. Enabling the feature on an existing database
+needs them created by hand, until the KMS leaves development and gets an upgrade note.
 
 Progress:
 
 - [x] Connect key providers, test the connection, and list the keys the AWS KMS provider may use
-- [ ] Generate keys in a provider
+- [x] Generate keys in a provider
 - [ ] Sign credentials and presentations with provider keys
 - [ ] Use provider keys in DID documents
 - [ ] Replace Stronghold as the secret manager
+
+##### AWS KMS
+
+| Environment variable        | `config.yaml`      | Default |
+| --------------------------- | ------------------ | ------- |
+| `UNICORE__DEPLOYMENT_ALIAS` | `deployment_alias` | none    |
+
+The deployment alias names the deployment the instance belongs to, such as `eridani`. Keys created with it are tagged `unitrust-alias = <alias>`, and a key created with a label is named `alias/<alias>/<label>` instead of `alias/<label>`. An IAM policy can then limit each deployment to its own keys and aliases. It may only contain letters, digits, `_` and `-`, and can't be `aws`.
+
+The IAM role or user UniCore runs as needs these actions:
+
+| Used for                                          | Actions                                                                            |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Testing the connection, listing and adopting keys | `kms:ListKeys`, `kms:DescribeKey`                                                  |
+| Creating keys                                     | `kms:CreateKey`, `kms:TagResource`, `kms:CreateAlias`                              |
+| Signing                                           | `kms:GetPublicKey`, `kms:Sign`                                                     |
+| Deleting keys                                     | `kms:DescribeKey`, `kms:ScheduleKeyDeletion`, `kms:ListAliases`, `kms:DeleteAlias` |
+
+`kms:CreateAlias` is checked on both the key and the alias, so it needs `alias/<alias>/*` as a resource too. A key that could not be named after it was created is scheduled for deletion again, which also needs `kms:ScheduleKeyDeletion`. Keys the role may not describe are left out of key listings.
 
 #### Example
 

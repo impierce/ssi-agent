@@ -66,6 +66,13 @@ fn into_directory(url: Url) -> Url {
     convert_url(url, true)
 }
 
+/// The value without surrounding whitespace, or `None` when nothing else is left.
+fn non_empty_trimmed(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 /// Converts a URL into a resource URL by removing the trailing slash if it has one.
 fn into_resource(url: Url) -> Url {
     convert_url(url, false)
@@ -120,6 +127,10 @@ pub struct ApplicationConfiguration {
     pub public_url: Url,
     #[config(default)]
     pub overwrite_previous_did_web: Option<String>,
+    /// The name of the deployment this instance belongs to, such as `eridani`, which scopes its keys in AWS KMS. Set
+    /// through `UNICORE__DEPLOYMENT_ALIAS`; trimmed, and empty means none.
+    #[config(default, transform_with = "non_empty_trimmed")]
+    pub deployment_alias: Option<String>,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
@@ -1710,6 +1721,44 @@ mod tests {
             ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development)
                 .map(|config| config.feature.kms)
         })
+    }
+
+    fn deployment_alias(value: &str) -> Option<String> {
+        temp_env::with_var("UNICORE__DEPLOYMENT_ALIAS", Some(value), || {
+            let provisioned_config = config::Config::builder()
+                .add_source(config::File::from_str(
+                    r#"
+                        event_store:
+                            type: "in_memory"
+                    "#,
+                    config::FileFormat::Yaml,
+                ))
+                .add_source(config::Environment::with_prefix("UNICORE").separator("__"))
+                .build()
+                .unwrap();
+
+            ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development)
+                .unwrap()
+                .deployment_alias
+        })
+    }
+
+    #[test]
+    #[serial]
+    fn reads_the_deployment_alias() {
+        assert_eq!(deployment_alias("eridani"), Some("eridani".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn trims_the_deployment_alias() {
+        assert_eq!(deployment_alias("  eridani "), Some("eridani".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn an_empty_deployment_alias_is_none() {
+        assert_eq!(deployment_alias("  "), None);
     }
 
     #[test]
