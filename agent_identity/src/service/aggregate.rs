@@ -3,6 +3,7 @@ use crate::{
     services::{validate_linked_verifiable_presentation, IdentityServices},
     state::LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID,
 };
+use agent_secret_manager::signer::SubjectSigner;
 use chrono::{DateTime, TimeDelta, Utc};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::{
@@ -202,13 +203,8 @@ async fn issue_linked_domains(
             let algorithm =
                 Algorithm::from_str(alg).map_err(|_| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
 
-            // TODO: Currently UniCore always uses the same keys for signing regardless of the DID method.
-            // Once we implement DID method-specific keys, then we should use the key of the verification
-            // method's DID method here.
-            let signer = subject
-                .issuer_signer(algorithm)
-                .await
-                .map_err(|err| SigningError(err.to_string()))?;
+            let signer = SubjectSigner::for_method(subject.clone(), verification_method_id.clone(), algorithm)
+                .ok_or_else(|| UnsupportedVerificationMethodAlgorithm(alg.to_string()))?;
             let credential = DomainLinkageCredentialBuilder::new(
                 verification_method_id.did().clone(),
                 origin,
@@ -596,6 +592,61 @@ pub mod service_tests {
                 is_deleted: false,
                 origins: vec![url("https://my-domain.example.org")],
             }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn signs_each_credential_with_the_key_of_its_verification_method(linked_domains_service_id: String) {
+        use identity_kit::did::{MethodType, VerificationMaterial};
+        use identity_kit::jose::{CompactJws, DefaultVerifier, JwsAlgorithm, KeyType};
+        use identity_kit::keys::{InMemoryKeyStore, KeySigner, KeySpec, KeyStore};
+
+        web_did_method();
+        let services = IdentityServices::default();
+        let store: Arc<dyn KeyStore> = Arc::new(InMemoryKeyStore::new());
+        let key = store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        let kms_key = KeySigner::new(store, key, JwsAlgorithm::ES256).await.unwrap();
+        let kms_method = VerificationMethod::new(
+            "did:web:my-domain.example.org#kms-key".parse().unwrap(),
+            MethodType::JSON_WEB_KEY_2020,
+            "did:web:my-domain.example.org".parse().unwrap(),
+            VerificationMaterial::jwk(&kms_key.public_jwk().clone().with_alg("ES256")),
+        );
+        services
+            .subject
+            .set_method_key(
+                kms_method.id.clone(),
+                agent_secret_manager::subject::MethodKey::Available(Box::new(kms_key.clone())),
+            )
+            .await;
+
+        let events = ServiceTestFramework::with(services)
+            .given_no_previous_events()
+            .when_async(ServiceCommand::AddLinkedDomains {
+                service_id: linked_domains_service_id,
+                verification_methods: vec![
+                    crate::document::aggregate::test_utils::es256_verification_method::default(),
+                    kms_method,
+                ],
+                origins: vec![url("https://my-domain.example.org")],
+            })
+            .await
+            .inspect_result()
+            .unwrap();
+
+        let [ServiceEvent::LinkedDomainsAdded { resource, .. }] = events.as_slice() else {
+            panic!("unexpected events: {events:?}");
+        };
+        let kms_credential = linked_dids(resource)
+            .into_iter()
+            .map(|jwt| CompactJws::decode(jwt.as_str()).unwrap())
+            .find(|jws| jws.kid() == Some("did:web:my-domain.example.org#kms-key"))
+            .unwrap();
+        assert!(kms_credential.verify(&DefaultVerifier, kms_key.public_jwk()).is_ok());
     }
 
     #[rstest]

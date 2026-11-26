@@ -89,7 +89,8 @@ paths:
       summary: Add a key provider
       description: |-
         Connects this instance to a key provider. Only one provider of each type can be added. The in-memory provider
-        is only available in the development profile.
+        is only available in the development profile. A `stackit_kms` provider needs its settings. No provider takes a
+        secret.
       operationId: add_key_provider
       requestBody:
         content:
@@ -105,7 +106,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/KeyProvider'
         '400':
-          description: Missing name, or a provider type that is not available in this profile
+          description: Missing name or settings, settings for another provider type, or a provider type that is not available in this profile
         '409':
           description: A provider of this type, or with this name, already exists
         '413':
@@ -114,6 +115,56 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/add-key-to-document:
+    post:
+      tags:
+      - Identity
+      summary: Add key to document
+      description: |-
+        Adds the public key of a key created in the Key Management System to your organisation's `did:web` document, as a
+        verification method. The key is available to sign with right away, but only signs once it is selected as the
+        signing key. Adding a key again changes nothing.
+      operationId: add_key_to_document
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - keyId
+              properties:
+                keyId:
+                  type: string
+                  description: The ID of a key created in the Key Management System.
+                  example: 0b6a7f8e-3f4c-4d2a-9b1e-5c8d7e6f5a4b
+        required: true
+      responses:
+        '200':
+          description: Key added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddKeyToDocumentResponse'
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: No key has the given ID
+        '409':
+          description: There is no enabled `did:web` document to add the key to
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+        '501':
+          description: The key exists, but this instance can't sign with it
+        '502':
+          description: The key can't be had now, such as when its key provider doesn't answer
   /v0/add-linked-domains:
     post:
       tags:
@@ -219,6 +270,42 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/adopt-key:
+    post:
+      tags:
+      - Key Management
+      summary: Adopt a key
+      description: |-
+        Records a key that exists in an added key provider under `label`, but that this instance didn't record, such as a
+        key whose creation was interrupted after the provider created it. `create-key` answers `409` for its label.
+      operationId: adopt_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdoptKeyRequest'
+        required: true
+      responses:
+        '201':
+          description: Key adopted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: The key isn't of an algorithm keys can be created for, or the provider refuses it
+        '404':
+          description: No provider of this type has been added, or no key has this label
+        '409':
+          description: The key is already recorded
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+        '502':
+          description: The provider could not be asked for the key
   /v0/authorization_requests:
     get:
       tags:
@@ -561,6 +648,43 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/BatchFailedProblem'
+  /v0/create-key:
+    post:
+      tags:
+      - Key Management
+      summary: Create a key
+      description: |-
+        Creates a key in an added key provider. The private key is generated in the provider and never leaves it.
+        The key signs for the `did:web` document once it is added to it with `add-key-to-document` and selected with
+        `select-signing-key`.
+      operationId: create_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKeyRequest'
+        required: true
+      responses:
+        '201':
+          description: Key created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: The provider does not support the algorithm or the label
+        '404':
+          description: No provider of this type has been added
+        '409':
+          description: The provider already has a key with this label
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+        '502':
+          description: The provider could not create the key
   /v0/create-new-catalog:
     post:
       tags:
@@ -812,6 +936,39 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/delete-key:
+    post:
+      tags:
+      - Key Management
+      summary: Delete a key
+      description: |-
+        Deletes a key from its provider, which schedules its deletion where the provider does so, and frees its label. It
+        no longer signs. The provider doesn't need to be added anymore. The key of a verification method in a DID document
+        isn't deleted: remove the method with `remove-key-from-document` first.
+      operationId: delete_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteKeyRequest'
+        required: true
+      responses:
+        '204':
+          description: Key deleted
+        '400':
+          description: Malformed JSON request body
+        '404':
+          description: There is no such key
+        '409':
+          description: The key is the key of a verification method in a DID document
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+        '502':
+          description: The provider could not delete the key
   /v0/delete-public-offer:
     post:
       tags:
@@ -860,6 +1017,45 @@ paths:
           description: Template not found
         '409':
           description: The template is published and must be archived first, or it is already deleted
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+  /v0/deselect-signing-key:
+    post:
+      tags:
+      - Identity
+      summary: Deselect signing key
+      description: |-
+        Signs with the configured key of the given algorithm again in your organisation's `did:web` document. Deselecting
+        an algorithm without a selected key is a no-op.
+      operationId: deselect_signing_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - algorithm
+              properties:
+                algorithm:
+                  type: string
+                  description: The algorithm whose configured key signs again.
+                  example: ES256
+        required: true
+      responses:
+        '204':
+          description: Signing key deselected
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: There is no enabled `did:web` document
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':
@@ -1052,6 +1248,22 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/KeyProvider'
+  /v0/get-all-keys:
+    get:
+      tags:
+      - Key Management
+      summary: List all keys
+      description: Lists the keys this instance created or adopted and didn't delete, in the order they were recorded.
+      operationId: get_all_keys
+      responses:
+        '200':
+          description: All keys retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Key'
   /v0/get-all-public-offers:
     get:
       tags:
@@ -1143,6 +1355,32 @@ paths:
           description: No provider of this type has been added
         '502':
           description: The provider could not be reached
+  /v0/get-signing-keys:
+    get:
+      tags:
+      - Identity
+      summary: Get signing keys
+      description: |-
+        Lists, per algorithm, the key your organisation's `did:web` document signs with now, the key selected to sign, and
+        why that key can't sign, if it can't.
+
+        Keys aren't checked in their key provider until they sign: a key deleted or disabled there is still listed as
+        signing, without a `problem`, until the next signature with it fails. From then on, its `problem` says why, and the
+        configured key signs instead while UniCore retries the key in the background.
+      operationId: get_signing_keys
+      responses:
+        '200':
+          description: The signing keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SigningKey'
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
   /v0/get-template-by-id/{id}:
     get:
       tags:
@@ -1751,12 +1989,54 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+  /v0/remove-key-from-document:
+    post:
+      tags:
+      - Identity
+      summary: Remove key from document
+      description: |-
+        Removes the verification method of a key added with `add-key-to-document` from your organisation's `did:web`
+        document. Credentials it signed no longer verify. The selected signing key of an algorithm can't be removed:
+        select another key or deselect it first.
+      operationId: remove_key_from_document
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationMethodId
+              properties:
+                verificationMethodId:
+                  type: string
+                  description: The verification method of an added key.
+                  example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+        required: true
+      responses:
+        '204':
+          description: Key removed
+        '400':
+          description: Malformed JSON request body
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '409':
+          description: The key is the selected signing key, not an added key, or there is no enabled `did:web` document
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
   /v0/remove-key-provider:
     post:
       tags:
       - Key Management
       summary: Remove a key provider
-      description: Disconnects this instance from a key provider. No keys are deleted at the provider.
+      description: |-
+        Disconnects this instance from a key provider. A provider that still has keys isn't removed: delete its keys with
+        `delete-key` first.
       operationId: remove_key_provider
       requestBody:
         content:
@@ -1771,6 +2051,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: No provider of this type has been added
+        '409':
+          description: The provider still has keys
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':
@@ -1875,6 +2157,47 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Catalog not found
+        '413':
+          description: Request body larger than `max_request_body_bytes` (2 MiB by default)
+        '415':
+          description: Missing or unsupported `Content-Type`; the request body must be `application/json`
+        '422':
+          description: Request body does not match the expected schema
+  /v0/select-signing-key:
+    post:
+      tags:
+      - Identity
+      summary: Select signing key
+      description: |-
+        Signs with the given verification method from now on, for the algorithm of its key, in the DID document it belongs
+        to. Selecting the key that is already selected is a no-op.
+      operationId: select_signing_key
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - verificationMethodId
+              properties:
+                verificationMethodId:
+                  type: string
+                  description: The verification method to sign with, in one of your organisation's DID documents.
+                  example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
+        required: true
+      responses:
+        '204':
+          description: Signing key selected
+        '400':
+          description: The verification method's key names no supported algorithm
+        '401':
+          description: Authentication required
+        '403':
+          description: Operation forbidden
+        '404':
+          description: No DID document has the verification method
+        '409':
+          description: The verification method's key is not available to sign with
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':
@@ -2151,6 +2474,20 @@ components:
           minLength: 1
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+            description: Required for `stackit_kms` providers, which keep keys in a key ring of your STACKIT project.
+          - type: 'null'
+    AddKeyToDocumentResponse:
+      type: object
+      required:
+      - verificationMethodId
+      properties:
+        verificationMethodId:
+          type: string
+          description: The verification method of the key, named by the thumbprint of its public key.
+          example: did:web:example.org#kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k
     AddTemplatesRequest:
       type: object
       properties:
@@ -2162,6 +2499,17 @@ components:
           items:
             type: string
           default: []
+    AdoptKeyRequest:
+      type: object
+      required:
+      - providerType
+      - label
+      properties:
+        label:
+          type: string
+          description: The label that names the key in the provider.
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     ApplicationProfile:
       type: string
       enum:
@@ -2590,6 +2938,31 @@ components:
           type: string
         originalCredentialId:
           type: string
+    CreateKeyAlgorithm:
+      type: string
+      description: The algorithms a key can be created for.
+      enum:
+      - ES256
+      - EdDSA
+    CreateKeyRequest:
+      type: object
+      required:
+      - providerType
+      - algorithm
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/CreateKeyAlgorithm'
+        label:
+          type:
+          - string
+          - 'null'
+          description: |-
+            A name for the key in the provider, which then identifies it there. Without one, the provider names it.
+
+            A labelled request is safe to retry: when the first one created the key, the retry answers `409` instead of
+            creating a second key.
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
     CreateNewTemplateRequestBody:
       type: object
       properties:
@@ -3047,6 +3420,13 @@ components:
         catalogId:
           type: string
           default: ''
+    DeleteKeyRequest:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
     DeletePublicOfferRequest:
       type: object
       required:
@@ -3163,6 +3543,20 @@ components:
       - id
       - status
       properties:
+        added_keys:
+          type: object
+          description: The ID in the Key Management System of the key of each added verification method, where it was recorded.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
+        added_verification_methods:
+          type: array
+          items:
+            type: string
+          description: |-
+            The verification methods of keys that aren't configured issuer keys, such as KMS keys, in the order they were
+            added.
         did_method:
           oneOf:
           - $ref: '#/components/schemas/SupportedDidMethod'
@@ -3173,6 +3567,15 @@ components:
           - type: 'null'
         id:
           type: string
+        signing_methods:
+          type: object
+          description: |-
+            The verification method selected to sign with, per algorithm. Without one, an algorithm signs with the
+            configured issuer key.
+          additionalProperties:
+            type: string
+          propertyNames:
+            type: string
         status:
           type: string
           enum:
@@ -3417,10 +3820,51 @@ components:
           type: string
           description: The y coordinate of an `EC` key.
       additionalProperties: true
+    JwsAlgorithm:
+      type: string
+      description: 'A JWS algorithm (RFC 7518 §3.1, RFC 8037, RFC 8812): its registered name, among the asymmetric algorithms this crate speaks.'
+      enum:
+      - EdDSA
+      - ES256
+      - ES256K
+      - ES384
+      - RS256
+      - PS256
     Jwt:
       type: string
       description: A JWT (RFC 7519) in JWS compact serialization.
       pattern: ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$
+    Key:
+      type: object
+      description: A key this instance created in one of its key providers.
+      required:
+      - id
+      - providerType
+      - providerKeyId
+      - algorithm
+      - publicKey
+      properties:
+        algorithm:
+          $ref: '#/components/schemas/JwsAlgorithm'
+        id:
+          type: string
+        label:
+          type:
+          - string
+          - 'null'
+          description: The label the key was created with, which also names it in the provider unless it is moved to another key.
+        providerKeyId:
+          type: string
+          description: The provider's identifier for the key, which names this key for good.
+        providerType:
+          $ref: '#/components/schemas/KeyProviderType'
+        publicKey:
+          $ref: '#/components/schemas/Jwk'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+            description: The settings the provider had when the key was recorded, which say where in the provider the key is.
+          - type: 'null'
     KeyProvider:
       type: object
       description: A key provider this instance is connected to.
@@ -3432,6 +3876,14 @@ components:
           type: string
         providerType:
           $ref: '#/components/schemas/KeyProviderType'
+        settings:
+          oneOf:
+          - $ref: '#/components/schemas/KeyProviderSettings'
+          - type: 'null'
+    KeyProviderSettings:
+      oneOf:
+      - $ref: '#/components/schemas/StackitKmsSettings'
+      description: The settings of a key provider. None of them are secret. Only `stackit_kms` providers have any.
     KeyProviderType:
       type: string
       description: |-
@@ -3440,6 +3892,7 @@ components:
       enum:
       - in_memory
       - aws_kms_ambient
+      - stackit_kms
     KeyProviderTypeRequest:
       type: object
       required:
@@ -4165,6 +4618,35 @@ components:
       - $ref: '#/components/schemas/Jwt'
       - $ref: '#/components/schemas/SdJwt'
       description: 'A credential in the compact serialization an issuer sent it in: a JWT or an SD-JWT.'
+    SigningKey:
+      type: object
+      description: The key an algorithm of your organisation's `did:web` document signs with, as UniCore last saw it.
+      required:
+      - algorithm
+      - verificationMethodId
+      properties:
+        algorithm:
+          type: string
+          example: ES256
+        problem:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Why the selected key, or else the signing key, can't sign: it couldn't be loaded, it failed the last time it
+            signed, or it was deleted. `null` doesn't prove the key works: a key deleted or disabled in its provider shows
+            `null` until a signature with it fails. Selecting another key with `select-signing-key`, or the configured one
+            with `deselect-signing-key`, resolves it.
+        selectedVerificationMethodId:
+          type:
+          - string
+          - 'null'
+          description: |-
+            The verification method selected to sign. When it differs from `verificationMethodId`, its key isn't available
+            and the configured key signs instead.
+        verificationMethodId:
+          type: string
+          description: The verification method that signs now.
     Source:
       type: string
       enum:
@@ -4172,6 +4654,38 @@ components:
       - Default
       - Runtime
       - None
+    StackitKmsSettings:
+      type: object
+      description: Where STACKIT KMS keeps the keys, a key ring in your STACKIT project, and the service account UniCore signs in as.
+      required:
+      - projectId
+      - region
+      - keyRingId
+      - serviceAccountEmail
+      properties:
+        keyRingId:
+          type: string
+          description: The ID of the key ring in that project that keeps the keys.
+          example: 9c0e7b52-5d2a-4f0e-8a51-3b6d1e2f4a7c
+        projectId:
+          type: string
+          description: The ID of your STACKIT project.
+          example: 4a1d2f6e-0f33-4c55-9b56-6f8e8a2b1c3d
+        region:
+          $ref: '#/components/schemas/StackitRegion'
+        serviceAccountEmail:
+          type: string
+          description: |-
+            The service account UniCore signs in as, with access to the key ring. It must have a federated identity
+            provider that trusts the workload identity this instance runs as, and that checks the subject as well as the
+            issuer, since other workloads can share the issuer.
+          example: unicore-kms@sa.stackit.cloud
+      additionalProperties: false
+    StackitRegion:
+      type: string
+      description: The STACKIT regions that offer KMS.
+      enum:
+      - eu01
     SupportedDidMethod:
       type: string
       description: DID methods supported by UniCore
@@ -4817,7 +5331,7 @@ tags:
 - name: Catalog
   description: Create and manage catalogs to organize and share your templates.
 - name: Key Management
-  description: Connect key providers that will hold this instance's signing keys. Only available when the `kms` feature flag is enabled.
+  description: Connect key providers and create keys in them that never leave the provider. Only available when the `kms` feature flag is enabled.
 - name: Authorization Requests
   description: Manage requests for verifiable presentations and their responses.
 - name: Public

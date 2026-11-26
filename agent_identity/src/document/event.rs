@@ -1,7 +1,7 @@
 use super::aggregate::Status;
 use agent_shared::config::SupportedDidMethod;
 use cqrs_es::DomainEvent;
-use identity_kit::did::{Did, DidDocument};
+use identity_kit::did::{Did, DidDocument, DidUrl};
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use strum::Display;
@@ -39,6 +39,31 @@ pub enum DocumentEvent {
     DocumentDeleted {
         document_id: String,
         document: DidDocument,
+    },
+    /// A key that isn't a configured issuer key, such as the key the Key Management System names `key_id`, became
+    /// the verification method `verification_method_id` of `document`.
+    PublicKeyAdded {
+        document_id: String,
+        verification_method_id: DidUrl,
+        key_id: String,
+        document: DidDocument,
+    },
+    /// The verification method of an added key left `document`.
+    PublicKeyRemoved {
+        document_id: String,
+        verification_method_id: DidUrl,
+        document: DidDocument,
+    },
+    /// `verification_method_id` signs for `algorithm` from now on.
+    SigningKeySelected {
+        document_id: String,
+        algorithm: Algorithm,
+        verification_method_id: DidUrl,
+    },
+    /// The configured issuer key signs for `algorithm` again.
+    SigningKeyDeselected {
+        document_id: String,
+        algorithm: Algorithm,
     },
 }
 

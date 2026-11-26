@@ -5,8 +5,12 @@ use agent_kms::adapter::ProviderKeys;
 use agent_kms::key_provider::{
     aggregate::{KeyProviderType, KeyProviders},
     command::KeyProviderCommand,
+    settings::KeyProviderSettings,
 };
-use agent_kms::state::{get_key_providers, list_key_provider_keys, test_key_provider_connection as test_connection};
+use agent_kms::state::{
+    get_key_providers, list_key_provider_keys, remove_key_provider as remove,
+    test_key_provider_connection as test_connection,
+};
 use agent_kms::KmsState;
 use axum::{
     extract::State,
@@ -25,6 +29,8 @@ use std::sync::Arc;
 pub struct KeyProviderDto {
     pub provider_type: KeyProviderType,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<KeyProviderSettings>,
 }
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -34,6 +40,8 @@ pub struct AddKeyProviderRequest {
     /// A name for the provider, unique among the providers this instance lists. It can't be changed later.
     #[schema(min_length = 1)]
     pub name: String,
+    /// Required for `stackit_kms` providers, which keep keys in a key ring of your STACKIT project.
+    pub settings: Option<KeyProviderSettings>,
 }
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -55,7 +63,8 @@ pub struct ConnectionTestResult {
 /// Add a key provider
 ///
 /// Connects this instance to a key provider. Only one provider of each type can be added. The in-memory provider
-/// is only available in the development profile.
+/// is only available in the development profile. A `stackit_kms` provider needs its settings. No provider takes a
+/// secret.
 #[utoipa::path(
     post,
     path = "/add-key-provider",
@@ -64,7 +73,7 @@ pub struct ConnectionTestResult {
     request_body = AddKeyProviderRequest,
     responses(
         (status = 201, description = "Key provider added", body = KeyProviderDto),
-        (status = 400, description = "Missing name, or a provider type that is not available in this profile"),
+        (status = 400, description = "Missing name or settings, settings for another provider type, or a provider type that is not available in this profile"),
         (status = 409, description = "A provider of this type, or with this name, already exists"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
@@ -73,7 +82,11 @@ pub struct ConnectionTestResult {
 pub(crate) async fn add_key_provider(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
-    JsonBody(AddKeyProviderRequest { provider_type, name }): JsonBody<AddKeyProviderRequest>,
+    JsonBody(AddKeyProviderRequest {
+        provider_type,
+        name,
+        settings,
+    }): JsonBody<AddKeyProviderRequest>,
 ) -> Result<Response, ApiError> {
     let name = KeyProviders::normalize_name(&name);
     command_handler(
@@ -84,13 +97,22 @@ pub(crate) async fn add_key_provider(
         KeyProviderCommand::AddKeyProvider {
             provider_type,
             name: name.clone(),
+            settings: settings.clone(),
         },
     )
     .await?;
 
     // Answer from the accepted command rather than the view: the event is stored at this point, but a failed view
     // update would otherwise turn a successful add into an error.
-    Ok((StatusCode::CREATED, Json(KeyProviderDto { provider_type, name })).into_response())
+    Ok((
+        StatusCode::CREATED,
+        Json(KeyProviderDto {
+            provider_type,
+            name,
+            settings,
+        }),
+    )
+        .into_response())
 }
 
 /// List all key providers
@@ -110,12 +132,17 @@ pub(crate) async fn get_all_key_providers(
     State(state): State<Arc<KmsState>>,
     RequestActor(actor): RequestActor,
 ) -> Result<Response, ApiError> {
-    let providers: Vec<KeyProviderDto> = get_key_providers(&state, caller(actor))
+    let mut view = get_key_providers(&state, caller(actor))
         .await
-        .map_err(IntoApiErrorExt::into_api_error)?
+        .map_err(IntoApiErrorExt::into_api_error)?;
+    let providers: Vec<KeyProviderDto> = view
         .providers
         .into_iter()
-        .map(|(provider_type, name)| KeyProviderDto { provider_type, name })
+        .map(|(provider_type, name)| KeyProviderDto {
+            provider_type,
+            name,
+            settings: view.settings.shift_remove(&provider_type),
+        })
         .collect();
 
     Ok((StatusCode::OK, Json(providers)).into_response())
@@ -123,7 +150,8 @@ pub(crate) async fn get_all_key_providers(
 
 /// Remove a key provider
 ///
-/// Disconnects this instance from a key provider. No keys are deleted at the provider.
+/// Disconnects this instance from a key provider. A provider that still has keys isn't removed: delete its keys with
+/// `delete-key` first.
 #[utoipa::path(
     post,
     path = "/remove-key-provider",
@@ -133,6 +161,7 @@ pub(crate) async fn get_all_key_providers(
     responses(
         (status = 204, description = "Key provider removed"),
         (status = 404, description = "No provider of this type has been added"),
+        (status = 409, description = "The provider still has keys"),
         (status = 422, description = "Request body does not match the expected schema"),
     )
 )]
@@ -142,14 +171,9 @@ pub(crate) async fn remove_key_provider(
     RequestActor(actor): RequestActor,
     JsonBody(KeyProviderTypeRequest { provider_type }): JsonBody<KeyProviderTypeRequest>,
 ) -> Result<Response, ApiError> {
-    command_handler(
-        state.authorization_checker.clone(),
-        actor,
-        KeyProviders::ID,
-        &state.command.key_providers,
-        KeyProviderCommand::RemoveKeyProvider { provider_type },
-    )
-    .await?;
+    remove(&state, caller(actor), provider_type)
+        .await
+        .map_err(IntoApiErrorExt::into_api_error)?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
 }

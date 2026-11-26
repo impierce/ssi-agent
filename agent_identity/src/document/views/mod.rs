@@ -1,7 +1,7 @@
 pub mod all_documents;
 
 use super::aggregate::Document;
-use cqrs_es::{EventEnvelope, View};
+use cqrs_es::{Aggregate, EventEnvelope, View};
 
 pub type DocumentView = Document;
 impl View<Document> for Document {
@@ -22,13 +22,15 @@ impl View<Document> for Document {
                 self.status.clone_from(status);
                 self.with_fixed_algorithm.clone_from(signing_algorithm);
             }
-            PublicKeyUpdated { document_id, document }
-            | DocumentDidWebOverwritten {
-                document_id, document, ..
-            } => {
+            PublicKeyUpdated { document_id, document } => {
                 self.document_id.clone_from(document_id);
                 self.document.replace(document.clone());
             }
+            DocumentDidWebOverwritten { .. }
+            | PublicKeyAdded { .. }
+            | PublicKeyRemoved { .. }
+            | SigningKeySelected { .. }
+            | SigningKeyDeselected { .. } => self.apply(event.payload.clone()),
             DocumentStatusUpdated { document_id, status } => {
                 self.document_id.clone_from(document_id);
                 self.status.clone_from(status);
