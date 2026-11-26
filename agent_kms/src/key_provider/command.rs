@@ -1,4 +1,4 @@
-use crate::key_provider::aggregate::KeyProviderType;
+use crate::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use shared_kernel::authorization::CommandOperation;
 
 #[derive(Debug)]
@@ -6,6 +6,8 @@ pub enum KeyProviderCommand {
     AddKeyProvider {
         provider_type: KeyProviderType,
         name: String,
+        /// Required for, and only taken by, the provider types that [need settings](KeyProviderType::needs_settings).
+        settings: Option<KeyProviderSettings>,
     },
     RemoveKeyProvider {
         provider_type: KeyProviderType,

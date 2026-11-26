@@ -18,6 +18,7 @@ use serde_json::json;
 use serde_with::{skip_serializing_none, SerializeDisplay};
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{RwLock, RwLockReadGuard},
 };
 use strum::VariantArray;
@@ -131,6 +132,10 @@ pub struct ApplicationConfiguration {
     /// through `UNICORE__DEPLOYMENT_ALIAS`; trimmed, and empty means none.
     #[config(default, transform_with = "non_empty_trimmed")]
     pub deployment_alias: Option<String>,
+    /// Where the workload identity token is that this instance signs in to STACKIT KMS with, renewed by its host. Set
+    /// through `UNICORE__STACKIT_FEDERATED_TOKEN_FILE`; defaults to where STACKIT's own SDKs look for it.
+    #[config(default = r#"PathBuf::from("/var/run/secrets/stackit.cloud/serviceaccount/token")"#)]
+    pub stackit_federated_token_file: PathBuf,
     #[config(
         default = r#"{
             let public_url = Self::fn_public_url(provisioned_config, application_profile).unwrap();
@@ -978,6 +983,7 @@ mod tests {
               },
               "application_url": "http://localhost:3033/",
               "public_url": "http://localhost:3033/",
+              "stackit_federated_token_file": "/var/run/secrets/stackit.cloud/serviceaccount/token",
               "token_endpoint": "http://localhost:3033/auth/token",
               "credential_endpoint": "http://localhost:3033/openid4vci/credential",
               "credential_offer_uri": "http://localhost:3033/openid4vci/credential-offer",

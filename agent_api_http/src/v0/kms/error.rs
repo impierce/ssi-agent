@@ -53,6 +53,16 @@ impl IntoApiErrorExt for KeyProviderError {
                 "Key Provider Name Taken",
                 "key-provider-name-taken",
             ),
+            KeyProviderError::MissingSettings(_) => (
+                StatusCode::BAD_REQUEST,
+                "Missing Key Provider Settings",
+                "missing-key-provider-settings",
+            ),
+            KeyProviderError::WrongSettings(_) => (
+                StatusCode::BAD_REQUEST,
+                "Wrong Key Provider Settings",
+                "wrong-key-provider-settings",
+            ),
         };
 
         problem(status, title, anchor, self)
@@ -230,6 +240,16 @@ mod tests {
                 KeyProviderError::NameTaken("Keys".to_string()),
                 StatusCode::CONFLICT,
                 Some("kms#key-provider-name-taken"),
+            ),
+            (
+                KeyProviderError::MissingSettings(KeyProviderType::StackitKms),
+                StatusCode::BAD_REQUEST,
+                Some("kms#missing-key-provider-settings"),
+            ),
+            (
+                KeyProviderError::WrongSettings(KeyProviderType::AwsKmsAmbient),
+                StatusCode::BAD_REQUEST,
+                Some("kms#wrong-key-provider-settings"),
             ),
         ]);
     }

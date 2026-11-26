@@ -9,6 +9,7 @@ use crate::key_provider::{
     command::{KeyProviderCommand, ListKeyProviderKeys, TestKeyProviderConnection},
     error::KeyProviderError,
     services::KeyProviderServices,
+    settings::KeyProviderSettings,
     views::KeyProvidersView,
 };
 use agent_shared::{
@@ -57,8 +58,8 @@ pub struct Queries {
 
 /// Constructs the CQRS components of the KMS bounded context.
 ///
-/// `adapters` holds the adapter for every provider type this instance can connect to. `key_usage` tells what signs
-/// with a key, so that no such key is deleted.
+/// `adapters` holds the adapters, or the factories that build them, for every provider type this instance can connect
+/// to. `key_usage` tells what signs with a key, so that no such key is deleted.
 pub async fn kms_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_bus: &EventBusHandle,
@@ -130,22 +131,6 @@ pub enum KeyProviderAccessError {
     Unsupported(KeyProviderType),
 }
 
-/// Returns the name of the provider of the given type, or `None` if it hasn't been added or has been removed.
-///
-/// # Errors
-///
-/// Fails when the caller isn't authorized or the providers can't be loaded.
-pub async fn get_key_provider(
-    state: &KmsState,
-    caller: Caller,
-    provider_type: KeyProviderType,
-) -> Result<Option<String>, QueryHandlerError> {
-    Ok(get_key_providers(state, caller)
-        .await?
-        .providers
-        .shift_remove(&provider_type))
-}
-
 /// Checks whether an added provider is reachable. The outcome is returned, not stored.
 ///
 /// The outer `Result` fails when the check couldn't be run; the inner one carries the provider's answer.
@@ -167,8 +152,8 @@ pub async fn test_key_provider_connection(
     .await
     .map_err(KeyProviderAccessError::Authorization)?;
 
-    let adapter = added_provider_adapter(state, caller, provider_type).await?;
-    Ok(adapter.test_connection().await)
+    let provider = added_provider(state, caller, provider_type).await?;
+    Ok(provider.adapter.test_connection().await)
 }
 
 /// Lists the keys that exist in an added provider. Nothing is stored.
@@ -192,29 +177,35 @@ pub async fn list_key_provider_keys(
     .await
     .map_err(KeyProviderAccessError::Authorization)?;
 
-    let adapter = added_provider_adapter(state, caller, provider_type).await?;
-    Ok(adapter.list_keys().await)
+    let provider = added_provider(state, caller, provider_type).await?;
+    Ok(provider.adapter.list_keys().await)
 }
 
-/// The adapter of an added provider. Whether the caller may use it for an operation is checked by the caller.
+/// An added provider: the settings it was added with, and the adapter built from them.
+pub(crate) struct AddedProvider {
+    pub(crate) settings: Option<KeyProviderSettings>,
+    pub(crate) adapter: Arc<dyn KeyProviderAdapter>,
+}
+
+/// The added provider of `provider_type`. Whether the caller may use it for an operation is checked by the caller.
 ///
 /// # Errors
 ///
 /// Fails when the providers can't be loaded, the provider hasn't been added, or this instance has no adapter for it.
-pub(crate) async fn added_provider_adapter(
+pub(crate) async fn added_provider(
     state: &KmsState,
     caller: Caller,
     provider_type: KeyProviderType,
-) -> Result<Arc<dyn KeyProviderAdapter>, KeyProviderAccessError> {
-    get_key_provider(state, caller, provider_type)
-        .await?
-        .ok_or(KeyProviderAccessError::NotFound(provider_type))?;
-
-    state
-        .adapters
-        .get(&provider_type)
-        .cloned()
-        .ok_or(KeyProviderAccessError::Unsupported(provider_type))
+) -> Result<AddedProvider, KeyProviderAccessError> {
+    let mut providers = get_key_providers(state, caller).await?;
+    if !providers.providers.contains_key(&provider_type) {
+        return Err(KeyProviderAccessError::NotFound(provider_type));
+    }
+    let settings = providers.settings.shift_remove(&provider_type);
+    let Some(adapter) = state.adapters.get(provider_type, settings.as_ref()) else {
+        return Err(KeyProviderAccessError::Unsupported(provider_type));
+    };
+    Ok(AddedProvider { settings, adapter })
 }
 
 /// Every key that is recorded and not deleted. Read for the rules of the KMS itself, so it isn't authorized.
@@ -280,17 +271,18 @@ pub async fn remove_key_provider(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    use crate::adapter::test_utils::UnreachableKeyProvider;
+    use crate::adapter::{test_utils::InMemoryFactory, UnreachableKeyProvider};
     use crate::key::{aggregate::tests::reference, command::KeyCommand, usage::Unused};
+    use crate::key_provider::settings::tests::stackit;
     use agent_store::in_memory::InMemory;
 
     /// Only AWS has an adapter, so an added in-memory provider is unsupported.
     async fn state() -> KmsState {
         let adapters: KeyProviderAdapters = [(
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(UnreachableKeyProvider) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(UnreachableKeyProvider("connection refused".to_string())) as Arc<dyn KeyProviderAdapter>,
         )]
         .into();
         kms_state(&InMemory, &EventBusHandle::default(), true, adapters, Arc::new(Unused)).await
@@ -305,10 +297,62 @@ mod tests {
             KeyProviderCommand::AddKeyProvider {
                 provider_type,
                 name: provider_type.to_string(),
+                settings: None,
             },
         )
         .await
         .unwrap();
+    }
+
+    /// A state with a STACKIT KMS provider added with `settings`, its adapters built by `factory`.
+    pub(crate) async fn stackit_state(factory: &InMemoryFactory, settings: KeyProviderSettings) -> KmsState {
+        let adapters = KeyProviderAdapters::default().with_factory(KeyProviderType::StackitKms, factory.clone());
+        let state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters, Arc::new(Unused)).await;
+        add_stackit(&state, settings).await;
+        state
+    }
+
+    /// Adds the STACKIT KMS provider with `settings`.
+    pub(crate) async fn add_stackit(state: &KmsState, settings: KeyProviderSettings) {
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            KeyProviders::ID,
+            &state.command.key_providers,
+            KeyProviderCommand::AddKeyProvider {
+                provider_type: KeyProviderType::StackitKms,
+                name: "Customer keys".to_string(),
+                settings: Some(settings),
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn builds_the_adapter_from_the_settings_the_provider_was_added_with() {
+        let factory = InMemoryFactory::default();
+        let state = stackit_state(&factory, stackit("key-ring")).await;
+
+        test_key_provider_connection(&state, Caller::Internal, KeyProviderType::StackitKms)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(*factory.builds.lock().unwrap(), [stackit("key-ring")]);
+    }
+
+    #[tokio::test]
+    async fn a_provider_whose_adapter_cannot_be_built_is_reported_unreachable() {
+        let factory = InMemoryFactory {
+            failure: Some("no workload identity token".to_string()),
+            ..InMemoryFactory::default()
+        };
+        let state = stackit_state(&factory, stackit("key-ring")).await;
+
+        let result = test_key_provider_connection(&state, Caller::Internal, KeyProviderType::StackitKms).await;
+
+        assert_eq!(result.unwrap().unwrap_err().to_string(), "no workload identity token");
     }
 
     #[tokio::test]

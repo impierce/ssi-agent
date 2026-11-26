@@ -2,7 +2,7 @@ use crate::error::IntoApiErrorExt;
 use crate::extractors::{JsonBody, RequestActor};
 use crate::handlers::caller;
 use agent_kms::key::service::{self, RecordedKey};
-use agent_kms::key_provider::aggregate::KeyProviderType;
+use agent_kms::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use agent_kms::KmsState;
 use axum::{
     extract::State,
@@ -28,6 +28,9 @@ pub struct KeyDto {
     pub label: Option<String>,
     pub algorithm: JwsAlgorithm,
     pub public_key: Jwk,
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings: Option<KeyProviderSettings>,
 }
 
 impl From<RecordedKey> for KeyDto {
@@ -39,6 +42,7 @@ impl From<RecordedKey> for KeyDto {
             label: reference.label,
             algorithm: reference.algorithm,
             public_key: reference.public_key,
+            settings: reference.settings,
         }
     }
 }

@@ -91,6 +91,7 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         KeyCommand::CreateKey {
             reference: KeyReference {
                 provider_type: KeyProviderType::AwsKmsAmbient,
+                settings: None,
                 provider_key_id: "arn:aws:kms:eu-central-1:123456789012:key/persisted".into(),
                 label: Some("issuer".to_string()),
                 algorithm: identity_kit::jose::JwsAlgorithm::ES256,

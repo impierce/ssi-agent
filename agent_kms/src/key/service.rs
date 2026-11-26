@@ -9,7 +9,7 @@ use crate::key::{
     views::AllKeysView,
 };
 use crate::key_provider::aggregate::KeyProviderType;
-use crate::state::{added_provider_adapter, all_keys, KeyProviderAccessError, KmsState};
+use crate::state::{added_provider, all_keys, AddedProvider, KeyProviderAccessError, KmsState};
 use agent_shared::handlers::{
     authorize_command, command_handler, public_query_handler, query_handler, CommandHandlerError, QueryHandlerError,
 };
@@ -94,7 +94,7 @@ pub async fn create_key(
     .await
     .map_err(RecordKeyError::Authorization)?;
 
-    let adapter = added_provider_adapter(state, caller.clone(), provider_type).await?;
+    let AddedProvider { settings, adapter } = added_provider(state, caller.clone(), provider_type).await?;
     let Some((_, key_type, _)) = ALGORITHMS.into_iter().find(|(candidate, ..)| *candidate == algorithm) else {
         return Err(RecordKeyError::UnsupportedAlgorithm(algorithm));
     };
@@ -112,6 +112,7 @@ pub async fn create_key(
         let recorded = async {
             let reference = KeyReference {
                 provider_type,
+                settings,
                 provider_key_id: key.clone(),
                 label,
                 algorithm,
@@ -150,7 +151,8 @@ pub async fn create_key(
 }
 
 /// Records a key that exists in an added provider under `label` but that this instance didn't record, such as a key
-/// whose creation was interrupted after the provider created it.
+/// whose creation was interrupted after the provider created it. A key recorded under another id that the provider
+/// says names the same key, such as another version of it, counts as recorded.
 ///
 /// # Errors
 ///
@@ -172,16 +174,15 @@ pub async fn adopt_key(
     .await
     .map_err(RecordKeyError::Authorization)?;
 
-    let adapter = added_provider_adapter(state, caller.clone(), provider_type).await?;
+    let AddedProvider { settings, adapter } = added_provider(state, caller.clone(), provider_type).await?;
     let Some(key) = adapter.find_key(&label).await? else {
         return Err(RecordKeyError::LabelNotFound(label));
     };
-    if all_keys(state)
-        .await?
-        .keys
-        .values()
-        .any(|reference| reference.provider_type == provider_type && reference.provider_key_id == key)
-    {
+    if all_keys(state).await?.keys.values().any(|reference| {
+        reference.provider_type == provider_type
+            && reference.settings == settings
+            && adapter.same_key(&reference.provider_key_id, &key)
+    }) {
         return Err(RecordKeyError::AlreadyRecorded(label));
     }
 
@@ -196,6 +197,7 @@ pub async fn adopt_key(
 
     let reference = KeyReference {
         provider_type,
+        settings,
         provider_key_id: key,
         label: Some(label),
         algorithm,
@@ -235,7 +237,7 @@ pub enum DeleteKeyError {
 }
 
 /// Deletes a key from its provider, which frees its label, and records that it is deleted. The provider doesn't need
-/// to be added anymore. A key the provider no longer has counts as deleted there, so an interrupted deletion can be
+/// to be added anymore: the key is reached with the settings it was recorded with. A key the provider no longer has counts as deleted there, so an interrupted deletion can be
 /// retried. A key that something still signs with is kept.
 ///
 /// # Errors
@@ -264,7 +266,7 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
             user,
         });
     }
-    let Some(adapter) = state.adapters.get(&reference.provider_type) else {
+    let Some(adapter) = state.adapters.get(reference.provider_type, reference.settings.as_ref()) else {
         return Err(DeleteKeyError::Unsupported(reference.provider_type));
     };
     match adapter.delete(&reference.provider_key_id).await {
@@ -304,7 +306,8 @@ pub enum SigningKeyError {
 }
 
 /// The key `id` as a signer, signing inside its provider with the algorithm the key was recorded for. Its public key
-/// is the recorded one, so the provider is only asked whether it still holds the key.
+/// is the recorded one, so the provider is only asked whether it still holds the key. The provider is reached with the
+/// settings the key was recorded with, so the key signs whether or not its provider is still added.
 ///
 /// Not authorized: it is asked for by whatever signs for something that names the key, which authorized that.
 ///
@@ -319,7 +322,7 @@ pub async fn signing_key(state: &KmsState, id: &str) -> Result<KeySigner<Arc<dyn
     else {
         return Err(SigningKeyError::NotFound(id.to_string()));
     };
-    let Some(adapter) = state.adapters.get(&reference.provider_type) else {
+    let Some(adapter) = state.adapters.get(reference.provider_type, reference.settings.as_ref()) else {
         return Err(SigningKeyError::Unsupported(reference.provider_type));
     };
     let store: Arc<dyn KeyStore> = adapter.clone();
@@ -365,13 +368,15 @@ pub async fn get_keys(state: &KmsState, caller: Caller) -> Result<Vec<RecordedKe
 mod tests {
     use super::*;
     use crate::adapter::{
-        test_utils::UnreachableKeyProvider, ConnectionError, InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters,
-        ProviderKeys,
+        test_utils::InMemoryFactory, ConnectionError, InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters,
+        ProviderKeys, UnreachableKeyProvider,
     };
     use crate::key::aggregate::{tests::reference, Key};
     use crate::key::usage::{KeyUsage, Unused};
+    use crate::key_provider::settings::tests::stackit;
     use crate::key_provider::{aggregate::KeyProviders, command::KeyProviderCommand};
     use crate::kms_state;
+    use crate::state::tests::{add_stackit, stackit_state};
     use agent_shared::application_state::Command;
     use agent_store::in_memory::InMemory;
     use async_trait::async_trait;
@@ -383,13 +388,15 @@ mod tests {
     use std::{collections::HashMap, sync::Arc, time::Duration};
 
     /// The in-memory provider, refusing every key with `refusal`, taking `creation_delay` to create one, and failing
-    /// every deletion when `deletion_fails`.
+    /// every deletion when `deletion_fails`. With `versioned`, ids that agree before a `/` name one key, as versions
+    /// of it.
     #[derive(Default)]
     struct TestProvider {
         store: InMemoryKeyStore,
         refusal: Option<KeyRefusal>,
         creation_delay: Duration,
         deletion_fails: bool,
+        versioned: bool,
     }
 
     #[async_trait]
@@ -444,6 +451,15 @@ mod tests {
         async fn find_key(&self, label: &str) -> Result<Option<KeyId>, KeyStoreError> {
             self.store.find_key(label).await
         }
+
+        fn same_key(&self, a: &KeyId, b: &KeyId) -> bool {
+            let key = |id: &KeyId| id.as_str().split('/').next().unwrap_or_default().to_string();
+            if self.versioned {
+                key(a) == key(b)
+            } else {
+                a == b
+            }
+        }
     }
 
     struct DenyAll;
@@ -496,6 +512,7 @@ mod tests {
             KeyProviderCommand::AddKeyProvider {
                 provider_type: KeyProviderType::InMemory,
                 name: "Local keys".to_string(),
+                settings: None,
             },
         )
         .await
@@ -845,7 +862,7 @@ mod tests {
         let mut state = state(&provider).await;
         let adapters: KeyProviderAdapters = [(
             KeyProviderType::AwsKmsAmbient,
-            Arc::new(UnreachableKeyProvider) as Arc<dyn KeyProviderAdapter>,
+            Arc::new(UnreachableKeyProvider("connection refused".to_string())) as Arc<dyn KeyProviderAdapter>,
         )]
         .into();
         state.adapters = Arc::new(adapters);
@@ -886,5 +903,104 @@ mod tests {
         let result = signing_key(&state, "key-id").await;
 
         assert!(matches!(result, Err(SigningKeyError::Unusable(_))));
+    }
+
+    async fn create_in_stackit(state: &KmsState) -> RecordedKey {
+        create_key(
+            state,
+            Caller::Internal,
+            KeyProviderType::StackitKms,
+            JwsAlgorithm::ES256,
+            Some("issuer".to_string()),
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Removes the STACKIT KMS provider although it has keys, which `remove_key_provider` refuses.
+    async fn remove_stackit(state: &KmsState) {
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            KeyProviders::ID,
+            &state.command.key_providers,
+            KeyProviderCommand::RemoveKeyProvider {
+                provider_type: KeyProviderType::StackitKms,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_key_signs_after_its_provider_is_removed() {
+        let state = stackit_state(&InMemoryFactory::default(), stackit("key-ring")).await;
+        let key = create_in_stackit(&state).await;
+        remove_stackit(&state).await;
+
+        let result = signing_key(&state, &key.id).await;
+
+        assert!(result.is_ok(), "{:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn a_key_signs_with_the_settings_it_was_created_with() {
+        let state = stackit_state(&InMemoryFactory::default(), stackit("key-ring")).await;
+        let key = create_in_stackit(&state).await;
+        remove_stackit(&state).await;
+        add_stackit(&state, stackit("other-key-ring")).await;
+
+        let result = signing_key(&state, &key.id).await;
+
+        assert!(result.is_ok(), "{:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn refuses_to_adopt_another_version_of_a_recorded_key() {
+        let provider = Arc::new(TestProvider {
+            versioned: true,
+            ..TestProvider::default()
+        });
+        let state = state(&provider).await;
+        provider
+            .store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap();
+        record(
+            &state,
+            "key-id",
+            KeyReference {
+                provider_key_id: KeyId::new("issuer/1"),
+                label: None,
+                ..reference()
+            },
+        )
+        .await;
+
+        let result = adopt(&state, "issuer").await;
+
+        assert!(matches!(result, Err(RecordKeyError::AlreadyRecorded(_))));
+    }
+
+    #[tokio::test]
+    async fn refuses_to_adopt_by_a_label_the_provider_refuses() {
+        let provider = Arc::new(TestProvider {
+            refusal: Some(KeyRefusal::InvalidLabel("reads as a key id".to_string())),
+            ..TestProvider::default()
+        });
+        let state = state(&provider).await;
+        provider
+            .store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap();
+
+        let result = adopt(&state, "issuer").await;
+
+        assert!(matches!(
+            result,
+            Err(RecordKeyError::Refused(KeyRefusal::InvalidLabel(_)))
+        ));
     }
 }

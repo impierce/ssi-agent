@@ -23,6 +23,7 @@ agent_shared = { path = "../agent_shared" }
 agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification" }
 kms-aws = { path = "../infrastructure/adapters/kms-aws" }
+kms-stackit = { path = "../infrastructure/adapters/kms-stackit" }
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
 anyhow.workspace = true

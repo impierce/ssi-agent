@@ -1,5 +1,5 @@
 use crate::key::{command::KeyCommand, error::KeyError, event::KeyEvent};
-use crate::key_provider::aggregate::KeyProviderType;
+use crate::key_provider::{aggregate::KeyProviderType, settings::KeyProviderSettings};
 use cqrs_es::{event_sink::EventSink, Aggregate};
 use identity_kit::{
     jose::{Jwk, JwsAlgorithm},
@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KeyReference {
     pub provider_type: KeyProviderType,
+    /// The settings the provider had when the key was recorded, which say where in the provider the key is. The key
+    /// is reached with them, also once the provider is removed or added again with other settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settings: Option<KeyProviderSettings>,
     /// The provider's id for the key, which names this key for good: an alias can later name another key, so for
     /// AWS KMS this is the key ARN.
     pub provider_key_id: KeyId,
@@ -74,6 +78,7 @@ pub(crate) mod tests {
     pub(crate) fn reference() -> KeyReference {
         KeyReference {
             provider_type: KeyProviderType::InMemory,
+            settings: None,
             provider_key_id: KeyId::new("issuer"),
             label: Some("issuer".to_string()),
             algorithm: JwsAlgorithm::ES256,

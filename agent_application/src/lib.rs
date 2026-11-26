@@ -34,6 +34,7 @@ use agent_verification::services::VerificationServices;
 use document_keys::{DocumentKeyUsage, KmsKeySource};
 pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
 use kms_aws::AwsKmsAmbientKeyProvider;
+use kms_stackit::StackitKmsFactory;
 use probes::{
     liveness::{healthz, livez},
     readiness::{readyz, ReadinessState},
@@ -387,14 +388,17 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
         None => AwsKmsAmbientKeyProvider::new(),
     };
 
-    let adapters: KeyProviderAdapters = [
+    let adapters = KeyProviderAdapters::from([
         (
             KeyProviderType::InMemory,
             Arc::new(InMemoryKeyStore::new()) as Arc<dyn KeyProviderAdapter>,
         ),
         (KeyProviderType::AwsKmsAmbient, Arc::new(aws_kms)),
-    ]
-    .into();
+    ])
+    .with_factory(
+        KeyProviderType::StackitKms,
+        StackitKmsFactory::new(config().stackit_federated_token_file.clone()),
+    );
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
 
     Ok(Some(Arc::new(
