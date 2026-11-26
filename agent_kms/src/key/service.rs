@@ -1,5 +1,5 @@
-//! Creating, adopting, deleting and listing keys. A key is authorized on its own id before its provider is asked
-//! anything.
+//! Creating, adopting, deleting and listing keys, and handing them out to sign with. A key is authorized on its own id
+//! before its provider is asked anything.
 
 use crate::adapter::KeyRefusal;
 use crate::key::{
@@ -16,9 +16,10 @@ use agent_shared::handlers::{
 use cqrs_es::persist::PersistenceError;
 use identity_kit::{
     jose::{JwsAlgorithm, KeyType},
-    keys::{KeyId, KeySpec, KeyStoreError},
+    keys::{KeyId, KeySigner, KeySpec, KeyStore, KeyStoreError},
 };
 use shared_kernel::authorization::{AuthorizationError, Caller};
+use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -222,6 +223,9 @@ pub enum DeleteKeyError {
     Persistence(#[from] PersistenceError),
     #[error("There is no key `{0}`")]
     NotFound(String),
+    /// Something still signs with the key, as [`KeyUsage`](crate::key::usage::KeyUsage) tells.
+    #[error("Key `{id}` is the key of `{user}`; remove it from there first")]
+    InUse { id: String, user: String },
     #[error("This instance has no adapter for `{0}` key providers")]
     Unsupported(KeyProviderType),
     #[error(transparent)]
@@ -232,12 +236,12 @@ pub enum DeleteKeyError {
 
 /// Deletes a key from its provider, which frees its label, and records that it is deleted. The provider doesn't need
 /// to be added anymore. A key the provider no longer has counts as deleted there, so an interrupted deletion can be
-/// retried.
+/// retried. A key that something still signs with is kept.
 ///
 /// # Errors
 ///
-/// Fails when the caller isn't authorized, there is no such key, this instance has no adapter for its provider, or
-/// the provider fails to delete it.
+/// Fails when the caller isn't authorized, there is no such key, something signs with it, this instance has no
+/// adapter for its provider, or the provider fails to delete it.
 pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<(), DeleteKeyError> {
     authorize_command(
         state.authorization_checker.as_ref(),
@@ -254,6 +258,12 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
     else {
         return Err(DeleteKeyError::NotFound(id.to_string()));
     };
+    if let Some(user) = state.key_usage.user(id).await? {
+        return Err(DeleteKeyError::InUse {
+            id: id.to_string(),
+            user,
+        });
+    }
     let Some(adapter) = state.adapters.get(&reference.provider_type) else {
         return Err(DeleteKeyError::Unsupported(reference.provider_type));
     };
@@ -271,6 +281,61 @@ pub async fn delete_key(state: &KmsState, caller: Caller, id: &str) -> Result<()
     )
     .await?;
     Ok(())
+}
+
+/// Why a key can't be given to sign with.
+#[derive(Debug, Error)]
+pub enum SigningKeyError {
+    /// The key's record couldn't be read. The key may still sign.
+    #[error(transparent)]
+    Persistence(#[from] PersistenceError),
+    /// The key was never recorded, was deleted, or its provider no longer holds it.
+    #[error("There is no key `{0}`")]
+    NotFound(String),
+    /// This instance has no adapter for the key's provider.
+    #[error("This instance has no adapter for `{0}` key providers")]
+    Unsupported(KeyProviderType),
+    /// The provider couldn't be asked whether it holds the key. The key may still sign.
+    #[error(transparent)]
+    Provider(KeyStoreError),
+    /// The provider can't sign with the key as it was recorded, such as with another algorithm.
+    #[error(transparent)]
+    Unusable(KeyStoreError),
+}
+
+/// The key `id` as a signer, signing inside its provider with the algorithm the key was recorded for. Its public key
+/// is the recorded one, so the provider is only asked whether it still holds the key.
+///
+/// Not authorized: it is asked for by whatever signs for something that names the key, which authorized that.
+///
+/// # Errors
+///
+/// Fails when there is no such key, this instance has no adapter for its provider, the provider no longer holds it or
+/// can't be asked, or the provider can't sign with it.
+pub async fn signing_key(state: &KmsState, id: &str) -> Result<KeySigner<Arc<dyn KeyStore>>, SigningKeyError> {
+    let Some(reference) = public_query_handler(id, &state.query.key)
+        .await?
+        .and_then(|view| view.reference)
+    else {
+        return Err(SigningKeyError::NotFound(id.to_string()));
+    };
+    let Some(adapter) = state.adapters.get(&reference.provider_type) else {
+        return Err(SigningKeyError::Unsupported(reference.provider_type));
+    };
+    let store: Arc<dyn KeyStore> = adapter.clone();
+    match store.exists(&reference.provider_key_id).await {
+        Ok(true) => {}
+        Ok(false) => return Err(SigningKeyError::NotFound(id.to_string())),
+        Err(error) => return Err(SigningKeyError::Provider(error)),
+    }
+
+    KeySigner::from_public_jwk(
+        store,
+        reference.provider_key_id,
+        reference.algorithm,
+        reference.public_key,
+    )
+    .map_err(SigningKeyError::Unusable)
 }
 
 /// Returns the keys this instance recorded and didn't delete, in the order they were recorded.
@@ -299,16 +364,20 @@ pub async fn get_keys(state: &KmsState, caller: Caller) -> Result<Vec<RecordedKe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapter::{ConnectionError, InMemoryKeyStore, KeyProviderAdapter, ProviderKeys};
-    use crate::key::aggregate::Key;
+    use crate::adapter::{
+        test_utils::UnreachableKeyProvider, ConnectionError, InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters,
+        ProviderKeys,
+    };
+    use crate::key::aggregate::{tests::reference, Key};
+    use crate::key::usage::{KeyUsage, Unused};
     use crate::key_provider::{aggregate::KeyProviders, command::KeyProviderCommand};
     use crate::kms_state;
     use agent_shared::application_state::Command;
     use agent_store::in_memory::InMemory;
     use async_trait::async_trait;
     use cqrs_es::AggregateError;
-    use identity_kit::jose::Jwk;
-    use identity_kit::keys::{KeyStore, KeyStoreCapabilities};
+    use identity_kit::jose::{encode_compact, CompactJws, DefaultVerifier, Jwk, JwsHeader};
+    use identity_kit::keys::KeyStoreCapabilities;
     use shared_kernel::authorization::{AuthorizationChecker, AuthorizationRequest};
     use shared_kernel::event_bus::EventBusHandle;
     use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -401,6 +470,16 @@ mod tests {
         }
     }
 
+    /// Something signs with every key.
+    struct SignsWithEveryKey;
+
+    #[async_trait]
+    impl KeyUsage for SignsWithEveryKey {
+        async fn user(&self, _id: &str) -> Result<Option<String>, PersistenceError> {
+            Ok(Some("did:web:example.org#key".to_string()))
+        }
+    }
+
     /// A state with `provider` added as the in-memory provider.
     async fn state(provider: &Arc<TestProvider>) -> KmsState {
         let adapters = [(
@@ -408,7 +487,7 @@ mod tests {
             provider.clone() as Arc<dyn KeyProviderAdapter>,
         )]
         .into();
-        let state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await;
+        let state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters, Arc::new(Unused)).await;
         command_handler(
             state.authorization_checker.clone(),
             Caller::Internal,
@@ -437,6 +516,19 @@ mod tests {
 
     async fn adopt(state: &KmsState, label: &str) -> Result<RecordedKey, RecordKeyError> {
         adopt_key(state, Caller::Internal, KeyProviderType::InMemory, label.to_string()).await
+    }
+
+    /// Records `reference` as the key `id`, without asking its provider.
+    async fn record(state: &KmsState, id: &str, reference: KeyReference) {
+        command_handler(
+            state.authorization_checker.clone(),
+            Caller::Internal,
+            id,
+            &state.command.keys,
+            KeyCommand::CreateKey { reference },
+        )
+        .await
+        .unwrap();
     }
 
     async fn recorded_ids(state: &KmsState) -> Vec<String> {
@@ -647,5 +739,152 @@ mod tests {
         delete_key(&state, Caller::Internal, &key.id).await.unwrap();
 
         assert!(recorded_ids(&state).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn refuses_to_delete_the_key_of_a_verification_method() {
+        let provider = Arc::new(TestProvider::default());
+        let mut state = state(&provider).await;
+        state.key_usage = Arc::new(SignsWithEveryKey);
+        let key = create(&state, Some("issuer")).await.unwrap();
+
+        let result = delete_key(&state, Caller::Internal, &key.id).await;
+
+        assert!(matches!(result, Err(DeleteKeyError::InUse { user, .. }) if user == "did:web:example.org#key"));
+    }
+
+    #[tokio::test]
+    async fn gives_a_key_to_sign_with_with_the_adapter_of_its_provider() {
+        let provider = Arc::new(TestProvider::default());
+        let mut state = state(&provider).await;
+        let aws = Arc::new(InMemoryKeyStore::new());
+        let adapters: KeyProviderAdapters = [
+            (
+                KeyProviderType::InMemory,
+                provider.clone() as Arc<dyn KeyProviderAdapter>,
+            ),
+            (KeyProviderType::AwsKmsAmbient, aws.clone()),
+        ]
+        .into();
+        state.adapters = Arc::new(adapters);
+        let key = aws
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        let public_key = aws.public_jwk(&key).await.unwrap();
+        record(
+            &state,
+            "key-id",
+            KeyReference {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                provider_key_id: key,
+                public_key: public_key.clone(),
+                ..reference()
+            },
+        )
+        .await;
+
+        let signer = signing_key(&state, "key-id").await.unwrap();
+
+        let token = encode_compact(&JwsHeader::new(JwsAlgorithm::ES256), b"{}", &signer)
+            .await
+            .unwrap();
+        assert!(CompactJws::decode(&token)
+            .unwrap()
+            .verify(&DefaultVerifier, &public_key)
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn an_unknown_key_cannot_sign() {
+        let provider = Arc::new(TestProvider::default());
+        let state = state(&provider).await;
+
+        let result = signing_key(&state, "missing").await;
+
+        assert!(matches!(result, Err(SigningKeyError::NotFound(id)) if id == "missing"));
+    }
+
+    #[tokio::test]
+    async fn a_key_without_an_adapter_for_its_provider_cannot_sign() {
+        let provider = Arc::new(TestProvider::default());
+        let state = state(&provider).await;
+        record(
+            &state,
+            "key-id",
+            KeyReference {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                ..reference()
+            },
+        )
+        .await;
+
+        let result = signing_key(&state, "key-id").await;
+
+        assert!(matches!(
+            result,
+            Err(SigningKeyError::Unsupported(KeyProviderType::AwsKmsAmbient))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_key_its_provider_no_longer_holds_cannot_sign() {
+        let provider = Arc::new(TestProvider::default());
+        let state = state(&provider).await;
+        let key = create(&state, Some("issuer")).await.unwrap();
+        provider.store.delete(&KeyId::new("issuer")).await.unwrap();
+
+        let result = signing_key(&state, &key.id).await;
+
+        assert!(matches!(result, Err(SigningKeyError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn a_key_whose_provider_cannot_be_reached_is_not_reported_missing() {
+        let provider = Arc::new(TestProvider::default());
+        let mut state = state(&provider).await;
+        let adapters: KeyProviderAdapters = [(
+            KeyProviderType::AwsKmsAmbient,
+            Arc::new(UnreachableKeyProvider) as Arc<dyn KeyProviderAdapter>,
+        )]
+        .into();
+        state.adapters = Arc::new(adapters);
+        record(
+            &state,
+            "key-id",
+            KeyReference {
+                provider_type: KeyProviderType::AwsKmsAmbient,
+                ..reference()
+            },
+        )
+        .await;
+
+        let result = signing_key(&state, "key-id").await;
+
+        assert!(matches!(result, Err(SigningKeyError::Provider(_))));
+    }
+
+    #[tokio::test]
+    async fn a_key_recorded_for_another_algorithm_than_its_public_key_cannot_sign() {
+        let provider = Arc::new(TestProvider::default());
+        let state = state(&provider).await;
+        provider
+            .store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256).with_label("issuer"))
+            .await
+            .unwrap();
+        record(
+            &state,
+            "key-id",
+            KeyReference {
+                algorithm: JwsAlgorithm::EdDSA,
+                ..reference()
+            },
+        )
+        .await;
+
+        let result = signing_key(&state, "key-id").await;
+
+        assert!(matches!(result, Err(SigningKeyError::Unusable(_))));
     }
 }

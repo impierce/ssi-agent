@@ -61,7 +61,14 @@ mod tests {
             (KeyProviderType::AwsKmsAmbient, Arc::new(UnreachableKeyProvider)),
         ]
         .into();
-        let kms_state = kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await;
+        let kms_state = kms_state(
+            &InMemory,
+            &EventBusHandle::default(),
+            true,
+            adapters,
+            Arc::new(agent_kms::key::usage::Unused),
+        )
+        .await;
 
         app_with_base_path(
             ApiState {

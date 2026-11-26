@@ -88,7 +88,8 @@ pub struct DeleteKeyRequest {
 /// Create a key
 ///
 /// Creates a key in an added key provider. The private key is generated in the provider and never leaves it.
-/// Nothing signs with the key yet.
+/// The key signs for the `did:web` document once it is added to it with `add-key-to-document` and selected with
+/// `select-signing-key`.
 #[utoipa::path(
     post,
     path = "/create-key",
@@ -154,7 +155,8 @@ pub(crate) async fn adopt_key(
 /// Delete a key
 ///
 /// Deletes a key from its provider, which schedules its deletion where the provider does so, and frees its label. It
-/// no longer signs. The provider doesn't need to be added anymore.
+/// no longer signs. The provider doesn't need to be added anymore. The key of a verification method in a DID document
+/// isn't deleted: remove the method with `remove-key-from-document` first.
 #[utoipa::path(
     post,
     path = "/delete-key",
@@ -164,6 +166,7 @@ pub(crate) async fn adopt_key(
     responses(
         (status = 204, description = "Key deleted"),
         (status = 404, description = "There is no such key"),
+        (status = 409, description = "The key is the key of a verification method in a DID document"),
         (status = 502, description = "The provider could not delete the key"),
     )
 )]

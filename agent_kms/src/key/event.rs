@@ -3,6 +3,7 @@ use cqrs_es::DomainEvent;
 use serde::{Deserialize, Serialize};
 use strum::Display;
 
+/// What happened to a key. A key's events are one of `KeyCreated` and `KeyAdopted`, then at most one `KeyDeleted`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Display)]
 pub enum KeyEvent {
     /// This instance created the key in its provider.

@@ -1,3 +1,4 @@
+mod document_keys;
 pub mod event_verification;
 mod metadata;
 pub mod openapi;
@@ -9,6 +10,7 @@ use agent_authorization::services::{AuthorizationServices, OAuth2AuthorizationRe
 use agent_event_publisher_http::HttpEventPublisher;
 use agent_event_publisher_nats::NatsEventPublisher;
 use agent_holder::{presentation::aggregate::Presentation, services::HolderServices};
+use agent_identity::document::key_source::{KeySource, NoKeys};
 use agent_identity::services::{IdentityServices, LinkedVerifiablePresentationSource};
 use agent_issuance::{
     application::credential_configuration_projection::{
@@ -18,6 +20,7 @@ use agent_issuance::{
 };
 use agent_kms::{
     adapter::{InMemoryKeyStore, KeyProviderAdapter, KeyProviderAdapters},
+    key::usage::KeyUsage,
     key_provider::aggregate::KeyProviderType,
     kms_state, KmsState,
 };
@@ -28,6 +31,7 @@ use agent_shared::{
 };
 use agent_store::{in_memory::InMemory, mongodb::MongoDB, postgres::Postgres, CqrsComponentBuilder};
 use agent_verification::services::VerificationServices;
+use document_keys::{DocumentKeyUsage, KmsKeySource};
 pub use event_verification::{core_event_verifiers, EventVerificationError, EventVerificationReport, EventVerifier};
 use kms_aws::AwsKmsAmbientKeyProvider;
 use probes::{
@@ -210,7 +214,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
-                kms_state = kms_state_if_enabled(&builder, &event_bus).await?;
+                kms_state =
+                    kms_state_if_enabled(&builder, &event_bus, Arc::new(DocumentKeyUsage(states.0.clone()))).await?;
                 event_verification = EventVerification::Postgres(builder);
                 states
             }
@@ -265,7 +270,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
-                kms_state = kms_state_if_enabled(&builder, &event_bus).await?;
+                kms_state =
+                    kms_state_if_enabled(&builder, &event_bus, Arc::new(DocumentKeyUsage(states.0.clone()))).await?;
                 event_verification = EventVerification::MongoDb(builder);
                 states
             }
@@ -313,7 +319,8 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
                     holder_state,
                     verification_state,
                 );
-                kms_state = kms_state_if_enabled(&InMemory, &event_bus).await?;
+                kms_state =
+                    kms_state_if_enabled(&InMemory, &event_bus, Arc::new(DocumentKeyUsage(states.0.clone()))).await?;
                 event_verification = EventVerification::InMemory;
                 states
             }
@@ -327,10 +334,15 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
     agent_authorization::state::initialize(&authorization_state)
         .await
         .unwrap();
-    agent_identity::state::initialize(&identity_state)
+    let kms_keys = kms_state
+        .clone()
+        .map(|kms_state| Arc::new(KmsKeySource(kms_state)) as Arc<dyn KeySource>);
+    let key_source = kms_keys.clone().unwrap_or_else(|| Arc::new(NoKeys));
+    agent_identity::state::initialize(&identity_state, key_source.as_ref())
         .await
         .map_err(io::Error::other)?;
     agent_identity::service::lifecycle::spawn_maintenance(&identity_state);
+    agent_identity::document::keys::spawn_key_retry(&identity_state, key_source);
     agent_issuance::state::initialize(&issuance_state).await.unwrap();
     // Templates published under an earlier version are advertised as this version derives them.
     resync_credential_configurations(issuance_state.clone(), &library_state).await;
@@ -345,18 +357,21 @@ pub async fn state(subject: Arc<Subject>) -> io::Result<ApplicationState> {
             verification_state: Some(verification_state),
             events_state: Some(Arc::new(agent_api_http::v0::events::EventsState::from(event_bus))),
             kms_state,
+            key_source: kms_keys,
         },
         event_verification,
         readiness,
     })
 }
 
-/// Builds the Key Management System, which stays hidden unless the `kms` feature flag is enabled.
+/// Builds the Key Management System, which stays hidden unless the `kms` feature flag is enabled. `key_usage`, the
+/// identity's documents, keeps a key from being deleted while it signs for them.
 ///
 /// Fails when the deployment alias can't scope keys in AWS KMS, so that keys are never created outside it.
 async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_bus: &shared_kernel::event_bus::EventBusHandle,
+    key_usage: Arc<dyn KeyUsage>,
 ) -> io::Result<Option<Arc<KmsState>>> {
     if !config().feature.kms {
         return Ok(None);
@@ -383,7 +398,7 @@ async fn kms_state_if_enabled<CCB: CqrsComponentBuilder>(
     let development_providers_allowed = matches!(ApplicationProfile::load(), ApplicationProfile::Development);
 
     Ok(Some(Arc::new(
-        kms_state(builder, event_bus, development_providers_allowed, adapters).await,
+        kms_state(builder, event_bus, development_providers_allowed, adapters, key_usage).await,
     )))
 }
 
@@ -500,6 +515,7 @@ pub async fn start_server(alias: String, router: axum::Router, port: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_kms::key::usage::Unused;
     use agent_shared::config::set_config;
     use serial_test::serial;
 
@@ -509,10 +525,15 @@ mod tests {
         let event_bus = shared_kernel::event_bus::EventBusHandle::default();
 
         set_config().feature.kms = false;
-        assert!(kms_state_if_enabled(&InMemory, &event_bus).await.unwrap().is_none());
+        assert!(kms_state_if_enabled(&InMemory, &event_bus, Arc::new(Unused))
+            .await
+            .unwrap()
+            .is_none());
 
         set_config().feature.kms = true;
-        let enabled = kms_state_if_enabled(&InMemory, &event_bus).await.unwrap();
+        let enabled = kms_state_if_enabled(&InMemory, &event_bus, Arc::new(Unused))
+            .await
+            .unwrap();
         set_config().feature.kms = false;
         assert!(enabled.is_some());
     }
@@ -524,7 +545,7 @@ mod tests {
         set_config().feature.kms = true;
         set_config().deployment_alias = Some("eridani/eu".to_string());
 
-        let result = kms_state_if_enabled(&InMemory, &event_bus).await;
+        let result = kms_state_if_enabled(&InMemory, &event_bus, Arc::new(Unused)).await;
         set_config().feature.kms = false;
         set_config().deployment_alias = None;
 

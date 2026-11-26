@@ -2,6 +2,8 @@ use crate::key::aggregate::KeyReference;
 use shared_kernel::authorization::CommandOperation;
 use strum::EnumDiscriminants;
 
+/// What the `Key` aggregate is asked to record. A key is recorded once, by `CreateKey` or `AdoptKey`, and deleted
+/// once; any other order is refused.
 #[derive(Debug, EnumDiscriminants)]
 #[strum_discriminants(name(KeyOperation))]
 pub enum KeyCommand {

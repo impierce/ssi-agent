@@ -11,7 +11,7 @@ use hyper::StatusCode;
 use identity_kit::keys::KeyStoreError;
 
 /// A problem of type `kms#<anchor>` in `docs/problem-details/kms.md`, detailed by `error`.
-fn problem<E: std::error::Error + Send + Sync + 'static>(
+pub(crate) fn problem<E: std::error::Error + Send + Sync + 'static>(
     status: StatusCode,
     title: &str,
     anchor: &str,
@@ -181,6 +181,7 @@ impl IntoApiErrorExt for DeleteKeyError {
             DeleteKeyError::Authorization(error) => error.into_api_error(),
             DeleteKeyError::Persistence(error) => error.into_api_error(),
             DeleteKeyError::NotFound(_) => problem(StatusCode::NOT_FOUND, "Key Not Found", "key-not-found", self),
+            DeleteKeyError::InUse { .. } => problem(StatusCode::CONFLICT, "Key In Use", "key-in-use", self),
             DeleteKeyError::Unsupported(provider_type) => {
                 KeyProviderAccessError::Unsupported(provider_type).into_api_error()
             }
@@ -371,6 +372,14 @@ mod tests {
                 DeleteKeyError::NotFound("key-id".to_string()),
                 StatusCode::NOT_FOUND,
                 Some("kms#key-not-found"),
+            ),
+            (
+                DeleteKeyError::InUse {
+                    id: "key-id".to_string(),
+                    user: "did:web:example.org#key".to_string(),
+                },
+                StatusCode::CONFLICT,
+                Some("kms#key-in-use"),
             ),
             (
                 DeleteKeyError::Unsupported(KeyProviderType::AwsKmsAmbient),

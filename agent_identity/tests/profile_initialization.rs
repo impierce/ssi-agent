@@ -1,6 +1,7 @@
 //! Startup must create the organisation profile from the configured display, and keep a profile that was
 //! provisioned through configuration in sync with it.
 
+use agent_identity::document::key_source::NoKeys;
 use agent_identity::identity_state;
 use agent_identity::profile::aggregate::{Profile, Source};
 use agent_identity::profile::command::ProfileCommand;
@@ -36,7 +37,7 @@ fn assert_matches_configured_display(profile: &Profile) {
 async fn initialization_creates_the_profile_from_the_configured_display() {
     let state = identity().await;
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     assert_matches_configured_display(&profile(&state).await);
 }
@@ -44,7 +45,7 @@ async fn initialization_creates_the_profile_from_the_configured_display() {
 #[tokio::test]
 async fn initialization_restores_a_profile_that_drifted_from_the_configured_display() {
     let state = identity().await;
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     for command in [
         ProfileCommand::UpdateSource {
@@ -76,7 +77,7 @@ async fn initialization_restores_a_profile_that_drifted_from_the_configured_disp
     }
     assert_eq!(profile(&state).await.source, Source::Runtime);
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     assert_matches_configured_display(&profile(&state).await);
 }

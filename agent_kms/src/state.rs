@@ -1,6 +1,7 @@
 use crate::adapter::{ConnectionError, KeyProviderAdapter, KeyProviderAdapters, ProviderKeys};
 use crate::key::{
     aggregate::Key,
+    usage::KeyUsage,
     views::{AllKeysView, KeyView},
 };
 use crate::key_provider::{
@@ -37,6 +38,8 @@ pub struct KmsState {
     pub adapters: Arc<KeyProviderAdapters>,
     /// Whether development-only providers, such as the in-memory provider, may be used.
     pub development_providers_allowed: bool,
+    /// What signs with the keys, asked before a key is deleted.
+    pub key_usage: Arc<dyn KeyUsage>,
 }
 
 #[derive(Clone)]
@@ -54,12 +57,14 @@ pub struct Queries {
 
 /// Constructs the CQRS components of the KMS bounded context.
 ///
-/// `adapters` holds the adapter for every provider type this instance can connect to.
+/// `adapters` holds the adapter for every provider type this instance can connect to. `key_usage` tells what signs
+/// with a key, so that no such key is deleted.
 pub async fn kms_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
     event_bus: &EventBusHandle,
     development_providers_allowed: bool,
     adapters: KeyProviderAdapters,
+    key_usage: Arc<dyn KeyUsage>,
 ) -> KmsState {
     let services = Arc::new(KeyProviderServices::new(development_providers_allowed));
 
@@ -85,6 +90,7 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
         },
         adapters: Arc::new(adapters),
         development_providers_allowed,
+        key_usage,
     }
 }
 
@@ -218,12 +224,14 @@ pub(crate) async fn all_keys(state: &KmsState) -> Result<AllKeysView, Persistenc
         .unwrap_or_default())
 }
 
+/// Why a key provider could not be removed.
 #[derive(Debug, Error)]
 pub enum RemoveKeyProviderError {
     #[error(transparent)]
     Authorization(AuthorizationError),
     #[error(transparent)]
     Persistence(#[from] PersistenceError),
+    /// A recorded key that isn't deleted lives in the provider.
     #[error("The `{0}` key provider still has keys; delete them first")]
     HasKeys(KeyProviderType),
     #[error(transparent)]
@@ -275,7 +283,7 @@ pub async fn remove_key_provider(
 mod tests {
     use super::*;
     use crate::adapter::test_utils::UnreachableKeyProvider;
-    use crate::key::{aggregate::tests::reference, command::KeyCommand};
+    use crate::key::{aggregate::tests::reference, command::KeyCommand, usage::Unused};
     use agent_store::in_memory::InMemory;
 
     /// Only AWS has an adapter, so an added in-memory provider is unsupported.
@@ -285,7 +293,7 @@ mod tests {
             Arc::new(UnreachableKeyProvider) as Arc<dyn KeyProviderAdapter>,
         )]
         .into();
-        kms_state(&InMemory, &EventBusHandle::default(), true, adapters).await
+        kms_state(&InMemory, &EventBusHandle::default(), true, adapters, Arc::new(Unused)).await
     }
 
     async fn add(state: &KmsState, provider_type: KeyProviderType) {

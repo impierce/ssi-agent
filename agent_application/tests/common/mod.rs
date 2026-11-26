@@ -1,10 +1,11 @@
 //! Shared flow for the event store integration tests.
 
 use agent_application::{router, state, ApplicationState};
+use agent_identity::document::command::DocumentCommand;
 use agent_kms::key::{aggregate::KeyReference, command::KeyCommand};
 use agent_kms::key_provider::aggregate::KeyProviderType;
 use agent_secret_manager::subject::Subject;
-use agent_shared::config::{config_mut, EventStoreConfig, EventStoreType};
+use agent_shared::config::{config_mut, EventStoreConfig, EventStoreType, SupportedDidMethod, ToggleOptions};
 use axum::{body::Body, extract::Request, http::StatusCode, Router};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -34,6 +35,13 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         connection_string: Some(connection_string),
     };
     config_mut().feature.kms = true;
+    config_mut().did_methods.insert(
+        SupportedDidMethod::Web,
+        ToggleOptions {
+            enabled: true,
+            preferred: Some(true),
+        },
+    );
 
     let state = application_state().await;
     state.verify_persisted_events().await;
@@ -55,6 +63,7 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     .await
     .unwrap();
     let kms = state.api.kms_state.clone().expect("the KMS is enabled");
+    let identity = state.api.identity_state.clone().expect("identity is enabled");
     let app = router(state);
     assert_reissuance_views(&app).await;
 
@@ -97,6 +106,43 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     )
     .await
     .unwrap();
+
+    // Added and selected directly, like the key: the AWS KMS provider can't be asked for it here.
+    let (status, documents) = send(
+        &app,
+        Request::get("/v0/documents?did_method=did:web")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let document_id = documents[0]["id"].as_str().unwrap().to_string();
+    let method = format!(
+        "{}#oKIywvGUpTVTyxMQ3bwIIeQUudfr_CkLMjCE19ECD-U",
+        documents[0]["document"]["id"].as_str().unwrap()
+    );
+    for command in [
+        DocumentCommand::AddPublicKey {
+            public_key: Box::new(
+                serde_json::from_value(json!({
+                    "kty": "EC",
+                    "crv": "P-256",
+                    "alg": "ES256",
+                    "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+                    "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+                }))
+                .unwrap(),
+            ),
+            key_id: "persisted-key".to_string(),
+        },
+        DocumentCommand::SelectSigningKey {
+            verification_method_id: method.parse().unwrap(),
+        },
+    ] {
+        agent_shared::handlers::public_command_handler(&document_id, &identity.command.document, command)
+            .await
+            .unwrap();
+    }
 
     let (status, catalog) = send(
         &app,
@@ -152,6 +198,31 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     let (status, keys) = send(&app, Request::get("/v0/get-all-keys").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(keys[0]["id"], "persisted-key");
+
+    let (status, documents) = send(
+        &app,
+        Request::get("/v0/documents?did_method=did:web")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        (&documents[0]["added_keys"], &documents[0]["signing_methods"]),
+        (&json!({ &method: "persisted-key" }), &json!({ "ES256": &method }))
+    );
+
+    // The key can't be loaded from AWS KMS here, so the configured key signs instead of the selected one.
+    let (status, signing_keys) = send(&app, Request::get("/v0/get-signing-keys").body(Body::empty()).unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    let es256 = signing_keys
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|signing_key| signing_key["algorithm"] == "ES256")
+        .unwrap();
+    assert_eq!(es256["selectedVerificationMethodId"], json!(&method));
+    assert_ne!(es256["verificationMethodId"], json!(&method));
 }
 
 async fn assert_reissuance_views(app: &Router) {

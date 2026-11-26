@@ -54,11 +54,13 @@ utoipa.workspace = true
 tikv-jemallocator = "0.7"
 
 [dev-dependencies]
+agent_kms = { path = "../agent_kms", features = ["test_utils"] }
 agent_secret_manager = { path = "../agent_secret_manager", features = [
     "test_utils",
 ] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 
+jsonwebtoken.workspace = true
 reqwest.workspace = true
 serde_norway.workspace = true
 serial_test = "3.0"

@@ -116,7 +116,7 @@ pub(crate) async fn service(
 mod tests {
     use agent_identity::{
         dns::CnameResolver,
-        document::aggregate::Document,
+        document::{aggregate::Document, key_source::NoKeys},
         service::lifecycle::{maintain_services, spawn_maintenance},
         services::{IdentityServices, LinkedVerifiablePresentationSource},
         state::{initialize_documents, IdentityState},
@@ -301,7 +301,7 @@ mod tests {
             let event_bus = shared_kernel::EventBusHandle::default();
             let mut state =
                 agent_identity::identity_state(&agent_store::in_memory::InMemory, Arc::new(services), &event_bus).await;
-            initialize_documents(&state, &configuration).await.unwrap();
+            initialize_documents(&state, &configuration, &NoKeys).await.unwrap();
             let authorization = Arc::new(RecordingAuthorization::default());
             state.authorization_checker = authorization.clone();
             let state = Arc::new(state);
@@ -458,7 +458,9 @@ mod tests {
 
         async fn restart(&self) {
             self.state.services.subject.verification_method_ids.lock().await.clear();
-            initialize_documents(&self.state, &self.configuration).await.unwrap();
+            initialize_documents(&self.state, &self.configuration, &NoKeys)
+                .await
+                .unwrap();
             maintain_services(&self.state).await.unwrap();
         }
 
@@ -859,7 +861,9 @@ mod tests {
         let mut configuration = fixture.configuration.clone();
         configuration.public_url = "https://new.example.org/".parse().unwrap();
 
-        let error = initialize_documents(&fixture.state, &configuration).await.unwrap_err();
+        let error = initialize_documents(&fixture.state, &configuration, &NoKeys)
+            .await
+            .unwrap_err();
 
         assert!(error.to_string().contains("did:web:example.org"));
         assert!(error.to_string().contains("new.example.org"));
@@ -879,7 +883,9 @@ mod tests {
             .unwrap()
             .enabled = false;
 
-        let error = initialize_documents(&fixture.state, &configuration).await.unwrap_err();
+        let error = initialize_documents(&fixture.state, &configuration, &NoKeys)
+            .await
+            .unwrap_err();
 
         assert!(error.to_string().contains("did:web:example.org"));
         assert!(error.to_string().contains("new.example.org"));
@@ -895,7 +901,9 @@ mod tests {
         configuration.public_url = "https://new.example.org/".parse().unwrap();
         configuration.overwrite_previous_did_web = Some("did:web:example.org".into());
 
-        initialize_documents(&fixture.state, &configuration).await.unwrap();
+        initialize_documents(&fixture.state, &configuration, &NoKeys)
+            .await
+            .unwrap();
 
         let replacement: Value = serde_json::from_slice(&fixture.did().await).unwrap();
         assert_eq!(replacement["id"], "did:web:new.example.org");
@@ -922,7 +930,9 @@ mod tests {
         configuration.public_url = "https://new.example.org/".parse().unwrap();
         configuration.overwrite_previous_did_web = Some("did:web:somewhere-else.example".into());
 
-        let error = initialize_documents(&fixture.state, &configuration).await.unwrap_err();
+        let error = initialize_documents(&fixture.state, &configuration, &NoKeys)
+            .await
+            .unwrap_err();
 
         assert!(error.to_string().contains("did:web:somewhere-else.example"));
         assert!(error.to_string().contains("did:web:example.org"));
@@ -1058,7 +1068,9 @@ mod tests {
             .get_mut(&SupportedDidMethod::Web)
             .unwrap()
             .enabled = false;
-        initialize_documents(&fixture.state, &configuration).await.unwrap();
+        initialize_documents(&fixture.state, &configuration, &NoKeys)
+            .await
+            .unwrap();
         fixture
             .remove_linked_domains(&[fixture.configuration.public_url.as_str()], 204)
             .await;

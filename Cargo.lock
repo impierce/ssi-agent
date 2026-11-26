@@ -136,6 +136,7 @@ dependencies = [
  "axum",
  "chrono",
  "identity-kit",
+ "jsonwebtoken",
  "kms-aws",
  "opentelemetry",
  "opentelemetry-appender-tracing",

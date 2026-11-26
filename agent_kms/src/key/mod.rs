@@ -6,4 +6,5 @@ pub mod command;
 pub mod error;
 pub mod event;
 pub mod service;
+pub mod usage;
 pub mod views;
