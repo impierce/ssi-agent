@@ -3155,6 +3155,10 @@ components:
           enum:
           - Pending
           - Issued
+        template_id:
+          type:
+          - string
+          - 'null'
     CredentialExpiry:
       oneOf:
       - type: string

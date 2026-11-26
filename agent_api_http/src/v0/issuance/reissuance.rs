@@ -264,6 +264,7 @@ mod tests {
             &state.command.credential,
             CredentialCommand::CreateUnsignedCredential {
                 credential_id: "11111111-1111-4111-8111-111111111111".to_string(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: json!({
                         "first_name": "Ferris",

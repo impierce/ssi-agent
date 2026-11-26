@@ -90,6 +90,7 @@ impl Default for CredentialStatus {
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
+    pub template_id: Option<String>,
     pub notification_id: Option<String>,
     pub data: Option<Data>,
     #[schema(schema_with = credential_configurations_supported)]
@@ -127,6 +128,7 @@ impl Aggregate for Credential {
         let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
                 credential_id,
+                template_id,
                 data,
                 credential_configuration,
                 expires_at,
@@ -213,6 +215,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![UnsignedCredentialCreated {
                     credential_id,
+                    template_id,
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
@@ -223,6 +226,7 @@ impl Aggregate for Credential {
 
             CreateSignedCredential {
                 credential_id,
+                template_id,
                 signed_credential,
             } => {
                 #[cfg(feature = "test_utils")]
@@ -232,6 +236,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![SignedCredentialCreated {
                     credential_id,
+                    template_id,
                     signed_credential,
                     notification_id: Some(notification_id),
                 }])
@@ -485,6 +490,7 @@ impl Aggregate for Credential {
         match event {
             UnsignedCredentialCreated {
                 credential_id,
+                template_id,
                 data,
                 credential_configuration,
                 notification_id,
@@ -492,6 +498,7 @@ impl Aggregate for Credential {
                 expires_at,
             } => {
                 self.credential_id = credential_id;
+                self.template_id = template_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
                 self.notification_id = notification_id;
@@ -500,10 +507,12 @@ impl Aggregate for Credential {
             }
             SignedCredentialCreated {
                 credential_id,
+                template_id,
                 signed_credential,
                 notification_id,
             } => {
                 self.credential_id = credential_id;
+                self.template_id = template_id;
                 self.signed.replace(signed_credential);
                 self.notification_id = notification_id;
             }
@@ -1083,6 +1092,7 @@ pub mod credential_tests {
             .given_no_previous_events()
             .when_async(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: credential_subject,
                 },
@@ -1092,6 +1102,7 @@ pub mod credential_tests {
             .await
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential,
                 },
@@ -1141,6 +1152,7 @@ pub mod credential_tests {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential,
                 },
@@ -1163,6 +1175,28 @@ pub mod credential_tests {
                 signed_credential: json!(verifiable_credential_jwt),
                 credential_status,
                 status: Status::Issued,
+            }])
+    }
+
+    /// A credential signed elsewhere, such as an imported one, need not come from a template.
+    #[rstest]
+    #[case::from_a_template(Some("template".to_string()))]
+    #[case::without_a_template(None)]
+    #[tokio::test]
+    async fn test_create_signed_credential_records_its_template_if_any(#[case] template_id: Option<String>) {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given_no_previous_events()
+            .when_async(CredentialCommand::CreateSignedCredential {
+                credential_id: credential_id(),
+                template_id: template_id.clone(),
+                signed_credential: json!("signed elsewhere"),
+            })
+            .await
+            .then_expect_events(vec![CredentialEvent::SignedCredentialCreated {
+                credential_id: credential_id(),
+                template_id,
+                signed_credential: json!("signed elsewhere"),
+                notification_id: Some(notification_id()),
             }])
     }
 
@@ -1193,6 +1227,7 @@ pub mod credential_tests {
             .given(vec![
                 CredentialEvent::UnsignedCredentialCreated {
                     credential_id: credential_id.clone(),
+                    template_id: Some("template".to_string()),
                     data: Data {
                         raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
                     },
@@ -1267,6 +1302,7 @@ pub mod credential_tests {
         let events = CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential.clone(),
                 },
@@ -1313,6 +1349,7 @@ pub mod credential_tests {
         let result = CredentialTestFramework::with(Arc::new(IssuanceServices::new(Arc::new(issuer))))
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: None,
                 data: Data {
                     raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
                 },
@@ -1383,6 +1420,7 @@ pub mod credential_tests {
         let events = CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential.clone(),
                 },
@@ -1488,6 +1526,7 @@ pub mod credential_tests {
                         credential_configuration: CredentialConfigurationsSupportedObject| {
             CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
+                template_id: Some("template".to_string()),
                 data: Data { raw },
                 credential_configuration: Box::new(credential_configuration),
                 notification_id: None,
