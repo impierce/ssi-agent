@@ -52,6 +52,9 @@ agent_secret_manager = { path = "../agent_secret_manager", features = [
 ] }
 agent_shared = { path = "../agent_shared", features = ["test_utils"] }
 agent_store = { path = "../agent_store" }
+
+identity-kit = { workspace = true, features = ["in-memory"] }
+
 serial_test = "3.0"
 tokio.workspace = true
 tracing-test.workspace = true

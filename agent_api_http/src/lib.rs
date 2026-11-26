@@ -9,7 +9,7 @@ pub mod utils;
 
 use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
-use agent_identity::state::IdentityState;
+use agent_identity::{document::key_source::KeySource, state::IdentityState};
 use agent_issuance::state::IssuanceState;
 use agent_kms::KmsState;
 use agent_library::state::LibraryState;
@@ -53,6 +53,9 @@ pub struct ApiState {
     pub events_state: Option<Arc<v0::events::EventsState>>,
     /// Only present when the `kms` feature flag is enabled.
     pub kms_state: Option<Arc<KmsState>>,
+    /// The keys `add-key-to-document` adds to the `did:web` document. Only present when the `kms` feature flag is
+    /// enabled; without it, the routes that change the document's keys don't exist.
+    pub key_source: Option<Arc<dyn KeySource>>,
 }
 
 /// Build the top-level API router.
@@ -79,6 +82,7 @@ pub(crate) fn app_with_base_path<E>(
         verification_state,
         events_state,
         kms_state,
+        key_source,
     }: ApiState,
     actor_extractor: Arc<E>,
     application_base_path: &str,
@@ -92,6 +96,13 @@ where
         .unwrap_or_default();
     let app = with_request_logging(
         Router::new()
+            .merge(
+                identity_state
+                    .clone()
+                    .zip(key_source)
+                    .map(v0::identity::document_keys_router)
+                    .unwrap_or_default(),
+            )
             .merge(identity_state.map(v0::identity::router).unwrap_or_default())
             .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
             .merge(

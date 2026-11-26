@@ -367,7 +367,7 @@ impl Aggregate for Credential {
                             &default_did_method.to_string()
                         )
                         .await
-                        .ok())
+                        .map_err(|error| CredentialError::SigningError(error.to_string()))?)
                     }
                     CredentialFormats::DcSdJwt(_) => {
                         sign_dc_sd_jwt(
@@ -1312,6 +1312,43 @@ pub mod credential_tests {
         credential_subject.remove("id");
 
         assert_eq!(json!(credential_subject), unsigned_credential["credentialSubject"]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn a_credential_the_issuer_key_cannot_sign_is_not_issued(credential_id: String, created_at: DateTime<Utc>) {
+        use agent_secret_manager::subject::Subject as IssuerSubject;
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+        use identity_kit::keys::InMemoryKeyStore;
+
+        // A store without the issuer keys, so that every signature fails.
+        let mut issuer = IssuerSubject::test_subject().await;
+        issuer.key_store = Arc::new(InMemoryKeyStore::new());
+
+        let result = CredentialTestFramework::with(Arc::new(IssuanceServices::new(Arc::new(issuer))))
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                data: Data {
+                    raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: None,
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result();
+
+        assert!(matches!(result, Err(CredentialError::SigningError(_))));
     }
 
     /// Decodes a base64url-encoded JSON segment of an SD-JWT.

@@ -1,4 +1,5 @@
 use agent_shared::config::SupportedDidMethod;
+use identity_kit::did::DidUrl;
 use identity_kit::keys::KeyId;
 use jsonwebtoken::Algorithm;
 use thiserror::Error;
@@ -38,4 +39,21 @@ pub enum DocumentError {
     HostError,
     #[error("Invalid domain or origin: {0}")]
     InvalidOriginError(String),
+
+    // Errors of added keys and signing keys
+    /// Keys are only added to `did:web` documents, the only ones that change.
+    #[error("Only `did:web` documents add public keys")]
+    DidWebOnlyError,
+    /// The key of the verification method names no algorithm UniCore signs with.
+    #[error("The key of `{0}` names no supported algorithm")]
+    NoKeyAlgorithmError(DidUrl),
+    /// Only a verification method of the document can be selected to sign.
+    #[error("The document has no verification method `{0}`")]
+    UnknownVerificationMethodError(DidUrl),
+    /// The verification method is one of the configured issuer keys, or isn't in the document.
+    #[error("`{0}` is not the verification method of an added key")]
+    NotAnAddedKeyError(DidUrl),
+    /// The verification method is selected to sign for its algorithm, which would be left without its key.
+    #[error("`{0}` is the selected signing key of its algorithm; select another key or deselect it first")]
+    SelectedSigningKeyError(DidUrl),
 }
