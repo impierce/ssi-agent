@@ -5,7 +5,7 @@ use agent_secret_manager::subject::Subject;
 use agent_shared::config::{config_mut, EventStoreConfig, EventStoreType};
 use axum::{body::Body, extract::Request, http::StatusCode, Router};
 use serde_json::{json, Value};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tower::ServiceExt;
 
 async fn send(app: &Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -23,6 +23,9 @@ async fn application_state() -> ApplicationState {
 /// Starts the application against the given event store, writes through the API, then starts it again on the same
 /// store (as after a restart), and asserts that the persisted events are verified and the data is served again.
 ///
+/// The second start waits for the event-store writer lease until the first application releases it; the first can
+/// not append events afterwards.
+///
 /// The event store is configured through [`config_mut`], since the `test_utils` configuration overrides
 /// `UNICORE__EVENT_STORE__CONNECTION_STRING`. Each file in `tests/` runs in its own process, so this only affects the
 /// configuration of the calling test binary.
@@ -35,20 +38,15 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
 
     let state = application_state().await;
     state.verify_persisted_events().await;
-    let issuance = state.api.issuance_state.as_ref().expect("issuance is enabled");
+    let writer_lease = state
+        .writer_lease
+        .clone()
+        .expect("persistent event stores hold a writer lease");
+    let issuance = state.api.issuance_state.clone().expect("issuance is enabled");
     agent_shared::handlers::public_command_handler(
         "persisted-reissuance",
         &issuance.command.reissuance,
-        agent_issuance::reissuance::command::ReissuanceCommand::CreateReissuance {
-            reissuance_id: "persisted-reissuance".to_owned(),
-            original_credential_id: "original".to_owned(),
-            new_credential_id: "replacement".to_owned(),
-            offer_id: "replacement-offer".to_owned(),
-            credential_configuration_id: "configuration".to_owned(),
-            reason: None,
-            trigger_type: None,
-            triggered_by: None,
-        },
+        create_reissuance("persisted-reissuance"),
     )
     .await
     .unwrap();
@@ -83,8 +81,27 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     assert_eq!(status, StatusCode::CREATED);
     let catalog_id = catalog["id"].as_str().unwrap().to_string();
 
-    // Restart: a new application state on the same event store.
-    let state = application_state().await;
+    // Restart: a new application state on the same event store, which waits for the writer lease.
+    let restart = application_state();
+    tokio::pin!(restart);
+    tokio::select! {
+        _ = &mut restart => panic!("second application started while the writer lease was held"),
+        () = tokio::time::sleep(Duration::from_secs(2)) => {}
+    }
+    writer_lease.release().await;
+    let state = tokio::time::timeout(Duration::from_secs(30), restart)
+        .await
+        .expect("second application did not acquire the released writer lease");
+    assert!(
+        agent_shared::handlers::public_command_handler(
+            "fenced-reissuance",
+            &issuance.command.reissuance,
+            create_reissuance("fenced-reissuance"),
+        )
+        .await
+        .is_err(),
+        "an application without the writer lease appended events"
+    );
     let report = state.event_verification.verify_events().await.unwrap();
     assert!(report.is_compatible(), "{:?}", report.incompatible);
     assert!(report.checked > 0, "no persisted events were verified");
@@ -120,6 +137,19 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         providers,
         json!([{ "providerType": "aws_kms_ambient", "name": "Persisted keys" }])
     );
+}
+
+fn create_reissuance(reissuance_id: &str) -> agent_issuance::reissuance::command::ReissuanceCommand {
+    agent_issuance::reissuance::command::ReissuanceCommand::CreateReissuance {
+        reissuance_id: reissuance_id.to_owned(),
+        original_credential_id: "original".to_owned(),
+        new_credential_id: "replacement".to_owned(),
+        offer_id: "replacement-offer".to_owned(),
+        credential_configuration_id: "configuration".to_owned(),
+        reason: None,
+        trigger_type: None,
+        triggered_by: None,
+    }
 }
 
 async fn assert_reissuance_views(app: &Router) {

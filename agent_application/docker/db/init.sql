@@ -10,6 +10,15 @@ CREATE TABLE events
     PRIMARY KEY (aggregate_type, aggregate_id, sequence)
 );
 
+CREATE TABLE application_leases
+(
+    lease_id      text        NOT NULL,
+    owner_id      text        NOT NULL,
+    fencing_token bigint      NOT NULL,
+    updated_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (lease_id)
+);
+
 CREATE TABLE access_token
 (
     view_id           text                        NOT NULL,
