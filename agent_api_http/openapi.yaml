@@ -3159,7 +3159,6 @@ components:
           type:
           - string
           - 'null'
-          description: The template the credential was created from.
     CredentialExpiry:
       oneOf:
       - type: string
