@@ -36,7 +36,9 @@ pub struct CredentialStatusChecker {
 
 impl CredentialStatusChecker {
     // TODO: in the future it would be nice to have a flag every time it's called or only in the config to choose between strict validation also failing on operational errors or lenient validation as is currently.
-    /// This function is basically a wrapper around `status_at` which allows us to differentiate between operational errors (unable to fetch or decode the status list token) and actual validation failures (credential status is invalid).
+    /// Checks the status read by [`CredentialStatusChecker::status_at`]: a status other than `VALID` fails with
+    /// `CredentialStatusInvalid`, while an operational error (the status list token cannot be fetched or decoded) is
+    /// logged and skipped.
     ///
     /// The status list token is checked against the current time, with `CLOCK_SKEW_LEEWAY`.
     pub async fn check_credential_status(
