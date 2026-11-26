@@ -90,8 +90,6 @@ impl Default for CredentialStatus {
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
-    /// The template the credential was created from.
-    #[serde(default)]
     pub template_id: Option<String>,
     pub notification_id: Option<String>,
     pub data: Option<Data>,

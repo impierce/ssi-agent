@@ -15,7 +15,6 @@ pub enum CredentialEvent {
     // TODO: rename to `DataCredentialCreated`?
     UnsignedCredentialCreated {
         credential_id: String,
-        #[serde(default)]
         template_id: Option<String>,
         data: Data,
         notification_id: Option<String>,
@@ -25,7 +24,6 @@ pub enum CredentialEvent {
     },
     SignedCredentialCreated {
         credential_id: String,
-        #[serde(default)]
         template_id: Option<String>,
         signed_credential: serde_json::Value,
         notification_id: Option<String>,
