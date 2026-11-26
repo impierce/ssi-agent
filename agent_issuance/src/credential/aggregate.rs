@@ -90,6 +90,7 @@ impl Default for CredentialStatus {
 pub struct Credential {
     #[serde(rename = "id")]
     pub credential_id: String,
+    pub template_id: Option<String>,
     pub notification_id: Option<String>,
     pub data: Option<Data>,
     #[schema(schema_with = credential_configurations_supported)]
@@ -127,6 +128,7 @@ impl Aggregate for Credential {
         let events: Vec<Self::Event> = match command {
             CreateUnsignedCredential {
                 credential_id,
+                template_id,
                 data,
                 credential_configuration,
                 expires_at,
@@ -213,6 +215,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![UnsignedCredentialCreated {
                     credential_id,
+                    template_id,
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
@@ -223,6 +226,7 @@ impl Aggregate for Credential {
 
             CreateSignedCredential {
                 credential_id,
+                template_id,
                 signed_credential,
             } => {
                 #[cfg(feature = "test_utils")]
@@ -232,6 +236,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![SignedCredentialCreated {
                     credential_id,
+                    template_id,
                     signed_credential,
                     notification_id: Some(notification_id),
                 }])
@@ -272,7 +277,7 @@ impl Aggregate for Credential {
                     .ok_or(InvalidIssuerDidError)?;
 
                 // Status claim as per the IETF OAuth Token Status List specification.
-                let status_list_url = get_status_list_url(status_list_id)?;
+                let status_list_url = get_status_list_url(status_list_id.clone())?;
 
                 let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
                     status_list_url.to_string(),
@@ -360,7 +365,7 @@ impl Aggregate for Credential {
                             &default_did_method.to_string()
                         )
                         .await
-                        .ok())
+                        .map_err(|error| CredentialError::SigningError(error.to_string()))?)
                     }
                     CredentialFormats::DcSdJwt(_) => {
                         sign_dc_sd_jwt(
@@ -434,12 +439,23 @@ impl Aggregate for Credential {
                     }
                 };
 
+                // Signed again on the same status-list entry, the credential keeps the status it has there. The entry is
+                // matched by list id, since the URL follows the configured base URL.
+                let status = if self.signed.is_some()
+                    && self.credential_status.index == index
+                    && status_list_id_of(&self.credential_status.status_list_url).as_ref() == Some(&status_list_id)
+                {
+                    self.credential_status.status
+                } else {
+                    StatusType::VALID
+                };
+
                 Ok(vec![CredentialSigned {
                     credential_id,
                     signed_credential,
                     credential_status: CredentialStatus {
                         index,
-                        status: StatusType::VALID,
+                        status,
                         status_list_url: status_list_url.to_string(),
                     },
                     status: Status::Issued,
@@ -484,6 +500,7 @@ impl Aggregate for Credential {
         match event {
             UnsignedCredentialCreated {
                 credential_id,
+                template_id,
                 data,
                 credential_configuration,
                 notification_id,
@@ -491,6 +508,7 @@ impl Aggregate for Credential {
                 expires_at,
             } => {
                 self.credential_id = credential_id;
+                self.template_id = template_id;
                 self.data.replace(data);
                 self.credential_configuration = *credential_configuration;
                 self.notification_id = notification_id;
@@ -499,10 +517,12 @@ impl Aggregate for Credential {
             }
             SignedCredentialCreated {
                 credential_id,
+                template_id,
                 signed_credential,
                 notification_id,
             } => {
                 self.credential_id = credential_id;
+                self.template_id = template_id;
                 self.signed.replace(signed_credential);
                 self.notification_id = notification_id;
             }
@@ -999,6 +1019,16 @@ pub fn get_status_list_url(id: String) -> Result<Url, CredentialError> {
     Ok(status_list_url)
 }
 
+/// The identifier of the status list at `status_list_url`, as `get_status_list_url` builds it.
+pub fn status_list_id_of(status_list_url: &str) -> Option<String> {
+    Url::parse(status_list_url)
+        .ok()?
+        .path_segments()?
+        .next_back()
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;
@@ -1072,6 +1102,7 @@ pub mod credential_tests {
             .given_no_previous_events()
             .when_async(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: credential_subject,
                 },
@@ -1081,6 +1112,7 @@ pub mod credential_tests {
             .await
             .then_expect_events(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential,
                 },
@@ -1130,6 +1162,7 @@ pub mod credential_tests {
         CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential,
                 },
@@ -1200,6 +1233,200 @@ pub mod credential_tests {
             }]);
     }
 
+    /// A credential signed elsewhere, such as an imported one, need not come from a template.
+    #[rstest]
+    #[case::from_a_template(Some("template".to_string()))]
+    #[case::without_a_template(None)]
+    #[tokio::test]
+    async fn test_create_signed_credential_records_its_template_if_any(#[case] template_id: Option<String>) {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given_no_previous_events()
+            .when_async(CredentialCommand::CreateSignedCredential {
+                credential_id: credential_id(),
+                template_id: template_id.clone(),
+                signed_credential: json!("signed elsewhere"),
+            })
+            .await
+            .then_expect_events(vec![CredentialEvent::SignedCredentialCreated {
+                credential_id: credential_id(),
+                template_id,
+                signed_credential: json!("signed elsewhere"),
+                notification_id: Some(notification_id()),
+            }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_credential_again_keeps_the_status_of_its_entry(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        // Signed at creation under an earlier base URL of the status lists, then revoked.
+        let revoked_at_old_url = CredentialStatus {
+            index: TESTINDEX,
+            status_list_url: format!("https://old.example.org/status-lists/{TEST_STATUS_LIST_ID}"),
+            status: StatusType::INVALID,
+        };
+        let revoked = CredentialStatus {
+            status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
+                .unwrap()
+                .to_string(),
+            ..revoked_at_old_url.clone()
+        };
+
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![
+                CredentialEvent::UnsignedCredentialCreated {
+                    credential_id: credential_id.clone(),
+                    template_id: Some("template".to_string()),
+                    data: Data {
+                        raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
+                    },
+                    credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                    notification_id: None,
+                    created_at: Some(created_at),
+                    expires_at: None,
+                },
+                CredentialEvent::CredentialSigned {
+                    credential_id: credential_id.clone(),
+                    signed_credential: json!("signed at creation"),
+                    credential_status: CredentialStatus {
+                        status: StatusType::VALID,
+                        ..revoked_at_old_url.clone()
+                    },
+                    status: Status::Issued,
+                },
+                CredentialEvent::CredentialStatusUpdated {
+                    credential_id: credential_id.clone(),
+                    credential_status: revoked_at_old_url,
+                },
+            ])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: true,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .then_expect_events(vec![CredentialEvent::CredentialSigned {
+                credential_id,
+                signed_credential: json!(JWT_VC_JSON_VC1_1_JWT.to_string()),
+                credential_status: revoked,
+                status: Status::Issued,
+            }])
+    }
+
+    #[test]
+    fn status_list_id_of_reads_the_id_get_status_list_url_puts_in() {
+        let url = get_status_list_url("list-1".to_string()).unwrap();
+        assert_eq!(status_list_id_of(url.as_str()), Some("list-1".to_string()));
+        assert_eq!(status_list_id_of(""), None);
+    }
+
+    /// `credential` with the claims of the structured template (nested objects, lists and tables) in place of its own.
+    fn with_structured_claims(mut credential: serde_json::Value) -> serde_json::Value {
+        let claims = agent_library::template::aggregate::test_utils::structured_claims();
+        if credential.get("credentialSubject").is_some() {
+            credential["credentialSubject"] = claims;
+        } else {
+            let vct = credential["vct"].clone();
+            credential = claims;
+            credential["vct"] = vct;
+        }
+        credential
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_jwt_vc_json_credential_keeps_nested_claims(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        let unsigned_credential = with_structured_claims(UNSIGNED_VC1_1_CREDENTIAL.clone());
+
+        let events = CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
+                data: Data {
+                    raw: unsigned_credential.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result()
+            .unwrap();
+
+        let [CredentialEvent::CredentialSigned { signed_credential, .. }] = &events[..] else {
+            panic!("unexpected events: {events:?}");
+        };
+        let payload = decode_segment(signed_credential.as_str().unwrap().split('.').nth(1).unwrap());
+        let mut credential_subject = payload["vc"]["credentialSubject"].as_object().unwrap().clone();
+        // The holder's identifier is added on signing.
+        credential_subject.remove("id");
+
+        assert_eq!(json!(credential_subject), unsigned_credential["credentialSubject"]);
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn a_credential_the_issuer_key_cannot_sign_is_not_issued(credential_id: String, created_at: DateTime<Utc>) {
+        use agent_secret_manager::subject::Subject as IssuerSubject;
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+        use identity_kit::keys::InMemoryKeyStore;
+
+        // A store without the issuer keys, so that every signature fails.
+        let mut issuer = IssuerSubject::test_subject().await;
+        issuer.key_store = Arc::new(InMemoryKeyStore::new());
+
+        let result = CredentialTestFramework::with(Arc::new(IssuanceServices::new(Arc::new(issuer))))
+            .given(vec![CredentialEvent::UnsignedCredentialCreated {
+                credential_id: credential_id.clone(),
+                template_id: None,
+                data: Data {
+                    raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
+                },
+                credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                notification_id: None,
+                created_at: Some(created_at),
+                expires_at: None,
+            }])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id,
+                subject_id: None,
+                overwrite: false,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .inspect_result();
+
+        assert!(matches!(result, Err(CredentialError::SigningError(_))));
+    }
+
     /// Decodes a base64url-encoded JSON segment of an SD-JWT.
     fn decode_segment(segment: &str) -> serde_json::Value {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -1222,6 +1449,17 @@ pub mod credential_tests {
         "vc+sd-jwt"
     )]
     #[case::elm_sd_jwt(UNSIGNED_ELM_CREDENTIAL.clone(), ELM_SD_JWT_CREDENTIAL_CONFIGURATION.clone(), "vc+sd-jwt")]
+    // Nested objects, lists and tables are each disclosed as a whole, with the top-level claim that holds them.
+    #[case::dc_sd_jwt_structured(
+        with_structured_claims(UNSIGNED_DC_SD_JWT_CREDENTIAL.clone()),
+        DC_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "dc+sd-jwt"
+    )]
+    #[case::vc2_sd_jwt_structured(
+        with_structured_claims(UNSIGNED_VC2_SD_JWT_CREDENTIAL.clone()),
+        VC2_SD_JWT_CREDENTIAL_CONFIGURATION.clone(),
+        "vc+sd-jwt"
+    )]
     #[serial_test::serial]
     #[tokio::test]
     async fn test_sign_sd_jwt_credential(
@@ -1237,6 +1475,7 @@ pub mod credential_tests {
         let events = CredentialTestFramework::with(IssuanceServices::default().await)
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: unsigned_credential.clone(),
                 },
@@ -1342,6 +1581,7 @@ pub mod credential_tests {
                         credential_configuration: CredentialConfigurationsSupportedObject| {
             CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
+                template_id: Some("template".to_string()),
                 data: Data { raw },
                 credential_configuration: Box::new(credential_configuration),
                 notification_id: None,

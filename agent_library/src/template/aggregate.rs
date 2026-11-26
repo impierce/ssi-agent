@@ -5,14 +5,15 @@ use cqrs_es::{event_sink::EventSink, Aggregate};
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-pub use super::open_badges::open_badges_required_leaf_paths;
 use super::open_badges::{
     ensure_schema_required_keys, validate_open_badges_required_properties, validate_open_badges_schema_properties,
 };
+pub use super::open_badges::{is_open_badges_standard_property, open_badges_required_leaf_paths};
 use super::{
     command::TemplateCommand, error::TemplateError, event::TemplateEvent, origin::TemplateOrigin,
     public_content::PublicTemplateContent,
 };
+use crate::json_schema_validation::template_schema_validator;
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, utoipa::ToSchema)]
@@ -148,7 +149,7 @@ pub enum FormFieldType {
 #[serde(rename_all = "camelCase")]
 pub struct PropertyAttribute {
     pub selectively_disclosable: bool,
-    /// Whether this property is non-removable — its leaf field must remain present in the schema
+    /// Whether this property is non-removable — it must remain present in the schema
     /// and cannot be removed by the caller. Determined by the data model; system-controlled only.
     /// For OpenBadges 3.0 templates, only the required standard fields are non-removable.
     /// Defaults to `false`.
@@ -387,34 +388,46 @@ impl Aggregate for Template {
 }
 
 fn validate_json_schema(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    jsonschema::validator_for(schema)
+    template_schema_validator(schema)
         .map(|_| ())
-        .map_err(|e| TemplateError::InvalidSchema(e.to_string()))
+        .map_err(TemplateError::InvalidSchema)?;
+
+    // The schema describes the claims of a credential, which are an object. Arrays belong to its properties.
+    if is_array_schema(schema) {
+        return Err(TemplateError::InvalidSchema(
+            "The schema of a template describes an object and cannot be an array. \
+             Define arrays as properties of the schema."
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
-/// Validates that no field in the schema (at any nesting level) has `"type": "array"`.
+/// Whether a schema node describes an array: its `type` is `"array"`, or a list of types that has it.
+pub fn is_array_schema(schema: &serde_json::Value) -> bool {
+    match schema.get("type") {
+        Some(serde_json::Value::String(r#type)) => r#type == "array",
+        Some(serde_json::Value::Array(types)) => types.iter().any(|r#type| r#type.as_str() == Some("array")),
+        _ => false,
+    }
+}
+
+/// Validates that no property of an Open Badges template schema (at any nesting level) has `"type": "array"`.
 ///
-/// Arrays are not supported in template schemas at this time. Supporting arrays would require
-/// a strategy for addressing individual array item fields in `schemaPropertiesAttributes` and
-/// in SD-JWT claim paths, which is deferred to a future release.
-fn validate_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    validate_no_array_types_recursive(schema)
-}
-
-fn validate_no_array_types_recursive(schema: &serde_json::Value) -> Result<(), TemplateError> {
-    if let Some(type_val) = schema.get("type").and_then(|t| t.as_str()) {
-        if type_val == "array" {
-            return Err(TemplateError::InvalidSchema(
-                "Array types are not supported in template schemas. \
-                 Define only object and scalar fields."
-                    .to_string(),
-            ));
-        }
+/// The shape of an Open Badges credential is given by the standard, and UniCore checks the schema against it property
+/// by property. Templates of the other data models may hold arrays, see ADR 0012.
+fn validate_open_badges_schema_no_array_types(schema: &serde_json::Value) -> Result<(), TemplateError> {
+    if is_array_schema(schema) {
+        return Err(TemplateError::InvalidSchema(
+            "Array types are not supported in Open Badges template schemas. \
+             Define only object and scalar fields."
+                .to_string(),
+        ));
     }
 
     if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
         for value in properties.values() {
-            validate_no_array_types_recursive(value)?;
+            validate_open_badges_schema_no_array_types(value)?;
         }
     }
 
@@ -703,9 +716,9 @@ impl Template {
 
                 if let Some(ref s) = *schema {
                     validate_json_schema(s)?;
-                    validate_schema_no_array_types(s)?;
 
                     if data_model == DataModel::OpenBadges3_0 {
+                        validate_open_badges_schema_no_array_types(s)?;
                         validate_open_badges_schema_properties(s)?;
                     }
                 }
@@ -894,9 +907,9 @@ impl Template {
                 ensure_template_editable(&self.status)?;
 
                 validate_json_schema(&schema)?;
-                validate_schema_no_array_types(&schema)?;
 
                 if self.data_model == DataModel::OpenBadges3_0 {
+                    validate_open_badges_schema_no_array_types(&schema)?;
                     validate_open_badges_schema_properties(&schema)?;
                     validate_open_badges_required_properties(&schema)?;
                 }
@@ -910,11 +923,11 @@ impl Template {
                 // Enforce non-removable properties: reject if any property with non_removable=true
                 // is missing from the new schema.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
-                    let new_leaf_paths = collect_leaf_paths(&schema);
+                    let new_property_paths = collect_property_paths(&schema);
                     let immutable_missing: Vec<&str> = existing_attrs
                         .iter()
                         .filter(|(_, attr)| attr.non_removable)
-                        .filter(|(k, _)| !new_leaf_paths.contains(*k))
+                        .filter(|(k, _)| !new_property_paths.contains(*k))
                         .map(|(k, _)| k.as_str())
                         .collect();
 
@@ -939,10 +952,10 @@ impl Template {
 
                 // Prune schema_properties_attributes whose keys no longer exist in the new schema.
                 if let Some(ref existing_attrs) = self.schema_properties_attributes {
-                    let new_leaf_paths = collect_leaf_paths(&schema);
+                    let new_property_paths = collect_property_paths(&schema);
                     let pruned: HashMap<String, PropertyAttribute> = existing_attrs
                         .iter()
-                        .filter(|(k, _)| new_leaf_paths.contains(*k))
+                        .filter(|(k, _)| new_property_paths.contains(*k))
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
 
@@ -1114,26 +1127,31 @@ fn validate_expiration(expiration: &Expiration) -> Result<(), TemplateError> {
     }
 }
 
-/// Recursively collects JSON Pointer paths (RFC 6901) to all leaf fields in a JSON Schema.
+/// Collects the JSON Pointer paths (RFC 6901) of all leaf properties in a JSON Schema: `/fieldName`, `/parent/child`.
 ///
-/// Rules:
-/// - Object nodes with defined, non-empty sub-properties are NOT added themselves; only their
-///   leaf descendants are added.
-/// - Object nodes with no defined sub-properties (or empty `properties`) are treated as leaves.
-/// - Arrays are not currently supported and must be rejected separately.
-/// - Paths follow RFC 6901 format: `/fieldName`, `/parent/child`, `/a/b/c`.
-///
-/// This matches how `schemaPropertiesAttributes` keys must be addressed, and maps 1:1 to
-/// SD-JWT claim paths without any translation step.
+/// - An object with defined, non-empty sub-properties is not a leaf; its descendants are collected instead.
+/// - An object without sub-properties is a leaf.
+/// - An array is a leaf, whatever else its schema holds: paths never descend into `items`, and `properties` say
+///   nothing about an array.
 fn collect_leaf_paths(schema: &serde_json::Value) -> std::collections::HashSet<String> {
     let mut paths = std::collections::HashSet::new();
-    collect_leaf_paths_with_prefix(schema, "", &mut paths);
+    collect_paths_with_prefix(schema, "", false, &mut paths);
     paths
 }
 
-fn collect_leaf_paths_with_prefix(
+/// Collects the JSON Pointer paths (RFC 6901) of all properties in a JSON Schema: the leaves of
+/// [`collect_leaf_paths`] and the objects that hold them. These are the paths a `schemaPropertiesAttributes` key may
+/// address: a leaf, or an object or array as a whole (ADR 0012).
+fn collect_property_paths(schema: &serde_json::Value) -> std::collections::HashSet<String> {
+    let mut paths = std::collections::HashSet::new();
+    collect_paths_with_prefix(schema, "", true, &mut paths);
+    paths
+}
+
+fn collect_paths_with_prefix(
     schema: &serde_json::Value,
     prefix: &str,
+    include_objects: bool,
     paths: &mut std::collections::HashSet<String>,
 ) {
     let properties = match schema.get("properties").and_then(|p| p.as_object()) {
@@ -1146,16 +1164,16 @@ fn collect_leaf_paths_with_prefix(
         let escaped_key = key.replace('~', "~0").replace('/', "~1");
         let path = format!("{}/{}", prefix, escaped_key);
 
-        // A node is a "nested object" only when it has defined, non-empty sub-properties.
-        // Such nodes are not added themselves — only their leaf descendants are.
-        let has_sub_properties = value
-            .get("properties")
-            .and_then(|p| p.as_object())
-            .is_some_and(|p| !p.is_empty());
+        let has_sub_properties = !is_array_schema(value)
+            && value
+                .get("properties")
+                .and_then(|p| p.as_object())
+                .is_some_and(|p| !p.is_empty());
 
         if has_sub_properties {
-            collect_leaf_paths_with_prefix(value, &path, paths);
-        } else {
+            collect_paths_with_prefix(value, &path, include_objects, paths);
+        }
+        if include_objects || !has_sub_properties {
             paths.insert(path);
         }
     }
@@ -1165,14 +1183,14 @@ fn validate_schema_properties_attributes(
     schema: &Option<serde_json::Value>,
     attributes: &HashMap<String, PropertyAttribute>,
 ) -> Result<(), TemplateError> {
-    let leaf_paths = match schema {
-        Some(s) => collect_leaf_paths(s),
+    let property_paths = match schema {
+        Some(s) => collect_property_paths(s),
         None => std::collections::HashSet::new(),
     };
 
     let mut invalid_keys: Vec<&str> = attributes
         .keys()
-        .filter(|k| !leaf_paths.contains(*k))
+        .filter(|k| !property_paths.contains(*k))
         .map(|k| k.as_str())
         .collect();
 
@@ -1321,5 +1339,25 @@ pub mod test_utils {
             },
         );
         Some(config)
+    }
+
+    /// A template with nested objects, lists and tables as a form builder writes it, and claims that satisfy it:
+    /// `schema`, `schemaPropertiesAttributes` and `claims`.
+    fn structured_template_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!("structured_template_fixture.json"))
+            .expect("structured_template_fixture.json must be valid JSON")
+    }
+
+    pub fn structured_schema() -> serde_json::Value {
+        structured_template_fixture()["schema"].clone()
+    }
+
+    pub fn structured_schema_properties_attributes() -> HashMap<String, PropertyAttribute> {
+        serde_json::from_value(structured_template_fixture()["schemaPropertiesAttributes"].clone())
+            .expect("the fixture's attributes must be property attributes")
+    }
+
+    pub fn structured_claims() -> serde_json::Value {
+        structured_template_fixture()["claims"].clone()
     }
 }

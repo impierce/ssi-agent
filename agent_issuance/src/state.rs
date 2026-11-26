@@ -11,6 +11,7 @@ use shared_kernel::view_repository::DynViewRepository;
 use std::sync::Arc;
 use tracing::{debug, info};
 
+use crate::application::signing_at_creation::{SignOnRedemption, SigningAtCreationPolicy};
 use crate::credential::aggregate::Credential;
 use crate::credential::views::all_credentials::AllCredentialsView;
 use crate::credential::views::CredentialView;
@@ -82,6 +83,8 @@ impl QueryOperation for AllPublicOffersView {
 #[derive(Clone)]
 pub struct IssuanceState {
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
+    /// Which templates' Credentials are signed when they are created. None by default.
+    pub signing_at_creation: Arc<dyn SigningAtCreationPolicy>,
     pub command: CommandHandlers,
     pub query: Queries,
     pub subject: Arc<Subject>,
@@ -280,7 +283,7 @@ pub async fn load_server_metadata(state: &IssuanceState) -> anyhow::Result<()> {
                     ..Default::default()
                 }),
                 credential_issuer_metadata: Box::new(CredentialIssuerMetadata {
-                    credential_issuer: public_url.clone(),
+                    credential_issuer: public_url.clone().into(),
                     credential_endpoint: public_url.append_path_segment("openid4vci/credential"),
                     nonce_endpoint: Some(public_url.append_path_segment("openid4vci/nonce")),
                     display,
@@ -414,6 +417,7 @@ pub async fn issuance_state<CCB: CqrsComponentBuilder>(
 
     IssuanceState {
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
+        signing_at_creation: Arc::new(SignOnRedemption),
         command: CommandHandlers {
             credential: credential_command_handler,
             reissuance: reissuance_command_handler,

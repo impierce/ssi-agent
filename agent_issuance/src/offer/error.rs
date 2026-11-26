@@ -34,4 +34,6 @@ pub enum OfferError {
     UnknownCredentialConfiguration(String),
     #[error("Credential identifier not supported")]
     UnsupportedCredentialIdentifierError,
+    #[error("The Credential Offer belongs to another holder")]
+    HolderMismatchError,
 }

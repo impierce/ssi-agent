@@ -1,5 +1,6 @@
 use crate::credential::aggregate::CredentialExpiry;
 use agent_library::{
+    json_schema_validation::template_schema_validator,
     queries,
     state::LibraryState,
     template::aggregate::{Expiration, Status, Template},
@@ -62,8 +63,7 @@ pub fn validate_credential_against_template(
 ) -> Result<(), TemplateIssuanceError> {
     if let Some(schema) = template.schema.as_ref() {
         let data = credential.get("credentialSubject").unwrap_or(credential);
-        let validator =
-            jsonschema::validator_for(schema).map_err(|e| TemplateIssuanceError::InvalidSchema(e.to_string()))?;
+        let validator = template_schema_validator(schema).map_err(TemplateIssuanceError::InvalidSchema)?;
         let (violations, descriptions): (Vec<SchemaViolation>, Vec<String>) = validator
             .iter_errors(data)
             .enumerate()
@@ -148,5 +148,74 @@ pub fn validate_expiry_within_template_deadline(
         (_, CredentialExpiry::Fixed(limit)) => Err(TemplateIssuanceError::ExpirationExceedsTemplateLimit(
             limit.to_rfc3339(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_library::template::aggregate::test_utils::{structured_claims, structured_schema};
+    use rstest::rstest;
+    use serde_json::json;
+
+    /// A stored schema that refers to another document, such as one saved before these were refused, validates no
+    /// credential.
+    #[test]
+    fn schema_referring_to_another_document_validates_nothing() {
+        let template = Template {
+            schema: Box::new(Some(json!({
+                "type": "object",
+                "properties": { "name": { "$ref": "https://schemas.example.org/name.json" } }
+            }))),
+            ..Default::default()
+        };
+
+        let error = validate_credential_against_template(&json!({ "name": "Ferris" }), &template).unwrap_err();
+
+        assert!(
+            matches!(&error, TemplateIssuanceError::InvalidSchema(message)
+                if message.ends_with("a template schema cannot refer to another document")),
+            "{error}"
+        );
+    }
+
+    fn structured_template() -> Template {
+        Template {
+            schema: Box::new(Some(structured_schema())),
+            ..Default::default()
+        }
+    }
+
+    #[rstest]
+    #[case::flat(structured_claims())]
+    #[case::under_credential_subject(json!({ "credentialSubject": structured_claims() }))]
+    fn claims_with_nested_objects_lists_and_tables_satisfy_their_template(#[case] credential: Value) {
+        assert!(validate_credential_against_template(&credential, &structured_template()).is_ok());
+    }
+
+    /// A violation inside an object, a list or a table names the place it is at.
+    #[rstest]
+    #[case::required_in_object(|claims: &mut Value| { claims["Address"].as_object_mut().unwrap().remove("Street"); }, "/Address")]
+    #[case::type_in_nested_object(|claims: &mut Value| claims["Address"]["Coordinates"]["Latitude"] = json!(51.89), "/Address/Coordinates/Latitude")]
+    #[case::empty_required_list(|claims: &mut Value| claims["Skills"] = json!([]), "/Skills")]
+    #[case::too_many_items(|claims: &mut Value| claims["Skills"] = json!(["a", "b", "c", "d", "e", "f"]), "/Skills")]
+    #[case::type_of_list_item(|claims: &mut Value| claims["Skills"][1] = json!(7), "/Skills/1")]
+    #[case::fixed_list(|claims: &mut Value| claims["Accreditations"] = json!(["https://other.example.com"]), "/Accreditations")]
+    #[case::required_in_list_item(|claims: &mut Value| { claims["Work experience"][1].as_object_mut().unwrap().remove("Employer"); }, "/Work experience/1")]
+    #[case::type_in_list_in_list_item(|claims: &mut Value| claims["Work experience"][0]["Roles"][0] = json!(true), "/Work experience/0/Roles/0")]
+    #[case::type_of_table_cell(|claims: &mut Value| claims["Completed classes"][1]["Code"] = json!(1029), "/Completed classes/1/Code")]
+    #[case::table_that_is_no_array(|claims: &mut Value| claims["Completed classes"] = json!({ "Code": "K0303" }), "/Completed classes")]
+    fn violation_in_nested_claims_names_its_path(#[case] break_claims: fn(&mut Value), #[case] path: &str) {
+        let mut claims = structured_claims();
+        break_claims(&mut claims);
+
+        let Err(TemplateIssuanceError::SchemaValidation { violations, .. }) =
+            validate_credential_against_template(&claims, &structured_template())
+        else {
+            panic!("the claims were accepted");
+        };
+
+        let paths: Vec<&str> = violations.iter().map(|violation| violation.path.as_str()).collect();
+        assert_eq!(paths, vec![path]);
     }
 }

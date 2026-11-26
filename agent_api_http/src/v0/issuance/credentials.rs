@@ -7,6 +7,7 @@ use crate::API_VERSION;
 pub use agent_issuance::application::template_issuance::SchemaViolation;
 use agent_issuance::application::{
     credential_offer::create_credential_offer_command,
+    signing_at_creation,
     template_issuance::{published_template, template_credential_expiry, validate_credential_against_template},
 };
 use agent_issuance::status_list::command::StatusListCommand;
@@ -227,6 +228,7 @@ struct ResolvedTemplate {
     template: Template,
     credential_configuration: CredentialConfigurationsSupportedObject,
     authorization: Authorization,
+    signs_at_creation: bool,
 }
 
 /// Loads the template and its credential configuration, rejecting templates that cannot issue.
@@ -257,10 +259,13 @@ async fn resolve_template(
             .finish()
     })?;
 
+    let signs_at_creation = state.signing_at_creation.signs_at_creation(template_id).await;
+
     Ok(ResolvedTemplate {
         template,
         credential_configuration,
         authorization,
+        signs_at_creation,
     })
 }
 
@@ -299,6 +304,7 @@ impl ResolvedTemplate {
 
         Ok(CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.to_owned(),
+            template_id: Some(self.template.template_id.clone()),
             data: Data {
                 raw: credential.clone(),
             },
@@ -325,6 +331,7 @@ impl ResolvedTemplate {
 
         Ok(CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.to_owned(),
+            template_id: Some(self.template.template_id.clone()),
             signed_credential: credential.clone(),
         })
     }
@@ -352,6 +359,8 @@ struct ValidatedCredential {
     credential_id: String,
     offer_id: String,
     create_credential: CredentialCommand,
+    /// Whether the credential is signed, and given its status-list index, once it is created.
+    sign_at_creation: bool,
     create_offer: OfferCommand,
     add_to_offer: OfferCommand,
     send_offer: Option<OfferCommand>,
@@ -366,8 +375,9 @@ struct Issued {
     email_requested: Option<bool>,
 }
 
-/// Creates the credential, creates its offer (or, if allowed, reuses an existing one), adds the
-/// credential to the offer and, when requested, sends the offer.
+/// Creates the credential, signs it when its template asks for that, creates its offer (or, if
+/// allowed, reuses an existing one), adds the credential to the offer and, when requested, sends the
+/// offer.
 ///
 /// On failure, returns what had been created up to that point alongside the error, so callers can
 /// report it; events cannot be rolled back.
@@ -381,6 +391,7 @@ async fn execute(
         credential_id,
         offer_id,
         create_credential,
+        sign_at_creation,
         create_offer,
         add_to_offer,
         send_offer,
@@ -407,6 +418,12 @@ async fn execute(
         .await
     );
     issued.credential_id = Some(credential_id.clone());
+
+    if sign_at_creation {
+        attempt!(signing_at_creation::sign_at_creation(state, &credential_id)
+            .await
+            .map_err(IntoApiErrorExt::into_api_error));
+    }
 
     let offer_exists = reuse_existing_offer
         && attempt!(
@@ -515,6 +532,7 @@ pub(crate) async fn credentials(
         credential_id: credential_id.clone(),
         offer_id: request.offer_id.clone(),
         create_credential,
+        sign_at_creation: !is_signed && resolved.signs_at_creation,
         create_offer: resolved.create_offer_command(&request.offer_id, None),
         add_to_offer: resolved.add_to_offer_command(&request.offer_id, &credential_id),
         send_offer: None,
@@ -731,6 +749,7 @@ fn validate_row(
         credential_id,
         offer_id,
         create_credential,
+        sign_at_creation: resolved.signs_at_creation,
         send_offer,
     })
 }
@@ -2146,6 +2165,99 @@ pub mod tests {
         assert_eq!(credential_count(&mut app).await, 1);
     }
 
+    /// A template with nested objects, lists and tables is created over the API as a form builder writes it, and
+    /// issues credentials whose claims have that shape.
+    #[tokio::test]
+    async fn test_template_with_nested_objects_lists_and_tables_issues_credentials() {
+        use agent_library::template::aggregate::test_utils::{
+            structured_claims, structured_schema, structured_schema_properties_attributes,
+        };
+
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+
+        let response = crate::v0::library::router(library_state.clone())
+            .call(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri(format!("{API_VERSION}/create-new-template"))
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({
+                            "title": "Diploma",
+                            "dataModel": DataModel::W3CVcDataModelV2_0,
+                            "holderType": HolderType::Individual,
+                            "status": Status::Published,
+                            "visibility": Visibility::Private,
+                            "type": ["VerifiableCredential"],
+                            "schema": structured_schema(),
+                            "schemaPropertiesAttributes": structured_schema_properties_attributes(),
+                            "holderAuthorization": { "pre_authorized": true }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let template = json_body(response).await;
+        assert_eq!(template["schema"], structured_schema());
+        assert_eq!(
+            template["schemaPropertiesAttributes"],
+            json!(structured_schema_properties_attributes())
+        );
+
+        let mut app = router((issuance_state.clone(), library_state));
+        let mut without_employer = structured_claims();
+        without_employer["Work experience"][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("Employer");
+        let response = batch_request(
+            &mut app,
+            CREATE_BATCH,
+            &json!({
+                "templateId": template["id"],
+                "credentials": [
+                    { "claims": structured_claims() },
+                    { "claims": without_employer },
+                ]
+            }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::MULTI_STATUS);
+        let body = json_body(response).await;
+        let results = body.as_array().unwrap();
+
+        assert_created(&mut app, &issuance_state, &results[0], 0).await;
+        let credential_id = results[0]["credentialId"].as_str().unwrap();
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credentials/{credential_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            json_body(response).await["data"]["raw"]["credentialSubject"],
+            structured_claims()
+        );
+
+        assert_eq!(results[1]["status"], 422);
+        assert_eq!(results[1]["error"]["title"], "Credential Schema Validation Failed");
+        let violations = results[1]["error"]["violations"].as_array().unwrap();
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0]["path"], "/Work experience/1");
+        assert!(violations[0]["message"].as_str().unwrap().contains("Employer"));
+    }
+
     #[tokio::test]
     async fn test_create_batch_reports_what_a_failing_row_had_created() {
         let mut issuance_state =
@@ -2372,6 +2484,101 @@ pub mod tests {
                 .message()
                 .unwrap_or_default()
                 .contains("The template requires an expiration date not after 2030-01-01T00:00:00+00:00"));
+        }
+    }
+
+    /// Signs the Credentials of one template at creation.
+    struct SignsTemplateAtCreation(String);
+
+    #[async_trait::async_trait]
+    impl agent_issuance::application::signing_at_creation::SigningAtCreationPolicy for SignsTemplateAtCreation {
+        async fn signs_at_creation(&self, template_id: &str) -> bool {
+            template_id == self.0
+        }
+    }
+
+    async fn app_signing_at_creation(signs_at_creation: bool) -> (Router, String) {
+        let mut issuance_state =
+            issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await;
+        // `create_test_template` creates a template with this id.
+        if signs_at_creation {
+            issuance_state.signing_at_creation = Arc::new(SignsTemplateAtCreation(TEMPLATE_ID.to_string()));
+        }
+        let issuance_state = Arc::new(issuance_state);
+        initialize(&issuance_state).await.unwrap();
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template(&library_state).await;
+        assert_eq!(template_id, TEMPLATE_ID);
+
+        (router((issuance_state, library_state)), template_id)
+    }
+
+    async fn credential_by_id(app: &mut Router, credential_id: &str) -> Value {
+        let response = app
+            .call(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri(format!("{API_VERSION}/credentials/{credential_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        json_body(response).await
+    }
+
+    fn assert_signed_at_creation(credential: &Value) {
+        assert_eq!(credential["status"], "Issued");
+        assert!(credential["signed"].is_string(), "{credential}");
+        assert!(credential["credential_status"]["status_list_url"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("/{}", agent_shared::config::TEST_STATUS_LIST_ID)));
+    }
+
+    #[tokio::test]
+    async fn test_credentials_endpoint_records_the_template_and_signs_at_creation_when_the_policy_asks() {
+        for signs_at_creation in [false, true] {
+            let (mut app, template_id) = app_signing_at_creation(signs_at_creation).await;
+
+            let credential_endpoint = credentials_with_template(&mut app, &template_id).await;
+            let credential_id = credential_endpoint.rsplit('/').next().unwrap();
+            let credential = credential_by_id(&mut app, credential_id).await;
+            assert_eq!(
+                credential["template_id"], TEMPLATE_ID,
+                "the credential records its template"
+            );
+
+            if signs_at_creation {
+                assert_signed_at_creation(&credential);
+            } else {
+                assert_eq!(credential["status"], "Pending");
+                assert!(credential["signed"].is_null());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_batch_signs_at_creation_when_the_policy_asks() {
+        let (mut app, template_id) = app_signing_at_creation(true).await;
+
+        let response = batch_request(
+            &mut app,
+            CREATE_BATCH,
+            &json!({
+                "templateId": template_id,
+                "expiresAt": "never",
+                "credentials": [valid_row(), valid_row()]
+            }),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        for result in json_body(response).await.as_array().unwrap() {
+            let credential = credential_by_id(&mut app, result["credentialId"].as_str().unwrap()).await;
+            assert_signed_at_creation(&credential);
+            assert!(result["credentialOffer"].is_string(), "the offer is still created");
         }
     }
 }

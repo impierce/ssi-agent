@@ -1,6 +1,6 @@
 use agent_api_http::v0::holder::router;
 use agent_holder::{holder_state, services::HolderServices};
-use agent_secret_manager::{service::Service as _, subject::Subject};
+use agent_secret_manager::service::Service as _;
 use agent_store::in_memory::InMemory;
 use axum::{
     body::{to_bytes, Body},
@@ -12,7 +12,6 @@ use http::StatusCode;
 use serde_json::{json, Value};
 use serial_test::serial;
 use std::sync::Arc;
-use tokio::sync::OnceCell;
 use tower::ServiceExt;
 use wiremock::{
     matchers::{method, path},
@@ -21,22 +20,8 @@ use wiremock::{
 
 const CREDENTIAL_CONFIGURATION_ID: &str = "badge";
 
-static SUBJECT: OnceCell<Arc<Subject>> = OnceCell::const_new();
-
-async fn test_subject() -> Arc<Subject> {
-    SUBJECT
-        .get_or_init(|| async { Arc::new(Subject::test_subject().await) })
-        .await
-        .clone()
-}
-
 async fn setup() -> Router {
-    let state = holder_state(
-        &InMemory,
-        Arc::new(HolderServices::new(test_subject().await)),
-        &Default::default(),
-    )
-    .await;
+    let state = holder_state(&InMemory, HolderServices::default().await, &Default::default()).await;
 
     router(Arc::new(state))
 }

@@ -5,6 +5,10 @@ use thiserror::Error;
 pub enum StatusListError {
     #[error("Status list aggregate not found")]
     AggregateNotFound,
+    #[error("Index `{0}` is already used")]
+    IndexAlreadyUsed(usize),
+    #[error("Index `{0}` is outside the status list")]
+    IndexOutOfRange(usize),
     #[error("Failed to set index `{0}` due to error: {1}")]
     FailedToSetIndex(usize, String),
     #[error("Failed to encode the status list token as JWT.")]

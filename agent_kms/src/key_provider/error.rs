@@ -13,6 +13,12 @@ pub enum KeyProviderError {
     MissingName,
     #[error("Another key provider is already named `{0}`")]
     NameTaken(String),
+    /// The provider type needs settings, and none were given.
+    #[error("A `{0}` key provider needs its settings")]
+    MissingSettings(KeyProviderType),
+    /// The settings are for another provider type, or the provider type takes none.
+    #[error("These settings are not for a `{0}` key provider")]
+    WrongSettings(KeyProviderType),
 }
 
 impl PartialEq for KeyProviderError {

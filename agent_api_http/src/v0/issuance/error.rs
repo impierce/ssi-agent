@@ -3,6 +3,7 @@ use crate::{
     DOCUMENTATION_URL,
 };
 use agent_issuance::application::credential_offer::PrepareOfferError;
+use agent_issuance::application::signing_at_creation::SigningAtCreationError;
 use agent_issuance::{
     application::access_token_validation_service::AccessTokenValidationError,
     application::template_issuance::TemplateIssuanceError,
@@ -72,7 +73,7 @@ impl IntoApiErrorExt for CredentialError {
             // `/openid4vci/credential` endpoint
             InvalidCredentialDataError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             InvalidIssuerDidError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
-            KeyIdError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            KeyIdError | SigningError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -118,6 +119,7 @@ impl IntoApiErrorExt for OfferError {
             MissingCredentialConfigurationIdsError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnknownCredentialConfiguration(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             UnsupportedCredentialIdentifierError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            HolderMismatchError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -154,6 +156,8 @@ impl IntoApiErrorExt for StatusListError {
         match self {
             AggregateNotFound => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             FailedToSetIndex(_, _) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            IndexAlreadyUsed(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
+            IndexOutOfRange(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             JwtEncodeError => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListEncodingError(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
             StatusListNotFound(_) => ApiError::new(StatusCode::INTERNAL_SERVER_ERROR),
@@ -200,6 +204,7 @@ impl IntoApiErrorExt for ReissuanceServiceError {
             ReissuanceServiceError::Offer(error) => error.into_api_error(),
             ReissuanceServiceError::Reissuance(error) => error.into_api_error(),
             ReissuanceServiceError::Template(error) => error.into_api_error(),
+            ReissuanceServiceError::SigningAtCreation(error) => error.into_api_error(),
             ReissuanceServiceError::OriginalCredentialNotIssued => ApiError::builder(StatusCode::BAD_REQUEST)
                 .title("Original Credential Not Issued")
                 .type_url(type_url("issuance#original-credential-not-issued"))
@@ -210,6 +215,17 @@ impl IntoApiErrorExt for ReissuanceServiceError {
                 .type_url(type_url("issuance#credential-configuration-mismatch"))
                 .message("The requested configuration must match the original credential type.")
                 .finish(),
+        }
+    }
+}
+
+impl IntoApiErrorExt for SigningAtCreationError {
+    fn into_api_error(self) -> ApiError {
+        match self {
+            Self::IndexAllocation(_) => ApiError::builder(StatusCode::INTERNAL_SERVER_ERROR)
+                .source(self)
+                .finish(),
+            Self::Credential(error) => error.into_api_error(),
         }
     }
 }
@@ -368,7 +384,7 @@ impl IntoPublicError for CredentialError {
             InvalidCredentialStatus => PublicError::InternalServerError,
             BuildCredentialError(_) => PublicError::InternalServerError,
             InvalidIssuerDidError => PublicError::InternalServerError,
-            KeyIdError => PublicError::InternalServerError,
+            KeyIdError | SigningError(_) => PublicError::InternalServerError,
             NoStatusListEntry => PublicError::InternalServerError,
         }
     }
@@ -409,6 +425,9 @@ impl IntoPublicError for OfferError {
             UnsupportedCredentialIdentifierError => {
                 PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::UnknownCredentialIdentifier))
             }
+            HolderMismatchError => {
+                PublicError::CredentialError(OID4VCError::new(CredentialErrorResponse::CredentialRequestDenied))
+            }
             // Internal errors that shouldn't reach the public API
             SendCredentialOfferError(_) | CredentialOfferNotAcceptedError(_) => PublicError::InternalServerError,
             UnsupportedTokenRequestGrantTypeError => PublicError::InternalServerError,
@@ -443,6 +462,8 @@ impl IntoPublicError for StatusListError {
         match self {
             AggregateNotFound => PublicError::InternalServerError,
             FailedToSetIndex(_, _) => PublicError::InternalServerError,
+            IndexAlreadyUsed(_) => PublicError::InternalServerError,
+            IndexOutOfRange(_) => PublicError::InternalServerError,
             JwtEncodeError => PublicError::InternalServerError,
             StatusListEncodingError(_) => PublicError::InternalServerError,
             StatusListNotFound(_) => PublicError::NotFoundError,
@@ -567,6 +588,11 @@ pub mod tests {
                 None,
             ),
             (CredentialError::KeyIdError, StatusCode::INTERNAL_SERVER_ERROR, None),
+            (
+                CredentialError::SigningError("error".to_string()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            ),
         ]);
     }
 
@@ -600,6 +626,7 @@ pub mod tests {
                 OfferError::MissingCredentialConfigurationIdsError,
                 OfferError::UnknownCredentialConfiguration("id".to_string()),
                 OfferError::UnsupportedCredentialIdentifierError,
+                OfferError::HolderMismatchError,
             ]
             .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None)),
         );
@@ -702,6 +729,11 @@ pub mod tests {
                 Some("unknown_credential_identifier"),
             ),
             (
+                OfferError::HolderMismatchError,
+                StatusCode::BAD_REQUEST,
+                Some("credential_request_denied"),
+            ),
+            (
                 OfferError::UnsupportedTokenRequestGrantTypeError,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 None,
@@ -728,6 +760,7 @@ pub mod tests {
                 CredentialError::BuildCredentialError("error".to_string()),
                 CredentialError::InvalidIssuerDidError,
                 CredentialError::KeyIdError,
+                CredentialError::SigningError("error".to_string()),
             ]
             .map(|error| (error, StatusCode::INTERNAL_SERVER_ERROR, None))
             .into(),

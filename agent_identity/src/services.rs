@@ -7,6 +7,7 @@ use crate::document::aggregate::{Document, Status};
 use crate::service::error::ServiceError;
 use agent_secret_manager::subject::Subject;
 use chrono::{DateTime, Utc};
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 use identity_kit::{
     did::{Did, DidDocument},
     domain_linkage::{DomainLinkageConfiguration, DomainLinkageValidator},
@@ -94,6 +95,7 @@ pub(crate) fn document_can_link(document: &Document) -> bool {
 /// Checks that a presentation can be published as a Linked Verifiable Presentation and returns its
 /// holder DID. The holder must own one of the `linkable_documents`, have signed the presentation,
 /// and be the subject of every credential in it; a presentation without credentials is rejected.
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 pub(crate) async fn validate_linked_verifiable_presentation(
     presentation_id: &str,
     presentation: Option<&Jwt>,
@@ -362,6 +364,7 @@ impl IdentityServices {
     /// and it keeps what a holder publishes legible — plainly marked unverified — while a signing
     /// fault is fixed. What is lost with the presentation is the proof that *this holder* assembled
     /// this set, so nothing here may be shown as the holder's own without that caveat.
+    #[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
     async fn validated_credentials(
         &self,
         holder_document: &DidDocument,
@@ -874,6 +877,7 @@ fn linked_verifiable_presentation_urls(document: &DidDocument) -> Vec<Url> {
 }
 
 #[cfg(test)]
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 mod tests {
     use super::*;
     use identity_kit::{

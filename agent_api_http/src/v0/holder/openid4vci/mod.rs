@@ -88,7 +88,7 @@ fn log_credential_offer(credential_offer: &CredentialOffer) {
         CredentialOffer::CredentialOffer(parameters) => {
             let grants = parameters.grants.as_ref();
             debug!(
-                credential_issuer_host = parameters.credential_issuer.host_str(),
+                credential_issuer_host = parameters.credential_issuer.url().host_str(),
                 credential_configuration_ids = ?*parameters.credential_configuration_ids,
                 pre_authorized_code_grant = grants.is_some_and(|grants| grants.pre_authorized_code.is_some()),
                 authorization_code_grant = grants.is_some_and(|grants| grants.authorization_code.is_some()),
