@@ -272,7 +272,7 @@ impl Aggregate for Credential {
                     .ok_or(InvalidIssuerDidError)?;
 
                 // Status claim as per the IETF OAuth Token Status List specification.
-                let status_list_url = get_status_list_url(status_list_id)?;
+                let status_list_url = get_status_list_url(status_list_id.clone())?;
 
                 let status_claim = identity_kit::status_list::Status::status_list(StatusListRef::new(
                     status_list_url.to_string(),
@@ -434,12 +434,23 @@ impl Aggregate for Credential {
                     }
                 };
 
+                // Signed again on the same status-list entry, the credential keeps the status it has there. The entry is
+                // matched by list id, since the URL follows the configured base URL.
+                let status = if self.signed.is_some()
+                    && self.credential_status.index == index
+                    && status_list_id_of(&self.credential_status.status_list_url).as_ref() == Some(&status_list_id)
+                {
+                    self.credential_status.status
+                } else {
+                    StatusType::VALID
+                };
+
                 Ok(vec![CredentialSigned {
                     credential_id,
                     signed_credential,
                     credential_status: CredentialStatus {
                         index,
-                        status: StatusType::VALID,
+                        status,
                         status_list_url: status_list_url.to_string(),
                     },
                     status: Status::Issued,
@@ -989,6 +1000,16 @@ pub fn get_status_list_url(id: String) -> Result<Url, CredentialError> {
     Ok(status_list_url)
 }
 
+/// The identifier of the status list at `status_list_url`, as `get_status_list_url` builds it.
+pub fn status_list_id_of(status_list_url: &str) -> Option<String> {
+    Url::parse(status_list_url)
+        .ok()?
+        .path_segments()?
+        .next_back()
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 pub mod credential_tests {
     use super::test_utils::*;
@@ -1143,6 +1164,79 @@ pub mod credential_tests {
                 credential_status,
                 status: Status::Issued,
             }])
+    }
+
+    #[rstest]
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn test_sign_credential_again_keeps_the_status_of_its_entry(
+        #[future(awt)] holder: Arc<dyn Subject>,
+        credential_id: String,
+        created_at: DateTime<Utc>,
+    ) {
+        use agent_shared::config::TEST_STATUS_LIST_ID;
+
+        // Signed at creation under an earlier base URL of the status lists, then revoked.
+        let revoked_at_old_url = CredentialStatus {
+            index: TESTINDEX,
+            status_list_url: format!("https://old.example.org/status-lists/{TEST_STATUS_LIST_ID}"),
+            status: StatusType::INVALID,
+        };
+        let revoked = CredentialStatus {
+            status_list_url: get_status_list_url(TEST_STATUS_LIST_ID.to_string())
+                .unwrap()
+                .to_string(),
+            ..revoked_at_old_url.clone()
+        };
+
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![
+                CredentialEvent::UnsignedCredentialCreated {
+                    credential_id: credential_id.clone(),
+                    data: Data {
+                        raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
+                    },
+                    credential_configuration: Box::new(JWT_VC_JSON_VC1_1_CREDENTIAL_CONFIGURATION.clone()),
+                    notification_id: None,
+                    created_at: Some(created_at),
+                    expires_at: None,
+                },
+                CredentialEvent::CredentialSigned {
+                    credential_id: credential_id.clone(),
+                    signed_credential: json!("signed at creation"),
+                    credential_status: CredentialStatus {
+                        status: StatusType::VALID,
+                        ..revoked_at_old_url.clone()
+                    },
+                    status: Status::Issued,
+                },
+                CredentialEvent::CredentialStatusUpdated {
+                    credential_id: credential_id.clone(),
+                    credential_status: revoked_at_old_url,
+                },
+            ])
+            .when_async(CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: Some(holder.identifier("did:key", Algorithm::EdDSA).await.unwrap()),
+                overwrite: true,
+                proofs: None,
+                status_list_id: TEST_STATUS_LIST_ID.to_string(),
+                index: TESTINDEX,
+            })
+            .await
+            .then_expect_events(vec![CredentialEvent::CredentialSigned {
+                credential_id,
+                signed_credential: json!(JWT_VC_JSON_VC1_1_JWT.to_string()),
+                credential_status: revoked,
+                status: Status::Issued,
+            }])
+    }
+
+    #[test]
+    fn status_list_id_of_reads_the_id_get_status_list_url_puts_in() {
+        let url = get_status_list_url("list-1".to_string()).unwrap();
+        assert_eq!(status_list_id_of(url.as_str()), Some("list-1".to_string()));
+        assert_eq!(status_list_id_of(""), None);
     }
 
     /// `credential` with the claims of the structured template (nested objects, lists and tables) in place of its own.

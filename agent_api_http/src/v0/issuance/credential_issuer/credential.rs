@@ -16,7 +16,7 @@ use agent_issuance::{
         access_token_validation_service::{AccessTokenValidationError, AccessTokenValidationService},
         nonce_validation_service::NonceValidationService,
     },
-    credential::{command::CredentialCommand, views::CredentialView},
+    credential::{aggregate::status_list_id_of, command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
@@ -145,30 +145,74 @@ pub(crate) async fn credential(
         }
     };
 
+    // A Credential signed at creation is signed again for the holder, keeping its status-list entry. The credentials of a
+    // Public Offer are shared by all its holders: each one gets them signed for itself, with an index of its own. A
+    // self-signed Credential has no status-list entry and is handed out as it is.
+    let mut signings = vec![];
+    for credential_id in &credential_ids {
+        let signing = match public_query_handler(credential_id, &state.query.credential).await? {
+            Some(CredentialView {
+                signed: Some(_),
+                credential_status,
+                ..
+            }) if !is_public_offer => {
+                if credential_status.status_list_url.is_empty() {
+                    Signing::Keep
+                } else {
+                    let status_list_id = status_list_id_of(&credential_status.status_list_url)
+                        .ok_or(PublicError::InternalServerError)?;
+                    Signing::ExistingIndex(status_list_id, credential_status.index)
+                }
+            }
+            Some(_) => Signing::NewIndex,
+            None => return Err(internal_server_error()),
+        };
+        signings.push(signing);
+    }
+
     // Find a status list which is not full
     // TODO: this contains quite some domain logic and should actually be moved there.
-    let status_list_id = status_list_with_room(&state, credential_ids.len())
-        .await
-        .map_err(|_| PublicError::InternalServerError)?;
+    let new_indices = signings
+        .iter()
+        .filter(|signing| matches!(signing, Signing::NewIndex))
+        .count();
+    let status_list_id = if new_indices == 0 {
+        None
+    } else {
+        Some(
+            status_list_with_room(&state, new_indices)
+                .await
+                .map_err(|_| PublicError::InternalServerError)?,
+        )
+    };
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
-    for credential_id in credential_ids {
-        let index = add_index(&state, &status_list_id)
-            .await
-            .map_err(|_| PublicError::InternalServerError)?;
-
-        // The credentials of a Public Offer are shared by all its holders: each one gets them signed for itself.
-        let command = CredentialCommand::SignCredential {
-            credential_id: credential_id.clone(),
-            subject_id: subject_id.clone(),
-            overwrite: is_public_offer,
-            proofs: proofs.clone(),
-            status_list_id: status_list_id.clone(),
-            index,
+    for (credential_id, signing) in credential_ids.into_iter().zip(signings) {
+        let status_list_entry = match (signing, &status_list_id) {
+            (Signing::Keep, _) => None,
+            (Signing::ExistingIndex(status_list_id, index), _) => Some((status_list_id, index)),
+            (Signing::NewIndex, Some(status_list_id)) => Some((
+                status_list_id.clone(),
+                add_index(&state, status_list_id)
+                    .await
+                    .map_err(|_| PublicError::InternalServerError)?,
+            )),
+            (Signing::NewIndex, None) => return Err(internal_server_error()),
         };
 
-        public_command_handler(&credential_id, &state.command.credential, command).await?;
+        if let Some((status_list_id, index)) = status_list_entry {
+            let command = CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: subject_id.clone(),
+                overwrite: true,
+                proofs: proofs.clone(),
+                status_list_id,
+                index,
+            };
+
+            public_command_handler(&credential_id, &state.command.credential, command).await?;
+        }
 
         let signed_credential = match public_query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
@@ -198,6 +242,16 @@ pub(crate) async fn credential(
         .ok_or_else(internal_server_error)
 }
 
+/// How the Credential endpoint signs a Credential of the offer.
+enum Signing {
+    /// Hand it out as it is.
+    Keep,
+    /// Sign it for the holder on the status-list entry it has.
+    ExistingIndex(String, usize),
+    /// Sign it for the holder on a new status-list entry.
+    NewIndex,
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -215,13 +269,14 @@ pub mod tests {
 
     use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::application::signing_at_creation::SigningAtCreationPolicy;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::issuance_state;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
-    use agent_shared::config::{set_config, Events};
+    use agent_shared::config::{set_config, Events, TEST_STATUS_LIST_ID};
     use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
@@ -414,14 +469,24 @@ pub mod tests {
         (access_token, notification_id.to_string())
     }
 
+    struct SignsEveryTemplateAtCreation;
+
+    #[async_trait::async_trait]
+    impl SigningAtCreationPolicy for SignsEveryTemplateAtCreation {
+        async fn signs_at_creation(&self, _template_id: &str) -> bool {
+            true
+        }
+    }
+
     #[rstest]
-    #[case::pre_authorized_code(true, false, false, false, 0)]
-    #[case::authorization_code(false, false, false, false, 0)]
-    #[case::with_external_server(true, false, true, false, 0)]
-    #[case::with_anonymous_access(true, true, false, false, 0)]
-    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0)]
+    #[case::pre_authorized_code(true, false, false, false, 0, false)]
+    #[case::authorization_code(false, false, false, false, 0, false)]
+    #[case::with_external_server(true, false, true, false, 0, false)]
+    #[case::with_anonymous_access(true, true, false, false, 0, false)]
+    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0, false)]
+    #[case::signed_at_creation(true, false, false, false, 0, true)]
     #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100, false)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
@@ -431,6 +496,7 @@ pub mod tests {
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,
         #[case] delay: u64,
+        #[case] signs_at_creation: bool,
     ) {
         let (external_server, bus_opt) = if with_external_server {
             let external_server = MockServer::start().await;
@@ -456,7 +522,11 @@ pub mod tests {
         };
 
         let event_bus = bus_opt.unwrap_or_default();
-        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
+        let mut issuance_state = issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await;
+        if signs_at_creation {
+            issuance_state.signing_at_creation = Arc::new(SignsEveryTemplateAtCreation);
+        }
+        let issuance_state = Arc::new(issuance_state);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -510,7 +580,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
         let jwt = if with_anonymous_access {
@@ -558,6 +628,16 @@ pub mod tests {
                 get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap(),
                 credential_jwt_claims_for_holder().await
             );
+        }
+
+        // The credential keeps the status-list index it got when it was signed.
+        if !is_self_signed {
+            let status_list =
+                agent_shared::handlers::public_query_handler(TEST_STATUS_LIST_ID, &issuance_state.query.status_list)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(status_list.used_indices.len(), 1);
         }
 
         if let Some(external_server) = external_server {

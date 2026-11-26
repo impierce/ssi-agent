@@ -103,6 +103,13 @@ A batch evaluated for validity and authorization without creating anything. A qu
 no events.
 _Avoid_: dry run, preview, validation-only mode
 
+**Signing at Creation**:
+Signing a credential, without holder binding, and giving it its status-list index when it is created,
+so it is Issued without a wallet redeeming its offer. A wallet that redeems the offer gets it signed again,
+bound to its key, on the same status-list entry. `IssuanceState::signing_at_creation` decides per template;
+by default no template's credentials are (`agent_issuance/src/application/signing_at_creation.rs`).
+_Avoid_: pre-signing, eager issuance
+
 **Credential Offer String**:
 The `openid-credential-offer://…` value a wallet consumes, which a QR code encodes.
 _Avoid_: offer link, offer URL, offer URI

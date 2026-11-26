@@ -1,5 +1,6 @@
 use crate::application::{
     credential_offer::{ensure_offer_contains_credential, OfferCreation, PrepareOfferError},
+    signing_at_creation::{sign_at_creation, SigningAtCreationError},
     template_issuance::{
         published_template, template_credential_expiry, validate_credential_against_template, TemplateIssuanceError,
     },
@@ -75,6 +76,8 @@ pub enum ReissuanceServiceError {
     Reissuance(#[from] CommandHandlerError<ReissuanceError>),
     #[error(transparent)]
     Template(#[from] TemplateIssuanceError),
+    #[error(transparent)]
+    SigningAtCreation(#[from] SigningAtCreationError),
     #[error("Only issued credentials can be reissued")]
     OriginalCredentialNotIssued,
     #[error("The requested configuration must match the original credential configuration")]
@@ -209,6 +212,14 @@ where
         )
         .await?;
 
+        if state
+            .signing_at_creation
+            .signs_at_creation(&request.credential_configuration_id)
+            .await
+        {
+            sign_at_creation(state, &request.new_credential_id).await?;
+        }
+
         ensure_offer_contains_credential(
             state,
             caller.clone(),
@@ -242,7 +253,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use agent_issuance::credential::{aggregate::CredentialExpiry, command::CredentialCommand, entity::Data};
+    use agent_issuance::application::signing_at_creation::SigningAtCreationPolicy;
+    use agent_issuance::credential::{
+        aggregate::{CredentialExpiry, Status},
+        command::CredentialCommand,
+        entity::Data,
+    };
     use agent_issuance::reissuance::service::{CreateReissuanceRequest, ReissuanceService, ReissuanceServiceError};
     use agent_issuance::server_config::command::ServerConfigCommand;
     use agent_issuance::services::IssuanceServices;
@@ -256,7 +272,24 @@ mod tests {
     use std::sync::Arc;
 
     async fn test_state() -> Arc<IssuanceState> {
-        let state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        test_state_signing_at_creation(false).await
+    }
+
+    struct SignsEveryTemplateAtCreation;
+
+    #[async_trait::async_trait]
+    impl SigningAtCreationPolicy for SignsEveryTemplateAtCreation {
+        async fn signs_at_creation(&self, _template_id: &str) -> bool {
+            true
+        }
+    }
+
+    async fn test_state_signing_at_creation(signs_at_creation: bool) -> Arc<IssuanceState> {
+        let mut state = issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await;
+        if signs_at_creation {
+            state.signing_at_creation = Arc::new(SignsEveryTemplateAtCreation);
+        }
+        let state = Arc::new(state);
         initialize(&state).await.unwrap();
         command_handler(
             SERVER_CONFIG_ID,
@@ -543,6 +576,39 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, ReissuanceServiceError::UnsupportedCredentialFormat(_)));
+    }
+
+    #[tokio::test]
+    async fn create_reissuance_signs_the_new_credential_at_creation_when_the_policy_asks() {
+        for signs_at_creation in [false, true] {
+            let state = test_state_signing_at_creation(signs_at_creation).await;
+            create_original_credential(&state, "11111111-1111-4111-8111-111111111111", "SD-JWT VC").await;
+
+            ReissuanceService::default()
+                .create(
+                    &state,
+                    &test_library_state().await,
+                    Caller::Anonymous,
+                    reissuance_request(
+                        "SD-JWT VC",
+                        json!({ "first_name": "Ferris", "last_name": "Reissued", "dob": "2010-01-01" }),
+                    ),
+                )
+                .await
+                .unwrap();
+
+            let new_credential = query_handler("22222222-2222-4222-8222-222222222222", &state.query.credential)
+                .await
+                .unwrap()
+                .unwrap();
+            let expected_status = if signs_at_creation {
+                Status::Issued
+            } else {
+                Status::Pending
+            };
+            assert_eq!(new_credential.status, expected_status);
+            assert_eq!(new_credential.signed.is_some(), signs_at_creation);
+        }
     }
 
     #[tokio::test]
