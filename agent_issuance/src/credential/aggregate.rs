@@ -1329,6 +1329,7 @@ pub mod credential_tests {
         let result = CredentialTestFramework::with(Arc::new(IssuanceServices::new(Arc::new(issuer))))
             .given(vec![CredentialEvent::UnsignedCredentialCreated {
                 credential_id: credential_id.clone(),
+                template_id: None,
                 data: Data {
                     raw: UNSIGNED_VC1_1_CREDENTIAL.clone(),
                 },
