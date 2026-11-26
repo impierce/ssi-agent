@@ -27,6 +27,42 @@ impl Default for StatusListAggregate {
     }
 }
 
+impl StatusListAggregate {
+    /// An index not used yet, chosen at random so that it says nothing about the order of issuance, or `None` when
+    /// every index is used. Under `test_utils` it is the first unused one from `TESTINDEX` on, so tests are repeatable.
+    pub fn unused_index(&self) -> Option<usize> {
+        let capacity = index_capacity();
+        if self.used_indices.len() >= capacity {
+            return None;
+        }
+
+        #[cfg(feature = "test_utils")]
+        let index = (TESTINDEX..capacity)
+            .chain(0..TESTINDEX)
+            .find(|candidate| !self.used_indices.contains(candidate));
+
+        #[cfg(not(feature = "test_utils"))]
+        let index = {
+            use rand::Rng;
+
+            let mut rng = rand::rng();
+            loop {
+                let candidate = rng.random_range(0..capacity);
+                if !self.used_indices.contains(&candidate) {
+                    break Some(candidate);
+                }
+            }
+        };
+
+        index
+    }
+}
+
+/// How many indices a status list holds.
+pub fn index_capacity() -> usize {
+    STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize
+}
+
 impl Aggregate for StatusListAggregate {
     type Command = StatusListCommand;
     type Event = StatusListEvent;
@@ -52,26 +88,17 @@ impl Aggregate for StatusListAggregate {
                 used_indices: vec![],
             }]),
             _ if self.id.is_empty() => return Err(StatusListError::AggregateNotFound),
-            AddIndex { status } => {
+            AddIndex { index, status } => {
+                if index >= index_capacity() {
+                    return Err(StatusListError::IndexOutOfRange(index));
+                }
+                if self.used_indices.contains(&index) {
+                    return Err(StatusListError::IndexAlreadyUsed(index));
+                }
+
                 let mut status_list = self.list.clone();
                 let mut used_indices = self.used_indices.clone();
 
-                #[cfg(feature = "test_utils")]
-                let index = TESTINDEX;
-
-                #[cfg(not(feature = "test_utils"))]
-                let index = {
-                    use rand::Rng;
-
-                    let mut rng = rand::rng();
-                    let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * (8 / BITS_PER_STATUS as usize);
-                    loop {
-                        let candidate = rng.random_range(0..max_amount_indices - 1);
-                        if !self.used_indices.contains(&candidate) {
-                            break candidate;
-                        }
-                    }
-                };
                 status_list
                     .set(index as u64, status)
                     .map_err(|e| StatusListError::FailedToSetIndex(index, e.to_string()))?;
@@ -173,4 +200,67 @@ fn fill_status_list_with_random_values(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_secret_manager::service::Service;
+    use cqrs_es::test::TestFramework;
+
+    type StatusListTestFramework = TestFramework<StatusListAggregate>;
+
+    fn created() -> StatusListEvent {
+        StatusListEvent::StatusListCreated {
+            id: "status-list".to_string(),
+            status_list: StatusList::from_bytes(BITS_PER_STATUS, vec![0; STATUS_LIST_BYTES_AMOUNT]).unwrap(),
+            used_indices: vec![],
+        }
+    }
+
+    fn with_used_index(index: usize) -> StatusListEvent {
+        StatusListEvent::IndexAdded {
+            id: "status-list".to_string(),
+            status_list: StatusList::from_bytes(BITS_PER_STATUS, vec![0; STATUS_LIST_BYTES_AMOUNT]).unwrap(),
+            used_indices: vec![index],
+            index,
+            status: StatusType::VALID,
+        }
+    }
+
+    #[tokio::test]
+    async fn an_index_is_added_once() {
+        StatusListTestFramework::with(IssuanceServices::default().await)
+            .given(vec![created(), with_used_index(7)])
+            .when_async(StatusListCommand::AddIndex {
+                index: 7,
+                status: StatusType::VALID,
+            })
+            .await
+            .then_expect_error_message("Index `7` is already used");
+    }
+
+    #[tokio::test]
+    async fn an_index_outside_the_status_list_is_refused() {
+        StatusListTestFramework::with(IssuanceServices::default().await)
+            .given(vec![created()])
+            .when_async(StatusListCommand::AddIndex {
+                index: index_capacity(),
+                status: StatusType::VALID,
+            })
+            .await
+            .then_expect_error_message(&format!("Index `{}` is outside the status list", index_capacity()));
+    }
+
+    #[test]
+    fn an_unused_index_skips_the_used_ones() {
+        let mut status_list = StatusListAggregate::default();
+        assert_eq!(status_list.unused_index(), Some(TESTINDEX));
+
+        status_list.used_indices = vec![TESTINDEX, TESTINDEX + 1];
+        assert_eq!(status_list.unused_index(), Some(TESTINDEX + 2));
+
+        status_list.used_indices = (0..index_capacity()).collect();
+        assert_eq!(status_list.unused_index(), None);
+    }
 }

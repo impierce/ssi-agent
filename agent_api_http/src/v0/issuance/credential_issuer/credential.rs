@@ -20,25 +20,21 @@ use agent_issuance::{
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
-    status_list::command::StatusListCommand,
+    status_list::application::index_allocation::{add_index, status_list_with_room},
 };
-use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
+use agent_shared::config::config;
 use axum::{
     extract::{rejection::JsonRejection, Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use identity_kit::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
-
-#[cfg(feature = "test_utils")]
-use agent_shared::config::TEST_STATUS_LIST_ID;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
@@ -149,46 +145,18 @@ pub(crate) async fn credential(
         }
     };
 
-    let all_status_lists = public_query_handler("all_status_lists", &state.query.all_status_lists)
-        .await?
-        .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
-
     // Find a status list which is not full
     // TODO: this contains quite some domain logic and should actually be moved there.
-    let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
-    let available_status_list = all_status_lists
-        .into_iter()
-        .find(|status_list| status_list.used_indices.len() + credential_ids.len() <= (max_amount_indices * 7) / 10); // The 7/10 factor ensures status lists are at most 70% full, the remainder will always be preserverd for random values protecting Issuer and Holder privacy.
-
-    let status_list_id = match available_status_list {
-        Some(status_list) => status_list.id.clone(),
-        None => {
-            #[cfg(not(feature = "test_utils"))]
-            let id = uuid::Uuid::new_v4().to_string();
-
-            #[cfg(feature = "test_utils")]
-            let id = TEST_STATUS_LIST_ID.to_string();
-
-            let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            public_command_handler(&id, &state.command.status_list, command).await?;
-
-            id
-        }
-    };
+    let status_list_id = status_list_with_room(&state, credential_ids.len())
+        .await
+        .map_err(|_| PublicError::InternalServerError)?;
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
     for credential_id in credential_ids {
-        let command = StatusListCommand::AddIndex {
-            status: StatusType::VALID,
-        };
-
-        public_command_handler(&status_list_id, &state.command.status_list, command).await?;
-
-        let status_list = public_query_handler(&status_list_id, &state.query.status_list)
-            .await?
-            .ok_or(PublicError::InternalServerError)?;
+        let index = add_index(&state, &status_list_id)
+            .await
+            .map_err(|_| PublicError::InternalServerError)?;
 
         // The credentials of a Public Offer are shared by all its holders: each one gets them signed for itself.
         let command = CredentialCommand::SignCredential {
@@ -197,11 +165,7 @@ pub(crate) async fn credential(
             overwrite: is_public_offer,
             proofs: proofs.clone(),
             status_list_id: status_list_id.clone(),
-            index: status_list
-                .used_indices
-                .last()
-                .cloned()
-                .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
+            index,
         };
 
         public_command_handler(&credential_id, &state.command.credential, command).await?;
