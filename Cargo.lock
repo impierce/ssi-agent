@@ -136,7 +136,9 @@ dependencies = [
  "axum",
  "chrono",
  "identity-kit",
+ "jsonwebtoken",
  "kms-aws",
+ "kms-stackit",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
@@ -147,6 +149,7 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "serde_with",
+ "serial_test",
  "shared-kernel",
  "testcontainers-modules",
  "tikv-jemallocator",
@@ -374,12 +377,14 @@ dependencies = [
  "identity-kit",
  "indexmap 2.14.2",
  "serde",
+ "serde_json",
  "shared-kernel",
  "strum 0.26.3",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
  "utoipa",
+ "uuid",
 ]
 
 [[package]]
@@ -3837,9 +3842,11 @@ dependencies = [
  "base64 0.22.1",
  "getrandom 0.2.17",
  "js-sys",
+ "pem",
  "serde",
  "serde_json",
  "signature 2.2.0",
+ "simple_asn1",
  "zeroize",
 ]
 
@@ -3909,6 +3916,28 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "wiremock",
+]
+
+[[package]]
+name = "kms-stackit"
+version = "0.1.0"
+dependencies = [
+ "agent_kms",
+ "async-trait",
+ "aws-lc-rs",
+ "base64 0.22.1",
+ "identity-kit",
+ "jsonwebtoken",
+ "p256",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
  "wiremock",
 ]
 
@@ -4909,6 +4938,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112d82ceb8c5bf524d9af484d4e4970c9fd5a0cc15ba14ad93dccd28873b0629"
 dependencies = [
  "digest 0.11.3",
+]
+
+[[package]]
+name = "pem"
+version = "3.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
+dependencies = [
+ "base64 0.22.1",
+ "serde_core",
 ]
 
 [[package]]
@@ -6384,6 +6423,18 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "simple_asn1"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d585997b0ac10be3c5ee635f1bab02d512760d14b7c468801ac8a01d9ae5f1d"
+dependencies = [
+ "num-bigint",
+ "num-traits",
+ "thiserror 2.0.21",
+ "time",
+]
 
 [[package]]
 name = "siopv2"
