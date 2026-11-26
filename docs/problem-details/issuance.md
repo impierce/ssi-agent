@@ -286,9 +286,9 @@ This error occurs when a template is used for a public offer but its schema cont
 ## No Status List Entry
 
 This error occurs when a status update (`PATCH /v0/credentials/{credential_id}`) finds no status list entry for the
-credential. UniCore assigns the entry when it signs the credential in the issuance flow, so a credential has none
-before it is issued, and credentials created already signed (`isSigned`) have none at all. The request leaves the
-credential unchanged.
+credential. UniCore assigns the entry when it signs the credential: when a wallet redeems its offer, or at creation
+for templates signed at creation. So a credential has none before it is issued, and credentials created already signed
+(`isSigned`) have none at all. The request leaves the credential unchanged.
 
 ### Resolution
 
