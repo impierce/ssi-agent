@@ -1,6 +1,6 @@
 # ADR 0011: Key Providers Sign In With the Host's Workload Identity
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-11-16
 **Context**: Supporting key providers besides AWS KMS, starting with STACKIT KMS
 
