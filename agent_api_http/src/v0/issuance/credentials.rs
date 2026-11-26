@@ -304,7 +304,7 @@ impl ResolvedTemplate {
 
         Ok(CredentialCommand::CreateUnsignedCredential {
             credential_id: credential_id.to_owned(),
-            template_id: self.template.template_id.clone(),
+            template_id: Some(self.template.template_id.clone()),
             data: Data {
                 raw: credential.clone(),
             },
@@ -331,7 +331,7 @@ impl ResolvedTemplate {
 
         Ok(CredentialCommand::CreateSignedCredential {
             credential_id: credential_id.to_owned(),
-            template_id: self.template.template_id.clone(),
+            template_id: Some(self.template.template_id.clone()),
             signed_credential: credential.clone(),
         })
     }

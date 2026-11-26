@@ -196,7 +196,7 @@ where
 
         let create_credential_command = CredentialCommand::CreateUnsignedCredential {
             credential_id: request.new_credential_id.clone(),
-            template_id: request.credential_configuration_id.clone(),
+            template_id: Some(request.credential_configuration_id.clone()),
             data: Data {
                 raw: request.credential,
             },
@@ -434,7 +434,7 @@ mod tests {
             &state.command.credential,
             CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.to_string(),
-                template_id: "template".to_string(),
+                template_id: Some("template".to_string()),
                 data: Data { raw: credential },
                 credential_configuration: Box::new(credential_configuration),
                 expires_at: CredentialExpiry::Never,
@@ -756,7 +756,7 @@ mod tests {
             &state.command.credential,
             CredentialCommand::CreateUnsignedCredential {
                 credential_id: "11111111-1111-4111-8111-111111111111".to_owned(),
-                template_id: "template".to_string(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: json!({"first_name": "Ferris"}),
                 },

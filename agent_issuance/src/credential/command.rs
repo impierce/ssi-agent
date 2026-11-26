@@ -14,16 +14,16 @@ use super::{aggregate::CredentialExpiry, entity::Data};
 pub enum CredentialCommand {
     CreateUnsignedCredential {
         credential_id: String,
-        /// The template the credential is created from.
-        template_id: String,
+        /// The template the credential is created from, if any.
+        template_id: Option<String>,
         data: Data,
         credential_configuration: Box<CredentialConfigurationsSupportedObject>,
         expires_at: CredentialExpiry,
     },
     CreateSignedCredential {
         credential_id: String,
-        /// The template the credential is created from.
-        template_id: String,
+        /// The template the credential is created from, if any.
+        template_id: Option<String>,
         signed_credential: serde_json::Value,
     },
     SignCredential {
