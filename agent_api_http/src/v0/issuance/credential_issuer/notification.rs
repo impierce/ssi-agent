@@ -1,8 +1,11 @@
 use crate::handlers::{public_command_handler, public_query_handler};
 use crate::v0::issuance::credential_issuer::protocol_request;
-use crate::v0::issuance::error::{internal_server_error, PublicError};
+use crate::v0::issuance::error::PublicError;
 use crate::v0::openapi::PROTOCOL_TAG;
-use agent_issuance::application::access_token_validation_service::AccessTokenValidationService;
+use agent_issuance::application::access_token_validation_service::{
+    AccessTokenValidationError, AccessTokenValidationService,
+};
+use agent_issuance::offer::views::OfferView;
 use agent_issuance::{credential::command::CredentialCommand, state::IssuanceState};
 use agent_shared::sensitive_logging::sensitive_debug;
 use axum::response::{IntoResponse, Response};
@@ -21,6 +24,9 @@ use tracing::debug;
 ///
 /// Receives a notification about the outcome of a credential issuance, as defined by
 /// [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint).
+///
+/// The `notification_id` must belong to a credential issued for the offer that the Access Token was granted for.
+/// Repeating a notification for the same event is accepted without recording it again.
 ///
 /// Errors use the HTTP status code 400 (Bad Request) and the content type `application/json`, as described in the
 /// [Notification Error Response](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response).
@@ -58,7 +64,12 @@ pub async fn notification(
         NotificationErrorResponse::InvalidNotificationRequest.into()
     })?;
 
-    let _claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+    let claims = AccessTokenValidationService::validate(&state, &access_token).await?;
+
+    // The Access Token must contain the `issuer_state` claim, which is used to identify the `offer_id`.
+    let offer_id = claims
+        .issuer_state
+        .ok_or_else(|| PublicError::from(AccessTokenValidationError::InvalidToken))?;
 
     let notification_request: NotificationRequest = serde_json::from_value::<NotificationRequest>(raw_value)
         .map_err(|_| PublicError::from(NotificationErrorResponse::InvalidNotificationRequest))?;
@@ -70,22 +81,10 @@ pub async fn notification(
         "Received notification"
     );
 
-    let credentials = match public_query_handler("all_credentials", &state.query.all_credentials).await? {
-        Some(all_credentials) => all_credentials.credentials,
-        _ => return Err(internal_server_error()),
-    };
-
-    let credential_id = credentials.iter().find_map(|(credential_id, credential)| {
-        let is_matching_notification =
-            credential.notification_id.as_ref() == Some(&notification_request.notification_id);
-        is_matching_notification.then_some(credential_id.clone())
-    });
-
-    let credential_id = match credential_id {
-        Some(id) => id,
-        None => {
-            return Err(PublicError::from(NotificationErrorResponse::InvalidNotificationId));
-        }
+    let Some(credential_id) =
+        find_offer_credential_id(&state, &offer_id, &notification_request.notification_id).await?
+    else {
+        return Err(NotificationErrorResponse::InvalidNotificationId.into());
     };
 
     let command = CredentialCommand::AddNotification {
@@ -96,6 +95,27 @@ pub async fn notification(
     public_command_handler(&credential_id, &state.command.credential, command).await?;
 
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+/// Finds the credential with `notification_id` among the credentials issued for `offer_id`, so a holder can only
+/// notify about credentials issued through the offer their Access Token was granted for.
+async fn find_offer_credential_id(
+    state: &IssuanceState,
+    offer_id: &str,
+    notification_id: &str,
+) -> Result<Option<String>, PublicError> {
+    let Some(OfferView { credential_ids, .. }) = public_query_handler(offer_id, &state.query.offer).await? else {
+        return Ok(None);
+    };
+
+    for credential_id in credential_ids {
+        let credential = public_query_handler(&credential_id, &state.query.credential).await?;
+        if credential.and_then(|credential| credential.notification_id).as_deref() == Some(notification_id) {
+            return Ok(Some(credential_id));
+        }
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -170,6 +190,47 @@ mod tests {
 
         let response = issuance_app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn a_notification_id_issued_for_another_offer_is_not_found() {
+        let issuance_state =
+            Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &Default::default()).await);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        create_test_template(&library_state).await;
+
+        let mut issuance_app = issuance::router((issuance_state.clone(), library_state));
+
+        credentials(&mut issuance_app).await;
+        let grants = offers(&mut issuance_app, TEMPLATE_ID).await.unwrap();
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &Default::default(),
+                Default::default(),
+            )
+            .await,
+        );
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
+
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+        let (_, notification_id) =
+            credential(&mut issuance_app, &issuance_state, TEMPLATE_ID, access_token, None).await;
+
+        let Ok(credential_id) = find_offer_credential_id(&issuance_state, "another-offer", &notification_id).await
+        else {
+            panic!("the credential lookup failed");
+        };
+
+        assert_eq!(credential_id, None);
     }
 
     #[tokio::test]

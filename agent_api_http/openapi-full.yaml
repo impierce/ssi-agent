@@ -494,6 +494,9 @@ paths:
         Receives a notification about the outcome of a credential issuance, as defined by
         [OpenID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-endpoint).
 
+        The `notification_id` must belong to a credential issued for the offer that the Access Token was granted for.
+        Repeating a notification for the same event is accepted without recording it again.
+
         Errors use the HTTP status code 400 (Bad Request) and the content type `application/json`, as described in the
         [Notification Error Response](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-notification-error-response).
       operationId: openid4vci_notification

@@ -448,10 +448,24 @@ impl Aggregate for Credential {
             AddNotification {
                 credential_id,
                 notification,
-            } => Ok(vec![CredentialEvent::NotificationReceived {
-                credential_id,
-                notification,
-            }]),
+            } => {
+                // Notifications must be handled idempotently, so a repeated event is not recorded again.
+                let is_duplicate = self
+                    .holder_notifications
+                    .iter()
+                    .any(|received| received.event == notification.event);
+
+                if self.notification_id.as_ref() != Some(&notification.notification_id) {
+                    Err(InvalidNotificationIdError)
+                } else if is_duplicate {
+                    Ok(vec![])
+                } else {
+                    Ok(vec![CredentialEvent::NotificationReceived {
+                        credential_id,
+                        notification,
+                    }])
+                }
+            }
             UpdateCredentialStatus {
                 credential_id,
                 credential_status,
@@ -1008,8 +1022,81 @@ pub mod credential_tests {
     use crate::offer::aggregate::test_utils::holder;
     use agent_secret_manager::service::Service;
     use oid4vc_core::Subject;
+    use oid4vci::notification_request::NotificationEvent;
 
     type CredentialTestFramework = TestFramework<Credential>;
+
+    fn signed_credential_created() -> CredentialEvent {
+        CredentialEvent::SignedCredentialCreated {
+            credential_id: credential_id(),
+            signed_credential: json!(JWT_VC_JSON_OBV3_JWT),
+            notification_id: Some(notification_id()),
+        }
+    }
+
+    fn notification_received(event: NotificationEvent) -> CredentialEvent {
+        CredentialEvent::NotificationReceived {
+            credential_id: credential_id(),
+            notification: NotificationRequest {
+                notification_id: notification_id(),
+                event,
+                event_description: None,
+            },
+        }
+    }
+
+    fn add_notification(notification_id: String, event: NotificationEvent) -> CredentialCommand {
+        CredentialCommand::AddNotification {
+            credential_id: credential_id(),
+            notification: NotificationRequest {
+                notification_id,
+                event,
+                event_description: None,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn a_repeated_notification_event_is_not_recorded_again() {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![
+                signed_credential_created(),
+                notification_received(NotificationEvent::CredentialAccepted),
+            ])
+            .when_async(add_notification(
+                notification_id(),
+                NotificationEvent::CredentialAccepted,
+            ))
+            .await
+            .then_expect_events(vec![])
+    }
+
+    #[tokio::test]
+    async fn a_later_different_notification_event_is_recorded() {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![
+                signed_credential_created(),
+                notification_received(NotificationEvent::CredentialAccepted),
+            ])
+            .when_async(add_notification(
+                notification_id(),
+                NotificationEvent::CredentialDeleted,
+            ))
+            .await
+            .then_expect_events(vec![notification_received(NotificationEvent::CredentialDeleted)])
+    }
+
+    #[tokio::test]
+    async fn a_notification_for_another_notification_id_is_rejected() {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given(vec![signed_credential_created()])
+            .when_async(add_notification(
+                "another_notification_id".to_string(),
+                NotificationEvent::CredentialAccepted,
+            ))
+            .await
+            .then_expect_error_message("The `notification_id` does not belong to this credential")
+    }
 
     #[rstest]
     #[case::jwt_vc_json_vc1_1(
