@@ -217,7 +217,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![UnsignedCredentialCreated {
                     credential_id,
-                    template_id: Some(template_id),
+                    template_id,
                     notification_id: Some(notification_id),
                     data: Data { raw: credential_data },
                     credential_configuration,
@@ -238,7 +238,7 @@ impl Aggregate for Credential {
 
                 Ok(vec![SignedCredentialCreated {
                     credential_id,
-                    template_id: Some(template_id),
+                    template_id,
                     signed_credential,
                     notification_id: Some(notification_id),
                 }])
@@ -1094,7 +1094,7 @@ pub mod credential_tests {
             .given_no_previous_events()
             .when_async(CredentialCommand::CreateUnsignedCredential {
                 credential_id: credential_id.clone(),
-                template_id: "template".to_string(),
+                template_id: Some("template".to_string()),
                 data: Data {
                     raw: credential_subject,
                 },
@@ -1177,6 +1177,28 @@ pub mod credential_tests {
                 signed_credential: json!(verifiable_credential_jwt),
                 credential_status,
                 status: Status::Issued,
+            }])
+    }
+
+    /// A credential signed elsewhere, such as an imported one, need not come from a template.
+    #[rstest]
+    #[case::from_a_template(Some("template".to_string()))]
+    #[case::without_a_template(None)]
+    #[tokio::test]
+    async fn test_create_signed_credential_records_its_template_if_any(#[case] template_id: Option<String>) {
+        CredentialTestFramework::with(IssuanceServices::default().await)
+            .given_no_previous_events()
+            .when_async(CredentialCommand::CreateSignedCredential {
+                credential_id: credential_id(),
+                template_id: template_id.clone(),
+                signed_credential: json!("signed elsewhere"),
+            })
+            .await
+            .then_expect_events(vec![CredentialEvent::SignedCredentialCreated {
+                credential_id: credential_id(),
+                template_id,
+                signed_credential: json!("signed elsewhere"),
+                notification_id: Some(notification_id()),
             }])
     }
 
