@@ -6,7 +6,7 @@ use identity_kit::status_list::StatusType;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StatusListCommand {
     CreateStatusList { id: String },
-    AddIndex { status: StatusType },
+    AddIndex { index: usize, status: StatusType },
     UpdateIndex { index: usize, status: StatusType },
 }
 
