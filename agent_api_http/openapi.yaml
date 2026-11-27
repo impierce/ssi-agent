@@ -496,6 +496,8 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+        '502':
+          description: The credential issuer metadata of the URL could not be fetched
   /v0/connections/accept-pending-changes:
     post:
       tags:
@@ -566,12 +568,16 @@ paths:
           description: Connection synced
         '400':
           description: Malformed JSON request body
+        '404':
+          description: Connection not found
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+        '502':
+          description: The credential issuer metadata of the connection could not be fetched
   /v0/connections/{connection_id}:
     get:
       tags:
@@ -903,6 +909,8 @@ paths:
           description: Malformed JSON request body
         '404':
           description: Credential not found
+        '409':
+          description: 'The credential has no status list entry: not issued yet, or signed outside UniCore'
         '413':
           description: Request body larger than `max_request_body_bytes` (2 MiB by default)
         '415':
@@ -1892,6 +1900,8 @@ paths:
           description: Missing or unsupported `Content-Type`; the request body must be `application/json`
         '422':
           description: Request body does not match the expected schema
+        '502':
+          description: The target URL could not be reached or did not accept the offer
   /v0/offers/{offer_id}:
     get:
       tags:

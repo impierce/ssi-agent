@@ -22,6 +22,8 @@ pub enum CredentialError {
     InvalidIssuerDidError,
     #[error("Failed to get a key identifier for signing the credential")]
     KeyIdError,
+    #[error("The credential has no status list entry: it has not been issued yet, or it was signed outside UniCore")]
+    NoStatusListEntry,
     #[error("Failed to sign the credential: {0}")]
     SigningError(String),
 }
