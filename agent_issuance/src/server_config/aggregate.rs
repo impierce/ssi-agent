@@ -99,7 +99,7 @@ impl ServerConfig {
         }
 
         let mut credential_issuer_metadata = self.credential_issuer_metadata.clone();
-        credential_issuer_metadata.credential_issuer = url.clone();
+        credential_issuer_metadata.credential_issuer = url.clone().into();
         credential_issuer_metadata.credential_endpoint = url.append_path_segment("openid4vci/credential");
         if credential_issuer_metadata.nonce_endpoint.is_some() {
             credential_issuer_metadata.nonce_endpoint = Some(url.append_path_segment("openid4vci/nonce"));
@@ -594,7 +594,7 @@ pub mod server_config_tests {
                 ..Default::default()
             },
             CredentialIssuerMetadata {
-                credential_issuer: old_url.clone(),
+                credential_issuer: old_url.clone().into(),
                 credential_endpoint: old_url.join("openid4vci/credential").unwrap(),
                 nonce_endpoint: Some(old_url.join("openid4vci/nonce").unwrap()),
                 ..Default::default()
@@ -627,7 +627,7 @@ pub mod server_config_tests {
         );
 
         let credential_issuer_metadata = server_config.credential_issuer_metadata;
-        assert_eq!(credential_issuer_metadata.credential_issuer, new_url);
+        assert_eq!(credential_issuer_metadata.credential_issuer, new_url.clone().into());
         assert_eq!(
             Some(credential_issuer_metadata.credential_endpoint),
             endpoint("openid4vci/credential")
@@ -953,7 +953,7 @@ pub mod test_utils {
     #[fixture]
     pub fn credential_issuer_metadata(static_issuer_url: Url) -> Box<CredentialIssuerMetadata> {
         Box::new(CredentialIssuerMetadata {
-            credential_issuer: static_issuer_url.clone(),
+            credential_issuer: static_issuer_url.clone().into(),
             credential_endpoint: static_issuer_url.join("credential").unwrap(),
             ..Default::default()
         })

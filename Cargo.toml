@@ -21,6 +21,7 @@ members = [
 
     "infrastructure/stores/mongodb",
     "infrastructure/adapters/kms-aws",
+    "infrastructure/adapters/kms-stackit",
     "infrastructure/adapters/verification-authorization",
 ]
 
@@ -40,13 +41,13 @@ publish = false
 pedantic = "warn"
 
 [workspace.dependencies]
-oid4vc-core = "0.6"
-oid4vc-manager = "0.6"
-oid4vci = { version = "0.6", features = ["utoipa"] }
-oid4vp = "0.6"
-siopv2 = "0.6"
+oid4vc-core = "0.8"
+oid4vc-manager = "0.9"
+oid4vci = { version = "0.9", features = ["utoipa"] }
+oid4vp = "0.10"
+siopv2 = "0.8"
 
-identity-kit = { version = "0.5", default-features = false, features = [
+identity-kit = { version = "0.6", default-features = false, features = [
     "did-jwk",
     "did-key",
     "did-web",
@@ -73,7 +74,7 @@ hickory-resolver = "0.26"
 mockall = "0.14"
 iso8601 = "0.6"
 indexmap = { version = "2.14", features = ["serde"] }
-jsonschema = "0.46"
+jsonschema = { version = "0.46", default-features = false }
 jsonwebtoken = { version = "11.1", default-features = false, features = ["aws_lc_rs"] }
 lazy_static = "1.4"
 mime = { version = "0.3" }
@@ -88,7 +89,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 rstest = "0.22"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0" }
+serde_json = { version = "1.0", features = ["preserve_order"] }
 serde_json_canonicalizer = "0.4"
 serde_json_path_to_error = { version = "0.1" }
 serde_norway = "0.9"

@@ -6,6 +6,7 @@ use crate::{
         issuance::{
             credential_issuer::protocol_request,
             error::{internal_server_error, PublicError},
+            public_offers::is_public_offer,
         },
         openapi::PROTOCOL_TAG,
     },
@@ -15,29 +16,25 @@ use agent_issuance::{
         access_token_validation_service::{AccessTokenValidationError, AccessTokenValidationService},
         nonce_validation_service::NonceValidationService,
     },
-    credential::{command::CredentialCommand, views::CredentialView},
+    credential::{aggregate::status_list_id_of, command::CredentialCommand, views::CredentialView},
     offer::{command::OfferCommand, views::OfferView},
     server_config::views::ServerConfigView,
     state::{IssuanceState, SERVER_CONFIG_ID},
-    status_list::command::StatusListCommand,
+    status_list::application::index_allocation::{add_index, status_list_with_room},
 };
-use agent_shared::config::{config, BITS_PER_STATUS, STATUS_LIST_BYTES_AMOUNT};
+use agent_shared::config::config;
 use axum::{
     extract::{rejection::JsonRejection, Json, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use axum_auth::AuthBearer;
-use identity_kit::status_list::StatusType;
 use oid4vci::credential_request::CredentialRequest;
 use oid4vci::errors::CredentialErrorResponse;
 use oid4vci::{credential_response::CredentialResponse, errors::OID4VCError};
 use std::sync::Arc;
 use tokio::time::sleep;
 use tracing::error;
-
-#[cfg(feature = "test_utils")]
-use agent_shared::config::TEST_STATUS_LIST_ID;
 
 const POLLING_INTERVAL_MS: u64 = 100;
 
@@ -106,12 +103,14 @@ pub(crate) async fn credential(
         };
 
     let proofs = credential_request.proofs.clone();
+    let is_public_offer = is_public_offer(&state, &offer_id).await?;
 
     let command = OfferCommand::VerifyCredentialRequest {
         offer_id: offer_id.clone(),
         credential_issuer_metadata,
         authorization_server_metadata,
         credential_request,
+        is_public_offer,
     };
 
     // Use the `offer_id` to verify the `proof` inside the `CredentialRequest`.
@@ -146,61 +145,74 @@ pub(crate) async fn credential(
         }
     };
 
-    let all_status_lists = public_query_handler("all_status_lists", &state.query.all_status_lists)
-        .await?
-        .map(|all_status_lists_view| all_status_lists_view.status_lists.into_values().collect::<Vec<_>>())
-        .unwrap_or_default();
+    // A Credential signed at creation is signed again for the holder, keeping its status-list entry. The credentials of a
+    // Public Offer are shared by all its holders: each one gets them signed for itself, with an index of its own. A
+    // self-signed Credential has no status-list entry and is handed out as it is.
+    let mut signings = vec![];
+    for credential_id in &credential_ids {
+        let signing = match public_query_handler(credential_id, &state.query.credential).await? {
+            Some(CredentialView {
+                signed: Some(_),
+                credential_status,
+                ..
+            }) if !is_public_offer => {
+                if credential_status.status_list_url.is_empty() {
+                    Signing::Keep
+                } else {
+                    let status_list_id = status_list_id_of(&credential_status.status_list_url)
+                        .ok_or(PublicError::InternalServerError)?;
+                    Signing::ExistingIndex(status_list_id, credential_status.index)
+                }
+            }
+            Some(_) => Signing::NewIndex,
+            None => return Err(internal_server_error()),
+        };
+        signings.push(signing);
+    }
 
     // Find a status list which is not full
     // TODO: this contains quite some domain logic and should actually be moved there.
-    let max_amount_indices = STATUS_LIST_BYTES_AMOUNT * 8 / BITS_PER_STATUS as usize;
-    let available_status_list = all_status_lists
-        .into_iter()
-        .find(|status_list| status_list.used_indices.len() + credential_ids.len() <= (max_amount_indices * 7) / 10); // The 7/10 factor ensures status lists are at most 70% full, the remainder will always be preserverd for random values protecting Issuer and Holder privacy.
-
-    let status_list_id = match available_status_list {
-        Some(status_list) => status_list.id.clone(),
-        None => {
-            #[cfg(not(feature = "test_utils"))]
-            let id = uuid::Uuid::new_v4().to_string();
-
-            #[cfg(feature = "test_utils")]
-            let id = TEST_STATUS_LIST_ID.to_string();
-
-            let command = StatusListCommand::CreateStatusList { id: id.clone() };
-            public_command_handler(&id, &state.command.status_list, command).await?;
-
-            id
-        }
+    let new_indices = signings
+        .iter()
+        .filter(|signing| matches!(signing, Signing::NewIndex))
+        .count();
+    let status_list_id = if new_indices == 0 {
+        None
+    } else {
+        Some(
+            status_list_with_room(&state, new_indices)
+                .await
+                .map_err(|_| PublicError::InternalServerError)?,
+        )
     };
 
     // Use the `credential_ids` and `subject_id` to sign all the credentials.
     let mut signed_credentials = vec![];
-    for credential_id in credential_ids {
-        let command = StatusListCommand::AddIndex {
-            status: StatusType::VALID,
+    for (credential_id, signing) in credential_ids.into_iter().zip(signings) {
+        let status_list_entry = match (signing, &status_list_id) {
+            (Signing::Keep, _) => None,
+            (Signing::ExistingIndex(status_list_id, index), _) => Some((status_list_id, index)),
+            (Signing::NewIndex, Some(status_list_id)) => Some((
+                status_list_id.clone(),
+                add_index(&state, status_list_id)
+                    .await
+                    .map_err(|_| PublicError::InternalServerError)?,
+            )),
+            (Signing::NewIndex, None) => return Err(internal_server_error()),
         };
 
-        public_command_handler(&status_list_id, &state.command.status_list, command).await?;
+        if let Some((status_list_id, index)) = status_list_entry {
+            let command = CredentialCommand::SignCredential {
+                credential_id: credential_id.clone(),
+                subject_id: subject_id.clone(),
+                overwrite: true,
+                proofs: proofs.clone(),
+                status_list_id,
+                index,
+            };
 
-        let status_list = public_query_handler(&status_list_id, &state.query.status_list)
-            .await?
-            .ok_or(PublicError::InternalServerError)?;
-
-        let command = CredentialCommand::SignCredential {
-            credential_id: credential_id.clone(),
-            subject_id: subject_id.clone(),
-            overwrite: false,
-            proofs: proofs.clone(),
-            status_list_id: status_list_id.clone(),
-            index: status_list
-                .used_indices
-                .last()
-                .cloned()
-                .ok_or(PublicError::InternalServerError)?, // TODO: even though the AddIndex command is executed right before this, retrieving the index this way is not the prettiest since something of a "data race" could occur where another index has already been added between the AddIndex command and this command. Then two credentials would be assigned the same index, as they both retrieve the same last index.
-        };
-
-        public_command_handler(&credential_id, &state.command.credential, command).await?;
+            public_command_handler(&credential_id, &state.command.credential, command).await?;
+        }
 
         let signed_credential = match public_query_handler(&credential_id, &state.query.credential).await? {
             Some(CredentialView {
@@ -230,6 +242,16 @@ pub(crate) async fn credential(
         .ok_or_else(internal_server_error)
 }
 
+/// How the Credential endpoint signs a Credential of the offer.
+enum Signing {
+    /// Hand it out as it is.
+    Keep,
+    /// Sign it for the holder on the status-list entry it has.
+    ExistingIndex(String, usize),
+    /// Sign it for the holder on a new status-list entry.
+    NewIndex,
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -241,24 +263,27 @@ pub mod tests {
     };
     use crate::API_VERSION;
     use crate::{
-        tests::OFFER_ID,
+        tests::{holder_did, key_proof, OFFER_ID},
         v0::issuance::{credentials::CredentialsEndpointRequest, offers::tests::offers},
     };
 
     use agent_authorization::authorization_state;
     use agent_authorization::services::AuthorizationServices;
+    use agent_issuance::application::signing_at_creation::SigningAtCreationPolicy;
     use agent_issuance::credential::aggregate::CredentialExpiry;
     use agent_issuance::issuance_state;
     use agent_issuance::offer::event::OfferEvent;
     use agent_issuance::services::IssuanceServices;
     use agent_issuance::state::IssuanceState;
     use agent_secret_manager::service::Service;
+    use agent_shared::config::TEST_STATUS_LIST_ID;
     use agent_store::in_memory::InMemory;
     use axum::{
         body::Body,
         http::{self, Request},
         Router,
     };
+    use oid4vc_core::utils::jwt::get_unverified_jwt_claims;
     use rstest::rstest;
     use serde_json::{json, Value};
     use shared_kernel::authorization::Caller;
@@ -271,9 +296,20 @@ pub mod tests {
     };
 
     const CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsInN1YiI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIiwibmJmIjoxMjYyMzA0MDAwLCJpYXQiOjEyNjIzMDQwMDAsImp0aSI6InVybjp1dWlkOjEyM2U0NTY3LWU4OWItMTJkMy1hNDU2LTQyNjYxNDE3NDAwMCIsInZjIjp7ImNyZWRlbnRpYWxTdWJqZWN0Ijp7ImZpcnN0X25hbWUiOiJGZXJyaXMiLCJsYXN0X25hbWUiOiJSdXN0YWNlYW4iLCJpZCI6ImRpZDprZXk6ejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.COxDXhB4zmiP79bU2wVGCWXMjk24z38vCjC8j23sXjaEhzvsCr_v_HuhPDVh3pkNzcF09tULDZiwjg0tgM19Cw";
-    const ANONYMOUS_CREDENTIAL_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dFODROQ01wTWVBeDlqSzljZjVXNEc4Z2NaOXh1d0p2RzFlN3dOazhLQ2d0I3o2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9.eyJpc3MiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCIsIm5iZiI6MTI2MjMwNDAwMCwiaWF0IjoxMjYyMzA0MDAwLCJqdGkiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJ2YyI6eyJjcmVkZW50aWFsU3ViamVjdCI6eyJmaXJzdF9uYW1lIjoiRmVycmlzIiwibGFzdF9uYW1lIjoiUnVzdGFjZWFuIn0sInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaWQiOiJ1cm46dXVpZDoxMjNlNDU2Ny1lODliLTEyZDMtYTQ1Ni00MjY2MTQxNzQwMDAiLCJuYW1lIjoiVmVyaWZpYWJsZSBDcmVkZW50aWFsIiwiaXNzdWVyIjp7Im5hbWUiOiJVbmlDb3JlIiwiaWQiOiJkaWQ6a2V5Ono2TWtnRTg0TkNNcE1lQXg5aks5Y2Y1VzRHOGdjWjl4dXdKdkcxZTd3Tms4S0NndCJ9LCJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSIseyJsb2dvX3VyaSI6eyJAaWQiOiJodHRwczovL3d3dy5pYW5hLm9yZy9hc3NpZ25tZW50cy9qd3QjbG9nb191cmkiLCJAdHlwZSI6IkBpZCJ9fV0sImlzc3VhbmNlRGF0ZSI6IjIwMTAtMDEtMDFUMDA6MDA6MDBaIiwidmFsaWRGcm9tIjoiMjAxMC0wMS0wMVQwMDowMDowMFoiLCJjcmVkZW50aWFsU3RhdHVzIjp7InR5cGUiOiJzdGF0dXNsaXN0K2p3dCIsImlkIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwidXJpIjoiaHR0cHM6Ly9teS1kb21haW4uZXhhbXBsZS5vcmcvaWV0Zi1vYXV0aC10b2tlbi1zdGF0dXMtbGlzdC8wIiwiaWR4IjoxMjN9fSwic3RhdHVzIjp7InN0YXR1c19saXN0Ijp7ImlkeCI6MTIzLCJ1cmkiOiJodHRwczovL215LWRvbWFpbi5leGFtcGxlLm9yZy9pZXRmLW9hdXRoLXRva2VuLXN0YXR1cy1saXN0LzAifX19.e0OYm-MkfQrA0GEbsqsb_yQHP47FitFz5fb-4pg8gLzNfYRy__nEBLZfckN5A7fKCS-r9nN3WOWHI375F7ZeAw";
     const DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS: u64 = 1000;
     pub const TEST_NONCE: &str = "7e03ad3f76cb3338c3a5642fe7634476aa3ad93fa1d584011ba2150d9da47133";
+
+    /// The claims of `CREDENTIAL_JWT`, but for the test holder's `did:key`: the DID of the key of its proofs.
+    async fn credential_jwt_claims_for_holder() -> Value {
+        let claims = get_unverified_jwt_claims(&json!(CREDENTIAL_JWT))
+            .unwrap()
+            .to_string()
+            .replace(
+                "did:key:z6MkiieyoLMSVsJAZv7Jje5wWSkDEymUgkyF8kbcrjZpX3qd",
+                &holder_did("did:key").await,
+            );
+        serde_json::from_str(&claims).unwrap()
+    }
 
     trait CredentialEventTrigger {
         async fn prepare_credential_event_trigger(
@@ -392,6 +428,8 @@ pub mod tests {
         .await
         .unwrap();
 
+        let proof = key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await;
+
         let response = issuance_app
             .oneshot(
                 Request::builder()
@@ -402,16 +440,7 @@ pub mod tests {
                     .body(Body::from(
                         serde_json::to_vec(&json!({
                             "credential_configuration_id": template_id,
-                            "proofs": { "jwt": ["eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lk\
-                                        IjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4\
-                                        a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lG\
-                                        OGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFa\
-                                        djdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8v\
-                                        ZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAs\
-                                        Im5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkz\
-                                        ZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBY\
-                                        tgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"]
-                            }
+                            "proofs": { "jwt": [proof] }
                         }))
                         .unwrap(),
                     ))
@@ -425,7 +454,10 @@ pub mod tests {
 
         let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        assert_eq!(
+            get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap(),
+            credential_jwt_claims_for_holder().await
+        );
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
@@ -437,14 +469,24 @@ pub mod tests {
         (access_token, notification_id.to_string())
     }
 
+    struct SignsEveryTemplateAtCreation;
+
+    #[async_trait::async_trait]
+    impl SigningAtCreationPolicy for SignsEveryTemplateAtCreation {
+        async fn signs_at_creation(&self, _template_id: &str) -> bool {
+            true
+        }
+    }
+
     #[rstest]
-    #[case::pre_authorized_code(true, false, false, false, 0)]
-    #[case::authorization_code(false, false, false, false, 0)]
-    #[case::with_external_server(true, false, true, false, 0)]
-    #[case::with_anonymous_access(true, true, false, false, 0)]
-    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0)]
+    #[case::pre_authorized_code(true, false, false, false, 0, false)]
+    #[case::authorization_code(false, false, false, false, 0, false)]
+    #[case::with_external_server(true, false, true, false, 0, false)]
+    #[case::with_anonymous_access(true, true, false, false, 0, false)]
+    #[case::with_external_server_and_self_signed_credential(true, false, true, true, 0, false)]
+    #[case::signed_at_creation(true, false, false, false, 0, true)]
     #[should_panic(expected = "assertion `left == right` failed\n  left: 500\n right: 200")]
-    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100)]
+    #[case::should_panic_due_to_timeout(true, false, true, false, DEFAULT_EXTERNAL_SERVER_RESPONSE_TIMEOUT_MS + 100, false)]
     #[serial_test::serial]
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
@@ -454,6 +496,7 @@ pub mod tests {
         #[case] with_external_server: bool,
         #[case] is_self_signed: bool,
         #[case] delay: u64,
+        #[case] signs_at_creation: bool,
     ) {
         let event_bus = shared_kernel::event_bus::EventBusHandle::new(1024);
         let external_server = if with_external_server {
@@ -480,7 +523,11 @@ pub mod tests {
             None
         };
 
-        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
+        let mut issuance_state = issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await;
+        if signs_at_creation {
+            issuance_state.signing_at_creation = Arc::new(SignsEveryTemplateAtCreation);
+        }
+        let issuance_state = Arc::new(issuance_state);
         agent_issuance::state::initialize(&issuance_state).await.unwrap();
 
         let library_state = setup_library_state(&issuance_state).await;
@@ -534,15 +581,14 @@ pub mod tests {
             .await
             .unwrap();
 
-        let mut authorization_app = authorization::router((authorization_state, issuance_state));
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
 
         let access_token: String = token(&mut authorization_app, is_pre_authorized, grants).await;
         let jwt = if with_anonymous_access {
-            // This JWT has no nonce, so no need to pre-generate
-            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVTMjU2Iiwia2lkIjoiZGlkOmp3azpleUpoYkdjaU9pSkZVekkxTmlJc0ltTnlkaUk2SWxBdE1qVTJJaXdpYTJsa0lqb2lhMUoyYms1M1N6QlhSbTlWZEVGR1JEZDFSbGN6Y3pSbWVFbDBVVmRKZGpaTU9FRldYMEV0VTFOV2J5SXNJbXQwZVNJNklrVkRJaXdpZUNJNklrSXRWblp4V2xsMVUyVmlXbXBoWVRNMlExcGhaMnRKVFZWeU9ERlZRMjR0U0ROZlJXbHBYMnByUlRBaUxDSjVJam9pZW01SFgwVXhiWFZQT1dsWGNFbHdPWE16VUZWbWRXUnlZelpNV2pBdGEwNDJVREJrUm5neldFeDRXU0o5IzAifQ.eyJhdWQiOiJodHRwOi8vbG9jYWxob3N0OjMwMzMvIiwiaWF0IjoxNzcxNDE1OTg2LCJub25jZSI6IjdlMDNhZDNmNzZjYjMzMzhjM2E1NjQyZmU3NjM0NDc2YWEzYWQ5M2ZhMWQ1ODQwMTFiYTIxNTBkOWRhNDcxMzMifQ.1vmzQVFvo90TSp8Yh9CbqJHyrzjE3U5xQN4G8BGPk6-vlrWHejVPjk-oWW8uXRmdiRsmJjRCUeSN3fLKdlTK_g"
+            // With anonymous access to the token endpoint, the proof has no `iss` (OpenID4VCI 1.0, Appendix F.1).
+            key_proof("did:jwk", None, TEST_NONCE).await
         } else {
-            // This JWT contains the nonce we just generated
-            "eyJ0eXAiOiJvcGVuaWQ0dmNpLXByb29mK2p3dCIsImFsZyI6IkVkRFNBIiwia2lkIjoiZGlkOmtleTp6Nk1raWlleW9MTVNWc0pBWnY3SmplNXdXU2tERXltVWdreUY4a2JjcmpacFgzcWQjejZNa2lpZXlvTE1TVnNKQVp2N0pqZTV3V1NrREV5bVVna3lGOGtiY3JqWnBYM3FkIn0.eyJpc3MiOiJkaWQ6a2V5Ono2TWtpaWV5b0xNU1ZzSkFadjdKamU1d1dTa0RFeW1VZ2t5RjhrYmNyalpwWDNxZCIsImF1ZCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1NzEzMjQ4MDAsIm5vbmNlIjoiN2UwM2FkM2Y3NmNiMzMzOGMzYTU2NDJmZTc2MzQ0NzZhYTNhZDkzZmExZDU4NDAxMWJhMjE1MGQ5ZGE0NzEzMyJ9.bDxmEWTGwKJJC8J5N16JHAR2ZBYtgWlhM_o_voJdXLnw_ScZMwGjZwNH6aQWKlgIaFWKonF88KNRFX2UAOAuBQ"
+            key_proof("did:key", Some(holder_did("did:key").await), TEST_NONCE).await
         };
 
         let response = issuance_app
@@ -573,14 +619,154 @@ pub mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
 
         if with_anonymous_access {
-            assert_eq!(body["credentials"][0]["credential"], json!(ANONYMOUS_CREDENTIAL_JWT));
-        } else {
+            // Without `iss`, the credential is still bound to the holder: the DID of the key of its proof.
+            let credential = get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap();
+            assert_eq!(credential["sub"], json!(holder_did("did:jwk").await));
+        } else if is_self_signed {
             assert_eq!(body["credentials"][0]["credential"], json!(CREDENTIAL_JWT));
+        } else {
+            assert_eq!(
+                get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap(),
+                credential_jwt_claims_for_holder().await
+            );
+        }
+
+        // The credential keeps the status-list index it got when it was signed.
+        if !is_self_signed {
+            let status_list =
+                agent_shared::handlers::public_query_handler(TEST_STATUS_LIST_ID, &issuance_state.query.status_list)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(status_list.used_indices.len(), 1);
         }
 
         if let Some(external_server) = external_server {
             // Assert that the event was dispatched to the target URL.
             assert!(external_server.received_requests().await.unwrap().len() == 1);
         }
+    }
+
+    /// A fresh nonce for a key proof: each Credential Request redeems its own.
+    async fn generate_nonce(issuance_state: &IssuanceState) -> String {
+        let c_nonce = agent_shared::generate_random_string();
+        agent_shared::handlers::command_handler(
+            issuance_state.authorization_checker.clone(),
+            Caller::Internal,
+            &c_nonce,
+            &issuance_state.command.nonce,
+            agent_issuance::nonce::command::NonceCommand::GenerateNonce {
+                c_nonce: c_nonce.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        c_nonce
+    }
+
+    #[rstest]
+    #[case::credential_offer(false)]
+    #[case::public_offer(true)]
+    #[serial_test::serial]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn credential_offer_belongs_to_holder_of_first_verified_request(#[case] is_public_offer: bool) {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::default();
+        let issuance_state = Arc::new(issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await);
+        agent_issuance::state::initialize(&issuance_state).await.unwrap();
+
+        let library_state = setup_library_state(&issuance_state).await;
+        let template_id = create_test_template_with_auth(&library_state, true).await;
+
+        let mut issuance_app = router((issuance_state.clone(), library_state));
+        credentials_with_template(&mut issuance_app, &template_id).await;
+        let grants = offers(&mut issuance_app, &template_id).await.unwrap();
+
+        if is_public_offer {
+            crate::handlers::public_command_handler(
+                &format!("public_offer:{OFFER_ID}"),
+                &issuance_state.command.public_offer,
+                agent_issuance::public_offer::command::PublicOfferCommand::Create {
+                    offer_id: OFFER_ID.to_string(),
+                    template_id: template_id.clone(),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let authorization_state = Arc::new(
+            authorization_state(
+                &InMemory,
+                AuthorizationServices::default().await,
+                &event_bus,
+                Default::default(),
+            )
+            .await,
+        );
+        agent_authorization::state::initialize(&authorization_state)
+            .await
+            .unwrap();
+        let mut authorization_app = authorization::router((authorization_state, issuance_state.clone()));
+        let access_token: String = token(&mut authorization_app, true, grants).await;
+
+        let request_credential = |did_method: &'static str, iss: Option<String>| {
+            let issuance_app = issuance_app.clone();
+            let issuance_state = issuance_state.clone();
+            let access_token = access_token.clone();
+            let template_id = template_id.clone();
+            async move {
+                let nonce = generate_nonce(&issuance_state).await;
+                let proof = key_proof(did_method, iss, &nonce).await;
+                let response = issuance_app
+                    .oneshot(
+                        Request::builder()
+                            .method(http::Method::POST)
+                            .uri("/openid4vci/credential")
+                            .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                            .header(http::header::AUTHORIZATION, format!("Bearer {access_token}"))
+                            .body(Body::from(
+                                serde_json::to_vec(&json!({
+                                    "credential_configuration_id": template_id,
+                                    "proofs": { "jwt": [proof] }
+                                }))
+                                .unwrap(),
+                            ))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let status = response.status();
+                let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                (status, serde_json::from_slice::<Value>(&body).unwrap_or_default())
+            }
+        };
+
+        let holder = holder_did("did:key").await;
+        let other_holder = holder_did("did:jwk").await;
+        let subject =
+            |body: &Value| get_unverified_jwt_claims(&body["credentials"][0]["credential"]).unwrap()["sub"].clone();
+
+        // The first holder redeems the offer.
+        let (status, body) = request_credential("did:key", Some(holder.clone())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(subject(&body), json!(holder));
+
+        // Another holder (the `did:jwk` key), also when its proof claims the first holder's DID as `iss`. A Public
+        // Offer issues to it a credential of its own.
+        for iss in [None, Some(holder.clone())] {
+            let (status, body) = request_credential("did:jwk", iss).await;
+            if is_public_offer {
+                assert_eq!(status, StatusCode::OK);
+                assert_eq!(subject(&body), json!(other_holder));
+            } else {
+                assert_eq!(status, StatusCode::BAD_REQUEST);
+                assert_eq!(body["error"], "credential_request_denied");
+            }
+        }
+
+        // The first holder again, also without `iss`.
+        let (status, body) = request_credential("did:key", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(subject(&body), json!(holder));
     }
 }

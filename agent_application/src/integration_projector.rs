@@ -89,6 +89,7 @@ mod tests {
             sequence: 1,
             payload: CredentialEvent::SignedCredentialCreated {
                 credential_id: "cred-abc".to_string(),
+                template_id: None,
                 signed_credential: serde_json::json!({}),
                 notification_id: None,
             },

@@ -1,6 +1,6 @@
 # ADR 0001: Keep `schemaPropertiesAttributes` as a Separate Field
 
-**Status**: Accepted  
+**Status**: Accepted, amended by [ADR 0012](./0012-lists-and-whole-object-attributes-in-template-schemas.md): a key may also address an object or an array as a whole  
 **Date**: 2026-05-21  
 **Context**: `feat/enforce-templates` branch
 

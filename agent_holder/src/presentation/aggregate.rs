@@ -4,6 +4,7 @@ use crate::services::HolderServices;
 use agent_shared::config::{get_preferred_did_method, get_preferred_signing_algorithm};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use cqrs_es::{event_sink::EventSink, Aggregate};
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 use identity_kit::{
     did::Did,
     vc::{EnvelopedVc, Jwt, JwtClaims, Presentation as VerifiablePresentation, PresentationV2},
@@ -142,6 +143,7 @@ impl Aggregate for Presentation {
 /// The claims of a presentation of `credentials` by `holder`, and the `typ` to sign them under: credential JWTs in a
 /// VCDM 1.1 presentation (`vp` claim, `JWT`), `vc+sd-jwt` credentials enveloped with every disclosure they carry in
 /// a VCDM 2.0 presentation (`vp+jwt`). A presentation of both kinds is refused.
+#[allow(deprecated, reason = "VCDM 1.1 JWT profile")]
 fn presentation_claims(
     holder: Did,
     credentials: Vec<SignedCredential>,

@@ -18,7 +18,7 @@ implementations and across versions of this code, and stored digests stay in eve
 ## Decision
 
 - **Input**: the public content of a template, the fields of the public template projection
-  (`GET /public/templates`) without `modifiedAt`. One type, `PublicTemplateContent` in
+  (`GET /public/templates`) without `id` and `modifiedAt`. One type, `PublicTemplateContent` in
   `agent_library`, defines it. The projection is built from it by exhaustive destructuring, so a
   field added to one but not the other fails to compile.
 - **Canonical form**: RFC 8785 (JCS) over the JSON of that content, with top-level `null` members

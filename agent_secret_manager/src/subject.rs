@@ -1,11 +1,11 @@
 use crate::key_store::issuer_keys;
 use crate::stronghold_key_store;
 use agent_shared::config::SupportedDidMethod;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use identity_kit::{
     did::{Did, DidDocument, DidUrl, VerificationRelationship},
-    jose::{Jwk, JwsAlgorithm, Signer as _},
+    jose::{Jwk, JwsAlgorithm, Signer},
     keys::{KeyId, KeySigner, KeyStore},
     methods::{jwk::DidJwk, key::DidKey, web::DidWeb, web::ReqwestClient},
     resolver::{KeyReference, KeyResolutionError, KeyResolver, KeyRole},
@@ -16,15 +16,22 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 /// Responsible for signing and verifying data.
+///
+/// A verification method signs with the configured issuer key of its algorithm, unless it has a key of its own, such
+/// as a KMS key (see [`Subject::set_method_key`]).
 pub struct Subject {
     /// Holds the configured issuer keys.
     pub key_store: Arc<dyn KeyStore>,
     pub verification_method_ids: Arc<Mutex<HashMap<StorageKey, DidUrl>>>,
     /// Resolves `did:key`, `did:jwk` and `did:web`.
     pub key_resolver: identity_kit::resolver::Resolver,
+    /// The keys of the verification methods that don't sign with a configured issuer key.
+    method_keys: Mutex<HashMap<DidUrl, MethodKey>>,
+    /// Notified whenever an available key fails to sign.
+    key_failures: Arc<Notify>,
 }
 
 impl fmt::Debug for Subject {
@@ -32,8 +39,23 @@ impl fmt::Debug for Subject {
         f.debug_struct("Subject")
             .field("verification_method_ids", &self.verification_method_ids)
             .field("key_resolver", &self.key_resolver)
+            .field("method_keys", &self.method_keys)
             .finish_non_exhaustive()
     }
+}
+
+/// The key of a verification method that doesn't sign with a configured issuer key, such as a KMS key. Whatever the
+/// key's state, nothing else signs for the method: signatures for it only verify with its own key.
+#[derive(Debug, Clone)]
+pub enum MethodKey {
+    /// Signs for the method. It isn't checked before it signs, so a key deleted or disabled in its provider stays
+    /// available until it fails to sign.
+    Available(Box<KeySigner<Arc<dyn KeyStore>>>),
+    /// Can't sign for the method now, for the given reason, but may again once it is loaded again, such as a key whose
+    /// provider can't be reached or that failed the last time it signed.
+    Unavailable(String),
+    /// Can't sign for the method anymore, for the given reason, such as a key deleted from its provider.
+    Gone(String),
 }
 
 /// The resolver for `did:key`, `did:jwk` and `did:web`, which fetches `did:web` documents with IdentityKit's hardened
@@ -83,6 +105,8 @@ impl Subject {
             key_store: Arc::new(stronghold_key_store().await),
             verification_method_ids: Arc::new(Mutex::new(HashMap::new())),
             key_resolver: key_resolver(),
+            method_keys: Mutex::default(),
+            key_failures: Arc::default(),
         }
     }
 
@@ -91,6 +115,60 @@ impl Subject {
         let (key, alg) = issuer_key(algorithm)?;
 
         Ok(KeySigner::new(Arc::clone(&self.key_store), key, alg).await?)
+    }
+
+    /// Gives `method` its own key from now on, instead of the configured issuer key. Only an available key signs.
+    pub async fn set_method_key(&self, method: DidUrl, key: MethodKey) {
+        self.method_keys.lock().await.insert(method, key);
+    }
+
+    /// Forgets the key of every method `keep` refuses, so that it signs with the configured issuer key again.
+    pub async fn retain_method_keys(&self, keep: impl Fn(&DidUrl) -> bool) {
+        self.method_keys.lock().await.retain(|method, _| keep(method));
+    }
+
+    /// The key of `method`, or `None` when it signs with the configured issuer key.
+    pub async fn method_key(&self, method: &DidUrl) -> Option<MethodKey> {
+        self.method_keys.lock().await.get(method).cloned()
+    }
+
+    /// Notified whenever an available key fails to sign and becomes [`MethodKey::Unavailable`]. A failure while nobody
+    /// waits is kept for the next wait, so none is missed.
+    pub fn key_failures(&self) -> Arc<Notify> {
+        Arc::clone(&self.key_failures)
+    }
+
+    /// Signs `message` for the verification method `method`: with its own key if it has one, else with the configured
+    /// issuer key for `algorithm`.
+    ///
+    /// # Errors
+    ///
+    /// Fails, naming `method`, when its key isn't available or fails to sign; then nothing else signs for it. A key that
+    /// fails to sign becomes [`MethodKey::Unavailable`], naming the failure, and [`Subject::key_failures`] is notified.
+    pub async fn sign_for_method(
+        &self,
+        method: &DidUrl,
+        algorithm: Algorithm,
+        message: &[u8],
+    ) -> anyhow::Result<Vec<u8>> {
+        let key = self.method_keys.lock().await.get(method).cloned();
+        let signer = match key {
+            None => return Ok(self.issuer_signer(algorithm).await?.sign(message).await?),
+            Some(MethodKey::Unavailable(reason) | MethodKey::Gone(reason)) => {
+                bail!("The key of `{method}` can't sign: {reason}")
+            }
+            Some(MethodKey::Available(signer)) => signer,
+        };
+
+        let error = match signer.sign(message).await {
+            Ok(signature) => return Ok(signature),
+            Err(error) => error,
+        };
+        if let Some(key @ MethodKey::Available(_)) = self.method_keys.lock().await.get_mut(method) {
+            *key = MethodKey::Unavailable(format!("it failed to sign: {error}"));
+            self.key_failures.notify_one();
+        }
+        bail!("The key `{}` of `{method}` can't sign: {error}", signer.key_id())
     }
 
     pub async fn get_public_key(&self, key_id: KeyId) -> anyhow::Result<Jwk> {
@@ -107,6 +185,19 @@ impl Subject {
             .await
             .insert(key, verification_method_id);
         Ok(())
+    }
+
+    /// Points the signing cache of `did_method` at `methods`, the verification method that signs for each algorithm.
+    /// Algorithms not in `methods` keep their method.
+    pub async fn set_signing_methods(
+        &self,
+        did_method: SupportedDidMethod,
+        methods: impl IntoIterator<Item = (Algorithm, DidUrl)>,
+    ) {
+        let mut cache = self.verification_method_ids.lock().await;
+        for (algorithm, method) in methods {
+            cache.insert(StorageKey::new(did_method, algorithm), method);
+        }
     }
 
     pub async fn get_verification_method_id(&self, key: StorageKey) -> Option<DidUrl> {
@@ -209,6 +300,8 @@ mod default_subject {
                 key_store: Arc::new(stronghold_key_store().await),
                 verification_method_ids,
                 key_resolver: key_resolver(),
+                method_keys: Mutex::default(),
+                key_failures: Arc::default(),
             }
         }
     }
@@ -238,8 +331,16 @@ impl Sign for Subject {
             .map(ToString::to_string)
     }
 
-    async fn sign(&self, message: &str, _subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
-        Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?)
+    /// Signs for the verification method the signing cache names for `subject_syntax_type` and `algorithm`, or with the
+    /// configured issuer key when it names none.
+    async fn sign(&self, message: &str, subject_syntax_type: &str, algorithm: Algorithm) -> anyhow::Result<Vec<u8>> {
+        match self.key_id(subject_syntax_type, algorithm).await {
+            Some(method) => {
+                self.sign_for_method(&method.parse()?, algorithm, message.as_bytes())
+                    .await
+            }
+            None => Ok(self.issuer_signer(algorithm).await?.sign(message.as_bytes()).await?),
+        }
     }
 
     fn external_signer(&self) -> Option<Arc<dyn ExternalSign>> {
@@ -279,6 +380,8 @@ mod tests {
     use super::*;
     use agent_shared::config::{default_issuer_eddsa_key_id, default_issuer_es256_key_id, SecretManagerConfig};
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use identity_kit::jose::{DefaultVerifier, JwsVerifier, KeyType};
+    use identity_kit::keys::{InMemoryKeyStore, KeySpec};
     use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ED25519};
 
     const ES256_SIGNED_JWT: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiIsImtpZCI6ImRpZDpqd2s6ZXlKaGJHY2lPaUpGVXpJMU5pSXNJbU55ZGlJNklsQXRNalUySWl3aWEybGtJam9pTkVGMVdXaFNRMk5HYkc0eWJuUm5VMTlxT1hCRlFtUkxkekl3VUhRdGJHRnFXVWh0V1RkQk1FMUdUU0lzSW10MGVTSTZJa1ZESWl3aWVDSTZJakpNV0dwT1JFOTZWM1J3WlZOWk0ydGlUbEkyWm14YVRVUjRZV2gxYXpKMlVXMWpkWFprUVRodk5EUWlMQ0o1SWpvaVpFRjJSVlpzV0UxSFVFdGFjMnRXV1RSWlZ6QnpPRUk0UzNZM2Myc3hZemt5VDA1WVJFcHZlRjlJY3lKOSMwIn0.eyJpc3MiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJzdWIiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaU5FRjFXV2hTUTJOR2JHNHliblJuVTE5cU9YQkZRbVJMZHpJd1VIUXRiR0ZxV1VodFdUZEJNRTFHVFNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SWpKTVdHcE9SRTk2VjNSd1pWTlpNMnRpVGxJMlpteGFUVVI0WVdoMWF6SjJVVzFqZFhaa1FUaHZORFFpTENKNUlqb2laRUYyUlZac1dFMUhVRXRhYzJ0V1dUUlpWekJ6T0VJNFMzWTNjMnN4WXpreVQwNVlSRXB2ZUY5SWN5SjkiLCJhdWQiOiJkaWQ6andrOmV5SmhiR2NpT2lKRlV6STFOaUlzSW1OeWRpSTZJbEF0TWpVMklpd2lhMmxrSWpvaVlrNDNiSEpaWVhOUlZrNDNMVUpZY0MxMFdFVldTR1l0YVhkTWRsVnRiWHByVUZsc2VHWlRWRkZvVlNJc0ltdDBlU0k2SWtWRElpd2llQ0k2SW1odVkyNU5UM2sxU0dGWGJ6SmFTbmhCWW5sWU1GOW1NVTFHU1dsMlRrRmtUMjFXYjNSWGVWZG9ielFpTENKNUlqb2libE5wYkhwMllsTmFYMUp1VWpOU2RreHdkRWxITmpkVWJWVkVhR1ZQWVZGNlltczJhVFJmWDBkeVFTSjkiLCJleHAiOjE3MjMwMjkyMjUsImlhdCI6MTcyMzAyODYyNSwibm9uY2UiOiJ0aGlzIGlzIGEgbm9uY2UifQ.w202CZKOeGM9k35tysJylksBUGI3fvkOgsPPVrfXYZzurns7KF5plMiR_KHH4H_GpYg57Nf2JWa3YEcXGDTVdw";
@@ -291,6 +394,188 @@ mod tests {
             issuer_eddsa_key_id: default_issuer_eddsa_key_id(),
             issuer_es256_key_id: default_issuer_es256_key_id(),
         };
+    }
+
+    /// A verification method of the `did:web` document.
+    fn method() -> DidUrl {
+        "did:web:example.org#own-key".parse().unwrap()
+    }
+
+    /// A key of its own for a verification method, apart from the configured issuer keys.
+    async fn own_key() -> KeySigner<Arc<dyn KeyStore>> {
+        let store: Arc<dyn KeyStore> = Arc::new(InMemoryKeyStore::new());
+        let key = store
+            .generate(KeySpec::new(KeyType::P256, JwsAlgorithm::ES256))
+            .await
+            .unwrap();
+        KeySigner::new(store, key, JwsAlgorithm::ES256).await.unwrap()
+    }
+
+    async fn issuer_public_key(subject: &Subject) -> Jwk {
+        subject
+            .get_public_key(KeyId::new(default_issuer_es256_key_id()))
+            .await
+            .unwrap()
+    }
+
+    fn did_web() -> String {
+        SupportedDidMethod::Web.to_string()
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_did_method_with_the_key_of_its_verification_method() {
+        let subject = Subject::test_subject().await;
+        let key = own_key().await;
+        subject
+            .insert_verification_method_id(StorageKey::new(SupportedDidMethod::Web, Algorithm::ES256), method())
+            .await
+            .unwrap();
+        subject
+            .set_method_key(method(), MethodKey::Available(Box::new(key.clone())))
+            .await;
+
+        let signature = Sign::sign(&subject, "message", &did_web(), Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(DefaultVerifier
+            .verify(JwsAlgorithm::ES256, b"message", &signature, key.public_jwk())
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_did_method_without_a_verification_method_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+
+        let signature = Sign::sign(&subject, "message", &did_web(), Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(DefaultVerifier
+            .verify(
+                JwsAlgorithm::ES256,
+                b"message",
+                &signature,
+                &issuer_public_key(&subject).await
+            )
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn signs_for_a_verification_method_without_its_own_key_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+        subject
+            .insert_verification_method_id(StorageKey::new(SupportedDidMethod::Web, Algorithm::ES256), method())
+            .await
+            .unwrap();
+
+        let signature = Sign::sign(&subject, "message", &did_web(), Algorithm::ES256)
+            .await
+            .unwrap();
+
+        assert!(DefaultVerifier
+            .verify(
+                JwsAlgorithm::ES256,
+                b"message",
+                &signature,
+                &issuer_public_key(&subject).await
+            )
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn signs_for_no_added_verification_method_with_the_configured_issuer_key() {
+        let subject = Subject::test_subject().await;
+        subject
+            .set_method_key(
+                "did:web:example.org#other-key".parse().unwrap(),
+                MethodKey::Available(Box::new(own_key().await)),
+            )
+            .await;
+
+        let signature = subject
+            .sign_for_method(&method(), Algorithm::ES256, b"message")
+            .await
+            .unwrap();
+
+        assert!(DefaultVerifier
+            .verify(
+                JwsAlgorithm::ES256,
+                b"message",
+                &signature,
+                &issuer_public_key(&subject).await
+            )
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn names_the_verification_method_whose_key_can_no_longer_sign() {
+        let subject = Subject::test_subject().await;
+        let key = own_key().await;
+        key.store().delete(key.key_id()).await.unwrap();
+        subject
+            .set_method_key(method(), MethodKey::Available(Box::new(key)))
+            .await;
+
+        let error = subject
+            .sign_for_method(&method(), Algorithm::ES256, b"message")
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("`did:web:example.org#own-key`"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_key_that_fails_to_sign_becomes_unavailable() {
+        let subject = Subject::test_subject().await;
+        let key = own_key().await;
+        key.store().delete(key.key_id()).await.unwrap();
+        subject
+            .set_method_key(method(), MethodKey::Available(Box::new(key)))
+            .await;
+
+        let _ = subject.sign_for_method(&method(), Algorithm::ES256, b"message").await;
+
+        assert!(matches!(
+            subject.method_key(&method()).await,
+            Some(MethodKey::Unavailable(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_key_that_fails_to_sign_is_reported() {
+        let subject = Subject::test_subject().await;
+        let key = own_key().await;
+        key.store().delete(key.key_id()).await.unwrap();
+        subject
+            .set_method_key(method(), MethodKey::Available(Box::new(key)))
+            .await;
+        let _ = subject.sign_for_method(&method(), Algorithm::ES256, b"message").await;
+
+        let reported = tokio::time::timeout(std::time::Duration::from_secs(1), subject.key_failures().notified()).await;
+
+        assert!(reported.is_ok());
+    }
+
+    #[tokio::test]
+    async fn signs_for_no_verification_method_whose_key_is_not_available() {
+        let subject = Subject::test_subject().await;
+        subject
+            .set_method_key(
+                method(),
+                MethodKey::Unavailable("its provider no longer holds it".to_string()),
+            )
+            .await;
+
+        let error = subject
+            .sign_for_method(&method(), Algorithm::ES256, b"message")
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "The key of `did:web:example.org#own-key` can't sign: its provider no longer holds it"
+        );
     }
 
     #[tokio::test]
