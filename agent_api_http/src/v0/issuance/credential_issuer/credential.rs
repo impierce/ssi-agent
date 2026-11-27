@@ -498,7 +498,8 @@ pub mod tests {
         #[case] delay: u64,
         #[case] signs_at_creation: bool,
     ) {
-        let (external_server, bus_opt) = if with_external_server {
+        let event_bus = shared_kernel::event_bus::EventBusHandle::new(1024);
+        let external_server = if with_external_server {
             let external_server = MockServer::start().await;
 
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
@@ -508,20 +509,18 @@ pub mod tests {
             set_config().set_event_publisher_http_target_events(
                 0,
                 Events {
-                    types: vec!["CredentialRequestVerified".to_string()],
+                    types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
                 },
             );
 
-            let bus = shared_kernel::event_bus::EventBusHandle::new(1024);
-            if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&bus) {
+            if let Some(publisher) = agent_event_publisher_http::HttpEventPublisher::from_config(&event_bus) {
                 publisher.spawn();
             }
-            (Some(external_server), Some(bus))
+            Some(external_server)
         } else {
-            (None, None)
+            None
         };
 
-        let event_bus = bus_opt.unwrap_or_default();
         let mut issuance_state = issuance_state(&InMemory, IssuanceServices::default().await, &event_bus).await;
         if signs_at_creation {
             issuance_state.signing_at_creation = Arc::new(SignsEveryTemplateAtCreation);

@@ -102,7 +102,7 @@ pub async fn library_state<CCB: CqrsComponentBuilder>(
     });
 
     let (catalog_command_handler, catalog, all_catalogs) = builder
-        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![event_bus.query()])
+        .commands_and_queries::<CatalogView, Catalog, AllCatalogsView>(catalog_services, vec![])
         .await;
 
     LibraryState {

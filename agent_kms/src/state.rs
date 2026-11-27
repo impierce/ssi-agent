@@ -62,7 +62,7 @@ pub struct Queries {
 /// to. `key_usage` tells what signs with a key, so that no such key is deleted.
 pub async fn kms_state<CCB: CqrsComponentBuilder>(
     builder: &CCB,
-    event_bus: &EventBusHandle,
+    _event_bus: &EventBusHandle,
     development_providers_allowed: bool,
     adapters: KeyProviderAdapters,
     key_usage: Arc<dyn KeyUsage>,
@@ -72,10 +72,10 @@ pub async fn kms_state<CCB: CqrsComponentBuilder>(
     // There is only one key providers aggregate, so its own view already lists every provider and the
     // all-aggregates view is not needed.
     let (key_providers_command_handler, key_providers, _) = builder
-        .commands_and_queries::<KeyProvidersView, KeyProviders, KeyProvidersView>(services, vec![event_bus.query()])
+        .commands_and_queries::<KeyProvidersView, KeyProviders, KeyProvidersView>(services, vec![])
         .await;
     let (keys_command_handler, key, all_keys) = builder
-        .commands_and_queries::<KeyView, Key, AllKeysView>((), vec![event_bus.query()])
+        .commands_and_queries::<KeyView, Key, AllKeysView>((), vec![])
         .await;
 
     KmsState {
