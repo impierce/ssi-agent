@@ -48,7 +48,7 @@ For example:
   "datacontenttype": "application/json",
   "data": {
     "offer_id": "12345",
-    "credential_ids": ["cred-1"],
+    "credential_configuration_ids": ["template-1"],
     "pre_authorized_code": "code-abc"
   }
 }

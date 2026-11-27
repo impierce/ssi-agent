@@ -20,7 +20,7 @@ pub struct UnmappedEvent;
 pub enum IssuanceIntegrationEvent {
     CredentialOffered {
         offer_id: String,
-        credential_ids: Vec<String>,
+        credential_configuration_ids: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pre_authorized_code: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,9 +102,7 @@ impl TryFrom<OfferEvent> for IssuanceIntegrationEvent {
                 delivery_options,
                 ..
             } => {
-                // `OfferEvent::CredentialOfferCreated` carries `credential_configuration_ids`;
-                // actual `Credential` aggregate IDs are linked separately via `OfferEvent::CredentialsAdded`.
-                let credential_ids = match credential_offer {
+                let credential_configuration_ids = match credential_offer {
                     oid4vci::credential_offer::CredentialOffer::CredentialOffer(payload) => {
                         payload.credential_configuration_ids.iter().cloned().collect()
                     }
@@ -113,7 +111,7 @@ impl TryFrom<OfferEvent> for IssuanceIntegrationEvent {
 
                 Ok(Self::CredentialOffered {
                     offer_id,
-                    credential_ids,
+                    credential_configuration_ids,
                     pre_authorized_code: Some(pre_authorized_code),
                     tx_code,
                     delivery_options,
@@ -349,5 +347,49 @@ mod tests {
             "com.impierce.unicore.issuance.offer.email_sent"
         );
         assert_eq!(email_integration.subject().as_deref(), Some("offer-1"));
+    }
+
+    #[test]
+    fn try_from_credential_offer_created_exposes_credential_configuration_ids() {
+        let credential_offer = oid4vci::credential_offer::CredentialOffer::CredentialOffer(Box::new(
+            oid4vci::credential_offer::CredentialOfferParameters {
+                credential_issuer: Url::parse("https://issuer.example.test").unwrap().into(),
+                credential_configuration_ids: oid4vci::credential_offer::CredentialConfigurationIds::try_new(vec![
+                    "tmpl-diploma".to_string(),
+                ])
+                .unwrap(),
+                grants: None,
+            },
+        ));
+        let event = OfferEvent::CredentialOfferCreated {
+            offer_id: "offer-1".to_string(),
+            grant_types: vec![oid4vci::credential_offer::GrantType::PreAuthorizedCode],
+            credential_offer,
+            credential_offer_uri: oid4vci::credential_offer::CredentialOffer::CredentialOfferUri(
+                Url::parse("https://issuer.example.test/offers/offer-1").unwrap(),
+            ),
+            pre_authorized_code: "code-abc".to_string(),
+            status: crate::offer::aggregate::Status::Created,
+            tx_code: None,
+            delivery_options: None,
+        };
+
+        let integration = IssuanceIntegrationEvent::try_from(event).expect("should map");
+        assert_eq!(
+            integration,
+            IssuanceIntegrationEvent::CredentialOffered {
+                offer_id: "offer-1".to_string(),
+                credential_configuration_ids: vec!["tmpl-diploma".to_string()],
+                pre_authorized_code: Some("code-abc".to_string()),
+                tx_code: None,
+                delivery_options: None,
+            }
+        );
+        let json = serde_json::to_value(&integration).unwrap();
+        assert_eq!(
+            json["credential_configuration_ids"],
+            serde_json::json!(["tmpl-diploma"])
+        );
+        assert!(json.get("credential_ids").is_none());
     }
 }
