@@ -155,9 +155,16 @@ impl EventPublishingContextBuilder {
         let supervisor = EventPublisherSupervisor::new(event_bus).with_allow_local_network(self.allow_local_network);
         let mut authoritative_views = Vec::new();
         if let Some(list_view) = views.event_publisher_list.load(EVENT_PUBLISHER_LIST_VIEW_ID).await? {
-            for (id, _) in list_view.into_entries() {
+            for (id, list_entry) in list_view.into_entries() {
                 match views.event_publisher.load(&id).await {
-                    Ok(Some(view)) if !view.is_deleted() => authoritative_views.push(view),
+                    Ok(Some(view)) if !view.is_deleted() => {
+                        let freshest = if list_entry.last_modified_at > view.last_modified_at {
+                            list_entry
+                        } else {
+                            view
+                        };
+                        authoritative_views.push(freshest);
+                    }
                     Ok(Some(_)) => {
                         tracing::debug!(
                             publisher_id = %id,
@@ -170,10 +177,9 @@ impl EventPublishingContextBuilder {
                             "Skipping event publisher from list view during startup hydration: per-publisher view not found"
                         );
                     }
-                    Err(PersistenceError::DeserializationError(err)) => {
+                    Err(PersistenceError::DeserializationError(_)) => {
                         tracing::error!(
                             publisher_id = %id,
-                            error = %err,
                             "Skipping corrupt event publisher view during startup hydration"
                         );
                     }
@@ -393,9 +399,9 @@ mod tests {
         async fn load(&self, view_id: &str) -> Result<Option<EventPublisherView>, PersistenceError> {
             if let Some(fault) = self.faults.get(view_id) {
                 return Err(match fault {
-                    LoadFault::Deserialization => {
-                        PersistenceError::DeserializationError("corrupt publisher row".into())
-                    }
+                    LoadFault::Deserialization => PersistenceError::DeserializationError(
+                        "invalid type: string \"Bearer secret-corrupt-token\", expected map".into(),
+                    ),
                     LoadFault::Connection => PersistenceError::ConnectionError("database unreachable".into()),
                     LoadFault::Unknown => PersistenceError::UnknownError("unexpected db failure".into()),
                 });
@@ -509,6 +515,7 @@ mod tests {
         assert!(logs_contain(
             "Skipping corrupt event publisher view during startup hydration"
         ));
+        assert!(!logs_contain("secret-corrupt-token"));
 
         event_bus.publish(CloudEvent::new("test.corrupt.hydration", "/services/test"));
         wait_for_request_path(&mock_server, "/healthy", Duration::from_secs(2)).await;
@@ -1076,5 +1083,68 @@ mod tests {
             Err(AggregateError::UserError(EventPublisherError::EventPublisherNotFound))
         ));
         assert!(supervisor.is_active("pub-err"));
+    }
+
+    #[tokio::test]
+    async fn startup_hydration_prefers_newer_list_entry_when_per_publisher_view_is_stale() {
+        let views = EventPublisherViewRepositories::from_factory(&InMemoryStore);
+        let created_at = Utc::now();
+        let deactivated_at = created_at + chrono::Duration::seconds(5);
+        let filter = EventPublisherFilter {
+            types: vec!["test.stale.per.pub".to_string()],
+        };
+        let url = "https://example.test/webhook".to_string();
+
+        // List view recorded the newer deactivation (`enabled: false`), while the per-publisher view
+        // is stale (`enabled: true` at `created_at`).
+        let mut list = EventPublisherListView::default();
+        list.update(&EventEnvelope {
+            aggregate_id: "pub-stale-view".to_string(),
+            sequence: 1,
+            payload: EventPublisherEvent::EventPublisherCreated {
+                id: "pub-stale-view".to_string(),
+                name: "Stale".to_string(),
+                description: None,
+                enabled: true,
+                filter: filter.clone(),
+                config: EventPublisherConfig::Http(HttpPublisherConfig {
+                    target_url: url.clone(),
+                    headers: None,
+                }),
+                occurred_at: created_at,
+            },
+            metadata: HashMap::new(),
+        });
+        list.update(&EventEnvelope {
+            aggregate_id: "pub-stale-view".to_string(),
+            sequence: 2,
+            payload: EventPublisherEvent::EventPublisherDeactivated {
+                occurred_at: deactivated_at,
+            },
+            metadata: HashMap::new(),
+        });
+        views
+            .event_publisher_list
+            .update_view(list, ViewContext::new(EVENT_PUBLISHER_LIST_VIEW_ID.to_string(), 0))
+            .await
+            .unwrap();
+        views
+            .event_publisher
+            .update_view(
+                test_view("pub-stale-view", url, true, Status::Configured, filter, created_at),
+                ViewContext::new("pub-stale-view".to_string(), 0),
+            )
+            .await
+            .unwrap();
+
+        let context = EventPublishingContextBuilder::new()
+            .with_views(views)
+            .with_event_bus(EventBusHandle::new(16))
+            .build(&InMemoryStore)
+            .await
+            .unwrap();
+
+        assert_eq!(context.supervisor.active_count(), 0);
+        assert!(!context.supervisor.is_active("pub-stale-view"));
     }
 }
