@@ -5,8 +5,11 @@ use cqrs_es::{
     persist::{PersistenceError, ViewContext, ViewRepository},
     Aggregate, CqrsFramework, Query, View,
 };
-use shared_kernel::view_repository::DynViewRepository;
-use std::{collections::HashMap, sync::Arc};
+use shared_kernel::{
+    command_handler::{CommandHandler, CommandHandlerFactory},
+    view_repository::{BoxedViewRepository, DynViewRepository, ViewRepositoryFactory},
+};
+use std::{collections::HashMap, future::Future, sync::Arc};
 use tokio::sync::Mutex;
 
 #[derive(Default)]
@@ -87,5 +90,32 @@ impl CqrsComponentBuilder for InMemory {
             aggregate,
             all_aggregates,
         )
+    }
+}
+
+impl ViewRepositoryFactory for InMemory {
+    fn create_view_repository<V, A>(&self, _name: &str) -> BoxedViewRepository<V, A>
+    where
+        V: View<A> + Clone + 'static,
+        A: Aggregate + 'static,
+    {
+        BoxedViewRepository::new(Box::new(MemRepository::<V, A>::default()))
+    }
+}
+
+impl CommandHandlerFactory for InMemory {
+    type Error = std::convert::Infallible;
+
+    #[allow(clippy::manual_async_fn)]
+    fn create_handler<A>(
+        &self,
+        services: A::Services,
+        queries: Vec<Box<dyn Query<A>>>,
+    ) -> impl Future<Output = Result<CommandHandler<A>, Self::Error>> + Send
+    where
+        A: Aggregate + 'static,
+        <A as Aggregate>::Command: Send,
+    {
+        async move { Ok(Arc::new(CqrsFramework::new(MemStore::default(), queries, services)) as CommandHandler<A>) }
     }
 }

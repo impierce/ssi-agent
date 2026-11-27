@@ -123,10 +123,16 @@ where
             .merge(holder_state.map(v0::holder::router).unwrap_or_default())
             .merge(verification_state.map(v0::verification::router).unwrap_or_default())
             .merge(kms_state.map(v0::kms::router).unwrap_or_default())
+            .merge(
+                events_state
+                    .clone()
+                    .map(v0::events::publishers_router)
+                    .unwrap_or_default(),
+            )
             .merge(public::router(library_state)),
     )
-    // The events router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
-    .merge(events_state.map(v0::events::router).unwrap_or_default());
+    // The SSE router is merged after the trace layer to ensure SSE event payloads and connections are not logged.
+    .merge(events_state.map(v0::events::sse_router).unwrap_or_default());
 
     let app = if application_base_path == "/" {
         app
@@ -200,8 +206,8 @@ pub fn sensitive_headers() -> SetSensitiveHeadersLayer {
     SetSensitiveHeadersLayer::new(SENSITIVE_HEADERS)
 }
 
-/// Rejects a `NUL` in the request URI without buffering the body or logging anything, for the
-/// events route — which stays outside the trace layer so SSE payloads are not logged.
+/// Rejects a `NUL` in the request URI without logging anything, for the SSE router —
+/// which stays outside the trace layer so SSE payloads and connections are not logged.
 pub(crate) async fn reject_null_byte_uri(request: Request, next: Next) -> Result<impl IntoResponse, Response> {
     if uri_contains_null_byte(request.uri()) {
         return Err(null_byte_rejection().into_axum_response());
@@ -834,6 +840,104 @@ mod tests {
         // Verify that absolutely nothing was logged for /events
         assert!(!logs_contain("Request completed"));
         assert!(!logs_contain("sensitive-data"));
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn event_publisher_routes_are_logged_without_leaking_secrets() {
+        use bc_event_publishing::{
+            application::{builder::EventPublishingContextBuilder, views::EventPublisherViewRepositories},
+            domain::event_publisher::services::KnownEventTypes,
+        };
+        use shared_kernel::test_utils::in_memory::InMemoryStore;
+
+        let bus_handle = shared_kernel::event_bus::EventBusHandle::new(16);
+        let views = EventPublisherViewRepositories::from_factory(&InMemoryStore);
+        let known_events = KnownEventTypes::with_event_types(["com.impierce.unicore.issuance.credential.issued"]);
+        let context = EventPublishingContextBuilder::new()
+            .with_views(views)
+            .with_event_bus(bus_handle.clone())
+            .with_known_event_types(known_events)
+            .build(&InMemoryStore)
+            .await
+            .unwrap();
+
+        let events_state = Arc::new(v0::events::EventsState::from(bus_handle).with_event_publishing(Arc::new(context)));
+
+        let app = app_with_base_path(
+            ApiState {
+                events_state: Some(events_state),
+                ..Default::default()
+            },
+            Arc::new(NoActorExtractor),
+            "/",
+        );
+
+        let response = tower::ServiceExt::oneshot(
+            app.clone(),
+            Request::builder()
+                .method("POST")
+                .uri("/v0/create-event-publisher")
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"name":"Secret Hook","filter":{"types":["com.impierce.unicore.issuance.credential.issued"]},"config":{"publisherType":"http","targetUrl":"https://hooks.example.org/cap/secret-path?token=secret-query","headers":{"X-Webhook-Secret":"top-secret-header"}}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Domain command rejection (422 Unprocessable Content) must also never leak capability paths,
+        // query secrets, or webhook headers via `Command rejected` / `Request rejected` logs.
+        let rejected_domain = tower::ServiceExt::oneshot(
+            app.clone(),
+            Request::builder()
+                .method("POST")
+                .uri("/v0/create-event-publisher")
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"name":"Rejected Hook","filter":{"types":["com.impierce.unicore.issuance.credential.issued"]},"config":{"publisherType":"http","targetUrl":"htps://hooks.example.org/cap/rejected-secret-path?token=rejected-secret-query","headers":{"X-Webhook-Secret":"rejected-secret-header"}}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(rejected_domain.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        // Deserialization rejection (422 Unprocessable Entity) must also never leak secrets.
+        let rejected_422 = tower::ServiceExt::oneshot(
+            app,
+            Request::builder()
+                .method("POST")
+                .uri("/v0/create-event-publisher")
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"name":"Malformed Hook","filter":{"types":["com.impierce.unicore.issuance.credential.issued"]},"config":{"publisherType":"http","targetUrl":"https://hooks.example.org/cap/unprocessable-secret-path?token=unprocessable-secret-query","headers":{"X-Webhook-Secret":"unprocessable-secret-header"},"unexpectedField":true}}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(rejected_422.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        assert!(logs_contain("Request completed"));
+        assert!(logs_contain("Request rejected"));
+        assert!(logs_contain("/v0/create-event-publisher"));
+        for secret in [
+            "secret-path",
+            "secret-query",
+            "top-secret-header",
+            "rejected-secret-path",
+            "rejected-secret-query",
+            "rejected-secret-header",
+            "unprocessable-secret-path",
+            "unprocessable-secret-query",
+            "unprocessable-secret-header",
+        ] {
+            assert!(!logs_contain(secret), "leaked `{secret}` in HTTP/command logs");
+        }
     }
 
     #[tokio::test]

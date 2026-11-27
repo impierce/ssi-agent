@@ -1,0 +1,49 @@
+[package]
+name = "bc-event-publishing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+shared-kernel.workspace = true
+
+async-nats = "0.50"
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tracing.workspace = true
+url.workspace = true
+utoipa.workspace = true
+
+[dev-dependencies]
+shared-kernel = { workspace = true, features = ["test-utils"] }
+
+futures.workspace = true
+rstest.workspace = true
+testcontainers-modules = { version = "0.15", features = ["nats"] }
+tracing-test.workspace = true
+wiremock.workspace = true
+
+[features]
+# Enables the integration tests that start a NATS server in a Docker container.
+docker-tests = []
+# Allows HTTP webhook targets on the local network (`localhost`, loopback, RFC 1918 / ULA)
+# for local development and E2E testing; link-local and other non-local reserved ranges remain blocked.
+allow-localhost = []
+# Exposes test-only local-network opt-in helpers for integration tests in downstream crates.
+test-utils = []
+
+[[test]]
+name = "nats"
+required-features = ["docker-tests"]
+
+[lints]
+workspace = true

@@ -5,7 +5,9 @@ use cqrs_es::{
 };
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, error};
+
+const MAX_OPTIMISTIC_LOCK_RETRIES: usize = 5;
 
 /// Extension trait for queries that need mutable access to views.
 ///
@@ -66,7 +68,14 @@ where
 {
     async fn dispatch(&self, _view_id: &str, events: &[EventEnvelope<A>]) {
         debug!(view_id = %self.view_id, event_count = events.len(), "ListAllQuery dispatching events");
-        self.apply_events(&self.view_id, events).await.ok();
+        if let Err(err) = self.apply_events(&self.view_id, events).await {
+            error!(
+                view_id = %self.view_id,
+                event_count = events.len(),
+                error = %err,
+                "ListAllQuery failed to apply events to list view"
+            );
+        }
     }
 }
 
@@ -88,18 +97,40 @@ where
     }
 
     async fn apply_events(&self, view_id: &str, events: &[EventEnvelope<A>]) -> Result<(), PersistenceError> {
-        for event in events {
-            let (mut view, view_context) = self.load_mut(view_id.to_string()).await?;
-
-            view.update(event);
-            self.view_repository.update_view(view, view_context).await?;
+        if events.is_empty() {
+            return Ok(());
         }
-        debug!(
-            view_id,
-            event_count = events.len(),
-            "ListAllQuery applied events to list view"
-        );
-        Ok(())
+
+        for attempt in 0..=MAX_OPTIMISTIC_LOCK_RETRIES {
+            let (mut view, view_context) = self.load_mut(view_id.to_string()).await?;
+            for event in events {
+                view.update(event);
+            }
+
+            match self.view_repository.update_view(view, view_context).await {
+                Ok(()) => {
+                    debug!(
+                        view_id,
+                        event_count = events.len(),
+                        attempt,
+                        "ListAllQuery applied events to list view"
+                    );
+                    return Ok(());
+                }
+                Err(PersistenceError::OptimisticLockError) if attempt < MAX_OPTIMISTIC_LOCK_RETRIES => {
+                    debug!(
+                        view_id,
+                        attempt = attempt + 1,
+                        max_retries = MAX_OPTIMISTIC_LOCK_RETRIES,
+                        "ListAllQuery encountered optimistic lock conflict; retrying"
+                    );
+                    tokio::task::yield_now().await;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        unreachable!("retry loop returns on success or final error")
     }
 }
 
@@ -203,5 +234,116 @@ mod tests {
         let (view, ctx) = CustomQuery::load_mut(&query, "list".to_string()).await.unwrap();
         assert_eq!(view.count, 0);
         assert_eq!(ctx.view_instance_id, "list");
+    }
+
+    #[derive(Default)]
+    struct CountingRepo {
+        inner: MemViewRepository<CounterView, TestAggregate>,
+        loads: std::sync::atomic::AtomicUsize,
+        updates: std::sync::atomic::AtomicUsize,
+        conflicts_remaining: std::sync::Mutex<usize>,
+        fail_with_unknown_error: std::sync::atomic::AtomicBool,
+    }
+
+    impl ViewRepository<CounterView, TestAggregate> for CountingRepo {
+        async fn load(&self, view_id: &str) -> Result<Option<CounterView>, PersistenceError> {
+            ViewRepository::load(&self.inner, view_id).await
+        }
+
+        async fn load_with_context(
+            &self,
+            view_id: &str,
+        ) -> Result<Option<(CounterView, ViewContext)>, PersistenceError> {
+            self.loads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            ViewRepository::load_with_context(&self.inner, view_id).await
+        }
+
+        async fn update_view(&self, view: CounterView, context: ViewContext) -> Result<(), PersistenceError> {
+            self.updates.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.fail_with_unknown_error.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(PersistenceError::UnknownError(Box::new(std::io::Error::other("boom"))));
+            }
+            {
+                let mut remaining = self.conflicts_remaining.lock().unwrap();
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    return Err(PersistenceError::OptimisticLockError);
+                }
+            }
+            ViewRepository::update_view(&self.inner, view, context).await
+        }
+    }
+
+    #[tokio::test]
+    async fn list_all_query_batches_events_and_skips_empty_batches() {
+        let repo = Arc::new(CountingRepo::default());
+        let query = ListAllQuery::<_, CounterView, TestAggregate>::new(repo.clone(), "list");
+
+        query.apply_events("list", &[]).await.unwrap();
+        assert_eq!(repo.loads.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(repo.updates.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let batch: Vec<_> = (1..=3)
+            .map(|sequence| EventEnvelope {
+                aggregate_id: "agg-1".to_string(),
+                sequence,
+                payload: TestEvent,
+                metadata: HashMap::new(),
+            })
+            .collect();
+
+        query.apply_events("list", &batch).await.unwrap();
+        assert_eq!(repo.loads.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(repo.updates.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        let view = ViewRepository::load(repo.as_ref(), "list").await.unwrap().unwrap();
+        assert_eq!(view.count, 3);
+    }
+
+    #[tokio::test]
+    async fn list_all_query_retries_on_optimistic_lock_error_and_does_not_retry_other_errors() {
+        let repo = Arc::new(CountingRepo::default());
+        *repo.conflicts_remaining.lock().unwrap() = 2;
+        let query = ListAllQuery::<_, CounterView, TestAggregate>::new(repo.clone(), "list");
+
+        let batch = vec![
+            EventEnvelope {
+                aggregate_id: "agg-1".to_string(),
+                sequence: 1,
+                payload: TestEvent,
+                metadata: HashMap::new(),
+            },
+            EventEnvelope {
+                aggregate_id: "agg-1".to_string(),
+                sequence: 2,
+                payload: TestEvent,
+                metadata: HashMap::new(),
+            },
+        ];
+
+        query.apply_events("list", &batch).await.unwrap();
+        assert_eq!(repo.loads.load(std::sync::atomic::Ordering::SeqCst), 3);
+        assert_eq!(repo.updates.load(std::sync::atomic::Ordering::SeqCst), 3);
+        let view = ViewRepository::load(repo.as_ref(), "list").await.unwrap().unwrap();
+        assert_eq!(view.count, 2);
+
+        // Exhausting retries returns OptimisticLockError
+        repo.loads.store(0, std::sync::atomic::Ordering::SeqCst);
+        repo.updates.store(0, std::sync::atomic::Ordering::SeqCst);
+        *repo.conflicts_remaining.lock().unwrap() = MAX_OPTIMISTIC_LOCK_RETRIES + 5;
+        let err = query.apply_events("list", &batch).await.unwrap_err();
+        assert!(matches!(err, PersistenceError::OptimisticLockError));
+        assert_eq!(
+            repo.updates.load(std::sync::atomic::Ordering::SeqCst),
+            MAX_OPTIMISTIC_LOCK_RETRIES + 1
+        );
+
+        // Non-optimistic errors fail immediately without retrying
+        repo.updates.store(0, std::sync::atomic::Ordering::SeqCst);
+        repo.fail_with_unknown_error
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let err = query.apply_events("list", &batch).await.unwrap_err();
+        assert!(matches!(err, PersistenceError::UnknownError(_)));
+        assert_eq!(repo.updates.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }

@@ -38,6 +38,24 @@ from-file = "/reports/seed/authorization_requests.dict"
 [dictionaries.documents]
 from-file = "/reports/seed/documents.dict"
 
+[dictionaries.event_publishers]
+from-file = "/reports/seed/event_publishers.dict"
+
+[dictionaries.deletable_event_publishers]
+from-file = "/reports/seed/deletable_event_publishers.dict"
+
+[dictionaries.event_types]
+from-file = "/reports/seed/event_types.dict"
+
+[dictionaries.webhook_urls]
+from-file = "/reports/seed/webhook_urls.dict"
+
+[dictionaries.nats_urls]
+from-file = "/reports/seed/nats_urls.dict"
+
+[dictionaries.nats_subjects]
+from-file = "/reports/seed/nats_subjects.dict"
+
 # Half of the generated values come from the dictionaries, the other half stays random so that unknown
 # and malformed identifiers are still exercised.
 [parameters]
@@ -49,6 +67,10 @@ from-file = "/reports/seed/documents.dict"
 "path.catalog_id" = { dictionary = "catalogs", probability = 0.5 }
 "path.authorization_request_id" = { dictionary = "authorization_requests", probability = 0.5 }
 "path.document_id" = { dictionary = "documents", probability = 0.5 }
+"body.filter.types[*]" = { dictionary = "event_types", probability = 0.7 }
+"body.config.targetUrl" = { dictionary = "webhook_urls", probability = 0.7 }
+"body.config.natsUrl" = { dictionary = "nats_urls", probability = 0.7 }
+"body.config.subject" = { dictionary = "nats_subjects", probability = 0.7 }
 
 # `id`, `offer_id` and `credential_id` name different resources depending on the operation.
 [[operations]]
@@ -62,6 +84,16 @@ parameters = { "path.offer_id" = { dictionary = "offers", probability = 0.5 } }
 [[operations]]
 include-operation-id-regex = "^(get_credential_by_id|update_credential_status)$"
 parameters = { "path.credential_id" = { dictionary = "credentials", probability = 0.5 } }
+
+# `delete_event_publisher` draws from its own pool so it does not delete the publishers that `get_event_publisher_by_id`
+# and `update_event_publisher` read and update later in the run.
+[[operations]]
+include-operation-id-regex = "^(get_event_publisher_by_id|update_event_publisher|activate_event_publisher|deactivate_event_publisher)$"
+parameters = { "path.id" = { dictionary = "event_publishers", probability = 0.5 }, "body.id" = { dictionary = "event_publishers", probability = 0.5 } }
+
+[[operations]]
+include-operation-id = "delete_event_publisher"
+parameters = { "body.id" = { dictionary = "deletable_event_publishers", probability = 0.5 } }
 
 # OAuth 2.0 and OpenID4VC answer well-formed requests with wrong values (an unknown code, an expired `request_uri`, an
 # unregistered client) with `400` and an error code, and finish authorization with a redirect: both are part of those

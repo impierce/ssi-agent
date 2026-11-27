@@ -82,6 +82,28 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
     .await;
     assert_eq!(status, StatusCode::CREATED);
 
+    let (status, publisher) = send(
+        &app,
+        Request::post("/v0/create-event-publisher")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                json!({
+                    "name": "Persisted webhook",
+                    "enabled": false,
+                    "filter": { "types": ["*"] },
+                    "config": {
+                        "publisherType": "http",
+                        "targetUrl": "https://example.test/webhook"
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let publisher_id = publisher["id"].as_str().unwrap().to_string();
+
     // Recorded directly: a key can't be created in AWS KMS here, and in-memory keys need the `development` profile.
     agent_shared::handlers::command_handler(
         kms.authorization_checker.clone(),
@@ -195,6 +217,20 @@ pub async fn assert_state_survives_a_restart(type_: EventStoreType, connection_s
         providers,
         json!([{ "providerType": "aws_kms_ambient", "name": "Persisted keys" }])
     );
+
+    let (status, publishers) = send(
+        &app,
+        Request::get("/v0/get-event-publisher-list")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(publishers
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["id"] == publisher_id && item["name"] == "Persisted webhook"));
 
     let (status, keys) = send(&app, Request::get("/v0/get-all-keys").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);

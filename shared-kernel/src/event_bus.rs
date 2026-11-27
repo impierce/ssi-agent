@@ -134,15 +134,15 @@ impl EventFilter {
                 if pattern == "*" || pattern.eq_ignore_ascii_case(event_type) {
                     return true;
                 }
-                if let Some(prefix) = pattern.strip_suffix('*') {
-                    if event_type
-                        .to_ascii_lowercase()
-                        .starts_with(&prefix.to_ascii_lowercase())
+                let event_suffix = event_type.strip_prefix("com.impierce.unicore.").unwrap_or(event_type);
+                if let Some(prefix) = pattern.strip_suffix(".*") {
+                    let prefix_dot = format!("{}.", prefix.to_ascii_lowercase());
+                    if event_type.to_ascii_lowercase().starts_with(&prefix_dot)
+                        || event_suffix.to_ascii_lowercase().starts_with(&prefix_dot)
                     {
                         return true;
                     }
                 }
-                let event_suffix = event_type.strip_prefix("com.impierce.unicore.").unwrap_or(event_type);
                 event_suffix.eq_ignore_ascii_case(pattern)
             })
     }

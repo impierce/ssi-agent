@@ -370,6 +370,22 @@ CREATE TABLE all_key_providerss
     PRIMARY KEY (view_id)
 );
 
+CREATE TABLE event_publisher
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
+CREATE TABLE event_publisher_list
+(
+    view_id           text                        NOT NULL,
+    version           bigint CHECK (version >= 0) NOT NULL,
+    payload           json                        NOT NULL,
+    PRIMARY KEY (view_id)
+);
+
 CREATE TABLE key
 (
     view_id           text                        NOT NULL,

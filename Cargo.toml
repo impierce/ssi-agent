@@ -4,8 +4,6 @@ members = [
     "agent_api_http",
     "agent_application",
     "agent_authorization",
-    "agent_event_publisher_http",
-    "agent_event_publisher_nats",
     "agent_holder",
     "agent_identity",
     "agent_issuance",
@@ -18,6 +16,8 @@ members = [
     "agent_verification",
 
     "shared-kernel",
+
+    "bounded-contexts/bc-event-publishing",
 
     "infrastructure/stores/mongodb",
     "infrastructure/adapters/kms-aws",
@@ -58,6 +58,7 @@ identity-kit = { version = "0.6", default-features = false, features = [
     "utoipa",
 ] }
 
+bc-event-publishing = { path = "bounded-contexts/bc-event-publishing" }
 shared-kernel = { path = "shared-kernel" }
 
 anyhow = "1.0"

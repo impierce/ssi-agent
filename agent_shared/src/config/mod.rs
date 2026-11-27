@@ -303,8 +303,6 @@ pub struct ApplicationConfiguration {
         ]"#
     )]
     pub display: Vec<Display>,
-    #[config(default)]
-    pub event_publishers: EventPublishers,
     #[config(default = "VpFormatsSupported {
         jwt_vc_json: Some(JwtVcJsonParameters {
             alg_values: Some(AlgValues::try_new(vec![Algorithm::ES256, Algorithm::EdDSA]).unwrap())
@@ -407,75 +405,16 @@ impl ApplicationConfiguration {
         }
     }
 
-    // TODO: make generic: set_enabled(enabled: bool)
-    pub fn enable_event_publisher_http(&mut self, index: usize) {
-        if self.event_publishers.http.len() <= index {
-            self.event_publishers
-                .http
-                .resize(index + 1, EventPublisherHttp::default());
-        }
-        self.event_publishers.http[index].enabled = true;
-    }
-
-    pub fn set_event_publisher_http_target_url(&mut self, index: usize, target_url: String) {
-        if self.event_publishers.http.len() <= index {
-            self.event_publishers
-                .http
-                .resize(index + 1, EventPublisherHttp::default());
-        }
-        self.event_publishers.http[index].target_url = target_url;
-    }
-
-    pub fn set_event_publisher_http_target_events(&mut self, index: usize, events: Events) {
-        if self.event_publishers.http.len() <= index {
-            self.event_publishers
-                .http
-                .resize(index + 1, EventPublisherHttp::default());
-        }
-        self.event_publishers.http[index].events = events;
-    }
-
     pub fn set_secret_manager_config(&mut self, config: SecretManagerConfig) {
         self.secret_manager = config;
     }
 
     /// The serialized configuration with all secrets redacted, for logging. On top of the fields the
-    /// serialization already redacts, the HTTP event publishers' header values and target URL paths
-    /// (webhook services often put a token in the path), and the usernames, passwords and query
-    /// values in URLs are redacted.
+    /// serialization already redacts, the usernames, passwords and query values in URLs are redacted.
     pub fn redacted(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(self).unwrap_or_default();
-
-        if let Some(publishers) = value
-            .pointer_mut("/event_publishers/http")
-            .and_then(serde_json::Value::as_array_mut)
-        {
-            for publisher in publishers.iter_mut() {
-                if let Some(headers) = publisher.get_mut("headers").and_then(serde_json::Value::as_object_mut) {
-                    headers.values_mut().for_each(|value| *value = json!(REDACTED));
-                }
-                if let Some(target_url) = publisher.get_mut("target_url") {
-                    redact_url_path(target_url);
-                }
-            }
-        }
-
         redact_url_credentials(&mut value);
         value
-    }
-}
-
-fn redact_url_path(value: &mut serde_json::Value) {
-    let Some(text) = value.as_str() else {
-        return;
-    };
-    let Ok(mut url) = Url::parse(text) else {
-        *value = json!(REDACTED);
-        return;
-    };
-    if url.path() != "/" && !url.path().is_empty() {
-        url.set_path("/REDACTED");
-        *value = json!(url.as_str());
     }
 }
 
@@ -693,45 +632,6 @@ pub struct Display {
     pub locale: Option<String>,
     pub logo: Option<Logo>,
     pub country: Option<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Deserialize, Clone, Serialize, Default)]
-pub struct EventPublishers {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub http: Vec<EventPublisherHttp>,
-    pub nats: Option<EventPublisherNats>,
-}
-
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-pub struct EventPublisherHttp {
-    pub enabled: bool,
-    pub target_url: String,
-    #[serde(with = "http_serde::option::header_map", default)]
-    pub headers: Option<reqwest::header::HeaderMap>,
-    pub events: Events,
-}
-
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-pub struct EventPublisherNats {
-    pub enabled: bool,
-    pub nats_url: String,
-    #[serde(default)]
-    pub subjects: Vec<NatsSubject>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct NatsSubject {
-    pub name: String,
-    #[serde(default)]
-    pub events: Events,
-}
-
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Events {
-    #[serde(default)]
-    pub types: Vec<String>,
 }
 
 /// All DID methods supported by UniCore
@@ -1029,7 +929,6 @@ mod tests {
                   }
                 }
               ],
-              "event_publishers": {},
               "vp_formats_supported": {
                 "jwt_vc_json": {
                   "alg_values": ["ES256", "EdDSA"]
@@ -1075,16 +974,6 @@ mod tests {
                         connection_string: "mongodb://user:db-password@localhost:27017"
                     secret_manager:
                         stronghold_password: "stronghold-password"
-                    event_publishers:
-                        http:
-                            - enabled: true
-                              target_url: "https://webhook-user:webhook-password@webhook.example.org/services/webhook-path-token?api_key=webhook-api-key"
-                              headers:
-                                authorization: "Bearer webhook-token"
-                              events: {}
-                        nats:
-                            enabled: true
-                            nats_url: "nats://nats-token@localhost:4222"
                 "#,
                 config::FileFormat::Yaml,
             ))
@@ -1094,35 +983,11 @@ mod tests {
         let config = ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
         let redacted = config.redacted().to_string();
 
-        for secret in [
-            "dev-api-key",
-            "db-password",
-            "stronghold-password",
-            "webhook-user",
-            "webhook-password",
-            "webhook-api-key",
-            "webhook-path-token",
-            "webhook-token",
-            "nats-token",
-        ] {
+        for secret in ["dev-api-key", "db-password", "stronghold-password"] {
             assert!(!redacted.contains(secret), "`{secret}` in {redacted}");
         }
 
         let redacted = config.redacted();
-        assert_eq!(
-            redacted.pointer("/event_publishers/http/0/headers"),
-            Some(&json!({ "authorization": "<REDACTED>" }))
-        );
-        assert_eq!(
-            redacted.pointer("/event_publishers/http/0/target_url"),
-            Some(&json!(
-                "https://REDACTED:REDACTED@webhook.example.org/REDACTED?api_key=REDACTED"
-            ))
-        );
-        assert_eq!(
-            redacted.pointer("/event_publishers/nats/nats_url"),
-            Some(&json!("nats://REDACTED@localhost:4222"))
-        );
         assert_eq!(redacted["public_url"], json!(config.public_url.as_str()));
     }
 
@@ -1471,8 +1336,6 @@ mod tests {
                     ApplicationConfiguration::load(provisioned_config, ApplicationProfile::Development).unwrap();
 
                 assert!(config.signing_algorithms_supported[&Algorithm::EdDSA].enabled);
-                assert!(config.event_publishers.http.is_empty());
-                assert!(config.event_publishers.nats.is_none());
             },
         );
     }
@@ -1687,34 +1550,6 @@ mod tests {
                 );
             },
         );
-    }
-
-    #[test]
-    fn test_events_rejects_unknown_fields() {
-        // Old beta config format: events: { credential: [...] }
-        let old_format = r#"{"credential": ["UnsignedCredentialCreated"]}"#;
-        let res: Result<Events, _> = serde_json::from_str(old_format);
-        assert!(res.is_err(), "Expected unknown field 'credential' to be rejected");
-
-        let unknown_format = r#"{"offer": ["TxCodeGenerated"]}"#;
-        let res: Result<Events, _> = serde_json::from_str(unknown_format);
-        assert!(res.is_err(), "Expected unknown field 'offer' to be rejected");
-
-        // Valid new format
-        let valid_format = r#"{"types": ["com.impierce.unicore.issuance.credential.offered", "com.impierce.unicore.issuance.credential.issued"]}"#;
-        let events: Events = serde_json::from_str(valid_format).unwrap();
-        assert_eq!(
-            events.types,
-            vec![
-                "com.impierce.unicore.issuance.credential.offered",
-                "com.impierce.unicore.issuance.credential.issued"
-            ]
-        );
-
-        // Empty object defaults to empty types
-        let empty_format = r#"{}"#;
-        let events: Events = serde_json::from_str(empty_format).unwrap();
-        assert!(events.types.is_empty());
     }
     fn kms_feature_flag(value: Option<&str>) -> Result<bool, SharedError> {
         temp_env::with_var("UNICORE__FEATURE__KMS", value, || {

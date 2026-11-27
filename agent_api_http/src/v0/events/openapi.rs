@@ -1,4 +1,23 @@
-use crate::v0::events::{__path_events_sse_handler, CloudEventStreamEvent};
+use crate::v0::events::{
+    __path_events_sse_handler,
+    commands::{
+        activate_event_publisher::{__path_activate_event_publisher, ActivateEventPublisherRequest},
+        create_event_publisher::{__path_create_event_publisher, CreateEventPublisherRequest},
+        deactivate_event_publisher::{__path_deactivate_event_publisher, DeactivateEventPublisherRequest},
+        delete_event_publisher::{__path_delete_event_publisher, DeleteEventPublisherRequest},
+        update_event_publisher::{__path_update_event_publisher, UpdateEventPublisherRequest},
+    },
+    config::{
+        EventPublisherConfigDto, HttpEventPublisherConfigDto, HttpEventPublisherType, NatsEventPublisherConfigDto,
+        NatsEventPublisherType,
+    },
+    queries::{
+        get_event_publisher_by_id::{__path_get_event_publisher_by_id, EventPublisherDto},
+        get_event_publisher_list::{__path_get_event_publisher_list, EventPublisherListDto},
+    },
+    CloudEventStreamEvent,
+};
+use bc_event_publishing::domain::event_publisher::config::{EventPublisherFilter, EventPublisherType};
 use shared_kernel::event_bus::CloudEvent;
 use utoipa::{
     openapi::{
@@ -11,10 +30,36 @@ use utoipa::{
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(events_sse_handler),
-    components(schemas(CloudEvent, CloudEventStreamEvent)),
+    paths(
+        events_sse_handler,
+        create_event_publisher,
+        update_event_publisher,
+        activate_event_publisher,
+        deactivate_event_publisher,
+        delete_event_publisher,
+        get_event_publisher_by_id,
+        get_event_publisher_list,
+    ),
+    components(schemas(
+        CloudEvent,
+        CloudEventStreamEvent,
+        EventPublisherType,
+        EventPublisherFilter,
+        HttpEventPublisherType,
+        NatsEventPublisherType,
+        HttpEventPublisherConfigDto,
+        NatsEventPublisherConfigDto,
+        EventPublisherConfigDto,
+        EventPublisherDto,
+        EventPublisherListDto,
+        CreateEventPublisherRequest,
+        UpdateEventPublisherRequest,
+        ActivateEventPublisherRequest,
+        DeactivateEventPublisherRequest,
+        DeleteEventPublisherRequest,
+    )),
     tags(
-        (name = "Events", description = "Stream domain events as CloudEvents via SSE.")
+        (name = "Events", description = "Stream domain events as CloudEvents via SSE and manage runtime event publishers.")
     )
 )]
 pub struct EventsApi;
@@ -32,13 +77,14 @@ pub fn webhooks() -> Paths {
         .build()
 }
 
-/// The request `agent_event_publisher_http` sends to each target configured under `event_publishers.http`.
+/// The request sent to each active HTTP event publisher (`publisherType: "http"`).
 fn cloud_event_webhook() -> PathItem {
     let operation = OperationBuilder::new()
         .summary(Some("Receive a CloudEvent"))
         .description(Some(
-            "Sent to the `target_url` of every target configured under `event_publishers.http` whose `events.types` \
-            include the event's type, with the headers configured for that target, e.g. a shared secret.\n\n\
+            "Sent to the `targetUrl` of every active HTTP event publisher (`publisherType: \"http\"`) whose \
+            `filter.types` matches the event's `type`, with any custom `headers` configured on that publisher \
+            (e.g. a shared secret).\n\n\
             Delivery is fire-and-forget: each request times out after 10 seconds and is not retried, and events are \
             dropped when the publisher falls behind the event bus. The response status is only logged.",
         ))

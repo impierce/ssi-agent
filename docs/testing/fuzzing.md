@@ -86,8 +86,8 @@ python3 scripts/fuzz-summary.py reports/fuzz/junit.xml
 Most operations take the identifier of an existing resource. Without any, they answer `404` and their
 handler logic is never reached. Before fuzzing, `scripts/fuzz-seed.py` creates a few published
 templates (some with constant values only, as public offers require), catalogs, offers, credentials,
-public offers, authorization requests and an in-memory key provider, and writes their identifiers,
-together with the DID documents created at startup, to `reports/fuzz/seed/`.
+public offers, authorization requests, event publishers and an in-memory key provider, and writes
+their identifiers, together with the DID documents created at startup, to `reports/fuzz/seed/`.
 `agent_application/docker/schemathesis.toml` binds the identifier parameters (`templateId`,
 `catalogId`, `offerId`, `catalog_id`, ...) to these dictionaries with a probability of 0.5, so half of
 the generated values refer to resources that exist and the other half stays random.
@@ -115,21 +115,21 @@ responses (`application/jwt`), which Schemathesis counts as JSON, are checked as
 `SCHEMATHESIS_HOOKS`.
 
 `agent_application/docker/fuzz.config.yaml` enables every switch that hides documented operations
-(`serve_openapi_enabled`, `feature.kms`), every DID method and signing algorithm that works without a
-remote service, and disables both event publishers.
+(`serve_openapi_enabled`, `feature.kms`) and every DID method and signing algorithm that works
+without a remote service.
 
 ## Hermeticity
 
 A fuzzer sends arbitrary data to every operation, including URLs and domains that would make the
 agent call third parties: credential-issuer metadata (`POST /v0/connections`), linked domain
-verification, sending offers to a `targetUrl`, resolving `did:web`. The compose project therefore runs
-on an internal Docker network without a route to the outside. Every operation is fuzzed, and outbound
-calls fail at the network boundary instead of reaching whatever host the generated input names. For
-the same reason, readiness checks and seeding run from the Schemathesis container inside that network,
-and no port is published.
+verification, sending offers to a `targetUrl`, runtime event publishers, resolving `did:web`. The
+compose project therefore runs on an internal Docker network without a route to the outside. Every
+operation is fuzzed, and outbound calls fail at the network boundary instead of reaching whatever
+host the generated input names. For the same reason, readiness checks and seeding run from the
+Schemathesis container inside that network, and no port is published.
 
-`agent_application/docker/fuzz.config.yaml` also disables both event publishers and the `did:web`
-method, so a run does not depend on them.
+`agent_application/docker/fuzz.config.yaml` also disables the `did:web` method, so a run does not
+depend on it.
 
 ## Published or full specification
 
