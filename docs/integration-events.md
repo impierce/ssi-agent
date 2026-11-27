@@ -22,7 +22,7 @@ Credential offer created and ready for holder interaction.
 | Field | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `offer_id` | `String` | Yes | Unique identifier of the credential offer. |
-| `credential_ids` | `Vec<String>` | Yes | Configuration IDs of the credentials included in this offer. |
+| `credential_configuration_ids` | `Vec<String>` | Yes | Configuration IDs of the credentials included in this offer. |
 | `pre_authorized_code` | `String` | No | Pre-authorized code for OID4VCI token exchange, if applicable. |
 | `tx_code` | `String` | No | Optional transaction PIN code required to redeem the offer. |
 | `delivery_options` | `DeliveryOptions` | No | Optional out-of-band delivery options (such as recipient email). |
