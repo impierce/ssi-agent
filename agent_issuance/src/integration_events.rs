@@ -242,6 +242,7 @@ mod tests {
     fn try_from_signed_credential_created() {
         let event = CredentialEvent::SignedCredentialCreated {
             credential_id: "cred-1".to_string(),
+            template_id: None,
             signed_credential: serde_json::json!({}),
             notification_id: None,
         };

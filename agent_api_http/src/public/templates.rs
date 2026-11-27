@@ -14,21 +14,23 @@ use hyper::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
-// Compared to the internal `TemplateDto` this omits the identifiers (`id` and `sourceTemplateId`),
-// `origin`, and `holderAuthorization` (issuance-side configuration). `status` and `visibility` are
-// omitted as well: every template returned here is by definition published and public, so both
-// fields would be constants. `modifiedAt` is kept because, absent a versioning system, it is the
-// only signal a reader has of how fresh a template is.
+// Compared to the internal `TemplateDto` this omits `sourceTemplateId`, `origin`, and
+// `holderAuthorization` (issuance-side configuration). `status` and `visibility` are omitted as
+// well: every template returned here is by definition published and public, so both fields would
+// be constants. `modifiedAt` is kept because, absent a versioning system, it is the only signal a
+// reader has of how fresh a template is.
 //
 // Data transfer object for publicly available Templates.
 //
-// A reduced projection of a template, carrying only what is needed to understand and render it.
-// Templates carry no public identifier: a reader that imports one assigns its own, and can refer
-// to an entry by its position in the returned array in the meantime.
+// A reduced projection of a template, carrying only what is needed to understand, render and refer
+// to it. `id` is not part of the public content, so it does not change the template origin digest.
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(as = PublicTemplate)]
 pub struct PublicTemplateDto {
+    /// Identifier of the template at this agent, stable for the template's lifetime. An importer
+    /// records it as `sourceTemplateId` of its copy's origin.
+    pub id: String,
     pub title: String,
     pub description: Option<String>,
     pub display: Display,
@@ -44,6 +46,7 @@ pub struct PublicTemplateDto {
 
 impl From<agent_library::template::views::TemplateView> for PublicTemplateDto {
     fn from(value: agent_library::template::views::TemplateView) -> Self {
+        let id = value.template_id.clone();
         let modified_at = value.modified_at.clone();
 
         // Exhaustive on both sides: a field added to `PublicTemplateContent`, the input of the
@@ -62,6 +65,7 @@ impl From<agent_library::template::views::TemplateView> for PublicTemplateDto {
         } = PublicTemplateContent::from(value);
 
         Self {
+            id,
             title,
             description,
             display,
@@ -167,7 +171,6 @@ mod tests {
         crate::public::router(Some(state))
     }
 
-    /// Templates have no public identifier, so tests identify them by their (unique) title.
     fn titles(body: &serde_json::Value) -> Vec<&str> {
         body.as_array()
             .unwrap()
@@ -305,7 +308,6 @@ mod tests {
         let keys: Vec<&String> = template.as_object().unwrap().keys().collect();
 
         for internal_field in [
-            "id",
             "sourceTemplateId",
             "origin",
             "status",
@@ -318,6 +320,7 @@ mod tests {
             );
         }
 
+        assert_eq!(template["id"], "public-published");
         // `modifiedAt` is deliberately public: it is the only freshness signal a reader has.
         assert_eq!(template["modifiedAt"], "2026-01-01T00:00:00Z");
         assert_eq!(template["title"], "Title of public-published");
@@ -328,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn projection_without_modified_at_is_the_public_content() {
+    fn projection_without_id_and_modified_at_is_the_public_content() {
         let template = TemplateView {
             description: Some("A description".to_string()),
             display: Some(Display {
@@ -347,7 +350,9 @@ mod tests {
         };
 
         let mut projection = serde_json::to_value(PublicTemplateDto::from(template.clone())).unwrap();
-        projection.as_object_mut().unwrap().remove("modifiedAt");
+        let projection_object = projection.as_object_mut().unwrap();
+        projection_object.remove("id");
+        projection_object.remove("modifiedAt");
 
         assert_eq!(projection, serde_json::to_value(template.public_content()).unwrap());
         assert_eq!(

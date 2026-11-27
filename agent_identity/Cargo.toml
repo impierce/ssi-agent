@@ -21,6 +21,7 @@ base64.workspace = true
 chrono.workspace = true
 cqrs-es.workspace = true
 derive_more.workspace = true
+futures.workspace = true
 hickory-resolver.workspace = true
 indexmap.workspace = true
 itertools = "0.14"
@@ -42,7 +43,6 @@ utoipa.workspace = true
 uuid.workspace = true
 
 # `test_utils` dependencies
-futures = { workspace = true, optional = true }
 rstest = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -69,5 +69,5 @@ tracing-test.workspace = true
 wiremock.workspace = true
 
 [features]
-test_utils = ["dep:futures", "dep:rstest"]
+test_utils = ["dep:rstest"]
 allow-localhost = ["agent_secret_manager/allow-localhost"]

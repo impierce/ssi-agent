@@ -11,6 +11,7 @@ impl View<Credential> for Credential {
         match &event.payload {
             CredentialEvent::UnsignedCredentialCreated {
                 credential_id,
+                template_id,
                 data,
                 credential_configuration,
                 notification_id,
@@ -18,6 +19,7 @@ impl View<Credential> for Credential {
                 expires_at,
             } => {
                 self.credential_id.clone_from(credential_id);
+                self.template_id.clone_from(template_id);
                 self.data.replace(data.clone());
                 self.credential_configuration = *credential_configuration.clone();
                 self.notification_id.clone_from(notification_id);
@@ -26,10 +28,12 @@ impl View<Credential> for Credential {
             }
             CredentialEvent::SignedCredentialCreated {
                 credential_id,
+                template_id,
                 signed_credential,
                 notification_id,
             } => {
                 self.credential_id.clone_from(credential_id);
+                self.template_id.clone_from(template_id);
                 self.signed.replace(signed_credential.clone());
                 self.notification_id.clone_from(notification_id);
             }

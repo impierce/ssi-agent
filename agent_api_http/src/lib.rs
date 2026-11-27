@@ -9,7 +9,7 @@ pub mod utils;
 
 use agent_authorization::state::AuthorizationState;
 use agent_holder::state::HolderState;
-use agent_identity::state::IdentityState;
+use agent_identity::{document::key_source::KeySource, state::IdentityState};
 use agent_issuance::state::IssuanceState;
 use agent_kms::KmsState;
 use agent_library::state::LibraryState;
@@ -53,6 +53,9 @@ pub struct ApiState {
     pub events_state: Option<Arc<v0::events::EventsState>>,
     /// Only present when the `kms` feature flag is enabled.
     pub kms_state: Option<Arc<KmsState>>,
+    /// The keys `add-key-to-document` adds to the `did:web` document. Only present when the `kms` feature flag is
+    /// enabled; without it, the routes that change the document's keys don't exist.
+    pub key_source: Option<Arc<dyn KeySource>>,
 }
 
 /// Build the top-level API router.
@@ -79,6 +82,7 @@ pub(crate) fn app_with_base_path<E>(
         verification_state,
         events_state,
         kms_state,
+        key_source,
     }: ApiState,
     actor_extractor: Arc<E>,
     application_base_path: &str,
@@ -92,6 +96,13 @@ where
         .unwrap_or_default();
     let app = with_request_logging(
         Router::new()
+            .merge(
+                identity_state
+                    .clone()
+                    .zip(key_source)
+                    .map(v0::identity::document_keys_router)
+                    .unwrap_or_default(),
+            )
             .merge(identity_state.map(v0::identity::router).unwrap_or_default())
             .merge(library_state.clone().map(v0::library::router).unwrap_or_default())
             .merge(
@@ -489,6 +500,37 @@ mod tests {
     pub const OFFER_ID: &str = "00000000-0000-0000-0000-000000000000";
     pub const TEMPLATE_ID: &str = "001";
 
+    /// A key proof for a Credential Request to UniCore, signed with the test holder's EdDSA key of `did_method`, so
+    /// that `did:key` and `did:jwk` act as two different holders. It claims `iss` as its `iss`, if any.
+    pub async fn key_proof(did_method: &str, iss: Option<String>, nonce: &str) -> String {
+        let holder = Arc::new(agent_secret_manager::subject::Subject::test_subject().await);
+        let mut proof_builder = oid4vci::Proof::builder()
+            .proof_type(oid4vci::proof::ProofType::Jwt)
+            .algorithm(jsonwebtoken::Algorithm::EdDSA)
+            .signer(holder)
+            .aud(config().public_url.to_string())
+            .iat(chrono::Utc::now().timestamp())
+            .nonce(nonce.to_string())
+            .subject_syntax_type(did_method);
+        if let Some(iss) = iss {
+            proof_builder = proof_builder.iss(iss);
+        }
+
+        let oid4vci::Proof::Jwt { jwt } = proof_builder.build().await.unwrap();
+        jwt
+    }
+
+    /// The DID of the test holder's EdDSA key of `did_method`.
+    pub async fn holder_did(did_method: &str) -> String {
+        use oid4vc_core::Subject as _;
+
+        agent_secret_manager::subject::Subject::test_subject()
+            .await
+            .identifier(did_method, jsonwebtoken::Algorithm::EdDSA)
+            .await
+            .unwrap()
+    }
+
     #[test]
     fn null_bytes_are_detected_in_every_spelling() {
         let uri = |raw: &str| raw.parse::<http::Uri>().unwrap();
@@ -627,7 +669,7 @@ mod tests {
             .into_iter()
             .collect();
         pub static ref CREDENTIAL_ISSUER_METADATA: CredentialIssuerMetadata = CredentialIssuerMetadata {
-            credential_issuer: config().public_url.clone(),
+            credential_issuer: config().public_url.clone().into(),
             credential_endpoint: config().public_url.join("openid4vci/credential").unwrap(),
             nonce_endpoint: Some(config().public_url.join("openid4vci/nonce").unwrap()),
             credential_configurations_supported: CREDENTIAL_CONFIGURATIONS_SUPPORTED.clone(),

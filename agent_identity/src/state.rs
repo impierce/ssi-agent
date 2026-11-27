@@ -3,6 +3,8 @@ use crate::connection::views::all_connections::AllConnectionsView;
 use crate::connection::views::ConnectionView;
 use crate::document::aggregate::Status;
 use crate::document::command::DocumentCommand;
+use crate::document::key_source::KeySource;
+use crate::document::keys::load_signing_keys;
 use crate::document::views::all_documents::AllDocumentsView;
 use crate::profile::aggregate::{Profile, Source};
 use crate::profile::command::ProfileCommand;
@@ -66,6 +68,9 @@ impl QueryOperation for AllServicesView {
 pub struct IdentityState {
     pub services: Arc<crate::services::IdentityServices>,
     pub service_lifecycle_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Held while the documents' keys or selected signing keys change together with the subject's, so that no load or
+    /// retry of the signing keys undoes such a change.
+    pub document_keys_lock: Arc<tokio::sync::Mutex<()>>,
     pub authorization_checker: Arc<dyn AuthorizationChecker>,
     pub command: CommandHandlers,
     pub query: Queries,
@@ -133,13 +138,14 @@ pub const LINKED_DOMAINS_SERVICE_ID: &str = "linked-domains-service";
 /// The unique identifier for the linked verifiable presentation service.
 pub const LINKED_VERIFIABLE_PRESENTATION_SERVICE_ID: &str = "linked-verifiable-presentation-service";
 
-/// Initialize the identity state.
-pub async fn initialize(state: &IdentityState) -> anyhow::Result<()> {
+/// Initialize the identity state. The keys added to the `did:web` document are loaded from `keys` before any linked
+/// domain is renewed.
+pub async fn initialize(state: &IdentityState, keys: &dyn KeySource) -> anyhow::Result<()> {
     info!("Initializing the identity state ...");
 
     initialize_display(state).await?;
     let configuration = config().clone();
-    initialize_documents(state, &configuration).await?;
+    initialize_documents(state, &configuration, keys).await?;
     crate::service::lifecycle::maintain_services(state).await?;
 
     Ok(())
@@ -411,10 +417,12 @@ async fn initialize_display(state: &IdentityState) -> anyhow::Result<()> {
 
 /// Reuses the persisted deployment DID and refuses to start on public-origin drift unless the
 /// configured one-shot overwrite authorization exactly names the persisted DID. Other DID
-/// methods retain their existing configuration-driven initialization.
+/// methods retain their existing configuration-driven initialization. The keys added to the
+/// `did:web` document are loaded from `keys` (see [`load_signing_keys`]).
 pub async fn initialize_documents(
     state: &IdentityState,
     configuration: &agent_shared::config::ApplicationConfiguration,
+    keys: &dyn KeySource,
 ) -> anyhow::Result<()> {
     let did_methods_with_or_without_fixed_algorithm = get_did_methods_with_or_without_fixed_algorithm(configuration);
 
@@ -578,28 +586,15 @@ pub async fn initialize_documents(
     }
 
     // Signing caches are process-local, even when the DID document is reused.
-    for document in query_all_documents(state, |(_, document)| document.status != Status::Disabled)
-        .await?
-        .values()
-    {
-        if let (Some(did_method), Some(did_document)) = (document.did_method, &document.document) {
-            for method in did_document.methods(None) {
-                if let Some(algorithm) = method.public_key_jwk().and_then(|jwk| jwk.alg()) {
-                    state
-                        .services
-                        .subject
-                        .insert_verification_method_id(
-                            agent_secret_manager::subject::StorageKey::new(did_method, algorithm.parse()?),
-                            method.id.clone(),
-                        )
-                        .await?;
-                }
-            }
-        }
-    }
+    load_signing_keys(state, keys).await?;
 
     if did_web_overwritten {
-        crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await?;
+        if let Err(error) = crate::service::lifecycle::renew_existing_linked_domains_credentials(state).await {
+            warn!(
+                error = format!("{error:#}"),
+                "Renewing the linked domains for the overwritten DID failed"
+            );
+        }
     }
     Ok(())
 }
@@ -691,6 +686,7 @@ pub async fn identity_state<CCB: CqrsComponentBuilder>(
     IdentityState {
         services,
         service_lifecycle_lock: Default::default(),
+        document_keys_lock: Default::default(),
         authorization_checker: Arc::new(AllowAllAuthorizationChecker),
         command: CommandHandlers {
             connection: connection_command_handler,
