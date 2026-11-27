@@ -911,6 +911,10 @@ mod tests {
                 "headers": { "Content-Type": "text/plain" }
             }),
             json!({
+                "publisherType": "http",
+                "targetUrl": "http://169.254.169.254/latest/meta-data/"
+            }),
+            json!({
                 "publisherType": "nats",
                 "natsUrl": "nats://broker.internal:4222",
                 "subject": "unicore.events.*"
@@ -933,6 +937,30 @@ mod tests {
                 .unwrap();
             let invalid_resp = tower::ServiceExt::oneshot(app.clone(), invalid_req).await.unwrap();
             assert_eq!(invalid_resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+        }
+
+        #[cfg(not(feature = "allow-localhost"))]
+        for local_url in ["http://127.0.0.1:8080/hook", "http://localhost:8080/hook"] {
+            let local_req = axum::http::Request::builder()
+                .method("POST")
+                .uri("/v0/create-event-publisher")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&json!({
+                        "name": "Local Publisher",
+                        "filter": {
+                            "types": ["com.impierce.unicore.issuance.credential.issued"]
+                        },
+                        "config": {
+                            "publisherType": "http",
+                            "targetUrl": local_url
+                        }
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap();
+            let local_resp = tower::ServiceExt::oneshot(app.clone(), local_req).await.unwrap();
+            assert_eq!(local_resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
         }
 
         // 3. Create valid HTTP publisher -> 200 OK with redacted secret header
@@ -991,7 +1019,30 @@ mod tests {
         let list_json: serde_json::Value = serde_json::from_slice(&list_bytes).unwrap();
         assert_eq!(list_json.as_array().unwrap().len(), 1);
 
-        // 5. Update, Deactivate, Activate, Delete
+        // 5. Update (cross-origin without explicit headers rejected; same-origin preserves headers), Deactivate, Activate, Delete
+        let cross_origin_omitted_req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/v0/update-event-publisher")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&json!({
+                    "id": pub_id,
+                    "config": {
+                        "publisherType": "http",
+                        "targetUrl": "https://other.example.org/events"
+                    }
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let cross_origin_omitted_resp = tower::ServiceExt::oneshot(app.clone(), cross_origin_omitted_req)
+            .await
+            .unwrap();
+        assert_eq!(
+            cross_origin_omitted_resp.status(),
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY
+        );
+
         let update_req = axum::http::Request::builder()
             .method("POST")
             .uri("/v0/update-event-publisher")
@@ -1062,5 +1113,74 @@ mod tests {
             .unwrap();
         let get_deleted_resp = tower::ServiceExt::oneshot(app, get_deleted_req).await.unwrap();
         assert_eq!(get_deleted_resp.status(), axum::http::StatusCode::NOT_FOUND);
+    }
+
+    #[cfg(feature = "allow-localhost")]
+    mod allow_localhost_tests {
+        use super::*;
+        use bc_event_publishing::{
+            application::{builder::EventPublishingContextBuilder, views::EventPublisherViewRepositories},
+            domain::event_publisher::services::KnownEventTypes,
+        };
+        use shared_kernel::test_utils::in_memory::InMemoryStore;
+
+        #[tokio::test]
+        async fn create_event_publisher_accepts_localhost_and_still_rejects_metadata() {
+            let bus_handle = EventBusHandle::new(16);
+            let views = EventPublisherViewRepositories::from_factory(&InMemoryStore);
+            let known_events = KnownEventTypes::with_event_types(["com.impierce.unicore.issuance.credential.issued"]);
+            let context = EventPublishingContextBuilder::new()
+                .with_views(views)
+                .with_event_bus(bus_handle.clone())
+                .with_known_event_types(known_events)
+                .build(&InMemoryStore)
+                .await
+                .unwrap();
+
+            let state = Arc::new(EventsState::from(bus_handle).with_event_publishing(Arc::new(context)));
+            let app = publishers_router(state);
+
+            for allowed_url in ["http://127.0.0.1:8080/hook", "http://localhost:8080/hook"] {
+                let req = axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/v0/create-event-publisher")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        serde_json::to_vec(&json!({
+                            "name": "Local Hook",
+                            "enabled": false,
+                            "filter": { "types": ["com.impierce.unicore.issuance.credential.issued"] },
+                            "config": {
+                                "publisherType": "http",
+                                "targetUrl": allowed_url
+                            }
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap();
+                let resp = tower::ServiceExt::oneshot(app.clone(), req).await.unwrap();
+                assert_eq!(resp.status(), axum::http::StatusCode::OK, "url: {allowed_url}");
+            }
+
+            let metadata_req = axum::http::Request::builder()
+                .method("POST")
+                .uri("/v0/create-event-publisher")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    serde_json::to_vec(&json!({
+                        "name": "Metadata Hook",
+                        "enabled": false,
+                        "filter": { "types": ["com.impierce.unicore.issuance.credential.issued"] },
+                        "config": {
+                            "publisherType": "http",
+                            "targetUrl": "http://169.254.169.254/latest/meta-data/"
+                        }
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap();
+            let metadata_resp = tower::ServiceExt::oneshot(app, metadata_req).await.unwrap();
+            assert_eq!(metadata_resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+        }
     }
 }

@@ -1,8 +1,5 @@
 use crate::domain::event_publisher::config::EventPublisherFilter;
-use shared_kernel::{
-    event_bus::EventFilter,
-    integration_event::{collect_projector_docs, EventProjector},
-};
+use shared_kernel::{event_bus::EventFilter, integration_event::EventProjector};
 use std::{
     collections::HashSet,
     sync::{Arc, PoisonError, RwLock},
@@ -65,10 +62,9 @@ impl KnownEventTypes {
 
     /// Adds all integration event types documented by `projectors` into this registry.
     pub fn extend_from_projectors(&self, projectors: &[EventProjector]) {
-        let docs = collect_projector_docs(projectors);
         let mut guard = self.inner.write().unwrap_or_else(PoisonError::into_inner);
-        for group in docs {
-            for variant in group.variants {
+        for projector in projectors {
+            for variant in projector.docs().variants {
                 guard.insert(variant.event_type.to_string());
             }
         }
@@ -136,20 +132,40 @@ impl KnownEventTypes {
 }
 
 /// Domain services for the [`EventPublisher`](super::aggregate::EventPublisher) aggregate.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct EventPublisherDomainServices {
     known_event_types: KnownEventTypes,
+    allow_local_network_targets: bool,
+}
+
+impl Default for EventPublisherDomainServices {
+    fn default() -> Self {
+        Self::new(KnownEventTypes::default())
+    }
 }
 
 impl EventPublisherDomainServices {
     #[must_use]
     pub fn new(known_event_types: KnownEventTypes) -> Self {
-        Self { known_event_types }
+        Self {
+            known_event_types,
+            allow_local_network_targets: cfg!(feature = "allow-localhost"),
+        }
+    }
+
+    pub(crate) fn with_allow_local_network_targets(mut self, allow: bool) -> Self {
+        self.allow_local_network_targets = allow;
+        self
     }
 
     #[must_use]
     pub fn known_event_types(&self) -> &KnownEventTypes {
         &self.known_event_types
+    }
+
+    #[must_use]
+    pub fn allow_local_network_targets(&self) -> bool {
+        self.allow_local_network_targets
     }
 }
 
@@ -183,5 +199,169 @@ mod tests {
         );
 
         known.extend_from_projectors(&[]);
+    }
+
+    mod duplicate_enum_name_fixtures {
+        use serde::{Deserialize, Serialize};
+        use shared_kernel::{
+            cqrs_es::{event_sink::EventSink, Aggregate, DomainEvent, EventEnvelope},
+            event_bus::CloudEvent,
+            integration_event::{
+                IntegrationEvent, IntegrationEventGroupDoc, IntegrationEventVariantDoc, ProjectIntegrationEvent,
+            },
+        };
+
+        #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+        pub struct DummyEvent;
+        impl DomainEvent for DummyEvent {
+            fn event_type(&self) -> String {
+                "DummyEvent".to_string()
+            }
+            fn event_version(&self) -> String {
+                "1.0".to_string()
+            }
+        }
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("dummy")]
+        pub struct DummyError;
+
+        pub mod first {
+            use super::{
+                Aggregate, CloudEvent, Deserialize, DummyError, DummyEvent, EventEnvelope, EventSink, IntegrationEvent,
+                IntegrationEventGroupDoc, IntegrationEventVariantDoc, ProjectIntegrationEvent, Serialize,
+            };
+
+            #[derive(Serialize)]
+            pub enum SharedNameEvents {}
+
+            impl IntegrationEvent for SharedNameEvents {
+                const SOURCE: &'static str = "/services/first";
+                const DOCS: IntegrationEventGroupDoc = IntegrationEventGroupDoc {
+                    name: "SharedNameEvents",
+                    source: Self::SOURCE,
+                    description: "",
+                    variants: &[IntegrationEventVariantDoc {
+                        variant_name: "Alpha",
+                        event_type: "com.impierce.unicore.first.alpha",
+                        description: "",
+                        subject_field: None,
+                        fields: &[],
+                    }],
+                };
+                fn event_type(&self) -> &'static str {
+                    match *self {}
+                }
+                fn subject(&self) -> Option<String> {
+                    match *self {}
+                }
+            }
+
+            #[derive(Default, Serialize, Deserialize)]
+            pub struct FirstAggregate;
+            impl Aggregate for FirstAggregate {
+                const TYPE: &'static str = "first";
+                type Command = ();
+                type Event = DummyEvent;
+                type Error = DummyError;
+                type Services = ();
+                fn handle(
+                    &mut self,
+                    (): (),
+                    (): &(),
+                    _: &EventSink<Self>,
+                ) -> impl std::future::Future<Output = Result<(), DummyError>> {
+                    std::future::ready(Ok(()))
+                }
+                fn apply(&mut self, _: DummyEvent) {}
+            }
+            impl ProjectIntegrationEvent for FirstAggregate {
+                type IntegrationEvent = SharedNameEvents;
+                fn project_integration_event(_: &EventEnvelope<Self>) -> Option<CloudEvent> {
+                    None
+                }
+            }
+        }
+
+        pub mod second {
+            use super::{
+                Aggregate, CloudEvent, Deserialize, DummyError, DummyEvent, EventEnvelope, EventSink, IntegrationEvent,
+                IntegrationEventGroupDoc, IntegrationEventVariantDoc, ProjectIntegrationEvent, Serialize,
+            };
+
+            #[derive(Serialize)]
+            pub enum SharedNameEvents {}
+
+            impl IntegrationEvent for SharedNameEvents {
+                const SOURCE: &'static str = "/services/second";
+                const DOCS: IntegrationEventGroupDoc = IntegrationEventGroupDoc {
+                    name: "SharedNameEvents",
+                    source: Self::SOURCE,
+                    description: "",
+                    variants: &[IntegrationEventVariantDoc {
+                        variant_name: "Beta",
+                        event_type: "com.impierce.unicore.second.beta",
+                        description: "",
+                        subject_field: None,
+                        fields: &[],
+                    }],
+                };
+                fn event_type(&self) -> &'static str {
+                    match *self {}
+                }
+                fn subject(&self) -> Option<String> {
+                    match *self {}
+                }
+            }
+
+            #[derive(Default, Serialize, Deserialize)]
+            pub struct SecondAggregate;
+            impl Aggregate for SecondAggregate {
+                const TYPE: &'static str = "second";
+                type Command = ();
+                type Event = DummyEvent;
+                type Error = DummyError;
+                type Services = ();
+                fn handle(
+                    &mut self,
+                    (): (),
+                    (): &(),
+                    _: &EventSink<Self>,
+                ) -> impl std::future::Future<Output = Result<(), DummyError>> {
+                    std::future::ready(Ok(()))
+                }
+                fn apply(&mut self, _: DummyEvent) {}
+            }
+            impl ProjectIntegrationEvent for SecondAggregate {
+                type IntegrationEvent = SharedNameEvents;
+                fn project_integration_event(_: &EventEnvelope<Self>) -> Option<CloudEvent> {
+                    None
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn extend_from_projectors_keeps_variants_when_two_enums_share_the_same_name() {
+        use duplicate_enum_name_fixtures as fixtures;
+        use shared_kernel::integration_event::EventProjector;
+
+        let projectors = [
+            EventProjector::for_aggregate::<fixtures::first::FirstAggregate>(),
+            EventProjector::for_aggregate::<fixtures::second::SecondAggregate>(),
+        ];
+        let known = KnownEventTypes::from_projectors(&projectors);
+        assert_eq!(
+            known
+                .validate_and_normalize(vec![
+                    "com.impierce.unicore.first.alpha".to_string(),
+                    "com.impierce.unicore.second.beta".to_string(),
+                ])
+                .unwrap(),
+            vec![
+                "com.impierce.unicore.first.alpha".to_string(),
+                "com.impierce.unicore.second.beta".to_string(),
+            ]
+        );
     }
 }

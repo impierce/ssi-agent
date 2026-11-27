@@ -1,12 +1,50 @@
-use crate::domain::event_publisher::config::{EventPublisherFilter, HttpPublisherConfig};
+use crate::domain::event_publisher::config::{
+    is_ip_allowed, validate_http_target_url, EventPublisherFilter, HttpPublisherConfig,
+};
 use reqwest::header::{HeaderValue, CONTENT_TYPE};
 use shared_kernel::event_bus::{BusEventStream, EventBus, EventBusError, EventBusHandle};
-use std::time::Duration;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio_stream::StreamExt;
 use url::Url;
 
 /// Default timeout for outgoing HTTP webhook requests.
 pub const DEFAULT_WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn validate_resolved_addrs(addrs: &[SocketAddr], allow_local_network: bool) -> Result<(), String> {
+    if addrs.is_empty() {
+        return Err("HTTP webhook host did not resolve to any address".to_string());
+    }
+    for addr in addrs {
+        if !is_ip_allowed(addr.ip(), allow_local_network) {
+            return Err(format!(
+                "resolved address {} is not permitted for HTTP webhook delivery",
+                addr.ip()
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Custom `reqwest` DNS resolver that vets every resolved IP address against the outbound SSRF
+/// policy and hands the vetted socket addresses directly to `hyper`, preventing DNS rebinding.
+struct VettingDnsResolver {
+    allow_local_network: bool,
+}
+
+impl reqwest::dns::Resolve for VettingDnsResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let allow_local_network = self.allow_local_network;
+        Box::pin(async move {
+            let addrs: Vec<SocketAddr> = tokio::net::lookup_host((name.as_str(), 0)).await?.collect();
+            validate_resolved_addrs(&addrs, allow_local_network).map_err(|reason| {
+                Box::new(std::io::Error::new(std::io::ErrorKind::PermissionDenied, reason))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
+            let iter: reqwest::dns::Addrs = Box::new(addrs.into_iter());
+            Ok(iter)
+        })
+    }
+}
 
 /// Background worker that subscribes to the [`EventBusHandle`] for a single configured
 /// HTTP event publisher and delivers matching [`CloudEvent`](shared_kernel::event_bus::CloudEvent)s.
@@ -15,6 +53,7 @@ pub struct HttpEventPublisherWorker {
     client: reqwest::Client,
     target_url: String,
     target_host: Option<String>,
+    allow_local_network: bool,
     stream: BusEventStream,
 }
 
@@ -50,6 +89,41 @@ impl HttpEventPublisherWorker {
         event_bus: &EventBusHandle,
         timeout: Duration,
     ) -> Self {
+        Self::with_options(
+            id,
+            filter,
+            config,
+            event_bus,
+            timeout,
+            cfg!(feature = "allow-localhost"),
+        )
+    }
+
+    /// Creates a new `HttpEventPublisherWorker` that permits local-network targets (`127.0.0.1`,
+    /// `::1`, `localhost`, RFC 1918 / ULA) for wiremock-backed integration tests.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying TLS/HTTP client backend fails to initialize.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use]
+    pub fn new_allowing_local_network(
+        id: String,
+        filter: &EventPublisherFilter,
+        config: HttpPublisherConfig,
+        event_bus: &EventBusHandle,
+    ) -> Self {
+        Self::with_options(id, filter, config, event_bus, DEFAULT_WEBHOOK_TIMEOUT, true)
+    }
+
+    pub(crate) fn with_options(
+        id: String,
+        filter: &EventPublisherFilter,
+        config: HttpPublisherConfig,
+        event_bus: &EventBusHandle,
+        timeout: Duration,
+        allow_local_network: bool,
+    ) -> Self {
         let stream: BusEventStream = if filter.types.is_empty() {
             Box::pin(tokio_stream::empty())
         } else {
@@ -64,6 +138,9 @@ impl HttpEventPublisherWorker {
 
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            // A configured HTTP proxy would resolve the target independently and bypass DNS pinning.
+            .no_proxy()
+            .dns_resolver(Arc::new(VettingDnsResolver { allow_local_network }))
             .default_headers(default_headers)
             .timeout(timeout)
             .build()
@@ -78,6 +155,7 @@ impl HttpEventPublisherWorker {
             client,
             target_url: config.target_url,
             target_host,
+            allow_local_network,
             stream,
         }
     }
@@ -106,6 +184,24 @@ impl HttpEventPublisherWorker {
                 }
             };
 
+            let target_host = self.target_host.as_deref().unwrap_or("<unknown>");
+            match Url::parse(&self.target_url)
+                .map_err(|err| err.to_string())
+                .and_then(|parsed| validate_http_target_url(&parsed, self.allow_local_network))
+            {
+                Ok(()) => {}
+                Err(reason) => {
+                    tracing::warn!(
+                        publisher_id = %self.id,
+                        event_id = %cloud_event.id,
+                        target_host,
+                        reason = %reason,
+                        "Blocked HTTP webhook delivery to disallowed target"
+                    );
+                    continue;
+                }
+            }
+
             let payload = match serde_json::to_vec(&cloud_event) {
                 Ok(payload) => payload,
                 Err(err) => {
@@ -119,7 +215,6 @@ impl HttpEventPublisherWorker {
                 }
             };
 
-            let target_host = self.target_host.as_deref().unwrap_or("<unknown>");
             match self.client.post(&self.target_url).body(payload).send().await {
                 Ok(res) => {
                     if res.status().is_success() {
@@ -194,7 +289,7 @@ mod tests {
         };
 
         let event_bus = EventBusHandle::new(100);
-        let worker = HttpEventPublisherWorker::new(
+        let worker = HttpEventPublisherWorker::new_allowing_local_network(
             "pub-1".to_string(),
             &EventPublisherFilter {
                 types: vec!["com.impierce.unicore.credential.issued".to_string()],
@@ -246,7 +341,7 @@ mod tests {
         };
 
         let event_bus = EventBusHandle::new(100);
-        let worker = HttpEventPublisherWorker::with_timeout(
+        let worker = HttpEventPublisherWorker::with_options(
             "pub-err".to_string(),
             &EventPublisherFilter {
                 types: vec!["test.error.event".to_string()],
@@ -254,6 +349,7 @@ mod tests {
             config,
             &event_bus,
             Duration::from_millis(50),
+            true,
         );
         let handle = worker.spawn();
 
@@ -289,7 +385,7 @@ mod tests {
         };
 
         let event_bus = EventBusHandle::new(100);
-        let worker = HttpEventPublisherWorker::new(
+        let worker = HttpEventPublisherWorker::new_allowing_local_network(
             "pub-redirect".to_string(),
             &EventPublisherFilter {
                 types: vec!["test.redirect.event".to_string()],
@@ -330,7 +426,7 @@ mod tests {
             types: vec!["test.log.event".to_string()],
         };
 
-        let ok_handle = HttpEventPublisherWorker::new(
+        let ok_handle = HttpEventPublisherWorker::new_allowing_local_network(
             "pub-ok".to_string(),
             &filter,
             HttpPublisherConfig {
@@ -341,7 +437,7 @@ mod tests {
         )
         .spawn();
 
-        let warn_handle = HttpEventPublisherWorker::new(
+        let warn_handle = HttpEventPublisherWorker::new_allowing_local_network(
             "pub-warn".to_string(),
             &filter,
             HttpPublisherConfig {
@@ -352,7 +448,7 @@ mod tests {
         )
         .spawn();
 
-        let err_handle = HttpEventPublisherWorker::with_timeout(
+        let err_handle = HttpEventPublisherWorker::with_options(
             "pub-conn-err".to_string(),
             &filter,
             HttpPublisherConfig {
@@ -361,10 +457,11 @@ mod tests {
             },
             &event_bus,
             Duration::from_millis(100),
+            true,
         )
         .spawn();
 
-        let ipv6_err_handle = HttpEventPublisherWorker::with_timeout(
+        let ipv6_err_handle = HttpEventPublisherWorker::with_options(
             "pub-ipv6-conn-err".to_string(),
             &filter,
             HttpPublisherConfig {
@@ -373,6 +470,21 @@ mod tests {
             },
             &event_bus,
             Duration::from_millis(100),
+            true,
+        )
+        .spawn();
+
+        let blocked_handle = HttpEventPublisherWorker::with_options(
+            "pub-ssrf-blocked".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: "http://169.254.169.254/latest/meta-data/blocked-cap-secret?sig=blocked-query-secret"
+                    .to_string(),
+                headers: None,
+            },
+            &event_bus,
+            Duration::from_millis(100),
+            false,
         )
         .spawn();
 
@@ -384,6 +496,7 @@ mod tests {
         warn_handle.abort();
         err_handle.abort();
         ipv6_err_handle.abort();
+        blocked_handle.abort();
 
         for secret in [
             "cap-secret-200",
@@ -394,8 +507,197 @@ mod tests {
             "query-secret-err",
             "ipv6-cap-secret",
             "ipv6-query-secret",
+            "blocked-cap-secret",
+            "blocked-query-secret",
         ] {
             assert!(!logs_contain(secret), "leaked URL secret `{secret}` in logs");
+        }
+    }
+
+    #[tokio::test]
+    async fn http_worker_blocks_loopback_and_localhost_when_local_network_is_disallowed() {
+        let mock_server = MockServer::start().await;
+        let port = mock_server.address().port();
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let event_bus = EventBusHandle::new(64);
+        let filter = EventPublisherFilter {
+            types: vec!["test.ssrf.event".to_string()],
+        };
+
+        let loopback_worker = HttpEventPublisherWorker::with_options(
+            "pub-loopback".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: format!("{}/webhook", mock_server.uri()),
+                headers: None,
+            },
+            &event_bus,
+            Duration::from_millis(200),
+            false,
+        )
+        .spawn();
+
+        let localhost_worker = HttpEventPublisherWorker::with_options(
+            "pub-localhost".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: format!("http://localhost:{port}/webhook"),
+                headers: None,
+            },
+            &event_bus,
+            Duration::from_millis(200),
+            false,
+        )
+        .spawn();
+
+        let userinfo_worker = HttpEventPublisherWorker::with_options(
+            "pub-userinfo".to_string(),
+            &filter,
+            HttpPublisherConfig {
+                target_url: format!("http://user:pass@127.0.0.1:{port}/webhook"),
+                headers: None,
+            },
+            &event_bus,
+            Duration::from_millis(200),
+            true,
+        )
+        .spawn();
+
+        event_bus.publish(CloudEvent::new("test.ssrf.event", "https://example.test/test"));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        mock_server.verify().await;
+        loopback_worker.abort();
+        localhost_worker.abort();
+        userinfo_worker.abort();
+    }
+
+    #[tokio::test]
+    async fn vetting_dns_resolver_rejects_disallowed_and_mixed_addresses_and_pins_allowed_localhost() {
+        use reqwest::dns::Resolve as _;
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+        // 1. Unit checks on validate_resolved_addrs
+        assert!(validate_resolved_addrs(&[], false).is_err());
+        assert!(validate_resolved_addrs(&[], true).is_err());
+
+        let public_v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)), 0);
+        let loopback_v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
+        let private_v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 0);
+        let metadata_v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254)), 0);
+        let cgnat_v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(100, 64, 0, 1)), 0);
+        let mapped_loopback = SocketAddr::new(IpAddr::V6(Ipv4Addr::LOCALHOST.to_ipv6_mapped()), 0);
+        let mapped_metadata = SocketAddr::new(IpAddr::V6(Ipv4Addr::new(169, 254, 169, 254).to_ipv6_mapped()), 0);
+        let siit_metadata = SocketAddr::new(IpAddr::V6("::ffff:0:169.254.169.254".parse().unwrap()), 0);
+        let six_to_four_loopback = SocketAddr::new(IpAddr::V6("2002:7f00:1::".parse().unwrap()), 0);
+        let link_local_v6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)), 0);
+
+        assert!(validate_resolved_addrs(&[public_v4], false).is_ok());
+        // Mixed public + private/loopback must be rejected when local network is disallowed
+        assert!(validate_resolved_addrs(&[public_v4, loopback_v4], false).is_err());
+        assert!(validate_resolved_addrs(&[public_v4, private_v4], false).is_err());
+        assert!(validate_resolved_addrs(&[mapped_loopback], false).is_err());
+        // Metadata, SIIT/6to4, link-local, CGNAT stay blocked even with local network allowed
+        assert!(validate_resolved_addrs(&[metadata_v4], true).is_err());
+        assert!(validate_resolved_addrs(&[mapped_metadata], true).is_err());
+        assert!(validate_resolved_addrs(&[siit_metadata], true).is_err());
+        assert!(validate_resolved_addrs(&[six_to_four_loopback], true).is_err());
+        assert!(validate_resolved_addrs(&[link_local_v6], true).is_err());
+        assert!(validate_resolved_addrs(&[cgnat_v4], true).is_err());
+        // Loopback and private are permitted with local network opt-in
+        assert!(validate_resolved_addrs(&[loopback_v4], true).is_ok());
+        assert!(validate_resolved_addrs(&[private_v4], true).is_ok());
+
+        // 2. Live DNS lookup for `localhost` via VettingDnsResolver
+        let strict_resolver = VettingDnsResolver {
+            allow_local_network: false,
+        };
+        assert!(strict_resolver.resolve("localhost".parse().unwrap()).await.is_err());
+
+        let local_resolver = VettingDnsResolver {
+            allow_local_network: true,
+        };
+        let resolved: Vec<SocketAddr> = local_resolver
+            .resolve("localhost".parse().unwrap())
+            .await
+            .unwrap()
+            .collect();
+        assert_ne!(resolved.len(), 0);
+        assert!(resolved.iter().all(|addr| addr.ip().is_loopback()));
+
+        // 3. End-to-end delivery through VettingDnsResolver using hostname `localhost`
+        let mock_server = MockServer::start().await;
+        let port = mock_server.address().port();
+        Mock::given(method("POST"))
+            .and(path("/localhost-hook"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let event_bus = EventBusHandle::new(16);
+        let worker = HttpEventPublisherWorker::new_allowing_local_network(
+            "pub-localhost-ok".to_string(),
+            &EventPublisherFilter {
+                types: vec!["test.localhost.event".to_string()],
+            },
+            HttpPublisherConfig {
+                target_url: format!("http://localhost:{port}/localhost-hook"),
+                headers: None,
+            },
+            &event_bus,
+        )
+        .spawn();
+
+        event_bus.publish(CloudEvent::new("test.localhost.event", "https://example.test/test"));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        mock_server.verify().await;
+        worker.abort();
+    }
+
+    #[cfg(feature = "allow-localhost")]
+    mod allow_localhost_tests {
+        use super::*;
+
+        #[tokio::test]
+        async fn default_worker_delivers_to_loopback_when_allow_localhost_enabled() {
+            let mock_server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/allow-localhost-hook"))
+                .respond_with(ResponseTemplate::new(200))
+                .expect(1)
+                .mount(&mock_server)
+                .await;
+
+            let event_bus = EventBusHandle::new(16);
+            let worker = HttpEventPublisherWorker::new(
+                "pub-allow-localhost".to_string(),
+                &EventPublisherFilter {
+                    types: vec!["test.allow_localhost.event".to_string()],
+                },
+                HttpPublisherConfig {
+                    target_url: format!("{}/allow-localhost-hook", mock_server.uri()),
+                    headers: None,
+                },
+                &event_bus,
+            )
+            .spawn();
+
+            event_bus.publish(CloudEvent::new(
+                "test.allow_localhost.event",
+                "https://example.test/test",
+            ));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+
+            mock_server.verify().await;
+            worker.abort();
         }
     }
 }

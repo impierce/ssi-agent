@@ -74,6 +74,7 @@ agent_store = { path = "../agent_store" }
 agent_verification = { path = "../agent_verification", features = [
     "test_utils",
 ] }
+bc-event-publishing = { workspace = true, features = ["test-utils"] }
 shared-kernel = { workspace = true, features = ["test-utils"] }
 verification-authorization = { path = "../infrastructure/adapters/verification-authorization" }
 
@@ -96,4 +97,7 @@ wiremock.workspace = true
 
 [features]
 test_utils = []
-allow-localhost = ["agent_identity/allow-localhost"]
+allow-localhost = [
+    "agent_identity/allow-localhost",
+    "bc-event-publishing/allow-localhost",
+]

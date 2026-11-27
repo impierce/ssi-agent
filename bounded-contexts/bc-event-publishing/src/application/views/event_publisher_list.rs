@@ -4,7 +4,10 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use shared_kernel::cqrs_es::{EventEnvelope, View};
-use std::collections::{hash_map::IntoValues, HashMap};
+use std::collections::{
+    hash_map::{IntoIter, IntoValues},
+    HashMap,
+};
 
 pub const EVENT_PUBLISHER_LIST_VIEW_ID: &str = "event-publisher-list";
 
@@ -25,5 +28,10 @@ impl EventPublisherListView {
     #[must_use]
     pub fn into_values(self) -> IntoValues<String, EventPublisherView> {
         self.0.into_values()
+    }
+
+    #[must_use]
+    pub fn into_entries(self) -> IntoIter<String, EventPublisherView> {
+        self.0.into_iter()
     }
 }

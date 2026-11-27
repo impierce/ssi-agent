@@ -65,7 +65,8 @@ impl EventPublisher {
         let updated_config = match config {
             Some(config) => config
                 .with_preserved_secrets(&current.config)
-                .normalized()
+                .map_err(UpdateEventPublisherError::from)?
+                .normalized_with_local_network(service.allow_local_network_targets())
                 .map_err(UpdateEventPublisherError::from)?,
             None => current.config.clone(),
         };

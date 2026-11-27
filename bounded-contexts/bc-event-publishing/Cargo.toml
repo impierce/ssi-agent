@@ -35,6 +35,11 @@ wiremock.workspace = true
 [features]
 # Enables the integration tests that start a NATS server in a Docker container.
 docker-tests = []
+# Allows HTTP webhook targets on the local network (`localhost`, loopback, RFC 1918 / ULA)
+# for local development and E2E testing; link-local and other non-local reserved ranges remain blocked.
+allow-localhost = []
+# Exposes test-only local-network opt-in helpers for integration tests in downstream crates.
+test-utils = []
 
 [[test]]
 name = "nats"

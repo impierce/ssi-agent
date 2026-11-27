@@ -197,7 +197,7 @@ pub mod tests {
 
         let event_bus = shared_kernel::event_bus::EventBusHandle::new(1024);
         drop(
-            bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
+            bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new_allowing_local_network(
                 "test-pub".to_string(),
                 &bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
                     types: vec!["com.impierce.unicore.verification.presentation.verified".to_string()],

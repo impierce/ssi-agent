@@ -88,7 +88,7 @@ Specify at least one valid CloudEvent `type` pattern in `filter.types` (an exact
 
 ## Invalid Event Publisher Configuration
 
-This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS `targetUrl`, a reserved HTTP header such as `Content-Type`/`Content-Length`/`Host`, an invalid HTTP header name or unpreserved `"****"` placeholder value, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed/wildcard NATS `subject` containing `*` or `>`). The system returns a `422 Unprocessable Content` error.
+This error occurs when the transport configuration in `config` is invalid (for example, a non-HTTP/HTTPS or disallowed internal/non-global `targetUrl`, a reserved HTTP header such as `Content-Type`/`Content-Length`/`Host`, an invalid HTTP header name or unpreserved `"****"` placeholder value, omitting or reusing `"****"` headers across a target URL origin change, an invalid `natsUrl` scheme/host or embedded credentials, or an empty/malformed/wildcard NATS `subject` containing `*` or `>`). The system returns a `422 Unprocessable Content` error.
 
 ### Resolution
 

@@ -44,7 +44,7 @@ impl EventPublisher {
         let description = description.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
 
         let filter = service.known_event_types().validate_and_normalize_filter(filter)?;
-        let config = config.normalized()?;
+        let config = config.normalized_with_local_network(service.allow_local_network_targets())?;
 
         sink.write(
             EventPublisherCreated {

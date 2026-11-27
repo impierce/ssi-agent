@@ -140,6 +140,7 @@ mod tests {
         let context = EventPublishingContextBuilder::new()
             .with_views(views.clone())
             .with_event_bus(event_bus.clone())
+            .with_allow_local_network(true)
             .build(&InMemoryStore)
             .await
             .unwrap();
@@ -243,6 +244,7 @@ mod tests {
         let restarted_context = EventPublishingContextBuilder::new()
             .with_views(views)
             .with_event_bus(event_bus)
+            .with_allow_local_network(true)
             .build(&InMemoryStore)
             .await
             .unwrap();
@@ -297,6 +299,7 @@ mod tests {
         let context = EventPublishingContextBuilder::new()
             .with_views(views.clone())
             .with_event_bus(event_bus.clone())
+            .with_allow_local_network(true)
             .build(&InMemoryStore)
             .await
             .unwrap();
@@ -339,7 +342,7 @@ mod tests {
         };
 
         // 2a. Simulated restart: hydrate inactive view into a fresh supervisor, then dispatch Activated
-        let hydrated_supervisor = EventPublisherSupervisor::new(event_bus.clone());
+        let hydrated_supervisor = EventPublisherSupervisor::new(event_bus.clone()).with_allow_local_network(true);
         let list_view = views
             .event_publisher_list
             .load(EVENT_PUBLISHER_LIST_VIEW_ID)
@@ -360,9 +363,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(150)).await;
         drop(hydrated_supervisor);
 
-        // 2b. Multi-replica fallback: fresh supervisor with view_repo (not in memory) activates from persisted view
-        let fallback_supervisor =
-            EventPublisherSupervisor::new(event_bus.clone()).with_view_repository(views.event_publisher.clone());
+        // 2b. Persisted-view activation: fresh supervisor with view_repo (not in memory) activates from persisted view
+        let fallback_supervisor = EventPublisherSupervisor::new(event_bus.clone())
+            .with_view_repository(views.event_publisher.clone())
+            .with_allow_local_network(true);
         fallback_supervisor
             .dispatch(&pub_id, std::slice::from_ref(&activated_envelope))
             .await;

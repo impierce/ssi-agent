@@ -505,7 +505,7 @@ pub mod tests {
             let target_url = format!("{}/ssi-events-subscriber", &external_server.uri());
 
             drop(
-                bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new(
+                bc_event_publishing::infrastructure::http::HttpEventPublisherWorker::new_allowing_local_network(
                     "test-pub".to_string(),
                     &bc_event_publishing::domain::event_publisher::config::EventPublisherFilter {
                         types: vec!["com.impierce.unicore.issuance.credential.request_verified".to_string()],
