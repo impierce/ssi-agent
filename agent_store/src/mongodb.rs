@@ -619,6 +619,12 @@ mod tests {
 
     impl IntegrationEvent for TestIntegrationEvent {
         const SOURCE: &'static str = "/services/template";
+        const DOCS: shared_kernel::IntegrationEventGroupDoc = shared_kernel::IntegrationEventGroupDoc {
+            name: "TestIntegrationEvent",
+            source: "/services/template",
+            description: "Test integration event.",
+            variants: &[],
+        };
 
         fn event_type(&self) -> &'static str {
             "com.impierce.unicore.template.created"
@@ -635,7 +641,7 @@ mod tests {
         fn project_integration_event(envelope: &EventEnvelope<Self>) -> Option<CloudEvent> {
             match &envelope.payload {
                 TestEvent::Created { id } => TestIntegrationEvent { id: id.clone() }
-                    .into_projected_cloud_event(envelope, "/services/template")
+                    .into_projected_cloud_event(envelope)
                     .ok(),
                 TestEvent::InternalOnly => None,
             }
@@ -670,6 +676,12 @@ mod tests {
 
     impl IntegrationEvent for OfferTestIntegrationEvent {
         const SOURCE: &'static str = "/services/issuance";
+        const DOCS: shared_kernel::IntegrationEventGroupDoc = shared_kernel::IntegrationEventGroupDoc {
+            name: "OfferTestIntegrationEvent",
+            source: "/services/issuance",
+            description: "Offer test integration event.",
+            variants: &[],
+        };
 
         fn event_type(&self) -> &'static str {
             "com.impierce.unicore.issuance.credential.offered"

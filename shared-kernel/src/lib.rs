@@ -10,6 +10,9 @@
 //! - [`service_registry`] — Type-keyed service registry and channel-based service handles.
 //! - [`streaming_event_store`] — Event store that applies events while reading them.
 
+// Allows `#[derive(IntegrationEvent)]` (which expands to `::shared_kernel::...` paths) to be used within this crate.
+extern crate self as shared_kernel;
+
 pub mod application_service;
 pub mod authorization;
 pub mod command_handler;
@@ -24,6 +27,7 @@ pub mod view_repository;
 pub mod test_utils;
 
 // Re-export commonly used items for convenience.
+pub use agent_macros::IntegrationEvent;
 pub use async_trait::async_trait;
 pub use chrono;
 pub use convert_case;
@@ -32,7 +36,11 @@ pub use event_bus::{
     BusEventStream, CloudEvent, EventBus, EventBusError, EventBusHandle, EventFilter, EventSource, EventSourceStream,
     Extension, Position, SourceEvent, SubscribePosition,
 };
-pub use integration_event::{EventProjector, IntegrationEvent, ProjectIntegrationEvent};
+pub use integration_event::{
+    collect_projector_docs, render_integration_events_groups_markdown, render_integration_events_markdown,
+    render_integration_events_summary_table, EventProjector, IntegrationEvent, IntegrationEventFieldDoc,
+    IntegrationEventGroupDoc, IntegrationEventVariantDoc, ProjectIntegrationEvent,
+};
 pub use slug::slugify;
 pub use strum;
 pub use uuid::Uuid;
