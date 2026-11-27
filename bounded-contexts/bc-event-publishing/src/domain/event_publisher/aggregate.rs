@@ -108,8 +108,12 @@ impl Aggregate for EventPublisher {
             } => {
                 self.event_publisher_updated(name, description, enabled, filter, config, occurred_at);
             }
-            EventPublisherActivated { occurred_at } => {
-                self.event_publisher_activated(occurred_at);
+            EventPublisherActivated {
+                filter,
+                config,
+                occurred_at,
+            } => {
+                self.event_publisher_activated(filter, config, occurred_at);
             }
             EventPublisherDeactivated { occurred_at } => {
                 self.event_publisher_deactivated(occurred_at);

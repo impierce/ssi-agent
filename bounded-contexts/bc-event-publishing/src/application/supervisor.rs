@@ -14,7 +14,7 @@ use shared_kernel::{
     async_trait,
     cqrs_es::{EventEnvelope, Query},
     event_bus::EventBusHandle,
-    view_repository::{load_by_id, BoxedViewRepository, SoftDeletable as _},
+    view_repository::SoftDeletable as _,
 };
 use std::{
     collections::HashMap,
@@ -23,24 +23,16 @@ use std::{
 use tokio::task::AbortHandle;
 use tracing::{debug, info, warn};
 
-struct PublisherEntry {
-    filter: EventPublisherFilter,
-    config: EventPublisherConfig,
-    worker: Option<AbortHandle>,
-}
-
 #[derive(Default)]
 struct WorkerRegistry {
-    entries: Mutex<HashMap<String, PublisherEntry>>,
+    workers: Mutex<HashMap<String, AbortHandle>>,
 }
 
 impl Drop for WorkerRegistry {
     fn drop(&mut self) {
-        let mut guard = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
-        for (_, entry) in guard.drain() {
-            if let Some(handle) = entry.worker {
-                handle.abort();
-            }
+        let mut guard = self.workers.lock().unwrap_or_else(PoisonError::into_inner);
+        for (_, handle) in guard.drain() {
+            handle.abort();
         }
     }
 }
@@ -56,7 +48,6 @@ impl Drop for WorkerRegistry {
 pub struct EventPublisherSupervisor {
     event_bus: EventBusHandle,
     registry: Arc<WorkerRegistry>,
-    view_repo: Option<Arc<BoxedViewRepository<EventPublisherView, EventPublisher>>>,
     allow_local_network: bool,
 }
 
@@ -66,7 +57,6 @@ impl EventPublisherSupervisor {
         Self {
             event_bus,
             registry: Arc::new(WorkerRegistry::default()),
-            view_repo: None,
             allow_local_network: cfg!(feature = "allow-localhost"),
         }
     }
@@ -76,31 +66,20 @@ impl EventPublisherSupervisor {
         self
     }
 
-    /// Attaches the [`EventPublisherView`] repository so activating a publisher loads the latest
-    /// persisted view instead of relying on potentially stale in-memory state.
-    #[must_use]
-    pub fn with_view_repository(
-        mut self,
-        view_repo: Arc<BoxedViewRepository<EventPublisherView, EventPublisher>>,
-    ) -> Self {
-        self.view_repo = Some(view_repo);
-        self
-    }
-
     /// Hydrates configured publishers from the persisted read model at application startup,
-    /// starting background worker tasks for all enabled, non-deleted publishers and retaining
-    /// inactive configurations for subsequent activation.
+    /// starting background worker tasks for all enabled, non-deleted publishers.
     pub fn hydrate_from_views(&self, views: impl IntoIterator<Item = EventPublisherView>) {
         let mut hydrated_count = 0usize;
         for view in views {
-            if !view.is_deleted() {
+            if !view.is_deleted() && view.enabled {
                 if let Some(config) = view.config {
-                    if view.enabled {
-                        self.start_or_replace_worker(view.id, view.filter, config);
-                        hydrated_count += 1;
-                    } else {
-                        self.upsert_inactive(view.id, view.filter, config);
-                    }
+                    self.start_or_replace_worker(view.id, &view.filter, config);
+                    hydrated_count += 1;
+                } else {
+                    warn!(
+                        publisher_id = %view.id,
+                        "Skipping enabled event publisher during startup hydration: view has no configuration"
+                    );
                 }
             }
         }
@@ -113,23 +92,20 @@ impl EventPublisherSupervisor {
     #[must_use]
     pub fn active_count(&self) -> usize {
         self.registry
-            .entries
+            .workers
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .values()
-            .filter(|entry| entry.worker.is_some())
-            .count()
+            .len()
     }
 
     /// Returns `true` if a background worker task is currently running for `id`.
     #[must_use]
     pub fn is_active(&self, id: &str) -> bool {
         self.registry
-            .entries
+            .workers
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .get(id)
-            .is_some_and(|entry| entry.worker.is_some())
+            .contains_key(id)
     }
 
     fn spawn_worker(&self, id: String, filter: &EventPublisherFilter, config: EventPublisherConfig) -> AbortHandle {
@@ -150,107 +126,33 @@ impl EventPublisherSupervisor {
         }
     }
 
-    fn start_or_replace_worker(&self, id: String, filter: EventPublisherFilter, config: EventPublisherConfig) {
-        let mut guard = self.registry.entries.lock().unwrap_or_else(PoisonError::into_inner);
+    fn start_or_replace_worker(&self, id: String, filter: &EventPublisherFilter, config: EventPublisherConfig) {
+        let mut guard = self.registry.workers.lock().unwrap_or_else(PoisonError::into_inner);
 
-        if let Some(handle) = guard.remove(&id).and_then(|previous| previous.worker) {
-            handle.abort();
+        if let Some(previous) = guard.remove(&id) {
+            previous.abort();
         }
 
-        let abort_handle = self.spawn_worker(id.clone(), &filter, config.clone());
+        let abort_handle = self.spawn_worker(id.clone(), filter, config);
         debug!(publisher_id = %id, "Started background event publisher worker");
-        guard.insert(
-            id,
-            PublisherEntry {
-                filter,
-                config,
-                worker: Some(abort_handle),
-            },
-        );
+        guard.insert(id, abort_handle);
     }
 
-    fn upsert_inactive(&self, id: String, filter: EventPublisherFilter, config: EventPublisherConfig) {
-        let mut guard = self.registry.entries.lock().unwrap_or_else(PoisonError::into_inner);
+    fn stop_worker(&self, id: &str) {
+        let mut guard = self.registry.workers.lock().unwrap_or_else(PoisonError::into_inner);
 
-        if let Some(handle) = guard.remove(&id).and_then(|previous| previous.worker) {
-            debug!(publisher_id = %id, "Stopped background event publisher worker");
-            handle.abort();
-        }
-
-        guard.insert(
-            id,
-            PublisherEntry {
-                filter,
-                config,
-                worker: None,
-            },
-        );
-    }
-
-    async fn activate_worker(&self, id: &str) {
-        if let Some(view_repo) = &self.view_repo {
-            match load_by_id(view_repo.as_ref(), id).await {
-                Ok(Some(view)) => {
-                    if let Some(config) = view.config {
-                        self.start_or_replace_worker(id.to_string(), view.filter, config);
-                    } else {
-                        self.remove_publisher(id);
-                        warn!(
-                            publisher_id = %id,
-                            "Cannot start background event publisher worker: persisted view has no configuration"
-                        );
-                    }
-                }
-                Ok(None) => {
-                    self.remove_publisher(id);
-                    warn!(
-                        publisher_id = %id,
-                        "Cannot start background event publisher worker: persisted view not found or deleted"
-                    );
-                }
-                Err(err) => {
-                    warn!(
-                        publisher_id = %id,
-                        error = %err,
-                        "Failed to load event publisher view during worker activation"
-                    );
-                }
-            }
-            return;
-        }
-
-        let cached = {
-            let guard = self.registry.entries.lock().unwrap_or_else(PoisonError::into_inner);
-            guard.get(id).map(|entry| (entry.filter.clone(), entry.config.clone()))
-        };
-
-        if let Some((filter, config)) = cached {
-            self.start_or_replace_worker(id.to_string(), filter, config);
-            return;
-        }
-
-        warn!(
-            publisher_id = %id,
-            "Cannot start background event publisher worker: configuration not found"
-        );
-    }
-
-    fn deactivate_worker(&self, id: &str) {
-        let mut guard = self.registry.entries.lock().unwrap_or_else(PoisonError::into_inner);
-
-        if let Some(handle) = guard.get_mut(id).and_then(|entry| entry.worker.take()) {
+        if let Some(handle) = guard.remove(id) {
             debug!(publisher_id = %id, "Stopped background event publisher worker");
             handle.abort();
         }
     }
 
-    fn remove_publisher(&self, id: &str) {
-        let mut guard = self.registry.entries.lock().unwrap_or_else(PoisonError::into_inner);
+    pub(crate) fn deactivate_worker(&self, id: &str) {
+        self.stop_worker(id);
+    }
 
-        if let Some(handle) = guard.remove(id).and_then(|entry| entry.worker) {
-            debug!(publisher_id = %id, "Stopped background event publisher worker");
-            handle.abort();
-        }
+    pub(crate) fn remove_publisher(&self, id: &str) {
+        self.stop_worker(id);
     }
 }
 
@@ -272,13 +174,13 @@ impl Query<EventPublisher> for EventPublisherSupervisor {
                     ..
                 } => {
                     if *enabled {
-                        self.start_or_replace_worker(aggregate_id.to_string(), filter.clone(), config.clone());
+                        self.start_or_replace_worker(aggregate_id.to_string(), filter, config.clone());
                     } else {
-                        self.upsert_inactive(aggregate_id.to_string(), filter.clone(), config.clone());
+                        self.deactivate_worker(aggregate_id);
                     }
                 }
-                EventPublisherEvent::EventPublisherActivated { .. } => {
-                    self.activate_worker(aggregate_id).await;
+                EventPublisherEvent::EventPublisherActivated { filter, config, .. } => {
+                    self.start_or_replace_worker(aggregate_id.to_string(), filter, config.clone());
                 }
                 EventPublisherEvent::EventPublisherDeactivated { .. } => {
                     self.deactivate_worker(aggregate_id);
@@ -296,12 +198,7 @@ mod tests {
     use super::*;
     use crate::{application::views::event_publisher::Status, domain::event_publisher::config::HttpPublisherConfig};
     use chrono::Utc;
-    use shared_kernel::{
-        cqrs_es::persist::{ViewContext, ViewRepository as _},
-        event_bus::CloudEvent,
-        test_utils::in_memory::MemViewRepository,
-        view_repository::BoxedViewRepository,
-    };
+    use shared_kernel::event_bus::CloudEvent;
     use std::time::Duration;
     use wiremock::{
         matchers::{method, path},
@@ -328,107 +225,33 @@ mod tests {
         }
     }
 
+    async fn wait_for_request_path(mock_server: &MockServer, expected_path: &str, timeout: Duration) {
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            if let Some(requests) = mock_server.received_requests().await {
+                if requests.iter().any(|req| req.url.path() == expected_path) {
+                    return;
+                }
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "timed out waiting for request to `{expected_path}`"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
     #[tokio::test]
-    async fn activate_worker_prefers_persisted_view_over_stale_cache_and_never_resurrects_missing_or_deleted() {
+    async fn activate_event_starts_and_replaces_worker_directly_from_committed_event() {
         let mock_server = MockServer::start().await;
         Mock::given(method("POST"))
-            .and(path("/stale"))
-            .respond_with(ResponseTemplate::new(200))
-            .expect(0)
-            .mount(&mock_server)
-            .await;
-        Mock::given(method("POST"))
-            .and(path("/fresh"))
+            .and(path("/v1"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
             .mount(&mock_server)
             .await;
-
-        let event_bus = EventBusHandle::new(32);
-        let view_repo = Arc::new(BoxedViewRepository::new(Box::new(MemViewRepository::<
-            EventPublisherView,
-            EventPublisher,
-        >::default())));
-
-        // Persist fresh view pointing to `/fresh`
-        view_repo
-            .update_view(
-                make_view(
-                    "pub-1",
-                    format!("{}/fresh", mock_server.uri()),
-                    true,
-                    Status::Configured,
-                ),
-                ViewContext::new("pub-1".to_string(), 0),
-            )
-            .await
-            .unwrap();
-
-        let supervisor = EventPublisherSupervisor::new(event_bus.clone())
-            .with_view_repository(view_repo.clone())
-            .with_allow_local_network(true);
-
-        // Seed in-memory cache with stale `/stale` config (inactive)
-        supervisor.hydrate_from_views([make_view(
-            "pub-1",
-            format!("{}/stale", mock_server.uri()),
-            false,
-            Status::Configured,
-        )]);
-        assert!(!supervisor.is_active("pub-1"));
-
-        let activated = EventEnvelope {
-            aggregate_id: "pub-1".to_string(),
-            sequence: 2,
-            payload: EventPublisherEvent::EventPublisherActivated {
-                occurred_at: Utc::now(),
-            },
-            metadata: HashMap::new(),
-        };
-
-        // 1. Activating loads `/fresh` from view_repo instead of stale cached `/stale`
-        supervisor.dispatch("pub-1", std::slice::from_ref(&activated)).await;
-        assert!(supervisor.is_active("pub-1"));
-
-        event_bus.publish(CloudEvent::new("test.supervisor.event", "/services/test"));
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        mock_server.verify().await;
-
-        // 2. If persisted view is soft-deleted, activate_worker must NOT fall back to stale cache
-        view_repo
-            .update_view(
-                make_view("pub-1", format!("{}/stale", mock_server.uri()), false, Status::None),
-                ViewContext::new("pub-1".to_string(), 1),
-            )
-            .await
-            .unwrap();
-        supervisor.dispatch("pub-1", std::slice::from_ref(&activated)).await;
-        assert!(!supervisor.is_active("pub-1"));
-
-        // 3. If persisted view is missing (Ok(None)), activate_worker must NOT fall back to stale cache
-        supervisor.hydrate_from_views([make_view(
-            "pub-missing",
-            format!("{}/stale", mock_server.uri()),
-            false,
-            Status::Configured,
-        )]);
-        let missing_activated = EventEnvelope {
-            aggregate_id: "pub-missing".to_string(),
-            sequence: 2,
-            payload: EventPublisherEvent::EventPublisherActivated {
-                occurred_at: Utc::now(),
-            },
-            metadata: HashMap::new(),
-        };
-        supervisor.dispatch("pub-missing", &[missing_activated]).await;
-        assert!(!supervisor.is_active("pub-missing"));
-    }
-
-    #[tokio::test]
-    async fn activate_worker_falls_back_to_cache_when_no_view_repository_is_attached() {
-        let mock_server = MockServer::start().await;
         Mock::given(method("POST"))
-            .and(path("/cached"))
+            .and(path("/v2"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
             .mount(&mock_server)
@@ -436,26 +259,229 @@ mod tests {
 
         let event_bus = EventBusHandle::new(32);
         let supervisor = EventPublisherSupervisor::new(event_bus.clone()).with_allow_local_network(true);
-        supervisor.hydrate_from_views([make_view(
-            "pub-cached",
-            format!("{}/cached", mock_server.uri()),
-            false,
-            Status::Configured,
-        )]);
+        assert_eq!(supervisor.active_count(), 0);
 
-        let activated = EventEnvelope {
-            aggregate_id: "pub-cached".to_string(),
+        let filter = EventPublisherFilter {
+            types: vec!["test.supervisor.event".to_string()],
+        };
+        let activated_v1 = EventEnvelope {
+            aggregate_id: "pub-1".to_string(),
             sequence: 2,
             payload: EventPublisherEvent::EventPublisherActivated {
+                filter: filter.clone(),
+                config: EventPublisherConfig::Http(HttpPublisherConfig {
+                    target_url: format!("{}/v1", mock_server.uri()),
+                    headers: None,
+                }),
                 occurred_at: Utc::now(),
             },
             metadata: HashMap::new(),
         };
-        supervisor.dispatch("pub-cached", &[activated]).await;
-        assert!(supervisor.is_active("pub-cached"));
+
+        // Starts directly from the committed event without any prior cache or view DB lookup.
+        supervisor.dispatch("pub-1", &[activated_v1]).await;
+        assert_eq!(supervisor.active_count(), 1);
+        assert!(supervisor.is_active("pub-1"));
 
         event_bus.publish(CloudEvent::new("test.supervisor.event", "/services/test"));
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        wait_for_request_path(&mock_server, "/v1", Duration::from_secs(2)).await;
+
+        // Re-activating with updated config replaces the previous worker cleanly.
+        let activated_v2 = EventEnvelope {
+            aggregate_id: "pub-1".to_string(),
+            sequence: 4,
+            payload: EventPublisherEvent::EventPublisherActivated {
+                filter,
+                config: EventPublisherConfig::Http(HttpPublisherConfig {
+                    target_url: format!("{}/v2", mock_server.uri()),
+                    headers: None,
+                }),
+                occurred_at: Utc::now(),
+            },
+            metadata: HashMap::new(),
+        };
+        supervisor.dispatch("pub-1", &[activated_v2]).await;
+        assert_eq!(supervisor.active_count(), 1);
+        assert!(supervisor.is_active("pub-1"));
+
+        event_bus.publish(CloudEvent::new("test.supervisor.event", "/services/test"));
+        wait_for_request_path(&mock_server, "/v2", Duration::from_secs(2)).await;
+
+        let deactivated = EventEnvelope {
+            aggregate_id: "pub-1".to_string(),
+            sequence: 5,
+            payload: EventPublisherEvent::EventPublisherDeactivated {
+                occurred_at: Utc::now(),
+            },
+            metadata: HashMap::new(),
+        };
+        supervisor.dispatch("pub-1", &[deactivated]).await;
+        assert_eq!(supervisor.active_count(), 0);
+        assert!(!supervisor.is_active("pub-1"));
+
+        mock_server.verify().await;
+    }
+
+    #[tokio::test]
+    async fn hydrate_from_views_starts_only_enabled_non_deleted_publishers() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/active"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/inactive"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let event_bus = EventBusHandle::new(32);
+        let supervisor = EventPublisherSupervisor::new(event_bus.clone()).with_allow_local_network(true);
+
+        supervisor.hydrate_from_views([
+            make_view(
+                "pub-active",
+                format!("{}/active", mock_server.uri()),
+                true,
+                Status::Configured,
+            ),
+            make_view(
+                "pub-paused",
+                format!("{}/inactive", mock_server.uri()),
+                false,
+                Status::Configured,
+            ),
+            make_view(
+                "pub-deleted",
+                format!("{}/inactive", mock_server.uri()),
+                true,
+                Status::None,
+            ),
+        ]);
+
+        assert_eq!(supervisor.active_count(), 1);
+        assert!(supervisor.is_active("pub-active"));
+        assert!(!supervisor.is_active("pub-paused"));
+        assert!(!supervisor.is_active("pub-deleted"));
+
+        event_bus.publish(CloudEvent::new("test.supervisor.event", "/services/test"));
+        wait_for_request_path(&mock_server, "/active", Duration::from_secs(2)).await;
+        mock_server.verify().await;
+    }
+
+    #[tokio::test]
+    #[tracing_test::traced_test]
+    async fn hydrate_from_views_warns_when_enabled_view_lacks_configuration() {
+        let supervisor = EventPublisherSupervisor::new(EventBusHandle::new(16)).with_allow_local_network(true);
+        let mut missing_config = make_view(
+            "pub-no-config",
+            "https://example.test/hook".to_string(),
+            true,
+            Status::Configured,
+        );
+        missing_config.config = None;
+
+        supervisor.hydrate_from_views([missing_config]);
+        assert_eq!(supervisor.active_count(), 0);
+        assert!(!supervisor.is_active("pub-no-config"));
+        assert!(logs_contain("WARN"));
+        assert!(logs_contain("pub-no-config"));
+        assert!(logs_contain("view has no configuration"));
+    }
+
+    #[tokio::test]
+    async fn update_and_delete_events_replace_or_stop_workers_according_to_enabled_state() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/updated"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/disabled"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let event_bus = EventBusHandle::new(32);
+        let supervisor = EventPublisherSupervisor::new(event_bus.clone()).with_allow_local_network(true);
+        let filter = EventPublisherFilter {
+            types: vec!["test.supervisor.update".to_string()],
+        };
+
+        // Disabled update on inactive publisher must not start a worker.
+        supervisor
+            .dispatch(
+                "pub-upd",
+                &[EventEnvelope {
+                    aggregate_id: "pub-upd".to_string(),
+                    sequence: 2,
+                    payload: EventPublisherEvent::EventPublisherUpdated {
+                        name: "Paused".to_string(),
+                        description: None,
+                        enabled: false,
+                        filter: filter.clone(),
+                        config: EventPublisherConfig::Http(HttpPublisherConfig {
+                            target_url: format!("{}/disabled", mock_server.uri()),
+                            headers: None,
+                        }),
+                        occurred_at: Utc::now(),
+                    },
+                    metadata: HashMap::new(),
+                }],
+            )
+            .await;
+        assert!(!supervisor.is_active("pub-upd"));
+
+        // Enabled update starts/replaces worker with the new config.
+        supervisor
+            .dispatch(
+                "pub-upd",
+                &[EventEnvelope {
+                    aggregate_id: "pub-upd".to_string(),
+                    sequence: 3,
+                    payload: EventPublisherEvent::EventPublisherUpdated {
+                        name: "Active".to_string(),
+                        description: None,
+                        enabled: true,
+                        filter: filter.clone(),
+                        config: EventPublisherConfig::Http(HttpPublisherConfig {
+                            target_url: format!("{}/updated", mock_server.uri()),
+                            headers: None,
+                        }),
+                        occurred_at: Utc::now(),
+                    },
+                    metadata: HashMap::new(),
+                }],
+            )
+            .await;
+        assert!(supervisor.is_active("pub-upd"));
+
+        event_bus.publish(CloudEvent::new("test.supervisor.update", "/services/test"));
+        wait_for_request_path(&mock_server, "/updated", Duration::from_secs(2)).await;
+
+        // Deleted event stops the active worker.
+        supervisor
+            .dispatch(
+                "pub-upd",
+                &[EventEnvelope {
+                    aggregate_id: "pub-upd".to_string(),
+                    sequence: 4,
+                    payload: EventPublisherEvent::EventPublisherDeleted {
+                        occurred_at: Utc::now(),
+                    },
+                    metadata: HashMap::new(),
+                }],
+            )
+            .await;
+        assert!(!supervisor.is_active("pub-upd"));
+        assert_eq!(supervisor.active_count(), 0);
+
         mock_server.verify().await;
     }
 }

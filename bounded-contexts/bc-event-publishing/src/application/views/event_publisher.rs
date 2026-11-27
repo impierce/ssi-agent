@@ -79,8 +79,14 @@ impl View<EventPublisher> for EventPublisherView {
                 self.config = Some(config.clone());
                 self.last_modified_at = *occurred_at;
             }
-            EventPublisherEvent::EventPublisherActivated { occurred_at } => {
+            EventPublisherEvent::EventPublisherActivated {
+                filter,
+                config,
+                occurred_at,
+            } => {
                 self.enabled = true;
+                self.filter.clone_from(filter);
+                self.config = Some(config.clone());
                 self.last_modified_at = *occurred_at;
             }
             EventPublisherEvent::EventPublisherDeactivated { occurred_at } => {

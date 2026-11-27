@@ -167,6 +167,6 @@ mod tests {
             })
             .inspect_result()
             .unwrap();
-        assert!(no_events.is_empty());
+        assert_eq!(no_events, Vec::new());
     }
 }

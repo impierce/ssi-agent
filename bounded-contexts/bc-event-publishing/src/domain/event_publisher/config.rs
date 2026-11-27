@@ -131,7 +131,9 @@ pub(crate) fn is_globally_routable(ip: IpAddr) -> bool {
             // - 2001:10::/28 (ORCHID, RFC 4843)
             // - 2001:db8::/32 (documentation, RFC 3849)
             // - 2002::/16 (6to4, RFC 3056 / deprecated RFC 7526 — can embed private/loopback IPv4)
+            // - 3fff::/20 (documentation, RFC 9637)
             !(first == 0x2002
+                || (first == 0x3fff && (segments[1] & 0xf000) == 0)
                 || (first == 0x2001
                     && (segments[1] == 0x0000
                         || (segments[1] == 0x0002 && segments[2] == 0x0000)
@@ -1161,6 +1163,8 @@ mod tests {
             "http://93.184.216.34/webhook",
             "https://[2606:2800:220:1:248:1893:25c8:1946]/webhook",
             "https://[::ffff:93.184.216.34]/webhook",
+            "https://[3ffe:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/webhook",
+            "https://[3fff:1000::]/webhook",
         ] {
             assert!(
                 HttpPublisherConfig {
@@ -1211,6 +1215,9 @@ mod tests {
             "http://192.0.2.1/secret-path",
             "http://198.18.0.1/secret-path",
             "http://[2001:db8::1]/secret-path",
+            "http://[3fff::]/secret-path",
+            "http://[3fff::1]/secret-path",
+            "http://[3fff:0fff:ffff:ffff:ffff:ffff:ffff:ffff]/secret-path",
             "http://[64:ff9b::127.0.0.1]/secret-path",
             "http://metadata.google.internal/computeMetadata/v1/secret-path",
             "http://metadata.goog/computeMetadata/v1/secret-path",
@@ -1260,6 +1267,9 @@ mod tests {
             "http://[::ffff:169.254.169.254]/",
             "http://[::ffff:0:169.254.169.254]/",
             "http://[2002:a9fe:a9fe::]/",
+            "http://[3fff::]/",
+            "http://[3fff::1]/",
+            "http://[3fff:0fff:ffff:ffff:ffff:ffff:ffff:ffff]/",
             "http://[fe80::1]/",
             "http://0.0.0.0/",
             "http://[::]/",

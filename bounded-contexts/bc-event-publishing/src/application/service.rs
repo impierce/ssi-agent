@@ -282,7 +282,7 @@ mod tests {
             .and(path("/v1"))
             .and(header("authorization", "Bearer secret-paused"))
             .respond_with(ResponseTemplate::new(200))
-            .expect(3)
+            .expect(2)
             .mount(&mock_server)
             .await;
         Mock::given(method("POST"))
@@ -307,6 +307,13 @@ mod tests {
         let pub_id = "pub-paused".to_string();
         let mut headers = BTreeMap::new();
         headers.insert("Authorization".to_string(), "Bearer secret-paused".to_string());
+        let filter = EventPublisherFilter {
+            types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
+        };
+        let v1_config = EventPublisherConfig::Http(HttpPublisherConfig {
+            target_url: format!("{}/v1", mock_server.uri()),
+            headers: Some(headers),
+        });
 
         // 1. Create publisher initially disabled
         context
@@ -317,13 +324,8 @@ mod tests {
                     name: "Paused Webhook".to_string(),
                     description: None,
                     enabled: false,
-                    filter: EventPublisherFilter {
-                        types: vec!["com.impierce.unicore.issuance.credential.issued".to_string()],
-                    },
-                    config: EventPublisherConfig::Http(HttpPublisherConfig {
-                        target_url: format!("{}/v1", mock_server.uri()),
-                        headers: Some(headers),
-                    }),
+                    filter: filter.clone(),
+                    config: v1_config.clone(),
                 }
                 .into(),
                 &Caller::Internal,
@@ -336,12 +338,14 @@ mod tests {
             aggregate_id: pub_id.clone(),
             sequence: 2,
             payload: EventPublisherEvent::EventPublisherActivated {
+                filter,
+                config: v1_config,
                 occurred_at: Utc::now(),
             },
             metadata: std::collections::HashMap::new(),
         };
 
-        // 2a. Simulated restart: hydrate inactive view into a fresh supervisor, then dispatch Activated
+        // 2. Simulated restart: hydrate inactive view into a fresh supervisor, then dispatch Activated
         let hydrated_supervisor = EventPublisherSupervisor::new(event_bus.clone()).with_allow_local_network(true);
         let list_view = views
             .event_publisher_list
@@ -362,21 +366,6 @@ mod tests {
         ));
         tokio::time::sleep(Duration::from_millis(150)).await;
         drop(hydrated_supervisor);
-
-        // 2b. Persisted-view activation: fresh supervisor with view_repo (not in memory) activates from persisted view
-        let fallback_supervisor = EventPublisherSupervisor::new(event_bus.clone())
-            .with_view_repository(views.event_publisher.clone())
-            .with_allow_local_network(true);
-        fallback_supervisor
-            .dispatch(&pub_id, std::slice::from_ref(&activated_envelope))
-            .await;
-        assert!(fallback_supervisor.is_active(&pub_id));
-        event_bus.publish(CloudEvent::new(
-            "com.impierce.unicore.issuance.credential.issued",
-            "/services/credential",
-        ));
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        drop(fallback_supervisor);
 
         // 3. Activate via command on original context -> delivers to /v1
         context

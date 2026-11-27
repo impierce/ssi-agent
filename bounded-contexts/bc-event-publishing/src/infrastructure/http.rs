@@ -597,17 +597,39 @@ mod tests {
         let siit_metadata = SocketAddr::new(IpAddr::V6("::ffff:0:169.254.169.254".parse().unwrap()), 0);
         let six_to_four_loopback = SocketAddr::new(IpAddr::V6("2002:7f00:1::".parse().unwrap()), 0);
         let link_local_v6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)), 0);
+        let rfc9637_before = SocketAddr::new(
+            IpAddr::V6("3ffe:ffff:ffff:ffff:ffff:ffff:ffff:ffff".parse().unwrap()),
+            0,
+        );
+        let rfc9637_start = SocketAddr::new(IpAddr::V6("3fff::".parse().unwrap()), 0);
+        let rfc9637_mid = SocketAddr::new(IpAddr::V6("3fff::1".parse().unwrap()), 0);
+        let rfc9637_end = SocketAddr::new(
+            IpAddr::V6("3fff:0fff:ffff:ffff:ffff:ffff:ffff:ffff".parse().unwrap()),
+            0,
+        );
+        let rfc9637_after = SocketAddr::new(IpAddr::V6("3fff:1000::".parse().unwrap()), 0);
 
         assert!(validate_resolved_addrs(&[public_v4], false).is_ok());
-        // Mixed public + private/loopback must be rejected when local network is disallowed
+        assert!(validate_resolved_addrs(&[rfc9637_before], false).is_ok());
+        assert!(validate_resolved_addrs(&[rfc9637_before], true).is_ok());
+        assert!(validate_resolved_addrs(&[rfc9637_after], false).is_ok());
+        assert!(validate_resolved_addrs(&[rfc9637_after], true).is_ok());
+        // Mixed public + private/loopback/documentation must be rejected when local network is disallowed
         assert!(validate_resolved_addrs(&[public_v4, loopback_v4], false).is_err());
         assert!(validate_resolved_addrs(&[public_v4, private_v4], false).is_err());
+        assert!(validate_resolved_addrs(&[public_v4, rfc9637_mid], false).is_err());
         assert!(validate_resolved_addrs(&[mapped_loopback], false).is_err());
-        // Metadata, SIIT/6to4, link-local, CGNAT stay blocked even with local network allowed
+        // Metadata, SIIT/6to4, RFC 9637 documentation, link-local, CGNAT stay blocked even with local network allowed
         assert!(validate_resolved_addrs(&[metadata_v4], true).is_err());
         assert!(validate_resolved_addrs(&[mapped_metadata], true).is_err());
         assert!(validate_resolved_addrs(&[siit_metadata], true).is_err());
         assert!(validate_resolved_addrs(&[six_to_four_loopback], true).is_err());
+        assert!(validate_resolved_addrs(&[rfc9637_start], false).is_err());
+        assert!(validate_resolved_addrs(&[rfc9637_start], true).is_err());
+        assert!(validate_resolved_addrs(&[rfc9637_mid], false).is_err());
+        assert!(validate_resolved_addrs(&[rfc9637_mid], true).is_err());
+        assert!(validate_resolved_addrs(&[rfc9637_end], false).is_err());
+        assert!(validate_resolved_addrs(&[rfc9637_end], true).is_err());
         assert!(validate_resolved_addrs(&[link_local_v6], true).is_err());
         assert!(validate_resolved_addrs(&[cgnat_v4], true).is_err());
         // Loopback and private are permitted with local network opt-in
