@@ -53,7 +53,7 @@ async fn initialization_derives_the_server_metadata_from_the_configuration() {
     );
 
     let credential_issuer_metadata = server_config.credential_issuer_metadata;
-    assert_eq!(credential_issuer_metadata.credential_issuer, public_url);
+    assert_eq!(credential_issuer_metadata.credential_issuer, public_url.clone().into());
     assert_eq!(
         credential_issuer_metadata.credential_endpoint,
         public_url.append_path_segment("openid4vci/credential")

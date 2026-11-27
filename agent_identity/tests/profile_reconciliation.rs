@@ -4,6 +4,7 @@
 //! Each file in `tests/` runs in its own process, so changing the global configuration here does not affect other
 //! tests. The tests in this file are serialized, since they share that configuration.
 
+use agent_identity::document::key_source::NoKeys;
 use agent_identity::identity_state;
 use agent_identity::profile::aggregate::{Profile, Source};
 use agent_identity::profile::command::ProfileCommand;
@@ -89,7 +90,7 @@ async fn a_default_display_creates_a_default_profile() {
     configure_display(Some(display()), false);
     let state = identity().await;
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     assert_matches(&profile(&state).await.unwrap(), &display(), Source::Default);
 }
@@ -101,7 +102,7 @@ async fn a_default_display_replaces_a_previously_provisioned_profile() {
     let state = identity().await;
     provisioned_profile(&state).await;
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     assert_matches(&profile(&state).await.unwrap(), &display(), Source::Default);
 }
@@ -121,7 +122,7 @@ async fn a_default_display_keeps_a_profile_changed_at_runtime() {
     .await;
     let before = profile(&state).await.unwrap();
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     let after = profile(&state).await.unwrap();
     assert_eq!(after.display_name, before.display_name);
@@ -137,7 +138,7 @@ async fn without_a_configured_display_an_empty_profile_is_created() {
     configure_display(None, false);
     let state = identity().await;
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     let profile = profile(&state).await.unwrap();
     assert_eq!(profile.display_name, None);
@@ -156,7 +157,7 @@ async fn removing_a_provisioned_display_clears_the_profile() {
     let state = identity().await;
     provisioned_profile(&state).await;
 
-    initialize(&state).await.unwrap();
+    initialize(&state, &NoKeys).await.unwrap();
 
     let profile = profile(&state).await.unwrap();
     assert_eq!(profile.display_name.as_deref(), Some(""));

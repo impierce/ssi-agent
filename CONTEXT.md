@@ -75,7 +75,8 @@ Terms with a fixed meaning in this codebase. Pick these words; avoid the alterna
 
 **Credential Offer**:
 The unit a wallet redeems: one holder, one pre-authorized code, one issued credential. Offers are
-not shared between holders.
+not shared between holders: an offer belongs to the holder of its first verified Credential Request,
+identified by the DID of the key its proof is signed with.
 _Avoid_: invitation, link
 
 **Public Offer**:
@@ -102,6 +103,13 @@ A batch evaluated for validity and authorization without creating anything. A qu
 no events.
 _Avoid_: dry run, preview, validation-only mode
 
+**Signing at Creation**:
+Signing a credential, without holder binding, and giving it its status-list index when it is created,
+so it is Issued without a wallet redeeming its offer. A wallet that redeems the offer gets it signed again,
+bound to its key, on the same status-list entry. `IssuanceState::signing_at_creation` decides per template;
+by default no template's credentials are (`agent_issuance/src/application/signing_at_creation.rs`).
+_Avoid_: pre-signing, eager issuance
+
 **Credential Offer String**:
 The `openid-credential-offer://…` value a wallet consumes, which a QR code encodes.
 _Avoid_: offer link, offer URL, offer URI
@@ -115,7 +123,7 @@ public content at import time (`agent_library/src/template/origin.rs`). Not the 
 _Avoid_: source template, parent template
 
 **Public Content**:
-The fields of the public template projection without `modifiedAt`; the input of the origin digest
+The fields of the public template projection without `id` and `modifiedAt`; the input of the origin digest
 (`PublicTemplateContent::digest` in `agent_library/src/template/public_content.rs`). See ADR 0010.
 
 ## When to Update This Guide
